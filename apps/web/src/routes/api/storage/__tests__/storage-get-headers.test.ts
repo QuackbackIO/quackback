@@ -25,6 +25,11 @@ const getS3Object = vi.fn(
   })
 )
 
+const generatePresignedGetUrl = vi.fn(
+  async (_key: string, _expiresIn?: number, _downloadName?: string, _contentType?: string) =>
+    'https://s3.example.com/presigned'
+)
+
 vi.mock('@/lib/server/config', () => ({ config: mockConfig }))
 vi.mock('@/lib/server/storage/s3', () => ({
   isS3Usable: vi.fn(() => true),
@@ -34,7 +39,7 @@ vi.mock('@/lib/server/storage/s3', () => ({
     (_secret: string, _key: string, sig: string | null) => sig === 'ok'
   ),
   getS3Object,
-  generatePresignedGetUrl: vi.fn(async () => 'https://s3.example.com/presigned'),
+  generatePresignedGetUrl,
   StorageUnavailableError: class StorageUnavailableError extends Error {},
 }))
 
@@ -46,6 +51,7 @@ const get = (path: string) =>
 beforeEach(() => {
   mockConfig.s3Proxy = false
   getS3Object.mockClear()
+  generatePresignedGetUrl.mockClear()
 })
 
 describe('handleStorageGet — a key that will not decode', () => {
@@ -165,5 +171,87 @@ describe('handleStorageGet — the three states a caller must tell apart', () =>
       request: new Request('http://localhost/api/storage/logos/broken.png'),
     })
     expect(res.status).toBe(500)
+  })
+})
+
+describe('handleStorageGet: what a stored file may do when opened', () => {
+  // A stored file's Content-Type comes from whoever sent it (an inbound email
+  // declares its own). Proxied, it is served from this origin, so anything a
+  // browser could run is a download, sandboxed, never a page.
+  // Each test names its own key: the proxy cache lives for the module.
+  const htmlKey = (name: string) => `chat-files/2026/09/3f2b8c1e-1a2b-4c3d-9e8f-0123456789ab-${name}.html`
+  const HTML_KEY = htmlKey('invoice')
+  const htmlObject = () => ({
+    body: new Blob(['<script>alert(1)</script>']).stream(),
+    contentType: 'text/html',
+  })
+
+  it('serves a proxied HTML file as a sandboxed download', async () => {
+    mockConfig.s3Proxy = true
+    getS3Object.mockImplementationOnce(async () => htmlObject())
+
+    const res = await get(`/api/storage/${HTML_KEY}?read=ok`)
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-disposition')).toBe('attachment; filename="invoice.html"')
+    expect(res.headers.get('content-security-policy')).toBe("sandbox; default-src 'none'")
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff')
+  })
+
+  it('keeps it a download when served from the proxy cache', async () => {
+    mockConfig.s3Proxy = true
+    const key = htmlKey('cached')
+    getS3Object.mockImplementationOnce(async () => htmlObject())
+    await get(`/api/storage/${key}?read=ok`)
+
+    const cached = await get(`/api/storage/${key}?read=ok`)
+
+    expect(getS3Object).toHaveBeenCalledTimes(1)
+    expect(cached.headers.get('content-disposition')).toBe('attachment; filename="cached.html"')
+    expect(cached.headers.get('content-security-policy')).toBe("sandbox; default-src 'none'")
+  })
+
+  it('keeps it a download on a range request', async () => {
+    mockConfig.s3Proxy = true
+    getS3Object.mockImplementationOnce(async () => ({ ...htmlObject(), contentRange: 'bytes 0-9/26' }))
+
+    const res = await new Promise<Response>((resolve) =>
+      resolve(
+        handleStorageGet({
+          request: new Request(`https://app.example.com/api/storage/${htmlKey('ranged')}?read=ok`, {
+            headers: { range: 'bytes=0-9' },
+          }),
+        })
+      )
+    )
+
+    expect(res.headers.get('content-disposition')).toBe('attachment; filename="ranged.html"')
+    expect(res.headers.get('content-security-policy')).toBe("sandbox; default-src 'none'")
+  })
+
+  it('keeps it a download on the forced email proxy, whatever S3_PROXY says', async () => {
+    getS3Object.mockImplementationOnce(async () => htmlObject())
+    const res = await get(`/api/storage/${htmlKey('emailed')}?read=ok&email=1`)
+    expect(getS3Object).toHaveBeenCalledTimes(1)
+    expect(res.headers.get('content-disposition')).toBe('attachment; filename="emailed.html"')
+  })
+
+  it('still shows a proxied image inline', async () => {
+    mockConfig.s3Proxy = true
+    const res = await get('/api/storage/logos/2026/09/brand-inline.gif')
+    expect(res.headers.get('content-type')).toBe('image/gif')
+    expect(res.headers.get('content-disposition')).toBeNull()
+  })
+
+  it('redirects a non-media file to a download', async () => {
+    const res = await get(`/api/storage/${HTML_KEY}?read=ok`)
+    expect(res.status).toBe(302)
+    expect(generatePresignedGetUrl).toHaveBeenCalledWith(HTML_KEY, undefined, 'invoice.html', undefined)
+  })
+
+  it('redirects a media file with its type forced from the extension', async () => {
+    const key = 'chat-files/2026/09/3f2b8c1e-1a2b-4c3d-9e8f-0123456789ab-report.pdf'
+    await get(`/api/storage/${key}?read=ok`)
+    expect(generatePresignedGetUrl).toHaveBeenCalledWith(key, undefined, undefined, 'application/pdf')
   })
 })

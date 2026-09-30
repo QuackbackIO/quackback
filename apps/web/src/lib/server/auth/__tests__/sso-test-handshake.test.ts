@@ -20,7 +20,7 @@ const baseInput: HandshakeInput = {
   discoveryUrl: 'https://idp.example/.well-known/openid-configuration',
   clientId: 'cid',
   clientSecret: 'csecret',
-  redirectUri: 'https://qb/api/auth/oauth2/callback/sso',
+  redirectUri: 'https://qb/api/auth/callback/sso',
   codeVerifier: 'test-code-verifier',
   expectedNonce: 'nonce789',
   expectedState: 'state123',
@@ -675,5 +675,91 @@ describe('runHandshake — capture and production replay', () => {
     expect(result.capture?.claims.extra).toBeUndefined()
     expect(result.allClaims?.extra).toBe('only-userinfo')
     expect(result.mappingOutcome?.warnings).toContain('subject_mismatch')
+  })
+})
+
+describe('runHandshake: ID token nonce', () => {
+  /** A signed exchange whose ID token carries `tokenNonce`, or no nonce at all. */
+  async function exchange(opts: { tokenNonce?: string; expectedNonce?: string }) {
+    const { publicKey, privateKey } = await generateKeyPair('RS256', { extractable: true })
+    const publicJwk = await exportJWK(publicKey)
+    publicJwk.kid = 'nonce-key'
+    publicJwk.alg = 'RS256'
+
+    const issuer = 'https://idp.example'
+    const idToken = await new SignJWT({
+      email: 'you@example.com',
+      ...(opts.tokenNonce ? { nonce: opts.tokenNonce } : {}),
+    })
+      .setProtectedHeader({ alg: 'RS256', kid: 'nonce-key' })
+      .setIssuer(issuer)
+      .setAudience('cid')
+      .setSubject('user-1')
+      .setIssuedAt()
+      .setExpirationTime('5m')
+      .sign(privateKey)
+
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          issuer,
+          token_endpoint: `${issuer}/token`,
+          jwks_uri: `${issuer}/jwks`,
+          userinfo_endpoint: `${issuer}/userinfo`,
+        }),
+        { status: 200 }
+      )
+    )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ id_token: idToken, access_token: 'at', token_type: 'Bearer' }),
+        {
+          status: 200,
+        }
+      )
+    )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ keys: [publicJwk] }), { status: 200 })
+    )
+    safeFetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ sub: 'user-1' }), { status: 200 })
+    )
+
+    return runHandshake({ ...baseInput, expectedNonce: opts.expectedNonce })
+  }
+
+  it('passes and records that a provider which leaves out the nonce should not be sent one', async () => {
+    // Signature, issuer and audience all verify; only the echo is missing. That
+    // is a provider that never returns a nonce, so the test records it and
+    // sign-in stops sending one.
+    const result = await exchange({ expectedNonce: 'nonce789' })
+    if (!result.ok) throw new Error(`expected success, got ${result.stage}: ${result.hint}`)
+    expect(result.idTokenNonce).toBe('off')
+    const step = result.steps.find((s) => s.stage === 'claim-check')
+    expect(step?.severity).toBe('info')
+    expect(step?.label).toMatch(/does not return the nonce/i)
+  })
+
+  it('records the nonce check as working when the provider echoes it', async () => {
+    const result = await exchange({ tokenNonce: 'nonce789', expectedNonce: 'nonce789' })
+    if (!result.ok) throw new Error(`expected success, got ${result.stage}: ${result.hint}`)
+    expect(result.idTokenNonce).toBe('check')
+  })
+
+  it('still fails a nonce that does not match', async () => {
+    const result = await exchange({ tokenNonce: 'someone-elses', expectedNonce: 'nonce789' })
+    if (result.ok) throw new Error('expected failure')
+    expect(result.stage).toBe('claim-check')
+    expect(result.hint).toMatch(/mismatch/i)
+  })
+
+  it('records nothing about the nonce when none was sent', async () => {
+    // Sign-in never binds a nonce for this provider, so there is nothing to learn.
+    const result = await exchange({ expectedNonce: undefined })
+    if (!result.ok) throw new Error(`expected success, got ${result.stage}: ${result.hint}`)
+    expect(result.idTokenNonce).toBeUndefined()
+    expect(result.steps.some((s) => s.stage === 'claim-check' && /not used/i.test(s.label))).toBe(
+      true
+    )
   })
 })

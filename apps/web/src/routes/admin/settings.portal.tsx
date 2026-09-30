@@ -1,7 +1,7 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
-import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router'
+import { ClientOnly, createFileRoute, useBlocker, useRouter } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { settingsQueries } from '@/lib/client/queries/settings'
@@ -13,9 +13,7 @@ import {
   ComputerDesktopIcon,
   DevicePhoneMobileIcon,
   ArrowTopRightOnSquareIcon,
-  ChevronDownIcon,
 } from '@heroicons/react/24/solid'
-import type { JSONContent } from '@tiptap/react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
@@ -28,13 +26,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { RichTextEditor, type EditorDocument } from '@/components/ui/rich-text-editor'
 import { cn } from '@/lib/shared/utils'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { PreviewToggleButton } from '@/components/admin/settings/preview-toggle'
 import { PortalPreview } from '@/components/admin/settings/branding/portal-preview'
+import { AdvancedCssPanel } from '@/components/admin/settings/branding/advanced-css-panel'
 import {
   PortalNavEditor,
   isValidNavLinkUrl,
@@ -73,26 +72,8 @@ import type {
   PortalWelcomeCard,
 } from '@/lib/shared/types/settings'
 import type { TiptapContent } from '@/lib/shared/db-types'
-
-// @uiw/react-codemirror + @codemirror/lang-css make this the largest route
-// chunk in the app, yet most visits never open the "Advanced CSS" panel —
-// defer it to its own chunk, loaded only when the <details> is expanded.
-const CustomCssEditor = lazy(() =>
-  import('@/components/admin/settings/branding/custom-css-editor').then((m) => ({
-    default: m.CustomCssEditor,
-  }))
-)
-
-// Fixed-height skeleton matching the editor's rendered height (280px) plus
-// its border, so the Advanced CSS panel doesn't jump while the chunk loads.
-function CustomCssEditorFallback() {
-  return (
-    <div
-      className="h-[280px] animate-pulse rounded-md border border-input bg-muted/30"
-      aria-hidden="true"
-    />
-  )
-}
+import { readBatch } from '@/lib/client/queries/read-batch'
+import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 export const Route = createFileRoute('/admin/settings/portal')({
   loader: async ({ context }) => {
@@ -102,11 +83,12 @@ export const Route = createFileRoute('/admin/settings/portal')({
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_BRANDING)
 
     const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
+    const ensure = readBatch(context.queryClient)
     await Promise.all([
-      context.queryClient.ensureQueryData(settingsQueries.branding()),
-      context.queryClient.ensureQueryData(settingsQueries.logo()),
-      context.queryClient.ensureQueryData(settingsQueries.customCss()),
-      context.queryClient.ensureQueryData(settingsQueries.portalConfig()),
+      ensure(settingsQueries.branding()),
+      ensure(settingsQueries.logo()),
+      ensure(settingsQueries.customCss()),
+      ensure(settingsQueries.portalConfig()),
       ensureBillingCatalogue(context.queryClient, context.billingEnabled),
     ])
   },
@@ -115,7 +97,8 @@ export const Route = createFileRoute('/admin/settings/portal')({
 
 function PortalPage() {
   const router = useRouter()
-  const { settings, session } = Route.useRouteContext()
+  const settings = useWorkspaceSettings()
+  const session = useSessionContext()
   const [, startTransition] = useTransition()
   // Display-only: the name is edited on Workspace > General.
   const workspaceName = settings?.name || ''
@@ -136,6 +119,7 @@ function PortalPage() {
     initialLogoUrl: logoData?.url ?? null,
     initialThemeConfig: brandingConfig as ThemeConfig,
     initialCustomCss: customCss,
+    baseline: settings?.visualTheme === 'refined' ? 'refined' : 'legacy',
   })
 
   // Baselines for dirty tracking — captured once from the loaded values,
@@ -234,8 +218,6 @@ function PortalPage() {
   // Preview wiring
   // ============================================
   const [viewport, setViewport] = useState<'desktop' | 'mobile'>('desktop')
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
 
   // Which built-in tabs are currently unavailable (product/tab off) — the
   // editor keeps their rows but renders them inert. Mirrors portal-header.
@@ -395,28 +377,7 @@ function PortalPage() {
                 </div>
               </div>
 
-              <details className="group rounded-lg border border-border/60 bg-muted/30">
-                <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-[13px] font-medium text-muted-foreground group-open:text-foreground [&::-webkit-details-marker]:hidden">
-                  Advanced CSS
-                  <span className="ms-auto flex items-center gap-3">
-                    <a
-                      href="https://tweakcn.com"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs font-medium text-primary hover:underline"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      Design at tweakcn.com
-                    </a>
-                    <ChevronDownIcon className="size-3.5 transition-transform group-open:rotate-180" />
-                  </span>
-                </summary>
-                <div className="px-3 pb-3">
-                  <Suspense fallback={<CustomCssEditorFallback />}>
-                    <CustomCssEditor value={state.cssText} onChange={state.setCssText} />
-                  </Suspense>
-                </div>
-              </details>
+              <AdvancedCssPanel value={state.cssText} onChange={state.setCssText} />
             </div>
           </SettingsCard>
 
@@ -492,17 +453,20 @@ function PortalPage() {
             </div>
           </div>
 
-          {mounted && (
+          {/* The iframe waits for hydration; ClientOnly re-renders only itself then. */}
+          <ClientOnly>
             <PortalPreview
               theme={state.previewMode}
               refreshKey={refreshKey}
               draftCss={state.cssText}
+              cssDirty={themeDirty}
               draft={previewDraft}
+              draftDirty={welcomeDirty || navDirty}
               viewport={viewport}
               workspaceName={workspaceName}
               faviconUrl={logoData?.url ?? null}
             />
-          )}
+          </ClientOnly>
         </div>
       </div>
 
@@ -560,10 +524,21 @@ function WelcomeBodyEditor({
   onChange: (v: TiptapContent) => void
 }) {
   const { upload: uploadImage } = useImageUpload({ prefix: 'portal-welcome' })
+  // The editor reports its document once it mounts. The same document again
+  // is not an edit, and adopting that copy would re-render the whole page.
+  // The live preview and the dirty check read the JSON, so each edit takes it.
+  const handleChange = useCallback(
+    (document: EditorDocument) => {
+      const json = document.json()
+      if (JSON.stringify(json) === JSON.stringify(value)) return
+      onChange(json as TiptapContent)
+    },
+    [value, onChange]
+  )
   return (
     <RichTextEditor
       value={value}
-      onChange={(json: JSONContent) => onChange(json as TiptapContent)}
+      onDocumentChange={handleChange}
       placeholder="Tell visitors what kind of feedback you'd love to hear…"
       minHeight="160px"
       features={{

@@ -13,7 +13,6 @@ export {
   normalizeStrength,
   strengthTier,
   formatBadgeCount,
-  slugify,
 } from './string'
 export {
   escapeHtmlAttr,

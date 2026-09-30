@@ -67,6 +67,12 @@ describe('normalizeLocale', () => {
     expect(normalizeLocale('zh-min-nan')).toBe('zh-cn')
     expect(normalizeLocale('zh-yue')).toBe('zh-cn')
   })
+  it('maps Dutch and Flemish tags to nl', () => {
+    expect(normalizeLocale('nl')).toBe('nl')
+    expect(normalizeLocale('nl-NL')).toBe('nl')
+    expect(normalizeLocale('nl-BE')).toBe('nl')
+    expect(normalizeLocale('NL-nl')).toBe('nl')
+  })
 })
 
 describe('resolveLocale', () => {
@@ -99,6 +105,11 @@ describe('resolveLocale', () => {
     expect(resolveLocale('zh-TW,zh;q=0.9,en;q=0.8')).toBe('zh-tw')
     expect(resolveLocale('zh-Hant-HK,zh;q=0.8')).toBe('zh-tw')
   })
+  it('resolves Dutch from the header', () => {
+    expect(resolveLocale('nl-NL,nl;q=0.9,en-US;q=0.8,en;q=0.7')).toBe('nl')
+    expect(resolveLocale('nl-BE,fr-BE;q=0.8')).toBe('nl')
+    expect(resolveLocale('en', 'nl')).toBe('nl')
+  })
   it('respects an explicit Chinese locale override', () => {
     expect(resolveLocale('en', 'zh-Hant')).toBe('zh-tw')
     expect(resolveLocale('en', 'zh-CN')).toBe('zh-cn')
@@ -129,6 +140,9 @@ describe('SUPPORTED_LOCALES', () => {
   it('includes Simplified and Traditional Chinese', () => {
     expect(SUPPORTED_LOCALES).toContain('zh-cn')
     expect(SUPPORTED_LOCALES).toContain('zh-tw')
+  })
+  it('includes nl', () => {
+    expect(SUPPORTED_LOCALES).toContain('nl')
   })
   it('DEFAULT_LOCALE is en', () => {
     expect(DEFAULT_LOCALE).toBe('en')

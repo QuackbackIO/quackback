@@ -41,6 +41,8 @@ import { streamLimiter } from '@/lib/server/realtime/stream-connection-limit'
 import { startStreamHeartbeat } from '@/lib/server/realtime/stream-heartbeat'
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import { getWorkspaceScope, runWithWorkspaceScope } from '@/lib/server/workspaces/workspace-context'
+import { withWorkspaceScopeById } from '@/lib/server/workspaces/fleet'
+import { isPooledTenancy } from '@/lib/server/workspaces/mode'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'chat-stream' })
@@ -250,6 +252,24 @@ export const Route = createFileRoute('/api/chat/stream')({
         // with no workspace scope and throw. Capture the scope now and re-enter
         // it for teardown — the same pattern the auth stash sweeps use.
         const workspaceScope = getWorkspaceScope()
+        // The captured scope's pool does not live as long as the stream: under
+        // pooled tenancy the pool cache ends a pool that has gone unused, or that
+        // its LRU cap pushes out, and a stream checks out only once. So presence
+        // writes after start re-acquire the workspace by key, which replaces an
+        // evicted pool. A single-workspace install runs them as they are.
+        const pooledWorkspaceKey =
+          workspaceScope && isPooledTenancy() ? workspaceScope.workspace.workspaceKey : null
+        const withLivePool = async (body: () => Promise<void>): Promise<void> => {
+          if (!pooledWorkspaceKey) return body()
+          try {
+            await withWorkspaceScopeById(pooledWorkspaceKey, 'request', body)
+          } catch (err) {
+            log.warn(
+              { err, stream_id: streamId, workspace_key: pooledWorkspaceKey },
+              'chat stream presence update failed'
+            )
+          }
+        }
         const teardown = async () => {
           if (cleanedUp) return
           cleanedUp = true
@@ -264,16 +284,18 @@ export const Route = createFileRoute('/api/chat/stream')({
             }
           }
           if (presenceMarked) {
-            const wentOffline = await clearPresence(me.principalId, streamId, isAgentStream)
-            // When an inbox agent's last stream closes cluster-wide, return
-            // their unanswered conversations to the queue so they aren't
-            // stranded. wentOffline reads the shared presence store, so an agent
-            // still live on another replica is not treated as offline here.
-            if (wentOffline && isAgentStream) {
-              const { requeueUnansweredOnAgentOffline } =
-                await import('@/lib/server/domains/conversation/conversation.service')
-              await requeueUnansweredOnAgentOffline(me.principalId)
-            }
+            await withLivePool(async () => {
+              const wentOffline = await clearPresence(me.principalId, streamId, isAgentStream)
+              // When an inbox agent's last stream closes cluster-wide, return
+              // their unanswered conversations to the queue so they aren't
+              // stranded. wentOffline reads the shared presence store, so an
+              // agent still live on another replica is not treated as offline.
+              if (wentOffline && isAgentStream) {
+                const { requeueUnansweredOnAgentOffline } =
+                  await import('@/lib/server/domains/conversation/conversation.service')
+                await requeueUnansweredOnAgentOffline(me.principalId)
+              }
+            })
           }
           slot.release()
         }
@@ -423,7 +445,7 @@ export const Route = createFileRoute('/api/chat/stream')({
                 return sse.heartbeatPing()
               },
               onAlive: () => {
-                void refreshPresence(me.principalId, streamId, isAgentStream)
+                void withLivePool(() => refreshPresence(me.principalId, streamId, isAgentStream))
               },
               onTimeout: () => {
                 log.info({ stream_id: streamId }, 'chat stream heartbeat timed out — tearing down')

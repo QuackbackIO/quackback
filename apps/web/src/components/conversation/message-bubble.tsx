@@ -423,8 +423,9 @@ function MessageEditForm({
         autofocus="end"
         placeholder="Edit message"
         className="max-h-64 overflow-y-auto"
-        onChange={(json, _html, markdown) => {
-          const doc = json as TiptapContent
+        onDocumentChange={(document) => {
+          const doc = document.json() as TiptapContent
+          const markdown = document.markdown()
           jsonRef.current = doc
           markdownRef.current = markdown
           setEmpty(!markdown.trim() && isEmptyTiptapDoc(doc))

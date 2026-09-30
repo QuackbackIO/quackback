@@ -45,10 +45,15 @@ export function publishConversationEvent(
  * A new message on both channels, with a different author label per audience.
  * The visitor's channel keeps the public name. The inbox copy may carry the
  * account name. Omit `agent` to send the same payload to both.
+ *
+ * `conversationUpdated` says the same write also sent the conversation's own
+ * update (publishConversationUpdate). The inbox list refreshes on that event,
+ * so the inbox copy of the message says it need not refresh again.
  */
 export function publishConversationMessage(
   conversationId: ConversationId,
-  messages: { visitor: ConversationMessageDTO; agent?: ConversationMessageDTO }
+  messages: { visitor: ConversationMessageDTO; agent?: ConversationMessageDTO },
+  opts?: { conversationUpdated?: boolean }
 ): void {
   publish(conversationChannel(conversationId), {
     kind: 'message',
@@ -59,6 +64,7 @@ export function publishConversationMessage(
     kind: 'message',
     conversationId,
     message: messages.agent ?? messages.visitor,
+    ...(opts?.conversationUpdated ? { conversationUpdated: true } : {}),
   })
 }
 

@@ -15,6 +15,7 @@ import {
 } from '@/lib/server/functions/changelog'
 import { listChangelogCategoriesFn } from '@/lib/server/functions/changelog-categories'
 import { fetchChangelogSettingsFn } from '@/lib/server/functions/settings'
+import { listSegmentsFn } from '@/lib/server/functions/admin'
 
 const STALE_TIME_SHORT = 30 * 1000
 const STALE_TIME_MEDIUM = 60 * 1000
@@ -46,6 +47,13 @@ export const changelogCategoryQueries = {
     queryOptions({
       queryKey: changelogKeys.categories(),
       queryFn: () => listChangelogCategoriesFn(),
+      staleTime: STALE_TIME_MEDIUM,
+    }),
+  /** The segments a label can be gated to (segment.view), named on each gated label. */
+  segments: () =>
+    queryOptions({
+      queryKey: ['admin', 'segments'] as const,
+      queryFn: () => listSegmentsFn(),
       staleTime: STALE_TIME_MEDIUM,
     }),
 }

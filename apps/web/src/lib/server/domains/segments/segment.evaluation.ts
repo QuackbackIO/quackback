@@ -5,6 +5,7 @@ import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import type { EvaluationResult } from './segment.types'
 import type { SegmentRules, SegmentCondition } from '@/lib/server/db'
 import { getSegment } from './segment.service'
+import { forgetRequestSegmentIds } from '@/lib/server/auth/request-session'
 
 /** SQL comparison operators for rule conditions */
 const OPERATOR_SQL: Record<string, string> = {
@@ -406,7 +407,7 @@ async function resolveMatchingPrincipals(
  * Adds new matches, removes stale members.
  */
 export async function evaluateDynamicSegment(segmentId: SegmentId): Promise<EvaluationResult> {
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     // The segment row lock also fences rule/name edits while memberships and
     // outbound intents commit. Every producer of dynamic changes uses this lock.
     await tx.execute(
@@ -450,6 +451,8 @@ export async function evaluateDynamicSegment(segmentId: SegmentId): Promise<Eval
     await notifyUserSyncIntegrations(segment.name, toAdd, toRemove, { executor: tx, segmentId })
     return { segmentId, added: toAdd.length, removed: toRemove.length }
   })
+  forgetRequestSegmentIds()
+  return result
 }
 
 /**

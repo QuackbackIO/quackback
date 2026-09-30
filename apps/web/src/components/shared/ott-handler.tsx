@@ -26,16 +26,17 @@ export function portalOttForwardUrl(pathname: string, searchStr: string): string
 }
 
 export function OttHandler() {
-  const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const searchStr = useRouterState({ select: (s) => s.location.searchStr })
+  // Selects the forward itself, so a navigation without `?ott=` renders nothing.
+  const next = useRouterState({
+    select: (s) => portalOttForwardUrl(s.location.pathname, s.location.searchStr),
+  })
   const processedRef = useRef<string | null>(null)
 
   useEffect(() => {
-    const next = portalOttForwardUrl(pathname, searchStr)
     if (!next || processedRef.current === next) return
     processedRef.current = next
     window.location.replace(next)
-  }, [pathname, searchStr])
+  }, [next])
 
   return null
 }

@@ -346,11 +346,15 @@ export interface DrainResult {
  *
  * **Why per-queue caps rather than one pool size.** The reference gave each
  * queue its own `Worker` with its own `concurrency`, and one of those numbers
- * is load-bearing: `workflow-dispatch` is `concurrency: 1` because it is a
- * global FIFO, not because it is slow. A single undifferentiated pool would run
- * two dispatch jobs at once and reorder a reply and a close on one
- * conversation. So the cap is per queue, the claim asks for exactly the free
- * slots each queue has, and the FIFO queue can never have two in flight.
+ * is load-bearing: `workflow-dispatch` is `concurrency: 1` because it
+ * dispatches in enqueue order, not because it is slow. A single
+ * undifferentiated pool would run two dispatch jobs at once and reorder a reply
+ * and a close on one conversation. So the cap is per queue, the claim asks for
+ * exactly the free slots each queue has, and a concurrency-1 queue never has
+ * two in flight in this pool. That order holds within one process while jobs
+ * succeed first time; it is not global. A failed job is retried behind later
+ * ones, two worker processes each run one job at once, and a crashed job runs
+ * again only once its lease lapses.
  */
 export interface JobPool {
   /** Jobs currently running, per queue. */

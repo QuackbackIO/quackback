@@ -1,6 +1,6 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { useState, useCallback, useEffect, useMemo, startTransition } from 'react'
+import { useState, useCallback, useEffect, useMemo, startTransition, Suspense } from 'react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/shared/spinner'
@@ -10,16 +10,51 @@ import { InboxLayout } from '@/components/admin/feedback/inbox-layout'
 import { AdminListHeader } from '@/components/admin/admin-list-header'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
+import { useOpenedOnce } from '@/lib/client/hooks/use-opened-once'
+import { lazyWithPreload } from '@/lib/client/lazy-with-preload'
 import { ChangelogFiltersPanel } from './changelog-filters'
 import { useChangelogFilters } from './use-changelog-filters'
-import { CreateChangelogDialog } from './create-changelog-dialog'
 import { ChangelogListItem } from './changelog-list-item'
 import { ChangelogTopViewed } from './changelog-top-viewed'
 import { changelogQueries } from '@/lib/client/queries/changelog'
 import { useDeleteChangelog } from '@/lib/client/mutations/changelog'
 import { Route } from '@/routes/admin/changelog'
 import type { ChangelogId } from '@quackback/ids'
-import { DocumentTextIcon } from '@heroicons/react/24/solid'
+import { DocumentTextIcon, PlusIcon } from '@heroicons/react/24/solid'
+
+// The create dialog carries the editor and the entry form, which outweigh the
+// list; it loads on first open, or ahead of it when the pointer or focus
+// reaches the New Entry button.
+const { Component: CreateChangelogDialog, preload: preloadCreateChangelogDialog } = lazyWithPreload(
+  () => import('./create-changelog-dialog'),
+  'CreateChangelogDialog'
+)
+
+/** The New Entry button and the create dialog it opens. */
+function NewChangelogEntryButton() {
+  const [open, setOpen] = useState(false)
+  // Kept mounted after the first open so closing animates.
+  const opened = useOpenedOnce(open)
+  return (
+    <>
+      <Button
+        size="sm"
+        aria-haspopup="dialog"
+        onPointerEnter={preloadCreateChangelogDialog}
+        onFocus={preloadCreateChangelogDialog}
+        onClick={() => setOpen(true)}
+      >
+        <PlusIcon className="h-4 w-4 mr-1.5" />
+        New Entry
+      </Button>
+      {opened && (
+        <Suspense fallback={null}>
+          <CreateChangelogDialog open={open} onOpenChange={setOpen} />
+        </Suspense>
+      )}
+    </>
+  )
+}
 
 function ChangelogSkeleton() {
   return (
@@ -154,7 +189,7 @@ export function ChangelogList() {
           <AdminListHeader
             searchValue={searchValue}
             onSearchChange={setSearchValue}
-            action={<CreateChangelogDialog />}
+            action={<NewChangelogEntryButton />}
           />
 
           {/* Top viewed */}
@@ -177,7 +212,9 @@ export function ChangelogList() {
                     ? 'No changelog entries match your filters'
                     : 'No changelog entries yet'
               }
-              action={!hasActiveFilters && !filters.search ? <CreateChangelogDialog /> : undefined}
+              action={
+                !hasActiveFilters && !filters.search ? <NewChangelogEntryButton /> : undefined
+              }
               className="h-48"
             />
           ) : (

@@ -8,6 +8,9 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import { aiUsageLog } from '@/lib/server/db'
 import { getGuidanceRuleStats } from '../guidance-stats'
+import { AI_USAGE_RETENTION_DAYS } from '@/lib/server/domains/ai/usage-log'
+
+const DAY_MS = 24 * 60 * 60 * 1000
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -46,8 +49,10 @@ describe.skipIf(!fixture.available)('getGuidanceRuleStats (real DB)', () => {
   afterAll(fixture.close)
 
   it('returns Applied count and lastAppliedAt only', async () => {
-    const first = new Date('2026-07-01T00:00:00.000Z')
-    const second = new Date('2026-07-02T00:00:00.000Z')
+    // Relative to now: the stats only count turns inside the usage retention
+    // window, so fixed dates age out of it (these did on 2026-09-29).
+    const first = new Date(Date.now() - 2 * DAY_MS)
+    const second = new Date(Date.now() - DAY_MS)
     await seedTurn(['assistant_guidance_a'], { createdAt: first })
     await seedTurn(['assistant_guidance_a'], { createdAt: second })
 
@@ -55,6 +60,16 @@ describe.skipIf(!fixture.available)('getGuidanceRuleStats (real DB)', () => {
     expect(stats.assistant_guidance_a).toEqual({ applied: 2, lastAppliedAt: second })
     expect(stats.assistant_guidance_a).not.toHaveProperty('resolved')
     expect(stats.assistant_guidance_a).not.toHaveProperty('resolvedPct')
+  })
+
+  it('leaves out turns older than the usage retention window', async () => {
+    await seedTurn(['assistant_guidance_a'], {
+      createdAt: new Date(Date.now() - (AI_USAGE_RETENTION_DAYS + 1) * DAY_MS),
+    })
+    await seedTurn(['assistant_guidance_a'], { createdAt: new Date(Date.now() - DAY_MS) })
+
+    const stats = await getGuidanceRuleStats()
+    expect(stats.assistant_guidance_a?.applied).toBe(1)
   })
 
   it('counts each applied rule once per successful turn', async () => {

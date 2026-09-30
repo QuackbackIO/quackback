@@ -23,7 +23,7 @@
  * context, matching the pinned-comment / mention-hover-card convention.
  */
 import { useRef, useState, type ReactNode } from 'react'
-import { useNavigate, useRouteContext } from '@tanstack/react-router'
+import { useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { CheckBadgeIcon } from '@heroicons/react/24/solid'
@@ -32,16 +32,10 @@ import { Avatar } from '@/components/ui/avatar'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/shared/utils'
 import { getPublicUserProfileFn } from '@/lib/server/functions/public-profile'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 const HOVER_OPEN_DELAY_MS = 200
 const HOVER_CLOSE_DELAY_MS = 150
-
-interface PortalRootContext {
-  settings?: {
-    name?: string | null
-    brandingData?: { logoUrl?: string | null; name?: string | null } | null
-  } | null
-}
 
 interface AuthorHoverCardProps {
   /** Principal whose profile the trigger links to. */
@@ -61,11 +55,11 @@ export function AuthorHoverCard({
 }: AuthorHoverCardProps) {
   const intl = useIntl()
   const navigate = useNavigate()
-  const ctx = useRouteContext({ from: '__root__' }) as PortalRootContext
-  const teamBadgeLogoUrl = ctx.settings?.brandingData?.logoUrl ?? null
+  const settings = useWorkspaceSettings()
+  const teamBadgeLogoUrl = settings?.brandingData?.logoUrl ?? null
   const teamBadgeLabel =
-    ctx.settings?.brandingData?.name ??
-    ctx.settings?.name ??
+    settings?.brandingData?.name ??
+    settings?.name ??
     intl.formatMessage({ id: 'portal.profile.teamBadge', defaultMessage: 'Team' })
 
   const [open, setOpen] = useState(false)

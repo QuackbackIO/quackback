@@ -66,7 +66,8 @@ const routerState = { billingEnabled: true }
 const permission = { canCheckout: true }
 
 vi.mock('@tanstack/react-router', () => ({
-  useRouteContext: () => routerState,
+  useRouteContext: (opts?: { select?: (context: never) => unknown }) =>
+    opts?.select ? opts.select(routerState as never) : routerState,
   useLocation: (opts: { select: (loc: { pathname: string; searchStr: string }) => string }) =>
     opts.select({ pathname: '/admin/automation/workflows', searchStr: '' }),
 }))

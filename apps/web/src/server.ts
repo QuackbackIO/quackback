@@ -1,6 +1,7 @@
 import handler, { createServerEntry } from '@tanstack/react-start/server-entry'
 import { assertBootConfigurationOrExit } from '@/lib/server/boot-config'
 import { logStartupBanner } from '@/lib/server/startup'
+import { finishResponse } from '@/lib/server/finish-response'
 
 // FIRST, and above the warmup below on purpose. A misconfigured process must
 // refuse before it opens a single socket, and the warmup opens several. This
@@ -34,7 +35,9 @@ if (process.env.QUACKBACK_BUILD !== '1') {
 logStartupBanner()
 
 export default createServerEntry({
-  fetch(request) {
-    return handler.fetch(request)
+  // The framework's final response, finished (body-end hooks, compression)
+  // out here rather than in request middleware: see finish-response.ts.
+  async fetch(request) {
+    return finishResponse(request, await handler.fetch(request))
   },
 })

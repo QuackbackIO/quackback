@@ -1,9 +1,8 @@
 import { useMemo } from 'react'
-import { useRouteContext } from '@tanstack/react-router'
 import { PortalBrandMark } from './portal-brand-mark'
 import { generateWorkspaceThemeCSS } from '@/lib/shared/theme'
-import type { BrandingConfig } from '@/lib/server/domains/settings/settings.types'
 import { escapeInlineStyle } from '@/lib/shared/safe-inline-content'
+import { useVisualTheme, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 interface PortalAuthShellProps {
   heading: React.ReactNode
@@ -28,18 +27,10 @@ interface PortalAuthShellProps {
  * optional subheading, the form, then a footer for the cross-link.
  */
 export function PortalAuthShell({ heading, subheading, children, footer }: PortalAuthShellProps) {
-  const ctx = useRouteContext({ from: '__root__' }) as {
-    settings?: {
-      brandingConfig?: BrandingConfig
-      customCss?: string
-      visualTheme?: 'legacy' | 'refined'
-    }
-    visualTheme?: 'legacy' | 'refined'
-  }
-  const brandingConfig = ctx.settings?.brandingConfig
-  const customCss = ctx.settings?.customCss ?? ''
-  const visualTheme =
-    ctx.visualTheme === 'refined' || ctx.settings?.visualTheme === 'refined' ? 'refined' : 'legacy'
+  const settings = useWorkspaceSettings()
+  const visualTheme = useVisualTheme()
+  const brandingConfig = settings?.brandingConfig
+  const customCss = settings?.customCss ?? ''
 
   const themeStyles = useMemo(
     () => generateWorkspaceThemeCSS(brandingConfig, visualTheme),

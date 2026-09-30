@@ -32,19 +32,65 @@ export interface SseStream {
   close: () => void
 }
 
+/**
+ * How often an otherwise silent stream writes a comment line.
+ *
+ * Servers and proxies close a connection that carries no bytes for a while:
+ * Bun's `idleTimeout` defaults to 10 seconds, and it counts a streamed response
+ * that has stopped writing as idle. The heartbeat below runs on a longer cycle
+ * because each beat also writes presence, so the keepalive is separate and
+ * costs one comment line and nothing else.
+ */
+export const SSE_STREAM_KEEPALIVE_MS = 5_000
+
+/**
+ * How long a just-written keepalive may wait unread before it counts against
+ * the reader. The keepalive and the heartbeat run on separate timers, so a
+ * beat can land after a keepalive is written and before the server has pulled
+ * it; that frame says nothing about whether anyone is reading. A reader that
+ * is really gone is still caught on the next beat, because keepalives stop
+ * once the queue holds anything.
+ */
+const KEEPALIVE_GRACE_MS = 1_000
+
 export function createSseStream(
-  options: { onCancel?: () => void | Promise<void> } = {}
+  options: { onCancel?: () => void | Promise<void>; keepAliveMs?: number } = {}
 ): SseStream {
   const encoder = new TextEncoder()
   let controller!: ReadableStreamDefaultController<Uint8Array>
   let closed = false
+  let keepAlive: ReturnType<typeof setInterval> | null = null
+  let lastKeepAliveAt = 0
+  const stopKeepAlive = () => {
+    if (keepAlive) clearInterval(keepAlive)
+    keepAlive = null
+  }
 
   const stream = new ReadableStream<Uint8Array>({
     start(c) {
       controller = c
+      const every = options.keepAliveMs ?? SSE_STREAM_KEEPALIVE_MS
+      if (every > 0) {
+        keepAlive = setInterval(() => {
+          if (closed) return stopKeepAlive()
+          // Only into an empty queue: a keepalive must never be what makes a
+          // live consumer look behind to the heartbeat's unconsumed check.
+          const size = controller.desiredSize
+          if (size === null || size <= 0) return
+          try {
+            controller.enqueue(encoder.encode(': keepalive\n\n'))
+            lastKeepAliveAt = Date.now()
+          } catch {
+            closed = true
+            stopKeepAlive()
+          }
+        }, every)
+        keepAlive.unref?.()
+      }
     },
     async cancel() {
       closed = true
+      stopKeepAlive()
       await options.onCancel?.()
     },
   })
@@ -66,7 +112,9 @@ export function createSseStream(
     heartbeatPing: () => {
       if (closed) return 'closed'
       const size = controller?.desiredSize
-      if (size !== undefined && size !== null && size <= 0) return 'unconsumed'
+      if (size !== undefined && size !== null && size <= 0) {
+        return Date.now() - lastKeepAliveAt < KEEPALIVE_GRACE_MS ? 'ok' : 'unconsumed'
+      }
       try {
         controller.enqueue(encoder.encode(': ping\n\n'))
         return 'ok'
@@ -78,6 +126,7 @@ export function createSseStream(
     isClosed: () => closed,
     close: () => {
       closed = true
+      stopKeepAlive()
       try {
         controller.close()
       } catch {

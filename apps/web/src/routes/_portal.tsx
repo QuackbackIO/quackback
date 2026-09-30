@@ -5,9 +5,11 @@ import {
   retainSearchParams,
   useRouteContext,
 } from '@tanstack/react-router'
+import { lazy, Suspense } from 'react'
 import { createServerFn } from '@tanstack/react-start'
 import { setResponseHeader } from '@tanstack/react-start/server'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
+import { unreadCountQuery } from '@/lib/client/hooks/use-notifications-queries'
 import { PortalPreviewProvider } from '@/components/public/portal-preview-listener'
 import { getMyPortalPermissionsFn } from '@/lib/server/functions/portal-permissions'
 import { PortalPermissionsProvider } from '@/lib/client/hooks/use-portal-permissions'
@@ -17,7 +19,6 @@ import { PortalHeader } from '@/components/public/portal-header'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
 import { AuthDialog } from '@/components/auth/auth-dialog'
 import { buildPortalAuthDialogConfig } from '@/components/auth/portal-auth-dialog-config'
-import { PortalAccessGate } from '@/components/portal/portal-access-gate'
 import type { PortalAccessGateError } from '@/lib/shared/types/portal-gate-error'
 import { generateWorkspaceThemeCSS, readFontSans } from '@/lib/shared/theme'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
@@ -33,7 +34,7 @@ import { isSafeCallbackUrl } from '@/lib/shared/routing'
 import { useAutoOpenAuthDialog } from '@/components/auth/use-auto-open-auth'
 import { resolveInstantSsoRedirectFn } from '@/lib/server/functions/instant-sso'
 import { useBrandingFont } from '@/lib/client/hooks/use-branding-font'
-import { usePreviewDraft } from '@/components/public/preview-draft-context'
+import { usePreviewCss } from '@/components/public/preview-draft-context'
 import { resolvePortalOgImageUrl } from '@/lib/shared/portal-og-image'
 
 /**
@@ -83,7 +84,7 @@ export const Route = createFileRoute('/_portal')({
     error: search.error,
   }),
   loader: async ({ context, deps, location }) => {
-    const { session, settings, userRole, baseUrl, registeredAuthProviders } = context
+    const { queryClient, session, settings, userRole, baseUrl, registeredAuthProviders } = context
 
     // Document response header — only meaningful (and only cheap) during SSR;
     // client-side navigations skip the extra RPC.
@@ -130,6 +131,14 @@ export const Route = createFileRoute('/_portal')({
       isTeamMember(userRole) ? getMyPortalPermissionsFn() : Promise.resolve([] as PermissionKey[])
     )
     const portalIntlPromise = markHandled(loadPortalIntl())
+    // The header's notification bell (signed-in visitors) shows the unread
+    // count on every portal page. Loaded with the page, the count is there at
+    // first paint rather than asked for once the page hydrates; unreadable
+    // now, it is left to the bell.
+    const unreadCountPromise =
+      session?.user && session.user.principalType !== 'anonymous'
+        ? queryClient.ensureQueryData(unreadCountQuery()).catch(() => null)
+        : Promise.resolve(null)
 
     const accessResult = await accessResultPromise
     // Parse the portal-route auth-prompt params (signin, prompt, callbackUrl)
@@ -210,7 +219,11 @@ export const Route = createFileRoute('/_portal')({
     // gating; the server still enforces every mutation) and only for team
     // roles — end users and visitors skip the RPC entirely. Both were already
     // started above, in parallel with the access check.
-    const [avatarData, permissionKeys] = await Promise.all([avatarPromise, permissionKeysPromise])
+    const [avatarData, permissionKeys] = await Promise.all([
+      avatarPromise,
+      permissionKeysPromise,
+      unreadCountPromise,
+    ])
 
     const brandingData = settings?.brandingData ?? null
     const faviconData = settings?.faviconData ?? null
@@ -306,9 +319,24 @@ export const Route = createFileRoute('/_portal')({
   component: PortalLayout,
 })
 
+// The access gate (a private portal's sign-in wall, with the whole sign-in form
+// and its two-factor steps) is for a visitor the portal turns away, so only
+// that visitor loads it. The server still renders it in place.
+const PortalAccessGate = lazy(() =>
+  import('@/components/portal/portal-access-gate').then((m) => ({ default: m.PortalAccessGate }))
+)
+
 function PortalLayout() {
   const loaderData = Route.useLoaderData()
-  const { preview } = Route.useSearch()
+  // Selected: the search and the route context are new objects after every
+  // navigation, and the layout (with the header and providers it renders)
+  // needs only these answers from them. The session lives on the root
+  // context (dehydrated once in __root.tsx) rather than in this loader's data.
+  const preview = Route.useSearch({ select: (search) => search.preview })
+  const isAuthenticated = useRouteContext({
+    from: '__root__',
+    select: ({ session }) => !!session?.user && session.user.principalType !== 'anonymous',
+  })
 
   // Access denied: render the in-place sign-in wall (a normal 200 page). The
   // gate is self-contained (it mounts its own PortalIntlProvider).
@@ -317,18 +345,20 @@ function PortalLayout() {
     return (
       <>
         <PortalBrandingFontLoader customCss={gate.customCss} configFontSans={gate.configFontSans} />
-        <PortalAccessGate
-          reason={gate.reason}
-          workspaceName={gate.workspaceName}
-          logoUrl={gate.logoUrl}
-          authConfig={gate.authConfig}
-          themeStyles={gate.themeStyles}
-          customCss={gate.customCss}
-          userEmail={gate.userEmail ?? null}
-          locale={gate.locale}
-          callbackUrl={gate.callbackUrl}
-          autoOpenSignin={gate.autoOpenSignin}
-        />
+        <Suspense fallback={null}>
+          <PortalAccessGate
+            reason={gate.reason}
+            workspaceName={gate.workspaceName}
+            logoUrl={gate.logoUrl}
+            authConfig={gate.authConfig}
+            themeStyles={gate.themeStyles}
+            customCss={gate.customCss}
+            userEmail={gate.userEmail ?? null}
+            locale={gate.locale}
+            callbackUrl={gate.callbackUrl}
+            autoOpenSignin={gate.autoOpenSignin}
+          />
+        </Suspense>
       </>
     )
   }
@@ -348,13 +378,6 @@ function PortalLayout() {
     prompt,
     permissionKeys,
   } = loaderData
-
-  // session + redacted settings live on the root context (dehydrated once in
-  // __root.tsx), so they're read from there rather than re-serialized into this
-  // route's loader data.
-  const { session } = useRouteContext({ from: '__root__' })
-
-  const isAuthenticated = !!session?.user && session.user.principalType !== 'anonymous'
 
   return (
     <PortalIntlProvider locale={locale} messages={messages}>
@@ -414,9 +437,9 @@ function PortalAuthAutoOpen(props: {
  * Loads the workspace's chosen branding font on demand (see useBrandingFont).
  * Mounted inside PortalPreviewProvider's tree so that, in the admin branding
  * preview, it also picks up the live draft stylesheet (postMessaged from the
- * settings page as the admin previews different fonts) via usePreviewDraft —
- * outside preview mode that hook returns null and this falls back to the
- * loader-supplied customCss/configFontSans, exactly like a normal visit.
+ * settings page as the admin previews different fonts) via usePreviewCss.
+ * Without a draft stylesheet (always, outside preview mode) it falls back to
+ * the loader-supplied customCss/configFontSans, exactly like a normal visit.
  */
 function PortalBrandingFontLoader({
   customCss,
@@ -425,7 +448,7 @@ function PortalBrandingFontLoader({
   customCss: string
   configFontSans: string | null
 }) {
-  const draft = usePreviewDraft()
-  useBrandingFont(draft?.css ?? customCss, configFontSans)
+  const draftCss = usePreviewCss()
+  useBrandingFont(draftCss ?? customCss, configFontSans)
   return null
 }

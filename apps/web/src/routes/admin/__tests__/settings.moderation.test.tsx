@@ -29,7 +29,7 @@ vi.mock('@/lib/client/queries/settings', () => ({
   settingsQueries: { portalConfig: () => ({ queryKey: ['portal'] }) },
 }))
 
-const { ModerationPage } = await import('../settings.moderation')
+const { ModerationPage } = await import('@/components/admin/settings/moderation-settings-page')
 
 describe('Moderation page', () => {
   it('keeps approval and content-review cards and has no anonymous-access card', () => {

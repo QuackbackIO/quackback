@@ -30,8 +30,6 @@ import {
 import { StatusSyncConfig } from '@/components/admin/settings/integrations/status-sync-config'
 import { TicketStatusSyncConfig } from '@/components/admin/settings/integrations/ticket-status-sync-config'
 import { OnDeleteConfig } from '@/components/admin/settings/integrations/on-delete-config'
-import { IntegrationHealthPanel } from '@/components/admin/settings/integrations/integration-health-panel'
-import type { IntegrationHealth } from '@/components/admin/settings/integrations/integration-health-panel'
 
 interface EventMapping {
   id: string
@@ -44,7 +42,6 @@ interface GitHubConfigProps {
   initialConfig: Record<string, unknown>
   initialEventMappings: EventMapping[]
   enabled: boolean
-  health?: IntegrationHealth
 }
 
 const EVENT_CONFIG = [
@@ -65,7 +62,6 @@ export function GitHubConfig({
   initialConfig,
   initialEventMappings,
   enabled,
-  health,
 }: GitHubConfigProps) {
   const updateMutation = useUpdateIntegration()
   const [repos, setRepos] = useState<GitHubRepo[]>([])
@@ -224,8 +220,6 @@ export function GitHubConfig({
           )}
         </div>
       </section>
-
-      <IntegrationHealthPanel health={health} />
 
       <div className="space-y-2">
         <span className={MENU_LABEL}>Feedback</span>

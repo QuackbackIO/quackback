@@ -1,4 +1,5 @@
 import { db, settings } from '@/lib/server/db'
+import { logger } from '@/lib/server/logger'
 import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 import { OSS_TIER_LIMITS, type TierLimits } from './tier-limits.types'
 import {
@@ -9,8 +10,43 @@ import {
 } from './cloud/billing-projection'
 import { canonicalPlanId, isPlanId, type PlanId } from './cloud/cloud.types'
 
+const log = logger.child({ component: 'tier-limits-service' })
+
 type StoredTierLimits = Partial<Omit<TierLimits, 'features'>> & {
   features?: Partial<TierLimits['features']>
+}
+
+/**
+ * Parse stored `tier_limits` JSON, tolerating corruption. Absent is the
+ * documented "no row" state (self-hosters get {@link OSS_TIER_LIMITS};
+ * cloud workspaces get the signed projection's floor — see
+ * {@link resolveEffectiveTierLimits}). Unparseable or non-object JSON is
+ * corrupt data: logged once so it can be found and repaired, and treated
+ * the same as "no row" rather than throwing on every tier-limit check.
+ */
+function parseStoredTierLimits(raw: string | null | undefined): StoredTierLimits | null {
+  if (!raw) return null
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch (err) {
+    log.error(
+      { err, column: 'tier_limits' },
+      'unreadable tier_limits JSON, treating as no stored row'
+    )
+    return null
+  }
+
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    log.error(
+      { column: 'tier_limits', valueType: Array.isArray(parsed) ? 'array' : typeof parsed },
+      'tier_limits JSON was not an object, treating as no stored row'
+    )
+    return null
+  }
+
+  return parsed as StoredTierLimits
 }
 
 export function mergeTierLimits(stored: StoredTierLimits | null): TierLimits {
@@ -157,7 +193,7 @@ export async function getTierLimits(now = new Date()): Promise<TierLimits> {
       .from(settings)
       .limit(1)
     const raw = rows[0]?.tierLimits
-    const stored: StoredTierLimits | null = raw ? (JSON.parse(raw) as StoredTierLimits) : null
+    const stored = parseStoredTierLimits(raw)
     const rawProjection = rows[0]?.cloud?.projection
     cached = {
       stored,

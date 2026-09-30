@@ -1,9 +1,9 @@
 /**
  * Ticket side effects driven off the shared event bus (convergence Phase 1a —
  * scratchpad/convergence-design.md, second-opinion dealbreaker 3). Same
- * fire-and-forget + lazy-import pattern as sla.event-hooks.ts: process.ts
- * routes every event here, the hook swallows its own errors, and the pure-DB
- * recorders never re-enter the bus.
+ * lazy-import pattern as sla.event-hooks.ts: the event reactions
+ * (events/event-reactions.ts) route every `message.created` here, the hook
+ * swallows its own errors, and the pure-DB recorders never re-enter the bus.
  *
  * Today exactly one reaction lives here: a VISITOR `message.created` on a
  * conversation paired with a CUSTOMER ticket reopens that ticket
@@ -44,10 +44,13 @@ export async function autoReopenPairTicketFromEvent(event: EventData): Promise<v
     // timeline record + event actor attribute the move to them (the function
     // no-ops unless the ticket is awaiting them or closed, so an already-open
     // ticket — e.g. the portal reply path's direct call having landed first —
-    // records nothing twice).
+    // records nothing twice). The message's own time lets a reaction that runs
+    // late leave standing a close made after the message.
+    const messageAt = new Date(event.data.message.createdAt)
     await autoReopenOnRequesterReply(
       ticketId,
-      (event.data.message.authorPrincipalId as PrincipalId | null) ?? null
+      (event.data.message.authorPrincipalId as PrincipalId | null) ?? null,
+      Number.isNaN(messageAt.getTime()) ? null : messageAt
     )
   } catch (err) {
     log.error({ err, eventType: event.type }, 'pair-ticket auto-reopen failed')

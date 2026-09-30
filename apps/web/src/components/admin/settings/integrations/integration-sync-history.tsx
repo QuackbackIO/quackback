@@ -81,6 +81,7 @@ export function IntegrationSyncHistory({ provider }: { provider: string }) {
       toast.error(error instanceof Error ? error.message : 'Could not update this sync')
     },
   })
+  if (history.data?.available === false) return null
   return (
     <section aria-label="Sync history" className="space-y-4">
       <div className="flex items-start justify-between gap-3">

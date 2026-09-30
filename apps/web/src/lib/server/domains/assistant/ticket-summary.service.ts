@@ -25,9 +25,9 @@
  *
  * `summarizeTicketOnClose` is best-effort end to end: every failure
  * (unconfigured AI, a malformed model response, a DB error) is caught and
- * logged here, so it never throws into its caller — the event hook
- * (events/process.ts) fires it fire-and-forget off `ticket.status_changed →
- * closed`, exactly as the conversation-close branch fires its sibling.
+ * logged here, so it never throws into its caller: the event reaction
+ * (events/event-reactions.ts) runs it off `ticket.status_changed → closed`,
+ * exactly as the conversation-close reaction runs its sibling.
  */
 import { chat } from '@tanstack/ai'
 import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
@@ -38,12 +38,19 @@ import {
   isAiClientConfigured,
   structuredOutputProviderOptions,
 } from '@/lib/server/domains/ai/config'
+import { abortControllerFor } from '@/lib/server/domains/ai/abort'
 import { createUsageLoggingMiddleware } from '@/lib/server/domains/ai/usage-middleware'
 import { getChatModel, getEmbeddingModel } from '@/lib/server/domains/ai/models'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { generateEmbedding } from '@/lib/server/domains/embeddings/embedding.service'
 import { listTicketMessages } from '@/lib/server/domains/tickets/ticket-message.service'
 import { buildTicketTranscript, GROUNDING_CHAR_BUDGET } from './transcript'
+import {
+  isCurrentClose,
+  upToClose,
+  writeForCurrentClose,
+  type TriggeringClose,
+} from './close-summary'
 import { createId, type TicketId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 
@@ -75,14 +82,23 @@ const TicketSummarySchema = z.object({ summary: z.string() })
  * isn't configured — mirrors `summarizeConversationOnClose`'s guard — and
  * never throws: every failure path (missing ticket, empty transcript,
  * malformed model output, a DB or provider error) is logged and swallowed,
- * since this runs fire-and-forget off the ticket-close event.
+ * since this runs off the ticket-close event. `signal` (the reaction job's
+ * deadline) aborts the provider calls.
+ *
+ * Bound to `close`, the close that queued it, as its conversation sibling is
+ * (see close-summary.ts).
  */
-export async function summarizeTicketOnClose(ticketId: TicketId): Promise<void> {
+export async function summarizeTicketOnClose(
+  ticketId: TicketId,
+  close: TriggeringClose,
+  opts: { signal?: AbortSignal } = {}
+): Promise<void> {
   try {
     await enforceAiTokenBudget()
 
     const model = getChatModel('summary')
     if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) return
+    if (!(await isCurrentClose('ticket', ticketId, close))) return
 
     const [ticketRow, thread] = await Promise.all([
       db.query.tickets.findFirst({
@@ -96,7 +112,7 @@ export async function summarizeTicketOnClose(ticketId: TicketId): Promise<void> 
       return
     }
 
-    const transcript = buildTicketTranscript(thread.messages)
+    const transcript = buildTicketTranscript(upToClose(thread.messages, close))
     if (!transcript) return // nothing customer-visible happened; no summary to write
 
     const truncated =
@@ -117,6 +133,7 @@ export async function summarizeTicketOnClose(ticketId: TicketId): Promise<void> 
       messages: [{ role: 'user', content: truncated }],
       outputSchema: TicketSummarySchema,
       stream: false,
+      abortController: abortControllerFor(opts.signal),
       modelOptions: { max_tokens: 400, ...structuredOutputProviderOptions() },
       middleware: [
         createUsageLoggingMiddleware({
@@ -136,9 +153,11 @@ export async function summarizeTicketOnClose(ticketId: TicketId): Promise<void> 
     // Best-effort: a failed/unavailable embedding still saves the summary text
     // (retrieval's keyword fallback can still use it), just without the
     // semantic ranking path.
-    const embedding = await generateEmbedding(summaryText, {
-      pipelineStep: 'ticket_summary_embedding',
-    })
+    const embedding = await generateEmbedding(
+      summaryText,
+      { pipelineStep: 'ticket_summary_embedding' },
+      { signal: opts.signal }
+    )
 
     const values = {
       ticketId,
@@ -154,15 +173,22 @@ export async function summarizeTicketOnClose(ticketId: TicketId): Promise<void> 
         : {}),
     }
 
-    await db
-      .insert(ticketSummaries)
-      .values({ id: createId('ticket_summary'), ...values })
-      .onConflictDoUpdate({
-        target: ticketSummaries.ticketId,
-        set: values,
-      })
-
-    log.info({ ticket_id: ticketId }, 'ticket summary generated')
+    const written = await writeForCurrentClose(
+      'ticket',
+      ticketId,
+      close,
+      opts.signal,
+      async (tx) => {
+        await tx
+          .insert(ticketSummaries)
+          .values({ id: createId('ticket_summary'), ...values })
+          .onConflictDoUpdate({
+            target: ticketSummaries.ticketId,
+            set: values,
+          })
+      }
+    )
+    if (written) log.info({ ticket_id: ticketId }, 'ticket summary generated')
   } catch (err) {
     log.error({ err, ticket_id: ticketId }, 'ticket summary generation failed')
   }

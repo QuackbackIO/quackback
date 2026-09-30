@@ -285,7 +285,11 @@ export async function sweepOverdueSlaBreaches(
           tx
         )
         if (!landed) return // settled, paused, re-applied, or claimed meanwhile
-        await insertClockEvent(row.id, applied.policyId, clock.reportKind, dueAt, at, tx)
+        // A next-response breach names its cycle, so the cycle's outcome is
+        // logged once even when a late reply answers it (sla.service.ts).
+        const cycleAt =
+          clock.dueField === 'nextResponseDueAt' ? applied.nextResponseCycleAt : undefined
+        await insertClockEvent(row.id, applied.policyId, clock.reportKind, dueAt, at, tx, cycleAt)
         recorded++
       })
     }

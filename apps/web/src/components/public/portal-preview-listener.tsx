@@ -1,5 +1,47 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { extractCssVariables, normalizeFontSans } from '@/lib/shared/theme'
 import { PreviewDraftProvider, type PortalPreviewDraft } from './preview-draft-context'
+
+type StructuralDraft = Omit<PortalPreviewDraft, 'css'>
+
+const sameContent = (a: unknown, b: unknown) => a === b || JSON.stringify(a) === JSON.stringify(b)
+
+/**
+ * The next structural draft, keeping each field that did not change as the
+ * very object it was. Every message carries the whole draft, so without this
+ * an edit to the welcome card would hand the header a new navigation too.
+ */
+function nextDraft(prev: StructuralDraft | null, next: StructuralDraft): StructuralDraft {
+  const nav = sameContent(prev?.nav, next.nav) ? prev?.nav : next.nav
+  const welcomeCard = sameContent(prev?.welcomeCard, next.welcomeCard)
+    ? prev?.welcomeCard
+    : next.welcomeCard
+  return prev && nav === prev.nav && welcomeCard === prev.welcomeCard ? prev : { nav, welcomeCard }
+}
+
+/**
+ * The draft stylesheet as the portal applies a saved theme. The saved theme
+ * also sets the font and radius on `body`, and the font family itself with
+ * `!important`, which beat a draft that sets them on `:root` alone; so the
+ * draft's light values are declared there too. They go ahead of the draft's
+ * own text, whose custom rules then win, as saved custom CSS does.
+ */
+function previewStylesheet(css: string): string {
+  const { light } = extractCssVariables(css)
+  const fontSans = light['--font-sans'] ? normalizeFontSans(light['--font-sans']) : null
+  const radius = light['--radius'] ?? null
+  const bodyVars = [
+    fontSans ? `--font-sans: ${fontSans}` : null,
+    radius ? `--radius: ${radius}` : null,
+  ].filter(Boolean)
+  return [
+    bodyVars.length > 0 ? `body { ${bodyVars.join('; ')}; }` : null,
+    fontSans ? `html body { font-family: ${fontSans} !important; }` : null,
+    css,
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
 
 /**
  * Bridge between the admin Branding page and the portal preview iframe.
@@ -26,7 +68,7 @@ export function PortalPreviewProvider({
   children: ReactNode
 }) {
   const [css, setCss] = useState('')
-  const [draft, setDraft] = useState<PortalPreviewDraft | null>(null)
+  const [draft, setDraft] = useState<StructuralDraft | null>(null)
 
   // Only a framed, explicitly preview-flagged document listens.
   const active = enabled && typeof window !== 'undefined' && window.self !== window.top
@@ -39,7 +81,8 @@ export function PortalPreviewProvider({
       if (msg?.type === 'quackback:preview-css' && typeof msg.css === 'string') {
         setCss(msg.css)
       } else if (msg?.type === 'quackback:preview-draft' && msg.draft) {
-        setDraft(msg.draft as PortalPreviewDraft)
+        const incoming = msg.draft as StructuralDraft
+        setDraft((prev) => nextDraft(prev, incoming))
       }
     }
     window.addEventListener('message', onMessage)
@@ -48,17 +91,14 @@ export function PortalPreviewProvider({
     return () => window.removeEventListener('message', onMessage)
   }, [active])
 
+  const stylesheet = useMemo(() => (css ? previewStylesheet(css) : ''), [css])
+
   if (!enabled) return <>{children}</>
 
-  // Merge the raw draft css into the same context payload draft-aware
-  // components already read (see PortalPreviewDraft.css) — one channel for
-  // the branding page's live edits instead of a second context.
-  const draftWithCss: PortalPreviewDraft | null = draft || css ? { ...draft, css } : null
-
   return (
-    <PreviewDraftProvider value={draftWithCss}>
+    <PreviewDraftProvider draft={draft} css={css}>
       {children}
-      {css ? <style data-preview-override="">{css}</style> : null}
+      {stylesheet ? <style data-preview-override="">{stylesheet}</style> : null}
     </PreviewDraftProvider>
   )
 }

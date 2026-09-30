@@ -8,6 +8,8 @@ import {
 } from '@/lib/server/db'
 import type { IdentityProviderId } from '@quackback/ids'
 import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/cache'
+import { localCacheGet, localCacheSet, settingsLocalTtlMs } from '@/lib/server/local-cache'
+import { memoizePerRequest } from '@/lib/server/request-memo'
 import { ValidationError, NotFoundError } from '@/lib/shared/errors'
 import { httpsUrl } from '@/lib/shared/schemas/auth'
 import {
@@ -54,15 +56,20 @@ import { resolveStatusSettings } from './settings.status'
 import {
   parseJsonConfig,
   parseJsonOrNull,
+  parseMetadataBag,
   parsePortalConfig,
   parseWidgetConfig,
   deepMerge,
   requireSettings,
+  requireSettingsCached,
   wrapDbError,
   invalidateSettingsCache,
   normalizeWelcomeCardInput,
   mergeWelcomeCard,
   publicWelcomeCard,
+  readSettingsRow,
+  type SettingsFreshness,
+  type SettingsRecord,
 } from './settings.helpers'
 import { withCurrentStorageReadTokens } from '@/lib/server/content/storage-read-urls'
 
@@ -138,8 +145,9 @@ async function getEmailDependentPassthroughKeys(): Promise<string[]> {
  * Public OIDC sign-in buttons for the portal, sourced from the
  * `identity_provider` table (NOT the static AUTH_PROVIDERS map). Each
  * button's `id` is the provider's `registrationId`, so a click drives
- * `signIn.social({ provider: registrationId })` → the matching
- * `/oauth2/callback/<registrationId>` (rewritten onto `/callback/<id>`).
+ * `signIn.social({ provider: registrationId })` →
+ * `/api/auth/callback/<registrationId>`. A return to the pre-1.7
+ * `/api/auth/oauth2/callback/<registrationId>` URL is rewritten onto that path.
  *
  * A provider yields a button only when it is BOTH:
  *   - button-eligible (`shouldRenderPublicButton`): no verified domain,
@@ -165,9 +173,9 @@ export async function getPublicOidcProviders(): Promise<OidcSignInButton[]> {
     .map((p) => ({ id: p.registrationId, name: p.label, logoUrl: p.logoUrl }))
 }
 
-export async function getAuthConfig(): Promise<AuthConfig> {
+export async function getAuthConfig(freshness: SettingsFreshness = 'cached'): Promise<AuthConfig> {
   try {
-    const org = await requireSettings()
+    const org = await readSettingsRow(freshness)
     return parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
   } catch (error) {
     log.error({ err: error }, 'get auth config failed')
@@ -616,9 +624,11 @@ export async function listVerifiedDomains(): Promise<VerifiedDomain[]> {
   }
 }
 
-export async function getPortalConfig(): Promise<PortalConfig> {
+export async function getPortalConfig(
+  freshness: SettingsFreshness = 'cached'
+): Promise<PortalConfig> {
   try {
-    const org = await requireSettings()
+    const org = await readSettingsRow(freshness)
     return parsePortalConfig(org.portalConfig)
   } catch (error) {
     log.error({ err: error }, 'get portal config failed')
@@ -654,7 +664,7 @@ export async function updatePortalConfig(input: UpdatePortalConfigInput): Promis
 
 export async function getDeveloperConfig(): Promise<DeveloperConfig> {
   try {
-    const org = await requireSettings()
+    const org = await requireSettingsCached()
     return parseJsonConfig(org.developerConfig, DEFAULT_DEVELOPER_CONFIG)
   } catch (error) {
     log.error({ err: error }, 'get developer config failed')
@@ -713,9 +723,11 @@ export async function updateDeveloperConfig(
   }
 }
 
-export async function getHelpCenterConfig(): Promise<HelpCenterConfig> {
+export async function getHelpCenterConfig(
+  freshness: SettingsFreshness = 'cached'
+): Promise<HelpCenterConfig> {
   try {
-    const org = await requireSettings()
+    const org = await readSettingsRow(freshness)
     return parseJsonConfig(org.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
   } catch (error) {
     log.error({ err: error }, 'get help center config failed')
@@ -723,14 +735,23 @@ export async function getHelpCenterConfig(): Promise<HelpCenterConfig> {
   }
 }
 
+/**
+ * A help-center update. `seo` and `autoTranslate` may be partial: they are
+ * merged over the stored section, so a caller never sends back a copy it read.
+ */
+export type HelpCenterConfigUpdate = Omit<Partial<HelpCenterConfig>, 'seo' | 'autoTranslate'> & {
+  seo?: Partial<HelpCenterConfig['seo']>
+  autoTranslate?: Partial<HelpCenterConfig['autoTranslate']>
+}
+
 export async function updateHelpCenterConfig(
-  input: Partial<HelpCenterConfig>
+  input: HelpCenterConfigUpdate
 ): Promise<HelpCenterConfig> {
   log.info('update help center config')
   try {
     const org = await requireSettings()
     const existing = parseJsonConfig(org.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
-    const updated = deepMerge(existing, input)
+    const updated = deepMerge(existing, input as Partial<HelpCenterConfig>)
     await db
       .update(settings)
       .set({ helpCenterConfig: JSON.stringify(updated) })
@@ -759,7 +780,7 @@ export async function enableHelpCenterLocale(input: {
       'Enabling a locale requires a homepage title'
     )
   }
-  const current = await getHelpCenterConfig()
+  const current = await getHelpCenterConfig('fresh')
   if (input.locale === current.locales.default) {
     throw new ValidationError('HC_LOCALE_IS_DEFAULT', 'The default locale is always enabled')
   }
@@ -778,7 +799,7 @@ export async function enableHelpCenterLocale(input: {
 
 /** Disabling a locale keeps its translation rows (re-enabling picks them back up). */
 export async function disableHelpCenterLocale(locale: string): Promise<HelpCenterLocalesConfig> {
-  const current = await getHelpCenterConfig()
+  const current = await getHelpCenterConfig('fresh')
   const updated = await updateHelpCenterConfig({
     locales: {
       ...current.locales,
@@ -792,7 +813,7 @@ export async function updateHelpCenterLocaleChrome(input: {
   locale: string
   chrome: Partial<HelpCenterLocaleChromeStrings>
 }): Promise<HelpCenterLocalesConfig> {
-  const current = await getHelpCenterConfig()
+  const current = await getHelpCenterConfig('fresh')
   if (!current.locales.additional.includes(input.locale)) {
     throw new NotFoundError('HC_LOCALE_NOT_ENABLED', 'That locale is not enabled')
   }
@@ -815,7 +836,7 @@ export async function updateHelpCenterLocaleChrome(input: {
 
 export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
   try {
-    const org = await requireSettings()
+    const org = await requireSettingsCached()
     const authConfig = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
 
     const [configuredTypes, passthroughKeys] = await Promise.all([
@@ -840,7 +861,7 @@ export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
 
 export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
   try {
-    const org = await requireSettings()
+    const org = await requireSettingsCached()
     const portalConfig = parsePortalConfig(org.portalConfig)
 
     const oidcProviders = await getPublicOidcProviders()
@@ -870,7 +891,41 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
 // WorkspaceSettings and SettingsBrandingData are defined in settings.types.ts
 // to prevent client-side barrel imports from pulling in this server-only module.
 
+/**
+ * The workspace settings with every config parsed, read at most once per
+ * request: the auth instance's version check, its hooks, the bootstrap payload
+ * and the auth helpers all ask for them. The request memo is keyed by the
+ * cache key, so `invalidateSettingsCache()` drops it along with the cached row.
+ * Each caller gets its own copy, as it did when every call parsed its own read.
+ */
 export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> {
+  const settings = await memoizePerRequest(CACHE_KEYS.WORKSPACE_SETTINGS, loadWorkspaceSettings)
+  return settings ? liveWorkspaceSettings(structuredClone(settings)) : null
+}
+
+/**
+ * The raw row inside {@link getWorkspaceSettings}, from the same read: the
+ * cached tier of the settings row (see settings.helpers.ts). Copied alone, so
+ * a caller that wants one column does not pay to copy every parsed config.
+ *
+ * @internal
+ */
+export async function getWorkspaceSettingsRow(): Promise<SettingsRecord | null> {
+  const settings = await memoizePerRequest(CACHE_KEYS.WORKSPACE_SETTINGS, loadWorkspaceSettings)
+  const row = settings?.settings as SettingsRecord | undefined
+  return row ? structuredClone(row) : null
+}
+
+async function loadWorkspaceSettings(): Promise<WorkspaceSettings | null> {
+  const local = localCacheGet<WorkspaceSettings>(CACHE_KEYS.WORKSPACE_SETTINGS)
+  if (local) return local
+  const settings = await readWorkspaceSettings()
+  const ttlMs = settingsLocalTtlMs()
+  if (settings && ttlMs > 0) localCacheSet(CACHE_KEYS.WORKSPACE_SETTINGS, settings, ttlMs)
+  return settings
+}
+
+async function readWorkspaceSettings(): Promise<WorkspaceSettings | null> {
   try {
     const cached = await cacheGet<WorkspaceSettings>(CACHE_KEYS.WORKSPACE_SETTINGS)
     if (cached) {
@@ -888,7 +943,7 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
         // the portal dark for the hour the entry has left to live.
         if (cached.featureFlags) cached.featureFlags.feedback = true
         await repairLabsProjection(cached)
-        return liveWorkspaceSettings(cached)
+        return cached
       }
     }
 
@@ -978,7 +1033,7 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
     // calls invalidateSettingsCache(), so a long TTL is safe and keeps
     // the per-request cost of getWorkspaceSettings to a single Redis GET.
     await cacheSet(CACHE_KEYS.WORKSPACE_SETTINGS, result, 3600)
-    return liveWorkspaceSettings(result)
+    return result
   } catch (error) {
     log.error({ err: error }, 'get workspace settings failed')
     wrapDbError('fetch settings with all configs', error)
@@ -1029,7 +1084,21 @@ export async function isCopilotCapabilityEnabled(
  * Update feature flags (partial update, merges with existing)
  */
 export async function updateFeatureFlags(input: Partial<FeatureFlags>): Promise<FeatureFlags> {
-  const org = await requireSettings()
+  // The patch rewrites columns it was computed from (flags, metadata, widget
+  // and portal config), so the row is read under its lock: a concurrent write
+  // to any of them is read here rather than overwritten.
+  const flags = await db.transaction(async (tx) => {
+    const [org] = await tx.select().from(settings).limit(1).for('update')
+    if (!org) throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
+    const { updated, patch } = featureFlagsWrite(org, input)
+    await tx.update(settings).set(patch).where(eq(settings.id, org.id))
+    return updated
+  })
+  await invalidateSettingsCache()
+  return flags
+}
+
+function featureFlagsWrite(org: SettingsRecord, input: Partial<FeatureFlags>) {
   // Unknown stored keys (retired Labs flags) drop here; the next write
   // persists a clean shape.
   const current = resolveFeatureFlags(org.featureFlags)
@@ -1051,7 +1120,7 @@ export async function updateFeatureFlags(input: Partial<FeatureFlags>): Promise<
   }
   if (input.statusPage === true) {
     const existing = resolveStatusSettings(org.metadata)
-    const meta = parseJsonOrNull<Record<string, unknown>>(org.metadata) ?? {}
+    const meta = parseMetadataBag(org.metadata, { settingsId: org.id, key: 'statusSettings' })
     meta.statusSettings = { ...existing, enabled: true }
     patch.metadata = JSON.stringify(meta)
   }
@@ -1068,7 +1137,5 @@ export async function updateFeatureFlags(input: Partial<FeatureFlags>): Promise<
       support: { ...portal.support, enabled: true },
     })
   }
-  await db.update(settings).set(patch).where(eq(settings.id, org.id))
-  await invalidateSettingsCache()
-  return updated
+  return { updated, patch }
 }

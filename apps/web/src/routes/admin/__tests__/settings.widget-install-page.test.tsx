@@ -30,7 +30,10 @@ vi.mock('@tanstack/react-router', async () => {
     await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router')
   return {
     ...actual,
-    useRouteContext: () => ({ baseUrl: 'https://feedback.example.com' }),
+    useRouteContext: (opts?: { select?: (context: never) => unknown }) => {
+      const context = { baseUrl: 'https://feedback.example.com' }
+      return opts?.select ? opts.select(context as never) : context
+    },
     Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
   }
 })
@@ -93,7 +96,8 @@ describe('WidgetInstallPage', () => {
   })
 
   it('shows setup steps and keeps the signing secret out of the numbered flow', async () => {
-    const { WidgetInstallPage } = await import('../settings.widget.install')
+    const { WidgetInstallPage } =
+      await import('@/components/admin/settings/widget/widget-install-page')
     render(<WidgetInstallPage />)
 
     expect(screen.queryByRole('switch', { name: /identify/i })).toBeNull()
@@ -111,7 +115,8 @@ describe('WidgetInstallPage', () => {
   })
 
   it('shows identify comments in the hand-install snippet after opening it', async () => {
-    const { WidgetInstallPage } = await import('../settings.widget.install')
+    const { WidgetInstallPage } =
+      await import('@/components/admin/settings/widget/widget-install-page')
     render(<WidgetInstallPage />)
 
     fireEvent.click(screen.getByRole('button', { name: /Install without an agent/ }))
@@ -125,7 +130,8 @@ describe('WidgetInstallPage', () => {
 
   it('toasts when Show on your website fails to save', async () => {
     updateWidgetConfig.mutateAsync.mockRejectedValue(new Error('nope'))
-    const { WidgetInstallPage } = await import('../settings.widget.install')
+    const { WidgetInstallPage } =
+      await import('@/components/admin/settings/widget/widget-install-page')
     render(<WidgetInstallPage />)
 
     fireEvent.click(screen.getByRole('switch', { name: 'Show on your website' }))
@@ -137,7 +143,8 @@ describe('WidgetInstallPage', () => {
   })
 
   it('mints a pairing code into the agent prompt and never copies a wgt_ secret', async () => {
-    const { WidgetInstallPage } = await import('../settings.widget.install')
+    const { WidgetInstallPage } =
+      await import('@/components/admin/settings/widget/widget-install-page')
     render(<WidgetInstallPage />)
 
     fireEvent.click(
@@ -161,7 +168,8 @@ describe('WidgetInstallPage', () => {
     onboarding.hasWidgetInstalled = true
     onboarding.hasWidgetEnabled = true
     onboarding.widgetOriginHost = 'app.example.com'
-    const { WidgetInstallPage } = await import('../settings.widget.install')
+    const { WidgetInstallPage } =
+      await import('@/components/admin/settings/widget/widget-install-page')
     render(<WidgetInstallPage />)
 
     expect(screen.getByText('Widget on your site')).toBeInTheDocument()
@@ -174,7 +182,8 @@ describe('WidgetInstallPage', () => {
 
   it('points a detected install at the visibility toggle', async () => {
     onboarding.hasWidgetInstalled = true
-    const { WidgetInstallPage } = await import('../settings.widget.install')
+    const { WidgetInstallPage } =
+      await import('@/components/admin/settings/widget/widget-install-page')
     render(<WidgetInstallPage />)
 
     expect(screen.getByText(/Turn on Show on your website so visitors/)).toBeInTheDocument()

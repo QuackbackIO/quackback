@@ -7,7 +7,7 @@ vi.mock('@/components/admin/upgrade', () => ({
   UpgradeNotice: () => <p>Custom domains are a Pro feature. Upgrade to Pro to enable it.</p>,
 }))
 
-const { DomainsCard, QuackbackUrlCard } = await import('../settings.domains')
+const { DomainsCard, QuackbackUrlCard } = await import('@/components/admin/settings/domains-cards')
 
 const PENDING = {
   hostname: 'feedback.acme.test',

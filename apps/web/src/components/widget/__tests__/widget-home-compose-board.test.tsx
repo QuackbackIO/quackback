@@ -65,12 +65,16 @@ vi.mock('framer-motion', async () => {
       }
       return createElement(tag, dom, children as ReactNode)
     })
+  const proxy = new Proxy(
+    {},
+    { get: (_target, prop) => (typeof prop === 'string' ? make(prop) : undefined) }
+  )
   return {
     AnimatePresence: ({ children }: { children?: ReactNode }) => children,
-    motion: new Proxy(
-      {},
-      { get: (_target, prop) => (typeof prop === 'string' ? make(prop) : undefined) }
-    ),
+    // m mirrors motion here: the fake components don't care which name reaches
+    // them, only the source's switch to LazyMotion's m does.
+    motion: proxy,
+    m: proxy,
     useReducedMotion: () => true,
   }
 })

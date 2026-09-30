@@ -19,13 +19,15 @@ import { StatusBadge } from '@/components/ui/status-badge'
 import { CheckIcon, LockClosedIcon } from '@heroicons/react/24/solid'
 import { signOut } from '@/lib/client/auth-client'
 import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
-import { useRouter, useRouteContext } from '@tanstack/react-router'
+import { useRouter } from '@tanstack/react-router'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { cn } from '@/lib/shared/utils'
-import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { DeferredRichTextEditor } from '@/components/ui/lazy-rich-text-editor'
+import type { EditorDocument } from '@/components/ui/rich-text-editor'
 import { COMMENT_EDITOR_FEATURES } from './comment-editor-features'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { PostId, PostCommentId } from '@quackback/ids'
+import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 
 export type CreateCommentMutation = UseMutationResult<
   unknown,
@@ -79,7 +81,7 @@ export function CommentForm({
   const intl = useIntl()
   const router = useRouter()
   const queryClient = useQueryClient()
-  const { session } = useRouteContext({ from: '__root__' })
+  const session = useSessionContext()
   const [error, setError] = useState<string | null>(null)
   const [selectedStatusId, setSelectedStatusId] = useState<string | null>(null)
   const [statusPopoverOpen, setStatusPopoverOpen] = useState(false)
@@ -106,7 +108,25 @@ export function CommentForm({
     },
   })
 
-  const editorJsonRef = useRef<TiptapContent | null>(null)
+  // What the editor holds. Typing keeps it here rather than in the form, so a
+  // keystroke never re-renders the form around the editor, and serializes
+  // nothing: the form takes the markdown when the comment is submitted. After
+  // a submit attempt the form validates on change, so from then on each change
+  // also reaches the field and its validation message follows the text.
+  const editorDocumentRef = useRef<EditorDocument | null>(null)
+  const submittedRef = useRef(false)
+
+  function recordEditorChange(document: EditorDocument, onFieldChange: (v: string) => void) {
+    editorDocumentRef.current = document
+    if (submittedRef.current) onFieldChange(document.markdown())
+  }
+
+  function submit() {
+    submittedRef.current = true
+    form.setValue('content', editorDocumentRef.current?.markdown() ?? '')
+    void form.handleSubmit(onSubmit)()
+  }
+
   // Bumping the key on submit force-remounts the editor with a fresh doc.
   // `form.reset()` flips field.value to '' which would clear via value-sync,
   // but TipTap's empty-doc model leaves a stale `<p></p>` node that traps
@@ -153,7 +173,7 @@ export function CommentForm({
     createComment.mutate(
       {
         content: data.content.trim(),
-        contentJson: editorJsonRef.current,
+        contentJson: (editorDocumentRef.current?.json() ?? null) as TiptapContent | null,
         parentId: parentId || null,
         postId,
         authorName: effectiveUser?.name || null,
@@ -165,7 +185,8 @@ export function CommentForm({
       {
         onSuccess: () => {
           form.reset()
-          editorJsonRef.current = null
+          editorDocumentRef.current = null
+          submittedRef.current = false
           setEditorResetKey((k) => k + 1)
           setSelectedStatusId(null)
           onSuccess?.()
@@ -194,7 +215,12 @@ export function CommentForm({
   if (showStatusSelector) {
     return (
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            submit()
+          }}
+        >
           <div className="rounded-lg border border-border/50 bg-background overflow-hidden focus-within:border-border focus-within:ring-1 focus-within:ring-ring/20 transition-colors">
             {/* Textarea area */}
             <FormField
@@ -215,12 +241,12 @@ export function CommentForm({
                       onKeyDownCapture={(e) => {
                         if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                           e.preventDefault()
-                          void form.handleSubmit(onSubmit)()
+                          submit()
                         }
                       }}
                     >
-                      <RichTextEditor
-                        key={editorResetKey}
+                      <DeferredRichTextEditor
+                        editorKey={editorResetKey}
                         value={field.value}
                         borderless
                         toolbarPosition="bottom"
@@ -233,10 +259,9 @@ export function CommentForm({
                           id: 'portal.commentForm.placeholder',
                           defaultMessage: 'Write a comment...',
                         })}
-                        onChange={(json, _html, markdown) => {
-                          editorJsonRef.current = json as TiptapContent
-                          field.onChange(markdown ?? '')
-                        }}
+                        onDocumentChange={(document) =>
+                          recordEditorChange(document, field.onChange)
+                        }
                       />
                     </div>
                   </FormControl>
@@ -410,7 +435,7 @@ export function CommentForm({
                 size="sm"
                 disabled={isSubmitting}
                 className="h-7 text-xs"
-                onClick={() => void form.handleSubmit(onSubmit)()}
+                onClick={submit}
               >
                 {isSubmitting
                   ? intl.formatMessage({
@@ -440,7 +465,13 @@ export function CommentForm({
   // Default composer for non-team-members / replies
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          submit()
+        }}
+        className="space-y-4"
+      >
         <FormField
           control={form.control}
           name="content"
@@ -458,12 +489,12 @@ export function CommentForm({
                   onKeyDownCapture={(e) => {
                     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                       e.preventDefault()
-                      void form.handleSubmit(onSubmit)()
+                      submit()
                     }
                   }}
                 >
-                  <RichTextEditor
-                    key={editorResetKey}
+                  <DeferredRichTextEditor
+                    editorKey={editorResetKey}
                     value={field.value}
                     minHeight="80px"
                     disabled={isSubmitting}
@@ -474,10 +505,7 @@ export function CommentForm({
                       id: 'portal.commentForm.placeholder',
                       defaultMessage: 'Write a comment...',
                     })}
-                    onChange={(json, _html, markdown) => {
-                      editorJsonRef.current = json as TiptapContent
-                      field.onChange(markdown ?? '')
-                    }}
+                    onDocumentChange={(document) => recordEditorChange(document, field.onChange)}
                   />
                 </div>
               </FormControl>
@@ -571,12 +599,7 @@ export function CommentForm({
               </Tooltip>
             </TooltipProvider>
           )}
-          <Button
-            type="button"
-            size="sm"
-            disabled={isSubmitting}
-            onClick={() => void form.handleSubmit(onSubmit)()}
-          >
+          <Button type="button" size="sm" disabled={isSubmitting} onClick={submit}>
             {isSubmitting
               ? intl.formatMessage({
                   id: 'portal.commentForm.submitting',

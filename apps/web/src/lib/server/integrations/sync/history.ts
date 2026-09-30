@@ -6,10 +6,20 @@ import {
   desc,
   postExternalLinks,
   sql,
+  integrations,
   integrationSyncOperations as operations,
   integrationSyncAttempts as attempts,
   integrationSyncActions as actions,
 } from '@/lib/server/db'
+import { logger } from '@/lib/server/logger'
+import { installationIdentity } from './identity'
+import {
+  connectionIsDestination,
+  readSlackAssistantEnabled,
+  routedChannelIds,
+  syncHistoryAvailable,
+  writesLedger,
+} from './availability'
 import { can } from '@/lib/server/policy/authorize'
 import type { Actor } from '@/lib/server/policy/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -32,6 +42,8 @@ import { inspectSyncRemote } from './remote'
 import { persistSyncLink } from './hooks'
 import { getBaseUrl } from '@/lib/server/config'
 import { absolutizeMarkdownUrls } from '../post-content'
+
+const log = logger.child({ component: 'sync-history' })
 
 export function syncActions(
   op: Pick<SyncOperation, 'state' | 'cancelRequested'> &
@@ -125,6 +137,26 @@ export async function listSyncHistory(
   input: { provider: string; filter: SyncFilter; cursor?: { at: string; id: string } },
   actor: Actor
 ) {
+  const row = await db.query.integrations.findFirst({
+    where: eq(integrations.integrationType, input.provider),
+    with: { eventMappings: true },
+  })
+  const definition = getIntegration(input.provider)
+  const config = (row?.config as Record<string, unknown> | null) ?? {}
+  const decision = syncHistoryAvailable({
+    provider: input.provider,
+    status: row?.status ?? null,
+    config,
+    notificationChannels: row ? routedChannelIds(config, row.eventMappings) : [],
+    writesLedger: writesLedger(definition),
+    connectionIsDestination: connectionIsDestination(definition),
+    slackAssistantEnabled: await readSlackAssistantEnabled(input.provider),
+  })
+  if (!decision.available || !row) {
+    log.debug({ provider: input.provider, reason: decision.reason }, 'sync history unavailable')
+    return { available: false as const, items: [], nextCursor: null }
+  }
+
   const stateFilter =
     input.filter === 'attention'
       ? sql`${operations.state} IN ('failed','auth_required','uncertain','conflict')`
@@ -139,6 +171,8 @@ export async function listSyncHistory(
     .where(
       and(
         eq(operations.provider, input.provider),
+        eq(operations.integrationId, row.id),
+        eq(operations.installation, installationIdentity(row)),
         stateFilter,
         sql`(${operations.createdAt} > now() - interval '90 days' OR ${operations.state} IN ('queued','running','retry_wait','failed','auth_required','uncertain','conflict'))`,
         input.cursor
@@ -154,6 +188,7 @@ export async function listSyncHistory(
     items.push(...(await Promise.all(page.slice(start, start + 5).map((op) => present(op, actor)))))
   const last = page.at(-1)
   return {
+    available: true as const,
     items,
     nextCursor: rows.length > 25 && last ? { at: last.createdAt.toISOString(), id: last.id } : null,
   }

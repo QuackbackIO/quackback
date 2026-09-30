@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query'
-import { Link, useRouteContext } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import {
   ArrowLeftIcon,
   ArrowTopRightOnSquareIcon,
@@ -60,6 +60,7 @@ import { MergeLeadControl } from '@/components/admin/users/merge-lead-control'
 import { useUpdatePortalUser } from '@/lib/client/mutations'
 import { listConversationsForUserFn, getConversationFn } from '@/lib/server/functions/conversation'
 import type { PrincipalId } from '@quackback/ids'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 const EXTERNAL_ID_KEY = '_externalUserId'
 const EM_DASH = '—'
@@ -282,7 +283,7 @@ function UserConversations({
   principalId: PrincipalId
   embedded?: boolean
 }) {
-  const { settings } = useRouteContext({ from: '__root__' })
+  const settings = useWorkspaceSettings()
   // Gated by the experimental supportInbox flag — when off, skip the fetch and
   // render nothing, so the profile shows no support history for a disabled feature.
   const supportInboxEnabled =
@@ -480,7 +481,7 @@ export function UserDetail({
   const [editName, setEditName] = useState('')
   const [editEmail, setEditEmail] = useState('')
   const updateUser = useUpdatePortalUser()
-  const { settings } = useRouteContext({ from: '__root__' })
+  const settings = useWorkspaceSettings()
   const supportInboxEnabled =
     (settings?.featureFlags as FeatureFlags | undefined)?.supportInbox ?? false
   // Check if current user can manage portal users
@@ -500,6 +501,27 @@ export function UserDetail({
     getNextPageParam: (last) => (last.hasMore ? (last.nextCursor ?? undefined) : undefined),
   })
   const conversationCount = conversationsQuery.data?.pages.flatMap((p) => p.conversations).length
+
+  // Escape goes back to the list, as it deselects there. Not while one of the
+  // profile's dialogs or the inline name edit is open, which Escape closes
+  // instead, nor from a field (menus keep their Escape to themselves).
+  const overlayOpen = removeDialogOpen || blockConfirmOpen || mergeOpen || composeOpen || isEditing
+  useEffect(() => {
+    if (overlayOpen) return
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      const target = e.target
+      if (
+        target instanceof Element &&
+        target.closest('input, textarea, select, [contenteditable="true"]')
+      ) {
+        return
+      }
+      onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [overlayOpen, onClose])
 
   const startEditing = () => {
     if (!user) return

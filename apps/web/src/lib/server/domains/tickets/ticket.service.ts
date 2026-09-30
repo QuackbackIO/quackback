@@ -25,6 +25,7 @@ import {
   asc,
   desc,
   tickets,
+  ticketActivity,
   ticketStatuses,
   conversationMessages,
   ticketConversations,
@@ -56,7 +57,7 @@ import { PRIORITY_RANK } from '@/lib/shared/conversation/priority-meta'
 import { getStageLabels } from '../settings/settings.tickets'
 import { emitTicketStatusChanged, emitTicketAssigned } from './ticket.webhooks'
 import { buildTicketContext, ticketToDTO, ticketRowToDTO } from './ticket.dto'
-import { recordTicketActivity } from './ticket-activity.service'
+import { recordTicketActivity, statusMovedSince } from './ticket-activity.service'
 import { safeSubscribeToTicket } from './ticket-subscription.service'
 import { ticketFtsMatch } from './ticket-search.service'
 import { statusTransition, firstResponseStamp, resolveStage } from './ticket.lifecycle'
@@ -456,24 +457,29 @@ export async function setTicketStatus(
   const stamp = firstResponseStamp(existing.firstResponseAt, isTeamMember(actor.role), now)
   if (stamp) patch.firstResponseAt = stamp
 
-  const [updated] = await db.update(tickets).set(patch).where(eq(tickets.id, id)).returning()
-
-  // Durable timeline record (fire-and-forget): EVERY real status move is
-  // recorded, including internal churn the customer-facing stage event below
-  // stays silent on. A same-status no-op set records nothing.
-  if (existing.statusId !== statusId) {
-    recordTicketActivity({
-      ticketId: id,
-      principalId: actor.principalId,
-      type: 'status.changed',
-      metadata: {
-        fromId: existing.statusId,
-        fromName: current?.name ?? null,
-        toId: statusId,
-        toName: target.name,
-      },
-    })
-  }
+  // The status move and its timeline record are one write. EVERY real status
+  // move is recorded, including internal churn the customer-facing stage
+  // event below stays silent on; a same-status no-op set records nothing. In
+  // the same transaction, so the record is there whenever the move is: the
+  // pair-ticket reopen reads it to leave a status set after the requester's
+  // message standing (autoReopenOnRequesterReply).
+  const updated = await db.transaction(async (tx) => {
+    const [row] = await tx.update(tickets).set(patch).where(eq(tickets.id, id)).returning()
+    if (existing.statusId !== statusId) {
+      await tx.insert(ticketActivity).values({
+        ticketId: id,
+        principalId: actor.principalId,
+        type: 'status.changed',
+        metadata: {
+          fromId: existing.statusId,
+          fromName: current?.name ?? null,
+          toId: statusId,
+          toName: target.name,
+        },
+      })
+    }
+    return row
+  })
 
   // Realtime signal (unified inbox §3.2, M3), unconditional like the webhook
   // below — mirrors conversation.service's publish-right-after-the-UPDATE
@@ -638,10 +644,20 @@ async function postTicketStatusEvent(ticketId: TicketId, stageLabel: string | nu
  * status move. The durable timeline keeps its distinct `ticket.reopened` type,
  * though: the history must read "reopened by the requester's reply", not an
  * anonymous status flip.
+ *
+ * `messageAt` is when the requester's message was written. The event reaction
+ * passes it because it runs from a queued job, possibly long after the
+ * message, and again when the job is retried: any status move after the
+ * message (a close, "awaiting requester" again, or this reopen's own earlier
+ * run) has already answered it, so the reopen leaves the ticket where it is.
+ * A close is read off `resolvedAt` on the row itself; other moves off the
+ * ticket's activity log (statusMovedSince). The status write only lands on the
+ * status this call read, so a concurrent status change is never overwritten.
  */
 export async function autoReopenOnRequesterReply(
   id: TicketId,
-  byPrincipalId: PrincipalId | null = null
+  byPrincipalId: PrincipalId | null = null,
+  messageAt: Date | null = null
 ): Promise<boolean> {
   const existing = await loadTicketOr404(id)
   const [current] = await db
@@ -656,6 +672,15 @@ export async function autoReopenOnRequesterReply(
   if (!current) return false
   const awaiting = resolveStage(current) === 'awaiting_requester'
   if (!awaiting && current.category !== 'closed') return false
+  if (
+    messageAt &&
+    current.category === 'closed' &&
+    existing.resolvedAt &&
+    existing.resolvedAt.getTime() > messageAt.getTime()
+  ) {
+    return false
+  }
+  if (messageAt && (await statusMovedSince(id, messageAt))) return false
 
   const [firstOpen] = await db
     .select({
@@ -676,23 +701,36 @@ export async function autoReopenOnRequesterReply(
   if (transition.reopenedIncrement) {
     patch.reopenedCount = sql`${tickets.reopenedCount} + 1` as unknown as number
   }
-  const [updated] = await db.update(tickets).set(patch).where(eq(tickets.id, id)).returning()
-
-  // Durable timeline record (fire-and-forget): a distinct 'ticket.reopened'
-  // type — not 'status.changed' — so the timeline reads honestly ("reopened by
-  // the requester's reply") rather than as an anonymous status flip.
-  recordTicketActivity({
-    ticketId: id,
-    principalId: byPrincipalId,
-    type: 'ticket.reopened',
-    metadata: {
-      fromId: existing.statusId,
-      fromName: current.name,
-      toId: firstOpen.id,
-      toName: firstOpen.name,
-      trigger: 'requester_reply',
-    },
+  // Guarded on the status read above: a status change that lands in between
+  // wins, and of two overlapping runs for one message only one reopens. The
+  // timeline record is a distinct 'ticket.reopened' type, not
+  // 'status.changed', so the history reads "reopened by the requester's reply"
+  // rather than an anonymous status flip. It is written in the same
+  // transaction as the move: statusMovedSince reads it, and a record written
+  // later on its own would carry a time after the reopen, so it could read as
+  // a status move after a newer message.
+  const updated = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(tickets)
+      .set(patch)
+      .where(and(eq(tickets.id, id), eq(tickets.statusId, existing.statusId)))
+      .returning()
+    if (!row) return null
+    await tx.insert(ticketActivity).values({
+      ticketId: id,
+      principalId: byPrincipalId,
+      type: 'ticket.reopened',
+      metadata: {
+        fromId: existing.statusId,
+        fromName: current.name,
+        toId: firstOpen.id,
+        toName: firstOpen.name,
+        trigger: 'requester_reply',
+      },
+    })
+    return row
   })
+  if (!updated) return false
 
   // Realtime signal, mirroring setTicketStatus (unified inbox §3.2, M3): an
   // inbox row re-render on the reopen. The returned DTO is unused here (this

@@ -459,7 +459,6 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
         initialConfig={integration.config}
         initialEventMappings={integration.eventMappings}
         enabled={isConnected}
-        health={integration.health}
       />
     ),
   },

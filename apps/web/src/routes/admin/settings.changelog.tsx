@@ -13,6 +13,8 @@ import { updateChangelogSettingsFn } from '@/lib/server/functions/settings'
 import { changelogCategoryQueries, changelogSettingsQueries } from '@/lib/client/queries/changelog'
 import { DEFAULT_CHANGELOG_SETTINGS, type ChangelogSettings } from '@/lib/shared/changelog-settings'
 import { isProductEnabled } from '@/lib/shared/types/settings'
+import { readBatch } from '@/lib/client/queries/read-batch'
+import { warmQuery } from '@/lib/client/queries/warm-query'
 
 export const Route = createFileRoute('/admin/settings/changelog')({
   beforeLoad: ({ context }) => {
@@ -22,9 +24,15 @@ export const Route = createFileRoute('/admin/settings/changelog')({
   },
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.CHANGELOG_MANAGE)
+    const ensure = readBatch(context.queryClient)
     await Promise.all([
-      context.queryClient.ensureQueryData(changelogSettingsQueries.get()),
-      context.queryClient.ensureQueryData(changelogCategoryQueries.list()),
+      ensure(changelogSettingsQueries.get()),
+      ensure(changelogCategoryQueries.list()),
+      // A segment-gated label shows its segments by name, read under
+      // segment.view; without it the names fall back to ids, as before.
+      context.permissions?.includes(PERMISSIONS.SEGMENT_VIEW)
+        ? warmQuery(ensure, changelogCategoryQueries.segments())
+        : undefined,
     ])
     return {}
   },

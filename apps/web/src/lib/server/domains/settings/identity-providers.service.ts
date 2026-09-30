@@ -26,7 +26,7 @@ import {
   ssoVerifiedDomain,
   type IdentityProviderClaimMapping,
 } from '@/lib/server/db'
-import type { IdentityProviderId } from '@quackback/ids'
+import type { IdentityProviderId, UserId } from '@quackback/ids'
 import { parseSsoTestCapture, type SsoTestCapture } from '@/lib/shared/sso-test-capture'
 import {
   applyClaimMappingEdits,
@@ -86,6 +86,7 @@ export interface IdentityProvider {
   scopes: string | null
   prompt: string | null
   tokenEndpointAuthMethod: string | null
+  idTokenNonce: string | null
   enabled: boolean
   /** True when a client secret is saved at `auth_<registrationId>`. An enabled
    *  provider without one registers nothing, so it is not a usable sign-in
@@ -135,6 +136,7 @@ export interface UpsertIdentityProviderInput {
   scopes?: string | null
   prompt?: string | null
   tokenEndpointAuthMethod?: string | null
+  idTokenNonce?: string | null
   enabled?: boolean
   autoCreateUsers?: boolean
   autoProvisionRole?: Role | null
@@ -178,10 +180,12 @@ const CONNECTION_FIELDS = [
   // Scopes decide which claims the IdP releases, which is precisely what the
   // test validates. Omitting them let a stale pass keep vouching for a scope
   // set the test never exercised. Prompt and the token-endpoint auth method are
-  // here for the same reason: both can make a request the IdP refuses.
+  // here for the same reason: both can make a request the IdP refuses. The
+  // nonce setting decides whether the test checks the echo at all.
   'scopes',
   'prompt',
   'tokenEndpointAuthMethod',
+  'idTokenNonce',
 ] as const
 
 type ConnectionField = (typeof CONNECTION_FIELDS)[number]
@@ -257,6 +261,7 @@ function rowToIdentityProvider(
     scopes: row.scopes,
     prompt: row.prompt,
     tokenEndpointAuthMethod: row.tokenEndpointAuthMethod,
+    idTokenNonce: row.idTokenNonce,
     enabled: row.enabled,
     configured,
     autoCreateUsers: row.autoCreateUsers,
@@ -457,6 +462,7 @@ export async function upsertIdentityProvider(
         if (input.prompt !== undefined) patch.prompt = input.prompt
         if (input.tokenEndpointAuthMethod !== undefined)
           patch.tokenEndpointAuthMethod = input.tokenEndpointAuthMethod
+        if (input.idTokenNonce !== undefined) patch.idTokenNonce = input.idTokenNonce
         if (input.enabled !== undefined) patch.enabled = input.enabled
         if (input.autoCreateUsers !== undefined) patch.autoCreateUsers = input.autoCreateUsers
         if (input.autoProvisionRole !== undefined) patch.autoProvisionRole = input.autoProvisionRole
@@ -518,6 +524,7 @@ export async function upsertIdentityProvider(
             scopes: input.scopes ?? null,
             prompt: input.prompt ?? null,
             tokenEndpointAuthMethod: input.tokenEndpointAuthMethod ?? null,
+            idTokenNonce: input.idTokenNonce ?? null,
             enabled: input.enabled ?? false,
             autoCreateUsers: input.autoCreateUsers ?? true,
             autoProvisionRole: input.autoProvisionRole ?? null,
@@ -659,6 +666,11 @@ export async function persistTestResult(
     expectedDetailsChangedAt: string | null
     outcome: 'success' | 'mapping_failed'
     capture: SsoTestCapture
+    /** What the test saw of the nonce. Written only with a passing result, and
+     *  without restamping `detailsChangedAt`, which would void this very pass. */
+    idTokenNonce?: 'check' | 'off'
+    /** The admin who ran the test; a nonce change it makes is audited as theirs. */
+    auditActorUserId?: UserId
   }
 ): Promise<'stamped' | 'stale'> {
   const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
@@ -671,18 +683,42 @@ export async function persistTestResult(
         ? isNull(identityProvider.detailsChangedAt)
         : eq(identityProvider.detailsChangedAt, new Date(args.expectedDetailsChangedAt))
 
+    const writesNonce = args.outcome === 'success' && args.idTokenNonce !== undefined
+    const nextNonce = args.idTokenNonce === 'off' ? 'off' : null
+
     const result = await db.transaction(async (tx) => {
+      // Read under the row lock the update takes anyway, so the audited
+      // "before" is the value this write replaces even when tests overlap.
+      const [prior] = writesNonce
+        ? await tx
+            .select({ idTokenNonce: identityProvider.idTokenNonce })
+            .from(identityProvider)
+            .where(eq(identityProvider.id, id))
+            .for('update')
+        : []
       const [row] = await tx
         .update(identityProvider)
         .set({
           lastTestCapture: args.capture,
           ...(args.outcome === 'success' ? { lastSuccessfulTestAt: new Date() } : {}),
+          ...(writesNonce ? { idTokenNonce: nextNonce } : {}),
         })
         .where(and(eq(identityProvider.id, id), detailsMatch))
         .returning({ id: identityProvider.id })
       if (!row) return 'stale' as const
       if (args.outcome === 'success') {
         await bumpAuthConfigVersionInTx(tx)
+      }
+      if (writesNonce && prior && (prior.idTokenNonce ?? null) !== nextNonce) {
+        const { recordAuditEventInTransaction } = await import('@/lib/server/audit/log')
+        await recordAuditEventInTransaction(tx, {
+          event: 'idp.updated',
+          actor: { userId: args.auditActorUserId ?? null },
+          target: { type: 'identity_provider', id },
+          before: { idTokenNonce: prior.idTokenNonce ?? null },
+          after: { idTokenNonce: nextNonce },
+          metadata: { source: 'connection_test' },
+        })
       }
       return 'stamped' as const
     })

@@ -219,6 +219,16 @@ describe('a key that would escape never reaches a command', () => {
     expect(presigned, `${label}: a command was presigned anyway`).toHaveLength(0)
   }
 
+  it('presigns a read with a forced type, or as a named download', async () => {
+    await withWorkspace('workspace-alpha', () =>
+      generatePresignedGetUrl(PRIVATE_KEY, 60, undefined, 'application/pdf')
+    )
+    await withWorkspace('workspace-alpha', () => generatePresignedGetUrl(PRIVATE_KEY, 60, 'contract.pdf'))
+    expect(presigned[0]).toMatchObject({ ResponseContentType: 'application/pdf' })
+    expect(presigned[0]).not.toHaveProperty('ResponseContentDisposition')
+    expect(presigned[1]).toMatchObject({ ResponseContentDisposition: 'attachment; filename="contract.pdf"' })
+  })
+
   it('refuses a traversal on the write path', async () => {
     await neverReachesTheBucket('upload', () =>
       withWorkspace('workspace-alpha', () => uploadObject('../../escape.png', BYTES, 'image/png'))

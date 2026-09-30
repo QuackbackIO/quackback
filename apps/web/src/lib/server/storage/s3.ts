@@ -480,7 +480,7 @@ export interface WorkspaceStorage {
   presignPut(key: string, contentType: string, expiresIn: number): Promise<string>
   put(key: string, body: Buffer | Uint8Array, contentType: string): Promise<void>
   get(key: string, range?: string): Promise<S3ObjectResult>
-  presignGet(key: string, expiresIn: number, downloadName?: string): Promise<string>
+  presignGet(key: string, expiresIn: number, downloadName?: string, contentType?: string): Promise<string>
   remove(key: string): Promise<void>
 }
 
@@ -581,7 +581,7 @@ function workspaceStorage(selfReportedWorkspaceId: WorkspaceId): WorkspaceStorag
       }
     },
 
-    async presignGet(key, expiresIn, downloadName) {
+    async presignGet(key, expiresIn, downloadName, contentType) {
       const Key = objectName(key)
       const client = await getS3Client(connection)
       const { GetObjectCommand } = await getS3Module()
@@ -592,6 +592,7 @@ function workspaceStorage(selfReportedWorkspaceId: WorkspaceId): WorkspaceStorag
         ...(downloadName
           ? { ResponseContentDisposition: `attachment; filename="${downloadName}"` }
           : {}),
+        ...(contentType ? { ResponseContentType: contentType } : {}),
       })
       return getSignedUrl(client, command, { expiresIn })
     },
@@ -1088,14 +1089,17 @@ export function getPublicUrl(key: string): string {
  * @param downloadName - When set, S3 responds with
  *   `Content-Disposition: attachment; filename="<downloadName>"`, so the
  *   browser saves a friendly name instead of the raw object key.
+ * @param contentType - When set, S3 responds with this Content-Type instead of
+ *   the stored one, which came from whoever uploaded or sent the file.
  */
 export async function generatePresignedGetUrl(
   key: string,
   expiresIn: number = 172800,
-  downloadName?: string
+  downloadName?: string,
+  contentType?: string
 ): Promise<string> {
   const storage = await currentWorkspaceStorage()
-  return storage.presignGet(key, expiresIn, downloadName)
+  return storage.presignGet(key, expiresIn, downloadName, contentType)
 }
 
 // ============================================================================

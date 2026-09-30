@@ -63,6 +63,12 @@ describe('billingSessionErrorResponse', () => {
     expect(location(res)).toBe('/admin/settings/billing?billing_error=over_plan_limits')
   })
 
+  it('names a top-up quoted at a price that has since changed', () => {
+    const res = billingSessionErrorResponse(new Error('topup_price_changed'))
+    expect(res.status).toBe(303)
+    expect(location(res)).toBe('/admin/settings/billing?billing_error=price_changed')
+  })
+
   it('does not leak unknown failure text into the URL', () => {
     const res = billingSessionErrorResponse(new Error('stripe down'))
     expect(res.status).toBe(303)

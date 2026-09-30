@@ -33,14 +33,12 @@ import {
 import type { FieldOperator } from '@/lib/shared/segment-builtin-fields'
 import { SearchableInput } from '@/components/ui/searchable-input'
 import { fetchSegmentAttributeValuesFn } from '@/lib/server/functions/admin'
+import { CUSTOM_ATTR_PREFIX, COMPANY_ATTR_PREFIX } from './segment-utils'
 
 // Attributes with DB-backed value typeahead. Matches SEARCHABLE_ATTRIBUTES
 // in segment-attribute-values.ts; kept duplicated here to avoid pulling
 // a server-only module into the client bundle.
 const SEARCHABLE_VALUE_ATTRIBUTES = new Set(['country', 'locale', 'name', 'email', 'signup_source'])
-
-export const CUSTOM_ATTR_PREFIX = '__custom__'
-export const COMPANY_ATTR_PREFIX = '__company_attr__'
 
 type RuleOperator = FieldOperator
 
@@ -341,11 +339,7 @@ function RuleConditionRow({
             const res = await fetchSegmentAttributeValuesFn({
               data: {
                 attribute: condition.attribute as
-                  | 'country'
-                  | 'locale'
-                  | 'name'
-                  | 'email'
-                  | 'signup_source',
+                  'country' | 'locale' | 'name' | 'email' | 'signup_source',
                 query,
                 limit: 20,
               },

@@ -66,4 +66,37 @@ describe('TopUpDialog', () => {
     expect(screen.queryByText(/\$10 per pack/)).not.toBeInTheDocument()
     expect(screen.queryByText('$10.00')).not.toBeInTheDocument()
   })
+
+  it('sends the pack price it quoted with the checkout, so that is what is charged', async () => {
+    catalogue.current = {
+      version: 1,
+      currency: 'usd',
+      annualDiscountMonths: 2,
+      recommendedPlanId: 'pro',
+      brandingRemoval: { monthlyCents: 5900, annualCents: 59000 },
+      aiTopUpPackCents: 800,
+      plans: [],
+    }
+    render(<TopUpDialog open meter="ai" onOpenChange={() => {}} />, { wrapper })
+    await screen.findByText(/\$8 per pack/)
+    expect(document.querySelector('input[name="packCents"]')).toHaveValue('800')
+    expect(document.querySelector('input[name="packUnits"]')).toBeNull()
+  })
+
+  it('sends the email pack size it quoted too', async () => {
+    catalogue.current = {
+      version: 1,
+      currency: 'usd',
+      annualDiscountMonths: 2,
+      recommendedPlanId: 'pro',
+      brandingRemoval: { monthlyCents: 5900, annualCents: 59000 },
+      emailTopUpPackCents: 1000,
+      emailTopUpPackUnits: 10_000,
+      plans: [],
+    }
+    render(<TopUpDialog open meter="email" onOpenChange={() => {}} />, { wrapper })
+    await screen.findByText(/\$10 per pack/)
+    expect(document.querySelector('input[name="packCents"]')).toHaveValue('1000')
+    expect(document.querySelector('input[name="packUnits"]')).toHaveValue('10000')
+  })
 })

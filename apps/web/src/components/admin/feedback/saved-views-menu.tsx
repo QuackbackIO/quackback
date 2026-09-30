@@ -3,7 +3,9 @@
  * workspace's saved views (applying one restores its stored filter set into
  * the URL-driven inbox state) and saves the current filter set as a named
  * view. A view is a saved filter SET — the active search term rides alongside
- * and is never captured (see lib/shared/post/views.ts).
+ * and is never captured (see lib/shared/post/views.ts). The views are listed
+ * only inside the dropdown, so they load when the viewer reaches for the menu
+ * rather than with every page load.
  */
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -43,7 +45,9 @@ interface SavedViewsMenuProps {
 
 export function SavedViewsMenu({ filters, hasActiveFilters, onApply }: SavedViewsMenuProps) {
   const queryClient = useQueryClient()
-  const viewsQuery = useQuery(postViewQueries.list())
+  const [wanted, setWanted] = useState(false)
+  const viewsQuery = useQuery({ ...postViewQueries.list(), enabled: wanted })
+  const want = () => setWanted(true)
   const [saveOpen, setSaveOpen] = useState(false)
   const [name, setName] = useState('')
 
@@ -70,16 +74,20 @@ export function SavedViewsMenu({ filters, hasActiveFilters, onApply }: SavedView
 
   return (
     <>
-      <DropdownMenu>
+      <DropdownMenu onOpenChange={(open) => open && want()}>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onPointerEnter={want} onFocus={want}>
             <BookmarkIcon className={MENU_ICON} />
             Views
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-64">
           <DropdownMenuLabel className={MENU_LABEL}>Saved views</DropdownMenuLabel>
-          {views.length === 0 && <DropdownMenuItem disabled>No saved views</DropdownMenuItem>}
+          {viewsQuery.isPending ? (
+            <DropdownMenuItem disabled>Loading views…</DropdownMenuItem>
+          ) : (
+            views.length === 0 && <DropdownMenuItem disabled>No saved views</DropdownMenuItem>
+          )}
           {views.map((view: PostViewDTO) => (
             <DropdownMenuItem
               key={view.id}

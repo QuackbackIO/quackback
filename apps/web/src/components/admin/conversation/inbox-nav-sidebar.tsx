@@ -1,5 +1,5 @@
+import { memo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useRouteContext } from '@tanstack/react-router'
 import {
   ChatBubbleLeftRightIcon,
   InboxIcon,
@@ -24,7 +24,6 @@ import { StarIcon as StarOutlineIcon } from '@heroicons/react/24/outline'
 import type { ConversationTagId, SegmentId, TeamId, ConversationViewId } from '@quackback/ids'
 import { fetchConversationTagsWithCountsFn } from '@/lib/server/functions/conversation-tags'
 import { fetchInboxSegmentsWithCountsFn } from '@/lib/server/functions/conversation-segments'
-import { listTeamsFn } from '@/lib/server/functions/teams'
 import {
   listConversationViewsFn,
   pinConversationViewFn,
@@ -34,7 +33,6 @@ import {
 import { conversationKeys } from '@/lib/client/queries/conversation-keys'
 import { inboxQueries } from '@/lib/client/queries/inbox'
 import type { ConversationViewDTO } from '@/lib/shared/conversation/views'
-import type { FeatureFlags } from '@/lib/shared/types/settings'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,6 +53,7 @@ import { cn } from '@/lib/shared/utils'
 // nav consumers are unaffected.
 export {
   inboxNavKey,
+  isInboxView,
   isTicketInboxView,
   type InboxView,
   type InboxNavItem,
@@ -65,6 +64,8 @@ import {
   type InboxView,
   type InboxNavItem,
 } from '@/lib/client/conversation/inbox-scope'
+import { inboxTeamsQueryOptions, type InboxTeam } from '@/lib/client/queries/inbox-teams'
+import { useFeatureFlag } from '@/lib/client/hooks/use-root-context'
 
 // Start with the broad conversation queue, then progressively narrow to the
 // teammate's own work and secondary personal feeds.
@@ -93,27 +94,9 @@ export const TICKET_INBOX_VIEWS = [
   { view: 'tickets_tracker', label: 'Trackers', Icon: RectangleStackIcon },
 ] as const
 
-/**
- * URL-safe guard: is `v` one of the canonical inbox views (conversation scopes,
- * Quinn AI, or a Tickets-section scope)? Derived from the view lists so the
- * route's `?view=` allowlist tracks the nav definition and can't drift — a new
- * view is accepted in the URL the moment it's listed above, instead of needing
- * a second hand-maintained list in validateSearch.
- */
-export function isInboxView(v: unknown): v is InboxView {
-  return (
-    typeof v === 'string' &&
-    (CONVERSATION_VIEWS.some((c) => c.view === v) ||
-      TICKET_INBOX_VIEWS.some((c) => c.view === v) ||
-      v === QUINN_VIEW.view)
-  )
-}
-
 /** Shared (deduped) source of `supportTickets` — gates the Tickets nav section. */
 export function useSupportTicketsEnabled(): boolean {
-  const { settings } = useRouteContext({ from: '__root__' })
-  const flags = settings?.featureFlags as FeatureFlags | undefined
-  return flags?.supportTickets ?? false
+  return useFeatureFlag('supportTickets')
 }
 
 /** Shared (deduped) source of the inbox nav-badge counts (mine/unassigned/
@@ -162,26 +145,10 @@ export function useConversationViews() {
   })
 }
 
-export type InboxTeam = {
-  id: TeamId
-  name: string
-  icon: string | null
-  color: string
-  memberCount: number
-}
+export { inboxTeamsQueryOptions, type InboxTeam }
 
-const INBOX_TEAMS_KEY = ['admin', 'inbox', 'teams'] as const
-
-/** Shared (deduped) source of the per-team inbox roster. */
 export function useInboxTeams(): { data: InboxTeam[] | undefined } {
-  return useQuery({
-    queryKey: INBOX_TEAMS_KEY,
-    queryFn: async (): Promise<InboxTeam[]> => {
-      const teams = await listTeamsFn()
-      return teams.map((t) => ({ ...t, id: t.id as TeamId, color: t.color ?? 'gray' }))
-    },
-    staleTime: 60_000,
-  })
+  return useQuery(inboxTeamsQueryOptions())
 }
 
 /** Human label for the active scope, resolving a tag/segment/team/view id. */
@@ -520,9 +487,10 @@ function countForTicketView(
  * Grouped inbox navigation: broad queues first, followed by personal feeds,
  * ticket scopes, AI activity, and workspace-defined views/taxonomy.
  * All scopes are mutually exclusive. Desktop-only (lg+); the mobile equivalent
- * is InboxScopeMenu in the list header.
+ * is InboxScopeMenu in the list header. Memoized: the route re-renders on every
+ * URL change, including opening an item, which leaves these props unchanged.
  */
-export function InboxNavSidebar({
+export const InboxNavSidebar = memo(function InboxNavSidebar({
   nav,
   onSelect,
   search,
@@ -664,7 +632,7 @@ export function InboxNavSidebar({
       </ScrollArea>
     </nav>
   )
-}
+})
 
 /**
  * Mobile scope switcher (lg:hidden) shown in the list header, since the nav

@@ -38,12 +38,26 @@ const mockSelectLabsRows = vi.fn()
 type SettingsTx = {
   query: { settings: { findFirst: (...args: unknown[]) => unknown } }
   update: (...args: unknown[]) => unknown
+  select: () => unknown
 }
 
 vi.mock('@/lib/server/db', async (importOriginal) => {
   const tx: SettingsTx = {
     query: { settings: { findFirst: (...args: unknown[]) => mockFindFirst(...args) } },
     update: (...args: unknown[]) => mockUpdate(...args),
+    // The read a read-modify-write takes under the row lock: the same stored
+    // row. Only the locking form is faked, so an unlocked read fails here.
+    select: () => ({
+      from: () => ({
+        limit: () => ({
+          for: async (strength: string) => {
+            if (strength !== 'update') throw new Error(`unexpected lock: ${strength}`)
+            const row = await mockFindFirst()
+            return row ? [row] : []
+          },
+        }),
+      }),
+    }),
   }
   return {
     // Spread the real db module so tables/operators stay current; override only what this suite drives.

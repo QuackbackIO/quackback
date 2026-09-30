@@ -19,6 +19,7 @@ describe('connectionAffectingChange', () => {
     scopes: null,
     prompt: null,
     tokenEndpointAuthMethod: null,
+    idTokenNonce: null,
   }
 
   it('is false when no connection-affecting field is supplied', () => {
@@ -42,6 +43,14 @@ describe('connectionAffectingChange', () => {
     // what the connection test validates. Omitting them let a stale passing test
     // keep vouching for a scope set it never exercised.
     expect(connectionAffectingChange({ clientId: 'client-1', scopes: 'openid' }, existing)).toBe(
+      true
+    )
+  })
+
+  it('is true when the ID token nonce setting changes', () => {
+    // Turning the nonce off changes what the test checks, so a pass recorded
+    // with the old setting must stop vouching for the new one.
+    expect(connectionAffectingChange({ clientId: 'client-1', idTokenNonce: 'off' }, existing)).toBe(
       true
     )
   })

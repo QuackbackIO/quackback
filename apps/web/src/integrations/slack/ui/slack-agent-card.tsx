@@ -19,6 +19,7 @@ export function SlackAgentCard() {
       await Promise.all([
         client.invalidateQueries({ queryKey: ['slack-agent-settings'] }),
         client.invalidateQueries({ queryKey: ['assistant', 'settings'] }),
+        client.invalidateQueries({ queryKey: ['admin', 'integrations', 'slack'] }),
       ])
     },
   })

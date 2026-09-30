@@ -14,12 +14,14 @@ import { BackLink } from '@/components/ui/back-link'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { connectorQueries } from '@/lib/client/queries/assistant-connectors'
+import { assistantQueries } from '@/lib/client/queries/assistant'
 import {
   useRefreshConnector,
   useStartConnectorOAuth,
 } from '@/lib/client/mutations/assistant-connectors'
 import { toast } from 'sonner'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
+import { warmQuery } from '@/lib/client/queries/warm-query'
 
 export const Route = createFileRoute('/admin/automation/connectors')({
   beforeLoad: ({ context }) => {
@@ -29,7 +31,13 @@ export const Route = createFileRoute('/admin/automation/connectors')({
     }
   },
   loader: async ({ context }) => {
-    await context.queryClient.ensureQueryData(connectorQueries.list())
+    const { queryClient } = context
+    // The built-in tools card reads the agent settings and the tool catalogue.
+    await Promise.all([
+      queryClient.ensureQueryData(connectorQueries.list()),
+      warmQuery(queryClient, assistantQueries.settings()),
+      warmQuery(queryClient, assistantQueries.tools()),
+    ])
   },
   errorComponent: ({ error, reset }) => (
     <DefaultErrorPage error={error} reset={reset} fullPage={false} />

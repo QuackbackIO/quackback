@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { ArrowPathIcon, ChevronDownIcon, SparklesIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import {
@@ -55,13 +55,14 @@ interface UndoState extends ReplacementState {
 export function ComposerAiActions({
   item,
   activeMode,
-  activeDraftText,
+  subscribeDraft,
   getDraftText,
   onReplaceDraftText,
 }: {
   item: InboxItemRef
   activeMode: ComposerMode
-  activeDraftText: string
+  /** Calls back on every draft change; returns the unsubscribe. */
+  subscribeDraft: (onChange: () => void) => () => void
   getDraftText: (mode: ComposerMode) => string
   /** Replace one mode's whole draft and return a full-fidelity restore action. */
   onReplaceDraftText: (mode: ComposerMode, text: string) => () => void
@@ -73,11 +74,22 @@ export function ComposerAiActions({
   const [transforming, setTransforming] = useState(false)
   const [proposal, setProposal] = useState<ReplacementState | null>(null)
   const [undo, setUndo] = useState<UndoState | null>(null)
+  // Re-renders only when the active draft gains or loses text, not per keystroke.
+  const hasDraftText = useSyncExternalStore(
+    subscribeDraft,
+    () => getDraftText(activeMode).trim() !== '',
+    () => false
+  )
 
   // Keep Undo until the transformed draft is deliberately edited again.
   useEffect(() => {
-    if (undo && getDraftText(undo.mode) !== undo.result) setUndo(null)
-  }, [activeMode, activeDraftText, getDraftText, undo])
+    if (!undo) return
+    const dropIfEdited = () => {
+      if (getDraftText(undo.mode) !== undo.result) setUndo(null)
+    }
+    dropIfEdited()
+    return subscribeDraft(dropIfEdited)
+  }, [activeMode, getDraftText, subscribeDraft, undo])
 
   if (!available) return null
 
@@ -169,8 +181,8 @@ export function ComposerAiActions({
             variant="ghost"
             size="sm"
             shape="default"
-            disabled={transforming || !activeDraftText.trim()}
-            title={!activeDraftText.trim() ? 'Write a draft first' : undefined}
+            disabled={transforming || !hasDraftText}
+            title={!hasDraftText ? 'Write a draft first' : undefined}
           >
             {transforming ? (
               <ArrowPathIcon className="size-4 animate-spin" />

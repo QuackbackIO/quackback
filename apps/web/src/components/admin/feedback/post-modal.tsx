@@ -1,19 +1,17 @@
 'use client'
 
-import { Suspense, useState, useEffect, useCallback } from 'react'
+import { Suspense, memo, useState, useCallback } from 'react'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { CustomerContextPanel } from '@/components/admin/feedback/customer-context-panel'
 import { ModalFooter } from '@/components/shared/modal-footer'
-import { useUrlModal } from '@/lib/client/hooks/use-url-modal'
 import { useSuspenseQuery, useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import type { JSONContent } from '@tiptap/react'
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { ModalHeader } from '@/components/shared/modal-header'
-import { UrlModalShell } from '@/components/shared/url-modal-shell'
 import { Button } from '@/components/ui/button'
-import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { RichTextEditor, type EditorDocument } from '@/components/ui/rich-text-editor'
 import { usePostMediaUpload, usePortalMediaUpload } from '@/lib/client/hooks/use-image-upload'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { postOwnerQueries } from '@/lib/client/queries/post-owner'
@@ -58,7 +56,6 @@ import {
 import { usePostExternalLinks } from '@/lib/client/hooks/use-post-external-links-query'
 import { usePostDetailKeyboard } from '@/lib/client/hooks/use-post-detail-keyboard'
 import { retryPostIntegrationSyncFn, setPostEtaFn } from '@/lib/server/functions/posts'
-import { useRouterState } from '@tanstack/react-router'
 import {
   type PostId,
   type PostStatusId,
@@ -77,11 +74,6 @@ import {
   getInitialContentJson,
 } from '@/components/admin/feedback/detail/post-utils'
 
-interface PostModalProps {
-  postId: string | undefined
-  currentUser: CurrentUser
-}
-
 interface PostModalContentProps {
   postId: PostId
   currentUser: CurrentUser
@@ -89,7 +81,12 @@ interface PostModalContentProps {
   onClose: () => void
 }
 
-function PostModalContent({
+/**
+ * Memoized, and every prop is stable while the post stays open, so the
+ * content (two rich-text editors, the sidebar, the comment thread) renders
+ * only for its own state, not for each navigation around it.
+ */
+export const PostModalContent = memo(function PostModalContent({
   postId,
   currentUser,
   onNavigateToPost,
@@ -98,7 +95,7 @@ function PostModalContent({
   const queryClient = useQueryClient()
 
   // Queries
-  const postQuery = useSuspenseQuery(adminQueries.postDetail(postId))
+  const postQuery = useSuspenseQuery(adminQueries.postDetail(postId, { withPanels: true }))
   const { data: tags = [] } = useQuery(adminQueries.tags())
   const { data: statuses = [] } = useQuery(adminQueries.statuses())
   const { data: boards = [] } = useQuery(adminQueries.boards())
@@ -134,7 +131,6 @@ function PostModalContent({
   const [title, setTitle] = useState(post.title)
   const [contentJson, setContentJson] = useState<JSONContent | null>(getInitialContentJson(post))
   const [contentMarkdown, setContentMarkdown] = useState(post.content ?? '')
-  const [hasInitialized, setHasInitialized] = useState(false)
 
   // UI state
   const [isUpdating, setIsUpdating] = useState(false)
@@ -142,6 +138,26 @@ function PostModalContent({
   const [showMergeOthersDialog, setShowMergeOthersDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [activeTab, setActiveTab] = useState<'comments' | 'activity'>('comments')
+
+  // Reset the form when the post changes (prev/next navigation, or a refetch
+  // bringing a new title or body). Adjusted during render rather than in an
+  // effect, which rendered the whole modal a second time on every open.
+  const [formSource, setFormSource] = useState({
+    id: post.id,
+    title: post.title,
+    contentJson: post.contentJson,
+  })
+  if (
+    formSource.id !== post.id ||
+    formSource.title !== post.title ||
+    formSource.contentJson !== post.contentJson
+  ) {
+    setFormSource({ id: post.id, title: post.title, contentJson: post.contentJson })
+    setTitle(post.title)
+    setContentJson(getInitialContentJson(post))
+    setShowMergeDialog(false)
+    setShowMergeOthersDialog(false)
+  }
 
   // Duplicate badge indicator — derived from merge suggestions (deduped by React Query with SimilarPostsCard)
   const { data: mergeSuggestionsData } = useQuery(mergeSuggestionQueries.forPost(postId))
@@ -190,23 +206,6 @@ function PostModalContent({
     post.id as PostId,
     showDeleteDialog || canManageIntegrations
   )
-
-  // Initialize form with post data
-  useEffect(() => {
-    if (post && !hasInitialized) {
-      setTitle(post.title)
-      setContentJson(getInitialContentJson(post))
-      setHasInitialized(true)
-    }
-  }, [post, hasInitialized])
-
-  // Reset when navigating to different post
-  useEffect(() => {
-    setTitle(post.title)
-    setContentJson(getInitialContentJson(post))
-    setShowMergeDialog(false)
-    setShowMergeOthersDialog(false)
-  }, [post.id, post.title, post.contentJson])
 
   // Keyboard navigation
   usePostDetailKeyboard({
@@ -279,9 +278,9 @@ function PostModalContent({
     }
   }
 
-  const handleContentChange = useCallback((_json: JSONContent, _html: string, markdown: string) => {
-    setContentJson(_json)
-    setContentMarkdown(markdown)
+  const handleContentChange = useCallback((document: EditorDocument) => {
+    setContentJson(document.json())
+    setContentMarkdown(document.markdown())
   }, [])
 
   const handleSubmit = async () => {
@@ -431,7 +430,7 @@ function PostModalContent({
               {/* Rich text editor */}
               <RichTextEditor
                 value={contentJson || ''}
-                onChange={handleContentChange}
+                onDocumentChange={handleContentChange}
                 placeholder="Add more details... Type / for commands"
                 minHeight="200px"
                 disabled={updatePost.isPending}
@@ -642,33 +641,4 @@ function PostModalContent({
       />
     </div>
   )
-}
-
-export function PostModal({ postId: urlPostId, currentUser }: PostModalProps) {
-  const { pathname, search } = useRouterState({ select: (s) => s.location })
-  const { open, validatedId, close, navigateTo } = useUrlModal<PostId>({
-    urlId: urlPostId,
-    idPrefix: 'post',
-    searchParam: 'post',
-    route: pathname,
-    search: search as Record<string, unknown>,
-  })
-
-  return (
-    <UrlModalShell
-      open={open}
-      onOpenChange={(o) => !o && close()}
-      srTitle="Edit post"
-      hasValidId={!!validatedId}
-    >
-      {validatedId && (
-        <PostModalContent
-          postId={validatedId}
-          currentUser={currentUser}
-          onNavigateToPost={navigateTo}
-          onClose={close}
-        />
-      )}
-    </UrlModalShell>
-  )
-}
+})

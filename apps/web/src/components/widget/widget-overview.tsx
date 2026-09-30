@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react'
 import { FormattedMessage } from 'react-intl'
-import { motion, useReducedMotion } from 'framer-motion'
+import { m, useReducedMotion } from 'framer-motion'
 import {
   LightBulbIcon,
   ChatBubbleLeftRightIcon,
@@ -325,7 +325,7 @@ export function WidgetOverview({
 
           <div className="flex flex-col gap-4 px-4">
             {/* Cards stagger in gently under the view's own entrance. */}
-            <motion.div
+            <m.div
               className="flex flex-col gap-2.5"
               initial={reduceMotion ? false : 'hidden'}
               animate="visible"
@@ -334,7 +334,7 @@ export function WidgetOverview({
               {conversation && (
                 // For Bearer-token visitors this can arrive after mount (SSR
                 // can't see their token); fade it in rather than popping.
-                <motion.div
+                <m.div
                   initial={reduceMotion ? false : { opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ duration: 0.25 }}
@@ -354,26 +354,26 @@ export function WidgetOverview({
                       onClick={onResumeMessenger}
                     />
                   </div>
-                </motion.div>
+                </m.div>
               )}
 
               {tabs.tickets && (
                 // Requester-scoped like the resume card: a Bearer-token
                 // visitor's tickets can arrive after mount — fade, don't pop.
-                <motion.div
+                <m.div
                   initial={reduceMotion ? false : { opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ duration: 0.25 }}
                 >
                   <WidgetRecentTicketsCard onOpenTicket={onOpenTicket} />
-                </motion.div>
+                </m.div>
               )}
 
               {cards.map((card) => {
                 const node = renderCard(card)
                 if (!node) return null
                 return (
-                  <motion.div
+                  <m.div
                     key={card.id}
                     variants={{
                       hidden: { opacity: 0, y: 8 },
@@ -385,10 +385,10 @@ export function WidgetOverview({
                     }}
                   >
                     {node}
-                  </motion.div>
+                  </m.div>
                 )
               })}
-            </motion.div>
+            </m.div>
           </div>
         </div>
       </ScrollArea>

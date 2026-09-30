@@ -372,6 +372,8 @@ went stale the moment a queue moved.
 | `integration-sync`              | —              | 5           | 6        | 90s   |
 | `integration-sync-sweep`        | `* * * * *`    | 1           | 1        | 60s   |
 | `event-dispatch`                | —              | 5           | 10       | 60s   |
+| `event-reactions`               | —              | 1           | 3        | 60s   |
+| `event-summaries`               | —              | 2           | 3        | 60s   |
 | `segment-evaluation`            | dynamic        | 2           | 3        | 60s   |
 | `help-center-translate`         | —              | 1           | 3        | 120s  |
 | `email-imap`                    | `* * * * *`    | 1           | 1        | 60s   |
@@ -415,8 +417,10 @@ shapes were available and the other two were rejected for reasons worth keeping:
   and doubles the always-warm connection count.
 - **One undifferentiated pool** loses the reference's per-queue `concurrency`,
   and one of those numbers is load-bearing: `workflow-dispatch` is 1 because it
-  is a global FIFO, not because it is slow. Two dispatch jobs in parallel
-  reorder a reply and a close on one conversation.
+  dispatches in enqueue order, not because it is slow. Two dispatch jobs in
+  parallel reorder a reply and a close on one conversation. That order holds
+  within one worker process while jobs succeed first time; it is not global
+  (see the reaction queues below).
 
 So the cap is **per queue**, the claim asks for exactly the free slots each
 queue has (one `LATERAL` query), and each queue's rows are leased for that
@@ -522,6 +526,171 @@ BullMQ worker was never started under pooled tenancy either.
 outbox relay (`LISTEN outbox_wake`, `outbox_relay_leader`, `relay-tier.ts`)
 is gone; see `events/RELAY.md`. Leftover `dispatch_owner = relay` rows are
 converted onto the job path when the job worker start.
+
+**An event's reactions ride their own queues.** For a type that has reactions,
+`emit()` also writes a job per reaction queue in that transaction. They do not
+wait on `event-dispatch`, so a failing target resolver never delays a reaction
+and a crash after the event is published cannot lose one. `event-summaries`
+(the close summaries) runs concurrently, so a slow AI call cannot hold up an
+SLA clock.
+
+Each job's reactions share a deadline (`REACTION_DEADLINE_MS` in
+`events/event-reactions.ts`: 30 s for `event-reactions`, 120 s for the
+summaries). Past it the job fails, which frees its lane, and retries or is
+dropped per the queue's `maxAttempts`; the job's abort signal cancels a
+summary's AI call. A database call that cannot be cancelled keeps running in
+the background, and its retry may overlap it, which the reactions tolerate
+because their writes are guarded on the state they read.
+
+`event-reactions` (SLA clocks, pair-ticket reopen, CSAT confirm) runs one job
+at a time per worker process, claimed in enqueue order, so in the common case
+its reactions apply in event order. That is all it guarantees. The order is
+not global:
+
+- a failed job is retried with `run_at = now() + backoff`, behind later jobs;
+- two worker processes (for example during a deploy overlap) each run one job
+  at once;
+- a job whose worker crashed runs again only once its lease lapses, after
+  later jobs;
+- a queue drained after a rollback runs old jobs late.
+
+So the reactions that would go wrong out of order read the database instead of
+relying on it:
+
+- The response clocks read the conversation's message rows
+  (`domains/sla/sla.messages.ts`). The first response settles at the first
+  human reply since the SLA was applied. Every message reaction rebuilds the
+  next-response cycles from the rows: after the first response each customer
+  message restarts the wait, and the next human reply answers the latest one.
+  The stamp carries the latest cycle and records which message opened it;
+  moving it past an answered cycle logs that cycle's outcome in the same
+  write, once (next-response events name their cycle in `meta.cycleAt`).
+- Pauses are rebuilt from history (`domains/sla/sla.pause-history.ts`): the
+  status changes in the events log, where a span starts on entering the paused
+  state and ends on leaving it (a move within it is neither), plus a
+  conversation's customer messages, which wake a snooze. Every SLA reaction
+  first reconciles the stamp with them (`sla.pause-reconcile.ts`): the stamp
+  lists the spans it has excluded (`pausedSpans`) and holds the current one
+  (`pausedAt`), and every ledger write is pinned to `pauseRevision`. So each
+  span is excluded once, and a wake that runs after the next pause began ends
+  the first pause at its own time.
+- A close settles time-to-close or time-to-resolve at the first close since
+  the SLA was applied, read from the status changes. A settle judges its clock
+  as it stood at the settle's own time and stores that deadline, so a pause
+  excluded before the settle ran leaves no trace on it.
+- The pair-ticket reopen leaves the ticket alone when its status moved after
+  the message (a close, read from the row, or any move its activity log
+  records; a status move and its record are written in one transaction), and
+  writes only on the status it read.
+- The CSAT confirm acts only on the involvement the rating was given about,
+  the one open when it was submitted.
+- An SLA recorder ignores an event, and the clocks ignore any message, from
+  before the stamp's current application (`appliedAt`), so a reaction that
+  runs after the SLA was applied again cannot settle, arm, pause or close the
+  new clocks.
+
+That narrows what a late, retried or replayed reaction can do; it does not
+remove it. The known remaining effects:
+
+- **An outcome of a replaced application is lost.** A reaction that runs
+  after the SLA was applied again is ignored, so what it would have recorded
+  against the replaced application is never logged.
+- **The sweep reads the stamp as the last reaction left it.** While a pause's
+  reactions are still queued, a deadline the pause would move can pass on the
+  stamp, and the sweep logs that breach.
+- **A customer message right after a snooze may not end it.** A snooze is
+  timed by its status event, written just after the status commits, so a
+  customer message written within milliseconds of it can read as earlier than
+  the snooze. The pause then stays open while the conversation is open, until
+  the next wake.
+- **Stamps from before this build.** A stamp without `pausedSpans` takes the
+  completed spans in its history as already excluded, which holds when its
+  resumes ran. A pause that completes during the rollout before its own first
+  reaction succeeds (its pause job retried behind its wake) is taken as
+  excluded too, so that span counts toward the clock once. A cycle armed without `nextResponseCycleAt` is adopted at the
+  next message reaction: its opener is the latest customer message (before its
+  reply, or at or before its deadline) whose own deadline is no later than the
+  stamp's, read from at most 20 of them. The adopted cycle keeps its deadline
+  and breach marker, so a reply after a sweep breach logs a settle after the
+  breach, as the earlier build did. When none of those messages fits, the
+  cycle is rebuilt from the messages instead, its deadline recomputed from
+  its opener plus the spans the stamp has excluded.
+- **An older build's resume does not record its span.** During a rollout
+  overlap, a resume run by an older build shifts the deadlines without adding
+  the span to `pausedSpans`, so the next reconcile excludes that span a second
+  time. An older build also re-arms without `nextResponseCycleAt`. After a
+  rollback, both would outlive it and, after a later roll-forward, exclude
+  spans twice or make a newer cycle look older than its opener; step 5 of the
+  runbook below strips them.
+- **A reply through an older API key reads as a person's.** Its row is stored
+  like the person's inbox reply, so the response clocks count it as a human
+  reply although its own event does not (see `sla.messages.ts`). Its own
+  reaction settles an armed next-response cycle at its time, and a later human
+  reply's reaction settles the first response at it.
+- **The history follows the order events were written.** Status changes on the
+  older emit path are written to the event log without waiting, so two moves
+  in quick succession can be written in the opposite order to the moves
+  themselves, and a pause span rebuilt from them can be wrong. The inline
+  reactions before this change ran in the same written order.
+- **Timestamps within the same instant.** A status move recorded in the same
+  instant as the message can let a late reopen through or stop a legitimate
+  one.
+
+**Rolling back to a build that predates the reaction queues.** A worker built
+before `event-reactions` and `event-summaries` has no definition for either,
+so it never claims their rows: it only claims queues it has definitions for,
+and the prune only deletes finished rows. Rows left behind stay `pending`,
+count as standing work, so the workspace's job loop never goes idle, and run
+late, against current state, once a newer worker is back. A web process of
+that older build runs these reactions in-process and queues none, so there is
+no gap or double once web and worker are on the same build. The window to
+manage is web newer than the worker: the newer web queues reactions the older
+worker never runs. An operator rolling back to a build that predates these
+queues therefore reverses the rollout order:
+
+1. Roll web back first. The older web reacts in-process and stops queueing;
+   the newer worker drains what the newer web queued.
+2. Wait until this reports 0 in every workspace (`running` covers a job the
+   newer worker still holds, which the reaper would otherwise return to
+   `pending` after the rollback):
+
+```sql
+SELECT count(*) FROM job_queue
+WHERE queue IN ('event-reactions', 'event-summaries') AND status IN ('pending', 'running');
+```
+
+3. Roll the worker back.
+4. Once the older worker is live and any lease it inherited has lapsed, delete
+   whatever is still pending on the two queues, for example a retry scheduled
+   after step 2:
+
+```sql
+DELETE FROM job_queue
+WHERE queue IN ('event-reactions', 'event-summaries') AND status = 'pending';
+```
+
+5. Strip the next-response cycle marker and the pause ledger, which the older
+   build neither writes nor clears, so they cannot outlive the rollback. A
+   stamp without a ledger takes the spans in its history as already excluded
+   after a roll-forward, which the older build's resumes did:
+
+```sql
+UPDATE conversations
+SET sla_applied = sla_applied - 'nextResponseCycleAt' - 'pausedSpans' - 'pauseRevision'
+WHERE sla_applied ?| array['nextResponseCycleAt', 'pausedSpans', 'pauseRevision'];
+UPDATE tickets
+SET sla_applied = sla_applied - 'pausedSpans' - 'pauseRevision'
+WHERE sla_applied ?| array['pausedSpans', 'pauseRevision'];
+```
+
+Dropping those few reactions is better than running them days later. Any
+left behind and run after a later roll-forward are subject to the remaining
+effects listed above, with days of later activity to collide with instead of
+seconds.
+
+An install that runs web and worker as one process cannot roll them back
+separately: its in-flight reaction rows are left behind at the rollback, so
+run steps 4 and 5 once the older build is up.
 
 ## 11. Running the evidence
 

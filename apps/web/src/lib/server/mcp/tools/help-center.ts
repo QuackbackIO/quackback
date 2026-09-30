@@ -17,6 +17,7 @@ import {
   updateCategory,
   deleteCategory,
 } from '@/lib/server/domains/help-center/help-center.service'
+import { isCategoryIconName } from '@/lib/server/domains/help-center/category-icons'
 import { parseOptionalTypeId, parseTypeId } from '@/lib/server/domains/api/validation'
 import type { PrincipalId, KbArticleId, KbCategoryId } from '@quackback/ids'
 import type { McpAuthContext } from '../types'
@@ -89,7 +90,16 @@ const manageCategorySchema = {
   name: z.string().max(200).optional().describe('Category name (required for create)'),
   slug: z.string().max(200).optional().describe('URL slug'),
   description: z.string().max(2000).nullable().optional().describe('Category description'),
-  icon: z.string().max(50).nullable().optional().describe('Emoji icon (e.g. "🚀")'),
+  icon: z
+    .string()
+    .refine(isCategoryIconName, {
+      message: 'Not a category icon. Use a Heroicons name such as "RocketLaunchIcon".',
+    })
+    .nullable()
+    .optional()
+    .describe(
+      'Heroicons (20px solid) icon name, e.g. "RocketLaunchIcon", "BookOpenIcon" or "CreditCardIcon". Emoji are not supported. null clears it.'
+    ),
   parentId: z
     .string()
     .nullable()
@@ -246,7 +256,7 @@ Example:
     description: `Create, update, or delete a help center category.
 
 Examples:
-- Create: manage_category({ action: "create", name: "Getting Started", icon: "🚀" })
+- Create: manage_category({ action: "create", name: "Getting Started", icon: "RocketLaunchIcon" })
 - Update: manage_category({ action: "update", categoryId: "kb_category_01abc...", name: "New Name" })
 - Delete: manage_category({ action: "delete", categoryId: "kb_category_01abc..." })`,
     schema: manageCategorySchema,

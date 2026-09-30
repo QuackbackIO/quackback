@@ -1,7 +1,9 @@
 /**
  * Real-DB coverage for the resolved_confirmed CSAT trigger: a positive rating
  * while Quinn's active involvement already answered counts as the customer's
- * explicit affirmation (§ recordOutcome, otherwise unreachable pre-CSAT).
+ * explicit affirmation (§ recordOutcome, otherwise unreachable pre-CSAT). The
+ * confirm runs from a queued reaction, possibly late, so it acts only on the
+ * involvement the rating was given about: the one open when it was submitted.
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll } from 'vitest'
 import { vi } from 'vitest'
@@ -35,13 +37,20 @@ async function seedConversation(): Promise<ConversationId> {
   return conversation.id
 }
 
-async function seedInvolvement(conversationId: ConversationId, lastAssistantAnswerAt: Date | null) {
+async function seedInvolvement(
+  conversationId: ConversationId,
+  lastAssistantAnswerAt: Date | null,
+  opened: { createdAt?: Date; status?: 'active' | 'handed_off' } = {}
+) {
   const [row] = await testDb
     .insert(assistantInvolvements)
-    .values({ conversationId, triggeredBy: 'first_touch', lastAssistantAnswerAt })
+    .values({ conversationId, triggeredBy: 'first_touch', lastAssistantAnswerAt, ...opened })
     .returning()
   return row
 }
+
+/** 2026-01-05 at the given UTC time. */
+const at = (hhmm: string) => new Date(`2026-01-05T${hhmm}:00.000Z`)
 
 async function statusOf(involvementId: AssistantInvolvementId) {
   const [row] = await testDb
@@ -60,7 +69,7 @@ describe.skipIf(!fixture.available)('confirmResolutionFromCsat (real DB, rolled 
     const conversationId = await seedConversation()
     const involvement = await seedInvolvement(conversationId, new Date())
 
-    await confirmResolutionFromCsat(conversationId, 5)
+    await confirmResolutionFromCsat(conversationId, 5, new Date())
 
     expect(await statusOf(involvement.id)).toBe('resolved_confirmed')
   })
@@ -69,7 +78,7 @@ describe.skipIf(!fixture.available)('confirmResolutionFromCsat (real DB, rolled 
     const conversationId = await seedConversation()
     const involvement = await seedInvolvement(conversationId, new Date())
 
-    await confirmResolutionFromCsat(conversationId, 2)
+    await confirmResolutionFromCsat(conversationId, 2, new Date())
 
     expect(await statusOf(involvement.id)).toBe('active')
   })
@@ -78,7 +87,7 @@ describe.skipIf(!fixture.available)('confirmResolutionFromCsat (real DB, rolled 
     const conversationId = await seedConversation()
     const involvement = await seedInvolvement(conversationId, null)
 
-    await confirmResolutionFromCsat(conversationId, 5)
+    await confirmResolutionFromCsat(conversationId, 5, new Date())
 
     expect(await statusOf(involvement.id)).toBe('active')
   })
@@ -86,6 +95,40 @@ describe.skipIf(!fixture.available)('confirmResolutionFromCsat (real DB, rolled 
   it('no-ops without an involvement on the conversation', async () => {
     const conversationId = await seedConversation()
 
-    await expect(confirmResolutionFromCsat(conversationId, 5)).resolves.toBeUndefined()
+    await expect(confirmResolutionFromCsat(conversationId, 5, new Date())).resolves.toBeUndefined()
+  })
+
+  it('a late confirm never confirms an involvement opened after the rating', async () => {
+    const conversationId = await seedConversation()
+    // The rating (10:20) was about the first involvement, which has since
+    // handed off; Quinn engaged again at 10:40 and has answered.
+    const rated = await seedInvolvement(conversationId, at('10:10'), {
+      createdAt: at('10:00'),
+      status: 'handed_off',
+    })
+    const later = await seedInvolvement(conversationId, at('10:45'), { createdAt: at('10:40') })
+
+    await confirmResolutionFromCsat(conversationId, 5, at('10:20'))
+
+    expect(await statusOf(rated.id)).toBe('handed_off')
+    expect(await statusOf(later.id)).toBe('active')
+  })
+
+  it('a late confirm skips when no involvement was open at the rating', async () => {
+    const conversationId = await seedConversation()
+    const later = await seedInvolvement(conversationId, at('10:45'), { createdAt: at('10:40') })
+
+    await confirmResolutionFromCsat(conversationId, 5, at('10:20'))
+
+    expect(await statusOf(later.id)).toBe('active')
+  })
+
+  it('a late confirm still confirms the rated involvement while it is active', async () => {
+    const conversationId = await seedConversation()
+    const rated = await seedInvolvement(conversationId, at('10:10'), { createdAt: at('10:00') })
+
+    await confirmResolutionFromCsat(conversationId, 5, at('10:20'))
+
+    expect(await statusOf(rated.id)).toBe('resolved_confirmed')
   })
 })

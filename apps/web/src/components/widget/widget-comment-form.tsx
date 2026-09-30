@@ -93,9 +93,9 @@ export function WidgetCommentForm({
             id: 'widget.commentForm.placeholder',
             defaultMessage: 'Write a comment...',
           })}
-          onChange={(json, _html, markdown) => {
-            editorJsonRef.current = json as TiptapContent
-            setCommentText(markdown ?? '')
+          onDocumentChange={(document) => {
+            editorJsonRef.current = document.json() as TiptapContent
+            setCommentText(document.markdown())
           }}
         />
       </div>

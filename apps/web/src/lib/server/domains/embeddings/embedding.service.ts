@@ -19,7 +19,8 @@ const EMBEDDING_DIMENSIONS = 1536
 
 /**
  * Generate embedding for text using OpenAI.
- * When logContext is provided, usage is recorded to ai_usage_log.
+ * When logContext is provided, usage is recorded to ai_usage_log. `signal`
+ * cancels the provider request and any retry, and the call then returns null.
  */
 export async function generateEmbedding(
   text: string,
@@ -28,7 +29,8 @@ export async function generateEmbedding(
     postId?: string
     rawFeedbackItemId?: string
     signalId?: string
-  }
+  },
+  opts: { signal?: AbortSignal } = {}
 ): Promise<number[] | null> {
   const openai = getOpenAI()
   const model = getEmbeddingModel()
@@ -49,12 +51,13 @@ export async function generateEmbedding(
           signalId: logContext.signalId,
         },
         () =>
-          withRetry(() =>
-            openai.embeddings.create({
-              model,
-              input: truncated,
-              dimensions: EMBEDDING_DIMENSIONS,
-            })
+          withRetry(
+            () =>
+              openai.embeddings.create(
+                { model, input: truncated, dimensions: EMBEDDING_DIMENSIONS },
+                { signal: opts.signal }
+              ),
+            { signal: opts.signal }
           ),
         (r) => ({
           inputTokens: r.usage?.prompt_tokens ?? 0,
@@ -64,15 +67,20 @@ export async function generateEmbedding(
       return response.data[0]?.embedding ?? null
     }
 
-    const { result: response } = await withRetry(() =>
-      openai.embeddings.create({
-        model,
-        input: truncated,
-        dimensions: EMBEDDING_DIMENSIONS,
-      })
+    const { result: response } = await withRetry(
+      () =>
+        openai.embeddings.create(
+          { model, input: truncated, dimensions: EMBEDDING_DIMENSIONS },
+          { signal: opts.signal }
+        ),
+      { signal: opts.signal }
     )
     return response.data[0]?.embedding ?? null
   } catch (error) {
+    if (opts.signal?.aborted) {
+      log.debug({ pipeline_step: logContext?.pipelineStep }, 'embedding generation aborted')
+      return null
+    }
     log.error(
       { pipeline_step: logContext?.pipelineStep, post_id: logContext?.postId, err: error },
       'embedding generation failed'

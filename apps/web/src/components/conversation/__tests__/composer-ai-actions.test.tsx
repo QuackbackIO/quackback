@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ConversationId } from '@quackback/ids'
 
@@ -39,10 +39,17 @@ function renderActions({
   note?: string
 } = {}) {
   const drafts: Record<ComposerMode, string> = { reply, note }
+  const listeners = new Set<() => void>()
+  /** Write a draft the way the composer does, notifying subscribers. */
+  const edit = (mode: ComposerMode, text: string) => {
+    drafts[mode] = text
+    act(() => listeners.forEach((listener) => listener()))
+  }
   const restores: Array<ReturnType<typeof vi.fn>> = []
   const onReplaceDraftText = vi.fn((mode: ComposerMode, text: string) => {
     const previous = drafts[mode]
     drafts[mode] = text
+    listeners.forEach((listener) => listener())
     const restore = vi.fn(() => {
       drafts[mode] = previous
     })
@@ -54,14 +61,17 @@ function renderActions({
       <ComposerAiActions
         item={{ kind: 'conversation', id: conversationId }}
         activeMode={activeMode}
-        activeDraftText={drafts[activeMode]}
+        subscribeDraft={(listener) => {
+          listeners.add(listener)
+          return () => listeners.delete(listener)
+        }}
         getDraftText={(mode) => drafts[mode]}
         onReplaceDraftText={onReplaceDraftText}
       />
     </div>
   )
 
-  return { drafts, restores, onReplaceDraftText }
+  return { drafts, edit, restores, onReplaceDraftText }
 }
 
 async function chooseImprove(label: string) {
@@ -100,6 +110,30 @@ describe('<ComposerAiActions>', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
     expect(restores[0]).toHaveBeenCalled()
+  })
+
+  it('offers Improve once the active draft has text', () => {
+    const { edit } = renderActions({ reply: '' })
+    const improve = screen.getByRole('button', { name: /improve/i })
+    expect(improve).toBeDisabled()
+
+    edit('note', 'A note.')
+    expect(improve).toBeDisabled()
+    edit('reply', 'A reply.')
+    expect(improve).toBeEnabled()
+    edit('reply', '  ')
+    expect(improve).toBeDisabled()
+  })
+
+  it('drops Undo once the improved draft is edited again', async () => {
+    const { edit } = renderActions()
+    await chooseImprove('Rephrase')
+    expect(await screen.findByRole('button', { name: 'Undo' })).toBeInTheDocument()
+
+    edit('note', 'Unrelated note.')
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument()
+    edit('reply', 'Improved draft. And more.')
+    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument()
   })
 
   it('never overwrites text entered while Improve is running', async () => {

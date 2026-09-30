@@ -23,7 +23,7 @@ export function AssistantDeploymentCard({
   const intl = useIntl()
   const updateDeployment = useUpdateWidgetAssistantDeployment()
   const [confirmingEnabled, setConfirmingEnabled] = useState<boolean | null>(null)
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null)
   const live = deployment.enabled && deployment.respond
 
   async function confirmChange() {
@@ -32,11 +32,11 @@ export function AssistantDeploymentCard({
       ? { enabled: true, respond: true }
       : { enabled: deployment.enabled, respond: false }
     try {
-      setMessage('')
+      setMessage(null)
       await updateDeployment.mutateAsync(next)
       onChange(next)
-      setMessage(
-        next.respond
+      setMessage({
+        text: next.respond
           ? intl.formatMessage({
               id: 'automation.agent.deployment.enabledStatus',
               defaultMessage: 'Automatic replies are enabled in Messenger.',
@@ -44,16 +44,18 @@ export function AssistantDeploymentCard({
           : intl.formatMessage({
               id: 'automation.agent.deployment.pausedStatus',
               defaultMessage: 'Automatic replies are paused.',
-            })
-      )
+            }),
+        isError: false,
+      })
       setConfirmingEnabled(null)
     } catch {
-      setMessage(
-        intl.formatMessage({
+      setMessage({
+        text: intl.formatMessage({
           id: 'automation.agent.deployment.error',
           defaultMessage: 'The deployment setting could not be changed. Try again.',
-        })
-      )
+        }),
+        isError: true,
+      })
     }
   }
 
@@ -144,15 +146,15 @@ export function AssistantDeploymentCard({
         </div>
         {message && (
           <p
-            role={message.includes('could not') ? 'alert' : 'status'}
-            aria-live="polite"
+            role={message.isError ? 'alert' : 'status'}
+            aria-live={message.isError ? 'assertive' : 'polite'}
             className={
-              message.includes('could not')
+              message.isError
                 ? 'mt-3 text-xs text-destructive'
                 : 'mt-3 text-xs text-muted-foreground'
             }
           >
-            {message}
+            {message.text}
           </p>
         )}
       </section>

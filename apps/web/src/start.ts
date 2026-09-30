@@ -15,6 +15,7 @@ import { oauthCorsMiddleware } from '@/lib/server/middleware/oauth-cors'
 import { requestContextMiddleware } from '@/lib/server/middleware/request-context'
 import { serverFnLogMiddleware } from '@/lib/server/middleware/server-fn-log'
 import { workspaceContextMiddleware } from '@/lib/server/middleware/workspace-context'
+import { expireRouteContextOnWrite } from '@/lib/client/route-context-middleware'
 
 /**
  * Same-origin protection for server functions, matching the framework default.
@@ -47,6 +48,8 @@ export const startInstance = createStart(() => {
     // Server-function failures never reach the request middleware's error
     // branch (see server-fn-log.ts), so they are logged here instead. Unlike
     // `requestMiddleware` above, this list replaces no framework default.
-    functionMiddleware: [serverFnLogMiddleware],
+    // In the browser, a POST server function drops the route context kept
+    // between navigations, so the next one sees what it changed.
+    functionMiddleware: [serverFnLogMiddleware, expireRouteContextOnWrite],
   }
 })

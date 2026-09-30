@@ -96,6 +96,7 @@ function makeProvider(overrides: Partial<IdentityProvider> = {}): IdentityProvid
     scopes: null,
     prompt: null,
     tokenEndpointAuthMethod: null,
+    idTokenNonce: null,
     enabled: true,
     configured: true,
     autoCreateUsers: true,

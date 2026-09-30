@@ -19,7 +19,7 @@ import {
   clearPersistedToken,
 } from '@/lib/client/widget-auth'
 import { sendToHost } from '@/lib/client/widget-bridge'
-import { widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
+import { INITIAL_SESSION_VERSION, widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
 import { authClient } from '@/lib/client/auth-client'
 import { resolveIdentifyAction, type SessionSource } from './identify-precedence'
 import type { WidgetMetadata, WidgetEventName, WidgetEventMap } from '@/lib/shared/widget/types'
@@ -109,13 +109,23 @@ export function WidgetAuthProvider({
   children,
 }: WidgetAuthProviderProps) {
   const queryClient = useQueryClient()
+  // A portal session the page hands the widget is adopted before the first
+  // render, so every identity-keyed read starts on it, one version past the
+  // anonymous server-rendered baseline. Adopted in an effect after mount, each
+  // of those reads ran once without it and then again for the new version.
+  const [portalSessionAdopted] = useState(() => {
+    if (!portalSessionToken || typeof window === 'undefined') return false
+    setWidgetToken(portalSessionToken)
+    return true
+  })
+  const initialSessionVersion = INITIAL_SESSION_VERSION + (portalSessionAdopted ? 1 : 0)
   const [user, setUser] = useState<WidgetUser | null>(null)
   const [canPortalHandoff, setCanPortalHandoff] = useState(canPortalHandoffFromPortal ?? true)
-  const [sessionVersion, setSessionVersion] = useState(0)
+  const [sessionVersion, setSessionVersion] = useState(initialSessionVersion)
   const [identityResolved, setIdentityResolved] = useState(false)
   const isIdentified = user !== null
-  const sessionReadyRef = useRef(false)
-  const sessionSourceRef = useRef<SessionSource>(null)
+  const sessionReadyRef = useRef(portalSessionAdopted)
+  const sessionSourceRef = useRef<SessionSource>(portalSessionAdopted ? 'portal' : null)
 
   // Durable device id from the host page (visitor analytics layer 2). Linked
   // to the session's principal server-side; deduped per (device, token) so
@@ -154,7 +164,7 @@ export function WidgetAuthProvider({
     document.documentElement.dir = dir
   }, [locale])
 
-  const sessionVersionRef = useRef(0)
+  const sessionVersionRef = useRef(initialSessionVersion)
   const getSessionVersion = useCallback(() => sessionVersionRef.current, [])
   const storeToken = useCallback((token: string) => {
     setWidgetToken(token)
@@ -296,10 +306,15 @@ export function WidgetAuthProvider({
   // SDK identify() calls via postMessage will override this if received.
   const portalHydratedRef = useRef(false)
   useEffect(() => {
-    if (!portalSessionToken || portalHydratedRef.current || sessionReadyRef.current) return
+    if (!portalSessionToken || portalHydratedRef.current) return
+    // A token known at mount was adopted before the first render (above); one
+    // that arrives later is adopted here, unless a session is already ready.
+    if (!portalSessionAdopted) {
+      if (sessionReadyRef.current) return
+      sessionSourceRef.current = 'portal'
+      storeToken(portalSessionToken)
+    }
     portalHydratedRef.current = true
-    sessionSourceRef.current = 'portal'
-    storeToken(portalSessionToken)
     if (portalUser) {
       setUser(portalUser)
       setCanPortalHandoff(canPortalHandoffFromPortal !== false)
@@ -307,7 +322,7 @@ export function WidgetAuthProvider({
       sendToHost({ type: 'quackback:auth-change', user: portalUser })
     }
     setIdentityResolved(true)
-  }, [portalSessionToken, portalUser, canPortalHandoffFromPortal, storeToken])
+  }, [portalSessionToken, portalSessionAdopted, portalUser, canPortalHandoffFromPortal, storeToken])
 
   // Restore a persisted anonymous session on mount so a returning visitor's
   // conversation is visible immediately, without waiting for a write. Skipped

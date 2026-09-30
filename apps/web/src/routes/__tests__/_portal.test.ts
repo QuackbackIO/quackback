@@ -11,6 +11,7 @@
  * vi.mock before the module loads we can spy on emit behavior.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { QueryClient } from '@tanstack/react-query'
 
 // ---------------------------------------------------------------------------
 // Mocks — must be hoisted before any import of _portal.tsx
@@ -40,7 +41,7 @@ vi.mock('@/lib/shared/i18n', () => ({
   loadMessages: vi.fn(async () => ({})),
   loadPortalMessages: vi.fn(async () => ({})),
   DEFAULT_LOCALE: 'en',
-  SUPPORTED_LOCALES: ['en', 'de', 'fr', 'es', 'ar', 'ru', 'pt-br', 'zh-cn', 'zh-tw'],
+  SUPPORTED_LOCALES: ['en', 'de', 'fr', 'es', 'ar', 'ru', 'pt-br', 'zh-cn', 'zh-tw', 'nl'],
 }))
 vi.mock('@/lib/shared/types/settings', () => ({
   DEFAULT_PORTAL_CONFIG: { oauth: {}, access: {} },
@@ -67,6 +68,10 @@ vi.mock('@tanstack/react-start/server', () => ({
 vi.mock('@/lib/server/functions/instant-sso', () => ({
   resolveInstantSsoRedirectFn: vi.fn(),
 }))
+vi.mock('@/lib/server/functions/notifications', () => ({
+  getUnreadCountFn: vi.fn(async () => ({ count: 0 })),
+  getNotificationsFn: vi.fn(),
+}))
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -82,6 +87,7 @@ function makeContext(sessionUser?: {
   principalType: 'user' | 'anonymous' | 'service'
 }) {
   return {
+    queryClient: new QueryClient(),
     session: sessionUser
       ? {
           user: {

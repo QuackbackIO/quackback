@@ -26,7 +26,7 @@ import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { CSV_TEMPLATE } from '@/lib/shared/schemas/import'
-import type { ImportRunListItem } from './import-history-list'
+import type { ImportRunListItem } from '@/lib/server/functions/data-runs'
 
 type Step = 'idle' | 'reviewing' | 'committing' | 'done' | 'failed'
 

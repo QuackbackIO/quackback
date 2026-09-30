@@ -11,6 +11,12 @@ import type { OfficeHoursConfig } from '@/lib/shared/conversation/types'
 import type { WidgetTranslations } from '@/lib/shared/widget/translations'
 import type { StatusSettings } from '@/lib/shared/status-settings'
 import type { OidcSignInButton } from '@/lib/shared/oidc-sign-in-button'
+// Vite aliases this to a no-op stub for the client bundle (see
+// logger.client-stub.ts), so it is safe for this otherwise client-bundled
+// module to import it for the one server-side parse-failure log below.
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'settings-types' })
 
 // =============================================================================
 // Auth Configuration (Team sign-in settings)
@@ -1121,13 +1127,46 @@ export interface FeatureFlags {
 }
 
 /**
+ * Parse stored `feature_flags` JSON into a plain object, tolerating
+ * corruption. Blank (absent/empty) or the literal string `'null'` means "no
+ * stored flags yet" — expected, silent, resolves to defaults. Anything else
+ * that fails to parse, or parses to something other than a plain object
+ * (array, string, number, boolean, `null`), is corrupt data: logged once so
+ * it can be found and repaired, and treated the same as "no stored flags" so
+ * callers still get safe defaults instead of throwing.
+ */
+function parseStoredFeatureFlags(storedJson: string | null | undefined): Record<string, unknown> {
+  if (!storedJson) return {}
+  const trimmed = storedJson.trim()
+  if (trimmed === '' || trimmed === 'null') return {}
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(storedJson)
+  } catch (err) {
+    log.error({ err, column: 'feature_flags' }, 'unreadable feature_flags JSON, using defaults')
+    return {}
+  }
+
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    log.error(
+      { column: 'feature_flags', valueType: Array.isArray(parsed) ? 'array' : typeof parsed },
+      'feature_flags JSON was not an object, using defaults'
+    )
+    return {}
+  }
+
+  return parsed as Record<string, unknown>
+}
+
+/**
  * Resolve stored feature-flags JSON to the current FeatureFlags shape:
  * defaults for missing keys, stored values for known keys. Unknown keys
  * (including retired Inbox AI / Connectors / Skills flags) are dropped, so
  * the first write after an upgrade persists a clean shape.
  */
 export function resolveFeatureFlags(storedJson: string | null | undefined): FeatureFlags {
-  const stored: Record<string, unknown> = storedJson ? JSON.parse(storedJson) : {}
+  const stored = parseStoredFeatureFlags(storedJson)
   const flags: FeatureFlags = { ...DEFAULT_FEATURE_FLAGS }
   for (const key of Object.keys(DEFAULT_FEATURE_FLAGS) as Array<keyof FeatureFlags>) {
     if (typeof stored[key] === 'boolean') flags[key] = stored[key]

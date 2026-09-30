@@ -68,7 +68,9 @@ export interface JobDefinition {
    *
    * This is the reference's per-`Worker` `concurrency`, and it is the reason
    * the job worker runs a bounded pool rather than a serial drain — see runner.ts.
-   * `workflow-dispatch` pins 1 deliberately: it is a global FIFO.
+   * `workflow-dispatch` and `event-reactions` pin 1 deliberately: one job at a
+   * time, claimed in enqueue order, within this process. That is not a global
+   * order (see runner.ts), so a handler must not depend on it for correctness.
    */
   concurrency?: number
   /** How long succeeded rows are kept. Defaults to the process-wide setting. */
@@ -350,6 +352,34 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       import('@/lib/server/events/event-dispatch-queue').then((m) => m.runEventDispatch),
   },
   {
+    // One event's reactions that read state an earlier event left (SLA
+    // clocks, pair-ticket reopen, CSAT confirm), queued in emit()'s
+    // transaction. `concurrency: 1` runs them one at a time in enqueue order
+    // within a process, which keeps the common case in event order. It is not
+    // a global order (retries, a second worker process, a lapsed lease), so the
+    // order-sensitive reactions read the database instead of relying on it:
+    // see events/event-reactions.ts.
+    name: 'event-reactions',
+    concurrency: 1,
+    maxAttempts: 3,
+    retryBackoffMs: 1_000,
+    retentionMs: DAY_MS,
+    failedRetentionMs: 30 * DAY_MS,
+    handler: () =>
+      import('@/lib/server/events/event-reactions-queue').then((m) => m.runEventReactions),
+  },
+  {
+    // The close summaries, queued next to event-reactions. Slow AI calls that
+    // do not depend on order, so they run concurrently off the serial queue.
+    name: 'event-summaries',
+    concurrency: 2,
+    maxAttempts: 3,
+    retentionMs: DAY_MS,
+    failedRetentionMs: 30 * DAY_MS,
+    handler: () =>
+      import('@/lib/server/events/event-summaries-queue').then((m) => m.runEventSummaries),
+  },
+  {
     // Was `{segment-evaluation}`. Its schedules are rows in the workspace's own
     // `segments` table, so they are derived per tick rather than registered.
     name: 'segment-evaluation',
@@ -399,10 +429,11 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       ),
   },
   {
-    // Was `{workflow-dispatch}`. `concurrency: 1` is a deliberate global FIFO,
-    // not a throughput default — two events on one conversation (a reply then
-    // a close) are two jobs, and only a serial queue keeps their dispatch in
-    // enqueue order.
+    // Was `{workflow-dispatch}`. `concurrency: 1` is deliberate, not a
+    // throughput default: two events on one conversation (a reply then a
+    // close) are two jobs, and only a serial queue keeps their dispatch in
+    // enqueue order. That order holds per worker process (see
+    // workflow-dispatch-queue.ts for its limits).
     name: 'workflow-dispatch',
     concurrency: 1,
     maxAttempts: 3,

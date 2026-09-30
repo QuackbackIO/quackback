@@ -1,6 +1,6 @@
 'use client'
 
-import { useLayoutEffect, useRef, useState } from 'react'
+import { memo, useLayoutEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useIntl } from 'react-intl'
 import { LightBulbIcon } from '@heroicons/react/24/outline'
@@ -35,7 +35,11 @@ function useContentHeight() {
 
 const MAX_SIMILAR_POSTS = 3
 
-export function SimilarPostsCard({
+/**
+ * Rendered beside a title being typed, whose search renders on every
+ * keystroke; it renders again only when its posts or visibility change.
+ */
+export const SimilarPostsCard = memo(function SimilarPostsCard({
   posts,
   show,
   className,
@@ -102,4 +106,4 @@ export function SimilarPostsCard({
       )}
     </AnimatePresence>
   )
-}
+})

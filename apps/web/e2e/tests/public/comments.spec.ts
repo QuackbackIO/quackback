@@ -68,6 +68,17 @@ async function goToFirstPost(page: Page) {
   await expect(page.getByRole('heading', { name: /\d+ comments?/i })).toBeVisible({
     timeout: 10000,
   })
+  await engageComposer(page)
+}
+
+/**
+ * The composer draws an empty editor and mounts the real one once the pointer
+ * arrives (or on focus), so point at it before driving the editor. A no-op
+ * where there is no composer (signed out, locked board).
+ */
+async function engageComposer(scope: Page | Locator) {
+  const standIn = scope.getByRole('textbox', { name: /write a comment/i }).first()
+  if (await standIn.isVisible()) await standIn.hover()
 }
 
 // ---------------------------------------------------------------------------
@@ -657,6 +668,10 @@ test.describe('Edge cases — comment content', () => {
 
       const replyBtn = commentItems.first().getByTestId('reply-button')
       await replyBtn.click()
+      await expect(
+        commentItems.first().getByRole('textbox', { name: /write a comment/i })
+      ).toBeVisible({ timeout: 5000 })
+      await engageComposer(commentItems.first())
 
       // The reply form is a nested CommentForm with the same editor data-testid
       const replyEditor = commentItems

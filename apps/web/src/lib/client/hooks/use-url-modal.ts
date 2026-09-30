@@ -7,12 +7,8 @@ interface UseUrlModalOptions {
   urlId: string | undefined
   /** TypeID prefix for validation (e.g. 'post', 'changelog') */
   idPrefix: IdPrefix
-  /** The search param key to clear when closing (e.g. 'post', 'entry') */
+  /** The search param that holds the ID (e.g. 'post', 'entry') */
   searchParam: string
-  /** The route to navigate to when closing */
-  route: string
-  /** Current route search params */
-  search: Record<string, unknown>
 }
 
 interface UseUrlModalReturn<T> {
@@ -30,14 +26,17 @@ interface UseUrlModalReturn<T> {
  * Hook for URL-synced modals that handles local state for instant UI,
  * URL synchronization, and TypeID validation.
  *
- * Used by PostModal, ChangelogModal, ArticleModal, and RoadmapModal.
+ * Closing and moving rewrite only `searchParam` on the page the modal is open
+ * over, from the location at the time of the navigation, so `close` and
+ * `navigateTo` stay the same functions while the location changes.
+ *
+ * Used by PostModal, ChangelogModal, ArticleModal, RoadmapModal and
+ * StatusIncidentModal.
  */
 export function useUrlModal<T extends string>({
   urlId,
   idPrefix,
   searchParam,
-  route,
-  search,
 }: UseUrlModalOptions): UseUrlModalReturn<T> {
   const navigate = useNavigate()
 
@@ -60,32 +59,37 @@ export function useUrlModal<T extends string>({
     }
   }
 
+  const setParam = useCallback(
+    (value: string | undefined) => {
+      startTransition(() => {
+        navigate({
+          to: '.',
+          search: (prev) => {
+            const next: Record<string, unknown> = { ...prev }
+            if (value === undefined) delete next[searchParam]
+            else next[searchParam] = value
+            return next as typeof prev
+          },
+          replace: true,
+        })
+      })
+    },
+    [navigate, searchParam]
+  )
+
   // Close modal instantly, then update URL in background
   const close = useCallback(() => {
     setLocalId(undefined)
-    startTransition(() => {
-      const { [searchParam]: _, ...restSearch } = search
-      navigate({
-        to: route,
-        search: restSearch,
-        replace: true,
-      })
-    })
-  }, [navigate, search, searchParam, route])
+    setParam(undefined)
+  }, [setParam])
 
   // Navigate to a different item (instant UI, background URL update)
   const navigateTo = useCallback(
     (newId: string) => {
       setLocalId(newId)
-      startTransition(() => {
-        navigate({
-          to: route,
-          search: { ...search, [searchParam]: newId },
-          replace: true,
-        })
-      })
+      setParam(newId)
     },
-    [navigate, search, searchParam, route]
+    [setParam]
   )
 
   return { open, validatedId, close, navigateTo }

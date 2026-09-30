@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { FormattedMessage } from 'react-intl'
 import { useQuery } from '@tanstack/react-query'
-import { Link, useRouteContext } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import {
   ArrowTopRightOnSquareIcon,
   BellIcon,
@@ -19,7 +19,7 @@ import {
   TicketIcon,
   UserCircleIcon,
 } from '@heroicons/react/24/outline'
-import type { PrincipalId } from '@quackback/ids'
+import type { ConversationId, PrincipalId } from '@quackback/ids'
 import {
   HANDOFF_REASON_LABELS,
   CONVERSATION_END_REASON_LABELS,
@@ -28,15 +28,9 @@ import {
 } from '@/lib/shared/conversation/types'
 import type { InboxItemRef } from '@/lib/shared/inbox/items'
 import type { TicketDTO } from '@/lib/server/domains/tickets'
-import {
-  listConversationsForUserFn,
-  getConversationAssistantActivityFn,
-} from '@/lib/server/functions/conversation'
-import { getPortalUserFn } from '@/lib/server/functions/admin'
-import { conversationKeys } from '@/lib/client/queries/conversation-keys'
-import { useMediaQuery } from '@/lib/client/hooks/use-media-query'
+import { conversationPanelQueries } from '@/lib/client/queries/conversation-panels'
+
 import { useCopilotTabGate } from '@/lib/client/hooks/use-copilot-tab-gate'
-import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { formatSlaCountdown, dueCountdownTone } from '@/lib/shared/conversation/sla'
 import { PriorityControl } from '@/components/admin/conversation/priority-control'
 import { AssigneeControl } from '@/components/admin/conversation/assignee-control'
@@ -71,6 +65,7 @@ import { MENU_LABEL } from '@/components/ui/menu'
 import { DetailRow as Row, formatDate } from '@/components/shared/detail-row'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
+import { useFeatureFlags } from '@/lib/client/hooks/use-root-context'
 
 const RESOLVED_META = {
   label: 'Resolved',
@@ -181,14 +176,6 @@ function TicketSlaChip({ sla }: { sla: NonNullable<TicketDTO['sla']> }) {
   )
 }
 
-/**
- * The viewport at which this panel exists at all — bound to the `xl:` Tailwind
- * breakpoint on the panel's own `hidden xl:flex` <aside> below. The inbox
- * route derives `copilotAvailable` from the SAME query so the Ask Copilot
- * affordances can never disagree with the panel actually rendering.
- */
-export const DETAIL_PANEL_MEDIA_QUERY = '(min-width: 1280px)'
-
 export interface InboxDetailPanelProps {
   /** The open item, discriminated by kind. */
   item: InboxItemRef
@@ -216,6 +203,10 @@ export interface InboxDetailPanelProps {
   openCopilotToken?: number
   /** Distinct GitHub users who have written on this issue. */
   issuePeople?: { principalId: string; displayName: string; avatarUrl: string | null }[]
+  /** Whether the viewport shows the panel (DETAIL_PANEL_MEDIA_QUERY, read by
+   *  the inbox route). The panel is `hidden xl:flex`; it only fetches its data
+   *  when shown, so smaller viewports don't pay for an invisible sidebar. */
+  visible: boolean
 }
 
 /**
@@ -239,11 +230,9 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
   onInsertFromCopilot,
   openCopilotToken,
   issuePeople,
+  visible: isVisible,
 }: InboxDetailPanelProps) {
-  const { settings } = useRouteContext({ from: '/admin' }) as {
-    settings?: { featureFlags?: FeatureFlags } | null
-  }
-  const flags = settings?.featureFlags
+  const flags = useFeatureFlags()
   // The flag + copilot.use gate, shared with the inbox route's
   // `copilotAvailable` so the Ask Copilot affordances can never disagree
   // with the tab actually existing.
@@ -296,29 +285,19 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
     : (conversation?.visitor.avatarUrl ?? null)
   const { blocked: contactBlocked } = usePersonBlockStatus(principalId)
 
-  // The panel is `hidden xl:flex`; only fetch its data when it's actually shown
-  // so smaller viewports don't pay for an invisible sidebar.
-  const isVisible = useMediaQuery(DETAIL_PANEL_MEDIA_QUERY)
-
+  // A conversation's thread request loads these with the thread and seeds
+  // them, so they only ask on their own for a ticket or once they go stale.
   const { data: detail } = useQuery({
-    queryKey: conversationKeys.agentContactDetail(principalId),
-    queryFn: () => getPortalUserFn({ data: { principalId: principalId as PrincipalId } }),
+    ...conversationPanelQueries.contact(principalId as PrincipalId),
     enabled: isVisible && !!principalId,
-    staleTime: 60_000,
   })
   const { data: history } = useQuery({
-    queryKey: conversationKeys.agentUserConversationsFor(principalId),
-    queryFn: () =>
-      listConversationsForUserFn({ data: { principalId: principalId as PrincipalId } }),
+    ...conversationPanelQueries.history(principalId as PrincipalId),
     enabled: isVisible && !!principalId,
-    staleTime: 30_000,
   })
   const { data: aiActivity } = useQuery({
-    queryKey: conversationKeys.agentAssistantActivity(conversation?.id),
-    queryFn: () =>
-      getConversationAssistantActivityFn({ data: { conversationId: conversation!.id } }),
+    ...conversationPanelQueries.assistantActivity(conversation?.id as ConversationId),
     enabled: isVisible && !isTicketItem && !!conversation,
-    staleTime: 30_000,
   })
   // The live registry (convergence Phase 4): the ticket card joins the type's
   // fields[] client-side to render the ticket's custom-field answers.

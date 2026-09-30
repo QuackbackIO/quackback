@@ -4,12 +4,9 @@ import { useQuery } from '@tanstack/react-query'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { Loader2 } from 'lucide-react'
 import { Cog6ToothIcon } from '@heroicons/react/24/solid'
-import { useRouterState } from '@tanstack/react-router'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
-import { useUrlModal } from '@/lib/client/hooks/use-url-modal'
 import { ModalHeader } from '@/components/shared/modal-header'
 import { ModalFooter } from '@/components/shared/modal-footer'
-import { UrlModalShell } from '@/components/shared/url-modal-shell'
 import { Form } from '@/components/ui/form'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
@@ -32,17 +29,14 @@ import { listSegmentsFn } from '@/lib/server/functions/admin'
 import { getInitialContentJson } from '@/components/admin/feedback/detail/post-utils'
 import type { ArticleId } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/react'
-
-interface ArticleModalProps {
-  articleId: string | undefined
-}
+import type { EditorDocument } from '@/components/ui/rich-text-editor'
 
 interface ArticleModalContentProps {
   articleId: ArticleId
   onClose: () => void
 }
 
-function ArticleModalContent({ articleId, onClose }: ArticleModalContentProps) {
+export function ArticleModalContent({ articleId, onClose }: ArticleModalContentProps) {
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const [translationsOpen, setTranslationsOpen] = useState(false)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
@@ -95,9 +89,9 @@ function ArticleModalContent({ articleId, onClose }: ArticleModalContentProps) {
   }, [article, articleId, form])
 
   const handleContentChange = useCallback(
-    (json: JSONContent, _html: string, markdown: string) => {
-      setContentJson(json)
-      form.setValue('content', markdown, { shouldValidate: false, shouldDirty: true })
+    (document: EditorDocument) => {
+      setContentJson(document.json())
+      form.setValue('content', document.markdown(), { shouldValidate: false, shouldDirty: true })
     },
     [form]
   )
@@ -233,27 +227,5 @@ function ArticleModalContent({ articleId, onClose }: ArticleModalContentProps) {
         onOpenChange={setFeedbackOpen}
       />
     </Form>
-  )
-}
-
-export function ArticleModal({ articleId: urlArticleId }: ArticleModalProps) {
-  const { pathname, search } = useRouterState({ select: (s) => s.location })
-  const { open, validatedId, close } = useUrlModal<ArticleId>({
-    urlId: urlArticleId,
-    idPrefix: 'article',
-    searchParam: 'article',
-    route: pathname,
-    search: search as Record<string, unknown>,
-  })
-
-  return (
-    <UrlModalShell
-      open={open}
-      onOpenChange={(o) => !o && close()}
-      srTitle="Edit article"
-      hasValidId={!!validatedId}
-    >
-      {validatedId && <ArticleModalContent articleId={validatedId} onClose={close} />}
-    </UrlModalShell>
   )
 }

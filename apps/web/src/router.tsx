@@ -4,6 +4,15 @@ import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query
 import { routeTree } from './routeTree.gen'
 import { DefaultErrorPage, NotFoundPage } from '@/components/shared/error-page'
 import { RoutePendingComponent } from '@/components/shared/route-pending'
+import { expireRouteContextOnInvalidate } from '@/lib/client/route-context-memo'
+
+// The small client helpers that lazily loaded chunks share. Reachable from
+// here, they join the entry chunk's static closure (see the `$initial` group
+// in vite.config.ts) instead of each becoming a chunk, and a request, of its
+// own wherever two lazy chunks import it.
+export { useOpenedOnce } from '@/lib/client/hooks/use-opened-once'
+export { lazyWithPreload } from '@/lib/client/lazy-with-preload'
+export { createValueStore, useStoreValue, useDebouncedStoreValue } from '@/lib/client/value-store'
 
 export function getRouter() {
   const queryClient = new QueryClient({
@@ -34,6 +43,10 @@ export function getRouter() {
     router,
     queryClient,
   })
+
+  // Sign-in, sign-out and settings changes call router.invalidate() to
+  // refresh the root and admin context, which navigations otherwise reuse.
+  expireRouteContextOnInvalidate(router)
 
   return router
 }

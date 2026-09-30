@@ -9,6 +9,7 @@ import {
   useQuery,
   useInfiniteQuery,
   infiniteQueryOptions,
+  queryOptions,
   keepPreviousData,
   type InfiniteData,
 } from '@tanstack/react-query'
@@ -152,8 +153,8 @@ export function useUserDetail({ principalId, enabled = true }: UseUserDetailOpti
 }
 
 /** Total count (unfiltered) for a lifecycle view's sidebar label. */
-export function useTotalUserCount(lifecycle: 'users' | 'leads' = 'users') {
-  return useQuery({
+export function totalUserCountOptions(lifecycle: 'users' | 'leads') {
+  return queryOptions({
     queryKey: [...usersKeys.totalCount(), lifecycle],
     queryFn: async () => {
       const result = (await listPortalUsersFn({
@@ -163,6 +164,10 @@ export function useTotalUserCount(lifecycle: 'users' | 'leads' = 'users') {
     },
     staleTime: 60 * 1000,
   })
+}
+
+export function useTotalUserCount(lifecycle: 'users' | 'leads' = 'users') {
+  return useQuery(totalUserCountOptions(lifecycle))
 }
 
 // ============================================================================

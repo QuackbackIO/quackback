@@ -14,14 +14,16 @@ import { countSeatUsage } from '@/lib/server/domains/principals/seat-usage'
 import { logger } from '@/lib/server/logger'
 import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
 import { TerminalJobError } from '@/lib/server/jobs/definitions'
-import { enqueueUsageReport, previousUtcMonth, usageReportDedupeKey } from './usage-report'
+import {
+  enqueueUsageReport,
+  isHostedBillingConfigured,
+  previousUtcMonth,
+  usageReportDedupeKey,
+} from './usage-report'
 
 const log = logger.child({ component: 'usage-report' })
 
-export function isHostedBillingConfigured(): boolean {
-  const raw = process.env.QUACKBACK_CONTROL_PLANE_URL
-  return typeof raw === 'string' && raw.length > 0
-}
+export { isHostedBillingConfigured }
 
 const MONTH_RE = /^\d{4}-\d{2}$/
 

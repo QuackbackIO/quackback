@@ -14,18 +14,21 @@ import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { settingsQueries } from '@/lib/client/queries/settings'
-import {
-  fetchConversationRoutingFn,
-  getEmailChannelStatusFn,
-  updateConversationRoutingFn,
-} from '@/lib/server/functions/settings'
-import { getGitHubChannelStatusFn } from '@/integrations/github/server/functions'
+import { channelSettingsQueries } from '@/lib/client/queries/channel-settings'
+import { githubChannelStatusQuery } from '@/integrations/github/ui/github-channel-status-query'
+import { updateConversationRoutingFn } from '@/lib/server/functions/settings'
 import { useQuery } from '@tanstack/react-query'
 import { getChannelDescriptor } from '@/lib/shared/channels'
 import {
   isPortalSupportSurfaceEnabled,
   isWidgetMessengerEnabled,
 } from '@/lib/shared/support-surfaces'
+import { readBatch } from '@/lib/client/queries/read-batch'
+import { warmQuery } from '@/lib/client/queries/warm-query'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+
+// The hub's GitHub row may be up to a minute old, like its email row.
+const HUB_STATUS_STALE_MS = 60_000
 
 export const Route = createFileRoute('/admin/settings/channels')({
   beforeLoad: ({ context }) => {
@@ -35,9 +38,22 @@ export const Route = createFileRoute('/admin/settings/channels')({
   },
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
+    const { queryClient } = context
+    const [{ channelSettingsQueries: channels }, { githubChannelStatusQuery: githubStatus }] =
+      await Promise.all([
+        import('@/lib/client/queries/channel-settings'),
+        import('@/integrations/github/ui/github-channel-status-query'),
+      ])
+    // The status rows and the routing switch are warmed with the configs so
+    // the hub renders complete from the document. A miss leaves a row to its
+    // own fetch and its defaults, as before.
+    const ensure = readBatch(queryClient)
     await Promise.all([
-      context.queryClient.ensureQueryData(settingsQueries.widgetConfig()),
-      context.queryClient.ensureQueryData(settingsQueries.portalConfig()),
+      ensure(settingsQueries.widgetConfig()),
+      ensure(settingsQueries.portalConfig()),
+      warmQuery(ensure, channels.emailStatus()),
+      warmQuery(ensure, githubStatus()),
+      warmQuery(ensure, channels.routing()),
     ])
     return {}
   },
@@ -45,24 +61,16 @@ export const Route = createFileRoute('/admin/settings/channels')({
 })
 
 function ChannelsHubPage() {
-  const { settings } = Route.useRouteContext()
+  const settings = useWorkspaceSettings()
   const flags = settings?.featureFlags as FeatureFlags | undefined
   const widget = useSuspenseQuery(settingsQueries.widgetConfig())
   const portal = useSuspenseQuery(settingsQueries.portalConfig())
-  const emailStatusQuery = useQuery({
-    queryKey: ['settings', 'email-channel-status'],
-    queryFn: () => getEmailChannelStatusFn(),
-    staleTime: 60_000,
-  })
+  const emailStatusQuery = useQuery(channelSettingsQueries.emailStatus())
   const githubStatusQuery = useQuery({
-    queryKey: ['settings', 'github-channel-status'],
-    queryFn: () => getGitHubChannelStatusFn(),
-    staleTime: 60_000,
+    ...githubChannelStatusQuery(),
+    staleTime: HUB_STATUS_STALE_MS,
   })
-  const routingQuery = useQuery({
-    queryKey: ['conversation-routing'],
-    queryFn: () => fetchConversationRoutingFn(),
-  })
+  const routingQuery = useQuery(channelSettingsQueries.routing())
   const [routingEnabled, setRoutingEnabled] = useState<boolean | null>(null)
   const [saving, setSaving] = useState(false)
 

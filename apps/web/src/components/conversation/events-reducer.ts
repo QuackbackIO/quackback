@@ -100,7 +100,10 @@ export function toggleReactionLocal(
 /** Whether an inbox-stream event changes the conversation LIST's ordering /
  *  preview / unread badge: new + deleted messages, conversation updates, and an
  *  AGENT read move (mark-unread). typing, visitor-read ("Seen"), and
- *  message_updated (reaction/flag) only touch the open thread.
+ *  message_updated (reaction/flag) only touch the open thread. A new message
+ *  whose write also sent the conversation's update leaves the list to that
+ *  event, so one write refreshes the list once, whichever event lands first
+ *  (companionRefreshFallback refreshes it should that event be lost).
  *
  *  Also covers the ticket-side events (unified inbox §3.2, M3), which share
  *  this one predicate rather than a parallel `eventChangesInboxItemList` since
@@ -119,10 +122,47 @@ export function agentEventChangesInboxList(evt: ConversationStreamEvent): boolea
     evt.kind === 'ticket_updated'
   )
     return true
+  if (evt.kind === 'message' && evt.conversationUpdated) return false
   return (
     (evt.kind !== 'read' && evt.kind !== 'typing' && evt.kind !== 'message_updated') ||
     (evt.kind === 'read' && evt.side === 'agent')
   )
+}
+
+/** A new message whose write also sent its conversation's `conversation` event
+ *  leaves the list refresh to that companion (agentEventChangesInboxList). The
+ *  two are published separately and a lost event is never replayed, so the
+ *  returned handler, given every inbox event, refreshes the list anyway once
+ *  `waitMs` passes without the companion. The write publishes the companion
+ *  first and stamps its `lastMessageAt` with the message's `createdAt`, so an
+ *  earlier event counts only when it carries that stamp: another update just
+ *  before the message may have refreshed the list before the message was
+ *  written. Any update after the message refreshes a list that has it. */
+export function companionRefreshFallback(refresh: () => void, waitMs = 1500) {
+  const waiting = new Map<string, ReturnType<typeof setTimeout>>()
+  const companions = new Map<string, { at: number; lastMessageAt: string }>()
+  return (evt: ConversationStreamEvent): void => {
+    const now = Date.now()
+    for (const [id, seen] of companions) if (now - seen.at >= waitMs) companions.delete(id)
+    if (evt.kind === 'conversation') {
+      const id = evt.conversation.id
+      clearTimeout(waiting.get(id))
+      waiting.delete(id)
+      companions.set(id, { at: now, lastMessageAt: evt.conversation.lastMessageAt })
+      return
+    }
+    if (evt.kind !== 'message' || !evt.conversationUpdated) return
+    const id = evt.conversationId
+    if (waiting.has(id)) return
+    if (companions.get(id)?.lastMessageAt === evt.message.createdAt) return
+    waiting.set(
+      id,
+      setTimeout(() => {
+        waiting.delete(id)
+        refresh()
+      }, waitMs)
+    )
+  }
 }
 
 /** Whether an inbox-stream event moves the nav-badge counts (mine/unassigned/

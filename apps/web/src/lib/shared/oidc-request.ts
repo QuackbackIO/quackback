@@ -9,8 +9,9 @@
  * sign-in fails, which is the failure this whole area keeps producing.
  *
  * So the rule is stronger than "add a column per parameter": anything the
- * authorize or token request carries comes from HERE, and a fourth parameter
- * cannot quietly diverge without someone deliberately routing around it.
+ * authorize or token request carries, including whether it sends a nonce, comes
+ * from HERE, and no parameter can quietly diverge without someone deliberately
+ * routing around it.
  */
 
 import { effectiveScopes } from './oidc-scopes'
@@ -25,6 +26,12 @@ export const DEFAULT_OIDC_PROMPT = 'login'
 
 /** Credentials in the request body. The other common choice is HTTP Basic. */
 export const DEFAULT_TOKEN_AUTH_METHOD = 'post'
+
+/**
+ * Send a `nonce` and require the ID token to echo it (OIDC Core §2), which
+ * binds the token to this sign-in attempt.
+ */
+export const DEFAULT_ID_TOKEN_NONCE = 'check'
 
 /**
  * `omit` is not an OIDC value — it is our way of saying "send no prompt at
@@ -47,8 +54,23 @@ export const TOKEN_AUTH_CHOICES = [
   { value: 'basic', label: 'Send credentials as HTTP Basic' },
 ] as const
 
+/**
+ * `off` exists for providers that sign a valid ID token but never echo the
+ * nonce, which fails every sign-in when the check is on. The connection test
+ * sets it from what the provider actually returns; an admin can still change
+ * it, and the next test checks again. It drops the echo check only: the
+ * signature, issuer and audience are still verified, and PKCE still binds the
+ * authorization code to the attempt, so the ID token cannot be swapped for one
+ * from another sign-in.
+ */
+export const ID_TOKEN_NONCE_CHOICES = [
+  { value: 'check', label: 'Send a nonce and check it' },
+  { value: 'off', label: "Don't use a nonce" },
+] as const
+
 export type PromptChoice = (typeof PROMPT_CHOICES)[number]['value']
 export type TokenAuthChoice = (typeof TOKEN_AUTH_CHOICES)[number]['value']
+export type IdTokenNonceChoice = (typeof ID_TOKEN_NONCE_CHOICES)[number]['value']
 
 function isPromptChoice(value: unknown): value is PromptChoice {
   return PROMPT_CHOICES.some((c) => c.value === value)
@@ -58,10 +80,15 @@ function isTokenAuthChoice(value: unknown): value is TokenAuthChoice {
   return TOKEN_AUTH_CHOICES.some((c) => c.value === value)
 }
 
+function isIdTokenNonceChoice(value: unknown): value is IdTokenNonceChoice {
+  return ID_TOKEN_NONCE_CHOICES.some((c) => c.value === value)
+}
+
 export interface AuthorizeRequestSource {
   scopes: string | null
   prompt: string | null
   tokenEndpointAuthMethod: string | null
+  idTokenNonce: string | null
 }
 
 /** What actually goes on the wire — `omit` is our sentinel and is resolved to
@@ -73,6 +100,8 @@ export interface AuthorizeRequest {
   /** Undefined means send no `prompt` parameter at all. */
   prompt: WirePrompt | undefined
   tokenAuth: TokenAuthChoice
+  /** `off` means send no `nonce` and expect none back. */
+  idTokenNonce: IdTokenNonceChoice
 }
 
 export function authorizeRequestFor(provider: AuthorizeRequestSource): AuthorizeRequest {
@@ -80,11 +109,17 @@ export function authorizeRequestFor(provider: AuthorizeRequestSource): Authorize
   const tokenAuth = isTokenAuthChoice(provider.tokenEndpointAuthMethod)
     ? provider.tokenEndpointAuthMethod
     : DEFAULT_TOKEN_AUTH_METHOD
+  // Anything unrecognised checks the nonce, so a hand-edited row can never
+  // switch the check off by accident.
+  const idTokenNonce = isIdTokenNonceChoice(provider.idTokenNonce)
+    ? provider.idTokenNonce
+    : DEFAULT_ID_TOKEN_NONCE
 
   return {
     scopes: effectiveScopes(provider),
     prompt: prompt === 'omit' ? undefined : prompt,
     tokenAuth,
+    idTokenNonce,
   }
 }
 
@@ -97,6 +132,11 @@ export function normalizePromptInput(value: string): string | null {
 
 export function normalizeTokenAuthInput(value: string): string | null {
   if (!isTokenAuthChoice(value) || value === DEFAULT_TOKEN_AUTH_METHOD) return null
+  return value
+}
+
+export function normalizeIdTokenNonceInput(value: string): string | null {
+  if (!isIdTokenNonceChoice(value) || value === DEFAULT_ID_TOKEN_NONCE) return null
   return value
 }
 

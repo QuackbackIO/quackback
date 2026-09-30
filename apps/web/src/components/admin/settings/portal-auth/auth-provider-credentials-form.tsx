@@ -86,8 +86,7 @@ export function AuthProviderCredentialsForm({
   const saveMutation = useSaveAuthProviderCredentials()
   const deleteMutation = useDeleteAuthProviderCredentials()
 
-  // Generic-OAuth providers (Custom OIDC) register a different callback path
-  // than built-in social providers, so derive it from the provider type. (#233)
+  // Better Auth 1.7: social and generic OIDC share `/api/auth/callback/<id>`.
   const redirectUri = `${baseUrl}${authProviderCallbackPath(providerId)}`
 
   const handleStartEdit = () => {

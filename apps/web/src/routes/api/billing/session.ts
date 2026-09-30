@@ -13,6 +13,7 @@ export function billingErrorCode(error: unknown): string {
   if (message === 'seat_cap_exceeded') return 'seat_cap_exceeded'
   if (message === 'over_free_limits') return 'over_free_limits'
   if (message === 'over_plan_limits') return 'over_plan_limits'
+  if (message === 'topup_price_changed') return 'price_changed'
   if (message === 'Authentication required') return 'unauthorized'
   if (message === 'Access denied: Not a team member') return 'not_teammate'
   if (message.startsWith('Access denied:')) return 'forbidden'
@@ -58,6 +59,9 @@ const actionSchema = z.discriminatedUnion('action', [
     action: z.literal('topup'),
     meter: z.enum(['ai', 'email']),
     packs: z.coerce.number().int().positive(),
+    // What the dialog showed per pack, so the checkout charges exactly that.
+    packCents: z.coerce.number().int().positive().optional(),
+    packUnits: z.coerce.number().int().positive().optional(),
   }),
   z.object({
     action: z.literal('branding'),

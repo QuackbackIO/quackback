@@ -461,7 +461,14 @@ export type TicketStreamEvent =
   | { kind: 'ticket_read'; ticketId: TicketId; side: MessageSenderType; at: string }
 
 export type ConversationStreamEvent =
-  | { kind: 'message'; conversationId: ConversationId; message: ConversationMessageDTO }
+  | {
+      kind: 'message'
+      conversationId: ConversationId
+      message: ConversationMessageDTO
+      /** Inbox copy only: the write that added the message also sent the
+       *  conversation's own `conversation` event, which refreshes the list. */
+      conversationUpdated?: true
+    }
   | { kind: 'conversation'; conversation: ConversationDTO }
   | {
       kind: 'read'

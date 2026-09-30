@@ -201,3 +201,37 @@ describe('POST /api/billing/session checkout', () => {
     expect(hoisted.createHostedBillingSession).not.toHaveBeenCalled()
   })
 })
+
+describe('POST /api/billing/session top-up', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    hoisted.requireAuth.mockResolvedValue({ user: { id: 'user_1' } })
+    hoisted.getCloudConfig.mockResolvedValue({ enabled: true, canUpgrade: true, canManageBilling: true })
+    hoisted.createHostedBillingSession.mockResolvedValue({ url: 'https://billing.example.com/checkout' })
+  })
+
+  it('forwards the pack price and size the customer was shown', async () => {
+    const res = await POST({
+      request: formRequest({ action: 'topup', meter: 'email', packs: '2', packCents: '1000', packUnits: '10000' }),
+    })
+    expect(res.status).toBe(303)
+    expect(hoisted.createHostedBillingSession).toHaveBeenCalledWith({
+      action: 'topup',
+      meter: 'email',
+      packs: 2,
+      packCents: 1000,
+      packUnits: 10000,
+    })
+  })
+
+  it('still forwards a top-up posted without them', async () => {
+    await POST({ request: formRequest({ action: 'topup', meter: 'ai', packs: '1' }) })
+    expect(hoisted.createHostedBillingSession).toHaveBeenCalledWith({ action: 'topup', meter: 'ai', packs: 1 })
+  })
+
+  it('refuses a malformed quoted price rather than forward it', async () => {
+    const res = await POST({ request: formRequest({ action: 'topup', meter: 'ai', packs: '1', packCents: '-5' }) })
+    expect(res.headers.get('location')).toContain('billing_error=invalid')
+    expect(hoisted.createHostedBillingSession).not.toHaveBeenCalled()
+  })
+})

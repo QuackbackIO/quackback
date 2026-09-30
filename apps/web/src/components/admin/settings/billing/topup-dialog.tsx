@@ -68,6 +68,9 @@ export function TopUpDialog(props: {
             <input type="hidden" name="action" value="topup" />
             <input type="hidden" name="meter" value={props.meter ?? 'ai'} />
             <input type="hidden" name="packs" value={String(packs)} />
+            {/* The price shown above, so the checkout charges exactly that. */}
+            {priced ? <input type="hidden" name="packCents" value={String(packCents)} /> : null}
+            {packUnits ? <input type="hidden" name="packUnits" value={String(packUnits)} /> : null}
             <Button type="submit" disabled={!props.meter || !priced}>
               Continue to checkout
             </Button>

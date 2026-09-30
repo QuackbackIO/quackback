@@ -23,7 +23,13 @@ export type CustomDomainInstruction = {
   isPrimary: boolean
   updatedAt: string
   cnameTarget: string
+  /** The hosting provider's own validation record. Never shown to admins. */
   ownershipTxt: { name: string; value: string } | null
+  /**
+   * The TXT record that proves this workspace controls the hostname, present
+   * until the proof is seen. A domain goes live only after it is published.
+   */
+  ownershipProof?: { name: string; value: string } | null
 }
 
 export async function requestWorkspaceIdentityMutation(input: {
@@ -264,7 +270,15 @@ export type HostedBillingSessionInput =
       brandingRemoval?: boolean
     }
   | { action: 'downgrade'; planId: 'free' }
-  | { action: 'topup'; meter: 'ai' | 'email'; packs: number }
+  | {
+      action: 'topup'
+      meter: 'ai' | 'email'
+      packs: number
+      /** The per-pack price the customer was shown; charged only if it is still live. */
+      packCents?: number
+      /** The emails per pack the customer was shown (email packs). */
+      packUnits?: number
+    }
   | { action: 'branding'; billingPeriod: 'monthly' | 'annual' }
   | { action: 'branding-remove' }
 

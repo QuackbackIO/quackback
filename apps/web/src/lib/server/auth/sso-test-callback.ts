@@ -17,8 +17,10 @@ import { runHandshake } from '@/lib/server/auth/sso-test-handshake'
 import {
   ssoTestSessionKey,
   ssoTestResultKey,
+  SSO_TEST_NONCE_NOT_RETURNED_LABEL,
   SSO_TEST_POSTMESSAGE_SOURCE,
 } from '@/lib/shared/sso-test-keys'
+import type { UserId } from '@quackback/ids'
 import { escapeHtmlAttr } from '@/lib/shared/utils/sanitize'
 import { logger } from '@/lib/server/logger'
 import type { SsoTestDiagnostic, TestSession } from '@/lib/server/functions/sso-test'
@@ -132,12 +134,25 @@ export async function handleSsoTestCallback(
     const provider = providers.find((p) => p.registrationId === session.registrationId)
     let stamped = false
     if (provider && capture) {
+      const idTokenNonce = result.ok ? result.idTokenNonce : undefined
       const persist = await persistTestResult(provider.id, {
         expectedDetailsChangedAt: session.detailsChangedAt ?? null,
         outcome: result.ok ? 'success' : 'mapping_failed',
         capture,
+        ...(idTokenNonce ? { idTokenNonce } : {}),
+        auditActorUserId: session.adminUserId as UserId,
       })
       stamped = persist === 'stamped' && result.ok
+      // A refused write must not leave the result promising that sign-in
+      // stops sending a nonce.
+      if (result.ok && idTokenNonce === 'off' && !stamped) {
+        for (const step of result.steps) {
+          if (step.label === SSO_TEST_NONCE_NOT_RETURNED_LABEL) {
+            step.detail =
+              'Not saved, because this provider changed during the test. Test again to apply it.'
+          }
+        }
+      }
       if (stamped && session.registrationId === 'sso') {
         const { markSsoTestSucceeded } =
           await import('@/lib/server/domains/settings/settings.service')

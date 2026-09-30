@@ -2,7 +2,7 @@
 import '@testing-library/jest-dom/vitest'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { WorkspaceIdentityCard } from '../settings.general'
+import { WorkspaceIdentityCard } from '@/components/admin/settings/workspace-identity-card'
 
 vi.mock('@/components/admin/settings/logo-uploader', () => ({
   LogoUploader: ({ workspaceName }: { workspaceName: string }) => (

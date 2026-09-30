@@ -1,5 +1,5 @@
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
-import { createFileRoute, useRouteContext } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { CreditCardIcon } from '@heroicons/react/24/solid'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
@@ -9,6 +9,7 @@ import { CheckoutBuilder } from '@/components/admin/settings/billing/checkout-bu
 import { billingQueries } from '@/lib/client/queries/billing'
 import { parseCheckoutSearch, type CheckoutSearch } from '@/lib/shared/billing/checkout-path'
 import type { BillingCatalogue } from '@/lib/server/control-plane/client'
+import { useBillingEnabled } from '@/lib/client/hooks/use-root-context'
 
 // The trailing underscore on "billing_" keeps this a sibling of Plans &
 // billing rather than a child rendered inside it. The URL is still
@@ -27,7 +28,7 @@ export const Route = createFileRoute('/admin/settings/billing_/checkout')({
 })
 
 function CheckoutPage() {
-  const { billingEnabled } = useRouteContext({ from: '__root__' })
+  const billingEnabled = useBillingEnabled()
   const search = Route.useSearch()
   const navigate = Route.useNavigate()
   const { data: overview } = useSuspenseQuery(billingQueries.overview())

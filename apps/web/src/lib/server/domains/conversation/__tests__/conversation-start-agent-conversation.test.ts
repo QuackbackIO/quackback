@@ -297,7 +297,8 @@ describe('startAgentConversation happy path', () => {
       expect.objectContaining({
         visitor: expect.anything(),
         agent: expect.anything(),
-      })
+      }),
+      { conversationUpdated: true }
     )
     expect(emit.emitConversationCreated).toHaveBeenCalledTimes(1)
     expect(emit.emitMessageCreated).toHaveBeenCalledTimes(1)

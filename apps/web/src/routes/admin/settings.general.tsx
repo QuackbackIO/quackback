@@ -3,15 +3,13 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Cog6ToothIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
+import { Cog6ToothIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
-import { LogoUploader } from '@/components/admin/settings/logo-uploader'
 import { updateWorkspaceNameFn } from '@/lib/server/functions/settings'
 import { getCloudIdentityFn, updateCloudIdentityFn } from '@/lib/server/functions/cloud-identity'
 import { updateFeatureFlagsFn } from '@/lib/server/functions/feature-flags'
@@ -28,13 +26,20 @@ import {
 } from '@/lib/shared/types'
 import { Switch } from '@/components/ui/switch'
 import { WorkspaceDangerCard } from '@/components/admin/settings/workspace-danger-card'
+import { WorkspaceIdentityCard } from '@/components/admin/settings/workspace-identity-card'
+import { readBatch } from '@/lib/client/queries/read-batch'
+import { warmQuery } from '@/lib/client/queries/warm-query'
+import { useManagedFieldPaths, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 export const Route = createFileRoute('/admin/settings/general')({
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
+    const ensure = readBatch(context.queryClient)
     const [cloudIdentity] = await Promise.all([
       getCloudIdentityFn(),
-      context.queryClient.ensureQueryData(settingsQueries.logo()),
+      ensure(settingsQueries.logo()),
+      // The export action shows a run in flight.
+      warmQuery(ensure, settingsQueries.exportRuns()),
     ])
     return { cloudIdentity }
   },
@@ -42,7 +47,8 @@ export const Route = createFileRoute('/admin/settings/general')({
 })
 
 function GeneralSettingsPage() {
-  const { settings, managedFieldPaths } = Route.useRouteContext()
+  const settings = useWorkspaceSettings()
+  const managedFieldPaths = useManagedFieldPaths()
   const { cloudIdentity } = Route.useLoaderData()
   const workspaceNameManaged = isPathManagedFromBootstrap(
     MANAGED_PATHS.WORKSPACE_NAME,
@@ -180,47 +186,5 @@ function GeneralSettingsPage() {
 
       <WorkspaceDangerCard cloudEnabled={Boolean(cloudIdentity)} />
     </div>
-  )
-}
-
-export function WorkspaceIdentityCard(props: {
-  workspaceName: string
-  saving: boolean
-  managed: boolean
-  onWorkspaceNameChange: (value: string) => void
-  maxLength?: number
-}) {
-  return (
-    <SettingsCard
-      title="Workspace"
-      description="Your logo and name, shown across the portal, widget, and emails"
-    >
-      <div className="flex items-center gap-4">
-        <LogoUploader workspaceName={props.workspaceName} />
-        <div className="min-w-0 flex-1 max-w-md space-y-1.5">
-          <Label htmlFor="workspace-name" className="text-xs text-muted-foreground">
-            Workspace Name
-          </Label>
-          <div className="relative">
-            <Input
-              id="workspace-name"
-              value={props.workspaceName}
-              onChange={(e) => props.onWorkspaceNameChange(e.target.value)}
-              placeholder="My Workspace"
-              disabled={props.managed}
-              maxLength={props.maxLength}
-            />
-            {props.saving && (
-              <ArrowPathIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
-            )}
-          </div>
-          {props.managed && (
-            <p className="text-xs text-muted-foreground">
-              Managed by your administrator&apos;s config &mdash; edit there.
-            </p>
-          )}
-        </div>
-      </div>
-    </SettingsCard>
   )
 }

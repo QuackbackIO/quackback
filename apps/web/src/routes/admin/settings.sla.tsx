@@ -59,6 +59,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { warmQuery } from '@/lib/client/queries/warm-query'
 
 const slaPoliciesQuery = queryOptions({
   queryKey: ['settings', 'slaPolicies'],
@@ -83,6 +84,8 @@ export const Route = createFileRoute('/admin/settings/sla')({
     await Promise.all([
       context.queryClient.ensureQueryData(slaPoliciesQuery),
       context.queryClient.ensureQueryData(settingsQueries.defaultSlaPolicy()),
+      // The policies' office-hours note reads these on first paint.
+      warmQuery(context.queryClient, slaOfficeHoursQuery),
     ])
     return {}
   },

@@ -1,5 +1,5 @@
 import { Suspense, useState } from 'react'
-import { createFileRoute, useRouteContext } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -18,6 +18,7 @@ import {
 } from '@/lib/shared/launch-checklist'
 import { isAdmin } from '@/lib/shared/roles'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
+import { useUserRole, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 export const Route = createFileRoute('/admin/')({
   loader: async ({ context }) => {
@@ -32,7 +33,8 @@ export const Route = createFileRoute('/admin/')({
 })
 
 function AdminOverviewPage() {
-  const { userRole, settings } = useRouteContext({ from: '__root__' })
+  const userRole = useUserRole()
+  const settings = useWorkspaceSettings()
   const admin = isAdmin(userRole)
   const flags = settings?.featureFlags as FeatureFlags | undefined
 

@@ -501,8 +501,9 @@ export async function peekRunnableJob(jobId: string): Promise<{ queue: string } 
  * Returns null when the row is not runnable, `run_at` is in the future,
  * another claimer holds `FOR UPDATE SKIP LOCKED`, or an older runnable
  * predecessor sits on the same queue (`ORDER BY run_at, id`). A miss is
- * success for a hint: the poller claims the head in FIFO order. That is
- * load-bearing for `workflow-dispatch`, which is a global FIFO.
+ * success for a hint: the poller claims the head in FIFO order. That keeps a
+ * concurrency-1 queue such as `workflow-dispatch` in enqueue order within one
+ * process (see runner.ts for what it does not order).
  */
 export async function claimById(jobId: string, leaseMs: number): Promise<ClaimedJob | null> {
   const table = sql.identifier(TABLE)

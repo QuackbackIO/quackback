@@ -24,6 +24,7 @@
  */
 import { logger } from '@/lib/server/logger'
 import { kvGet, kvSet, kvDel } from '@/lib/server/kv/pg-kv'
+import { forgetCachedKeys } from '@/lib/server/local-cache'
 
 const log = logger.child({ component: 'cache' })
 
@@ -58,9 +59,9 @@ export const CACHE_KEYS = {
   // authConfig.oauth; invalidated by invalidateSettingsCache() and by the
   // platform-credential save/delete flows. 5min TTL backstops anything missed.
   REGISTERED_AUTH_PROVIDERS: 'auth:registered-providers',
-  // Per-user principal type/role lookup hit on every authenticated SSR
-  // render. Invalidated by role/type mutations; 5min TTL backstops anything
-  // we miss.
+  // Names a user's principal. Nothing is stored under it: the principal row is
+  // read once per request (`auth/request-session.ts`) under this same key, and
+  // every role/type mutation deletes the key, which drops that memo.
   PRINCIPAL_BY_USER: (userId: string) => `principal:user:${userId}` as const,
 } as const
 
@@ -81,7 +82,12 @@ export async function cacheSet(key: string, value: unknown, ttlSeconds: number):
   }
 }
 
+/**
+ * Delete `keys`, and forget every copy of them this process holds: the
+ * request memo and the short-lived local copies (`local-cache.ts`).
+ */
 export async function cacheDel(...keys: string[]): Promise<void> {
+  forgetCachedKeys(...keys)
   try {
     await kvDel(...keys)
   } catch (err) {

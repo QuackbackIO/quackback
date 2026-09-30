@@ -445,25 +445,14 @@ describe('stopEnterFromReachingParentForm', () => {
   })
 })
 
-describe('markdown serialization optimization', () => {
-  it('skips markdown serialization when onChange has arity < 3', () => {
-    const getMarkdown = vi.fn(() => '# hello')
-    const editor = { getMarkdown }
-
-    expect(markdownFromEditor(editor, 2)).toBe('')
-    expect(getMarkdown).not.toHaveBeenCalled()
-
-    expect(markdownFromEditor(editor, 3)).toBe('# hello')
-    expect(getMarkdown).toHaveBeenCalledOnce()
-  })
-
+describe('markdownFromEditor fallbacks', () => {
   it('returns empty markdown when the serializer throws with no prior value', () => {
     const editor = {
       getMarkdown: () => {
         throw new Error('unknown node')
       },
     }
-    expect(markdownFromEditor(editor, 3)).toBe('')
+    expect(markdownFromEditor(editor)).toBe('')
   })
 
   it('keeps the last successful markdown when the serializer throws', () => {
@@ -472,7 +461,7 @@ describe('markdown serialization optimization', () => {
         throw new Error('unknown node')
       },
     }
-    expect(markdownFromEditor(editor, 3, '- GIF per link')).toBe('- GIF per link')
+    expect(markdownFromEditor(editor, '- GIF per link')).toBe('- GIF per link')
   })
 
   it('projects current JSON text when the serializer throws mid-edit', () => {
@@ -490,7 +479,7 @@ describe('markdown serialization optimization', () => {
         },
       ],
     }
-    expect(markdownFromEditor(editor, 3, 'old markdown', json)).toBe('new edit')
+    expect(markdownFromEditor(editor, 'old markdown', json)).toBe('new edit')
   })
 
   it('seeds markdown fallback from JSON text when the serializer has not run', () => {

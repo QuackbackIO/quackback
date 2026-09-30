@@ -165,4 +165,38 @@ describe('useAskAi', () => {
     })
     expect(result.current.state.status).toBe('idle')
   })
+
+  it('a reset while the streaming client loads cancels the ask', async () => {
+    const answer = { kind: 'grounded', answer: 'A.', sources: [] }
+    const fetchMock = stubAguiFetch(aguiRun({ middle: structuredDeltas(answer), result: answer }))
+
+    const { result } = renderHook(() => useAskAi())
+    await act(async () => {
+      const asking = result.current.ask('q')
+      result.current.reset()
+      await asking
+    })
+
+    expect(result.current.state.status).toBe('idle')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('asking again while the streaming client loads answers only the latest question', async () => {
+    const answer = { kind: 'grounded', answer: 'Second.', sources: [] }
+    const fetchMock = stubAguiFetch(aguiRun({ middle: structuredDeltas(answer), result: answer }))
+
+    const { result } = renderHook(() => useAskAi())
+    await act(async () => {
+      const first = result.current.ask('first')
+      const second = result.current.ask('second')
+      await Promise.all([first, second])
+    })
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(result.current.state).toMatchObject({
+      status: 'done',
+      question: 'second',
+      answer: 'Second.',
+    })
+  })
 })

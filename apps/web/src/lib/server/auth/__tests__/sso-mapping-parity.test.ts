@@ -88,7 +88,7 @@ async function testHandshake(world: MappingWorld, idToken: string, publicJwk: Js
     discoveryUrl: `${issuer}/.well-known/openid-configuration`,
     clientId: 'cid',
     clientSecret: 'csecret',
-    redirectUri: 'https://qb/api/auth/oauth2/callback/oidc_abc',
+    redirectUri: 'https://qb/api/auth/callback/oidc_abc',
     codeVerifier: 'test-code-verifier',
     expectedNonce: 'nonce789',
     expectedState: 'state123',

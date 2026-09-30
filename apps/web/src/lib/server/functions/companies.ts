@@ -59,7 +59,7 @@ export interface CompanyWithMemberCountDTO extends CompanyDTO {
   memberCount: number
 }
 
-function serializeCompany(company: Company): CompanyDTO {
+export function serializeCompany(company: Company): CompanyDTO {
   return {
     id: company.id,
     name: company.name,

@@ -411,6 +411,9 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/conversation.ts`::setInboxTranslationEnabledFn | conversation.manage |
 | `lib/server/functions/conversation.ts`::dismissInboxTranslationSuggestionFn | conversation.manage |
 | `lib/server/functions/customer-context.ts`::fetchCustomerContextFn | integration.view |
+| `lib/server/functions/data-runs.ts`::listExportRunsFn | settings.manage |
+| `lib/server/functions/data-runs.ts`::listImportRunsFn | settings.manage |
+| `lib/server/functions/data-runs.ts`::listImportRunsFn | ADMIN-ONLY |
 | `lib/server/functions/external-item-search.ts`::searchExternalItemsFn | integration.manage |
 | `lib/server/functions/external-statuses.ts`::fetchExternalStatusesFn | integration.manage |
 | `lib/server/functions/feature-flags.ts`::updateFeatureFlagsFn | settings.manage |
@@ -564,6 +567,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/roadmaps.ts`::deleteRoadmapColumnFn | roadmap.manage |
 | `lib/server/functions/roadmaps.ts`::reorderRoadmapsFn | roadmap.manage |
 | `lib/server/functions/roadmaps.ts`::getRoadmapPostsFn | roadmap.manage |
+| `lib/server/functions/roadmaps.ts`::getRoadmapColumnsFn | roadmap.manage |
 | `lib/server/functions/roadmaps.ts`::getRoadmapDateBucketsFn | roadmap.manage |
 | `lib/server/functions/roles.ts`::listRolesFn | member.view |
 | `lib/server/functions/roles.ts`::createRoleFn | role.manage |
@@ -688,11 +692,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/subscriptions.ts`::unsubscribeFromPostFn | END_USER (any authenticated) |
 | `lib/server/functions/subscriptions.ts`::updateSubscriptionLevelFn | END_USER (any authenticated) |
 | `lib/server/functions/subscriptions.ts`::adminUpdateVoterSubscriptionFn | post.vote_on_behalf |
-| `lib/server/functions/support-reporting.ts`::slaAttainmentFn | analytics.view |
-| `lib/server/functions/support-reporting.ts`::slaAttainmentByPolicyFn | analytics.view |
-| `lib/server/functions/support-reporting.ts`::slaBreachHeatmapFn | analytics.view |
-| `lib/server/functions/support-reporting.ts`::slaTimeAfterMissFn | analytics.view |
-| `lib/server/functions/support-reporting.ts`::workflowEffectivenessFn | analytics.view |
+| `lib/server/functions/support-reporting.ts`::supportReportingFn | analytics.view |
 | `lib/server/functions/support-reporting.ts`::attributeBreakdownFn | analytics.view |
 | `lib/server/functions/teammate-preferences.ts`::getMyLanguagePreferenceFn | END_USER (any authenticated) |
 | `lib/server/functions/teammate-preferences.ts`::setMyLanguagePreferenceFn | END_USER (any authenticated) |
@@ -1025,7 +1025,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-217 of 1042 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+219 of 1043 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1091,6 +1091,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/portal.ts`::fetchPublicBoards | server-fn |
 | `lib/server/functions/portal.ts`::fetchPublicPostDetail | server-fn |
 | `lib/server/functions/portal.ts`::fetchPublicPosts | server-fn |
+| `lib/server/functions/portal.ts`::fetchPublicRoadmapColumns | server-fn |
 | `lib/server/functions/portal.ts`::fetchPublicRoadmapDateBuckets | server-fn |
 | `lib/server/functions/portal.ts`::fetchPublicRoadmapPosts | server-fn |
 | `lib/server/functions/portal.ts`::fetchPublicRoadmaps | server-fn |
@@ -1111,6 +1112,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/public-posts.ts`::listPublicPostsFn | server-fn |
 | `lib/server/functions/public-posts.ts`::listPublicRoadmapsFn | server-fn |
 | `lib/server/functions/public-profile.ts`::getPublicUserProfileFn | server-fn |
+| `lib/server/functions/read-batch.ts`::readTogetherFn | server-fn |
 | `lib/server/functions/recovery-codes-consume.ts`::consumeRecoveryCodeFn | server-fn |
 | `lib/server/functions/settings-utils.ts`::fetchSettingsHeaderLogoData | server-fn |
 | `lib/server/functions/settings-utils.ts`::fetchSettingsLogoData | server-fn |

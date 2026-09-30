@@ -25,7 +25,7 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { SegmentMultiSelect } from '@/components/admin/segments/segment-multi-select'
 import { cn } from '@/lib/shared/utils'
-import { listSegmentsFn } from '@/lib/server/functions/admin'
+import { changelogCategoryQueries } from '@/lib/client/queries/changelog'
 import {
   createChangelogCategoryFn,
   updateChangelogCategoryFn,
@@ -218,11 +218,7 @@ export function LabelsCard({ initialCategories }: LabelsCardProps) {
   const [deletingCategory, setDeletingCategory] = useState<ChangelogCategory | null>(null)
   const [reordering, setReordering] = useState(false)
 
-  const segmentsQuery = useQuery({
-    queryKey: ['admin', 'segments'] as const,
-    queryFn: () => listSegmentsFn(),
-    staleTime: 60_000,
-  })
+  const segmentsQuery = useQuery(changelogCategoryQueries.segments())
   const segments = (segmentsQuery.data ?? []).map((s) => ({ id: s.id, name: s.name }))
 
   function handleCategorySaved(saved: ChangelogCategory) {

@@ -66,6 +66,27 @@ export interface LedgerEntry {
 
 export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   {
+    file: 'apps/web/src/lib/server/functions/read-batch.ts',
+    name: 'registeredReads',
+    category: 'fleet-wide',
+    reason:
+      'Maps the query key of each registered read to its query factory, built once from the static BATCHED_READS list. It holds code, not data: every workspace resolves the same keys to the same factories, and each factory runs its own gated server function for the calling workspace.',
+  },
+  {
+    file: 'apps/web/src/lib/shared/content-emoji.ts',
+    name: 'byChar',
+    category: 'fleet-wide',
+    reason:
+      'Indexes the bundled emoji dataset by character, built once on first lookup. The dataset ships with the app and is the same for every workspace, so a cross-workspace hit returns the emoji any workspace would look up.',
+  },
+  {
+    file: 'apps/web/src/lib/shared/content-emoji.ts',
+    name: 'byEmoticon',
+    category: 'fleet-wide',
+    reason:
+      'Indexes the bundled emoji dataset by emoticon, built once on first lookup. The dataset ships with the app and is the same for every workspace, so a cross-workspace hit returns the emoji any workspace would look up.',
+  },
+  {
     file: 'apps/web/src/lib/server/integrations/sync/transport.ts',
     name: 'evidence',
     category: 'process-lifetime',
@@ -87,6 +108,15 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'auth_config_version is a small per-workspace counter, so two workspaces sitting on the same ' +
       'number is routine; compared across workspaces the guard reads "unchanged" and hands back an ' +
       'instance built for someone else.',
+  },
+  {
+    file: 'apps/web/src/lib/server/auth/index.ts',
+    name: 'authBuilds',
+    category: 'workspace-keyed',
+    reason:
+      'The auth instance build in flight, shared by concurrent cold requests. It resolves to an ' +
+      "instance closed over one workspace's database adapter and providers (see authInstances), so " +
+      'a caller joining another workspace build would authenticate against the wrong workspace.',
   },
   {
     file: 'apps/web/src/lib/server/auth/index.ts',
@@ -265,6 +295,25 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'request scope that named the workspace is still open — an SSE stream outlives that scope by ' +
       "minutes. Keyed by the logical channel alone it would hand one workspace's inbox stream " +
       "another workspace's messages on a bus with no authorization layer of its own.",
+  },
+  {
+    file: 'apps/web/src/lib/server/local-cache.ts',
+    name: 'localCopies',
+    category: 'workspace-keyed',
+    reason:
+      "Short-lived copies of cached values, chiefly the workspace settings, which hold one workspace's " +
+      'auth config, secrets and flags. Shared, one workspace would be served another workspace settings ' +
+      'for up to the copy lifetime.',
+  },
+  {
+    file: 'apps/web/src/lib/server/response-hooks.ts',
+    name: 'bodyEndHooks',
+    category: 'workspace-scoped-key',
+    keyedBy: 'response.body',
+    reason:
+      "Keyed by one response's body stream, an object that exists only for the request that produced " +
+      'it, so a lookup can only ever find its own request. It is a WeakMap and the entry is removed ' +
+      'when taken, so nothing outlives the response.',
   },
   {
     file: 'apps/web/src/lib/server/workspaces/pool-cache.ts',
@@ -876,6 +925,18 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'lastIndex. And its input is migration SQL read from disk by policy tooling: no request, no ' +
       'workspace value, nothing to carry across even if it did. Ledgered rather than exempted so that ' +
       'a second .exec() site, or an await inside that loop, is a visible diff.',
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/dormant-usage-report.ts',
+    name: 'checked',
+    category: 'workspace-scoped-key',
+    keyedBy: 'workspaceKey',
+    reason:
+      'Which month this worker process last asked a parked workspace to queue its usage report, ' +
+      'keyed by workspaceKey, so each parked workspace is asked once a month rather than every ' +
+      'refresh. Written only by the worker\u2019s refresh; the ask itself runs inside that ' +
+      'workspace\u2019s own scope. A wrong entry would skip or repeat one workspace\u2019s ask, and ' +
+      'repeating is harmless because the report\u2019s dedupe key coalesces it.',
   },
   {
     file: 'apps/web/src/lib/server/jobs/worker.ts',

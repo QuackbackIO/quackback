@@ -1,40 +1,45 @@
-import { Suspense, lazy } from 'react'
-import {
-  createFileRoute,
-  Outlet,
-  redirect,
-  useNavigate,
-  useRouterState,
-  useRouteContext,
-} from '@tanstack/react-router'
+import { useEffect, type ComponentProps } from 'react'
+import { createFileRoute, Outlet, redirect, useRouterState } from '@tanstack/react-router'
 import { IntlProvider } from 'react-intl'
 import { useAdminPresence } from '@/lib/client/hooks/use-admin-presence'
 import { DEFAULT_LOCALE, loadMessages } from '@/lib/shared/i18n'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
+import { unreadCountQuery } from '@/lib/client/hooks/use-notifications-queries'
 import { getLatestVersion, isNewerVersion } from '@/lib/server/functions/version'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
-import { Skeleton } from '@/components/ui/skeleton'
+import { ArticleModal, ChangelogModal, PostModal } from '@/components/admin/entity-modals'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { UpdateBanner } from '@/components/admin/update-banner'
 import { PlanNoticeBanner } from '@/components/admin/plan-notice-banner'
 import { getPlanNotice } from '@/lib/server/functions/plan-notice'
-import { isProductEnabled } from '@/lib/shared/types/settings'
 import { CloudQuackbackWidget } from '@/components/shared/cloud-quackback-widget'
 import { useHasPermission } from '@/lib/client/use-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { createRouteContextMemo } from '@/lib/client/route-context-memo'
+import { isAdminPathAllowedDuringDowngradeLock } from '@/lib/shared/billing/plan-downgrade-lock'
+import type { requireWorkspaceRole } from '@/lib/server/functions/workspace-utils'
+import { useFeatureFlag, useProductEnabled } from '@/lib/client/hooks/use-root-context'
 
-const PostModal = lazy(() =>
-  import('@/components/admin/feedback/post-modal').then((m) => ({ default: m.PostModal }))
-)
-const ChangelogModal = lazy(() =>
-  import('@/components/admin/changelog/changelog-modal').then((m) => ({
-    default: m.ChangelogModal,
-  }))
-)
-const ArticleModal = lazy(() =>
-  import('@/components/admin/help-center/article-modal').then((m) => ({ default: m.ArticleModal }))
-)
+/** What the admin pages read from the role guard's answer. */
+type AdminGuard = Pick<
+  Awaited<ReturnType<typeof requireWorkspaceRole>>,
+  'user' | 'principal' | 'permissions'
+>
+
+/**
+ * The role guard's answer holds for every admin page until the viewer or
+ * their role changes, so navigations and preloads share one call (see
+ * route-context-memo.ts for what expires it).
+ */
+const adminGuard = createRouteContextMemo<AdminGuard>()
+
+async function loadAdminGuard(): Promise<AdminGuard> {
+  const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
+  const { user, principal, permissions } = await requireWorkspaceRole({
+    data: { allowedRoles: ['admin', 'member'] },
+  })
+  return { user, principal, permissions }
+}
 
 export const Route = createFileRoute('/admin')({
   validateSearch: (
@@ -46,7 +51,7 @@ export const Route = createFileRoute('/admin')({
     if (typeof search.article === 'string') next.article = search.article
     return next
   },
-  beforeLoad: async ({ location }) => {
+  beforeLoad: async ({ location, context }) => {
     // Skip auth for public admin routes (login, signup)
     // These are child routes but should be publicly accessible
     const publicPaths = ['/admin/login', '/admin/signup']
@@ -55,19 +60,26 @@ export const Route = createFileRoute('/admin')({
     }
 
     // Only team members (admin, member roles) can access admin dashboard
-    // Portal users (role='user') don't have access to this
-    const [{ requireWorkspaceRole }, { shouldLockAdminToBillingFn }] = await Promise.all([
-      import('@/lib/server/functions/workspace-utils'),
-      import('@/lib/server/functions/billing'),
-    ])
+    // Portal users (role='user') don't have access to this.
     // Role guard first: it throws a sign-in redirect. The billing helper's
     // requireAuth() throws a plain Error, so racing the two can surface an
     // error page for an unauthenticated visitor.
-    const { user, principal, permissions } = await requireWorkspaceRole({
-      data: { allowedRoles: ['admin', 'member'] },
-    })
-    if (await shouldLockAdminToBillingFn({ data: { pathname: location.pathname } })) {
-      throw redirect({ href: '/admin/settings/billing' })
+    const { user, principal, permissions } = await adminGuard.get(loadAdminGuard)
+
+    // A pending plan downgrade locks billing managers to the pages where they
+    // can get under the new plan's limits. Only a billing manager of a
+    // workspace with plan billing (cloudEnabled) can be locked, so only they
+    // pay for the check, and it runs on every navigation because the path
+    // decides it.
+    if (
+      context.cloudEnabled &&
+      permissions.includes(PERMISSIONS.BILLING_MANAGE) &&
+      !isAdminPathAllowedDuringDowngradeLock(location.pathname)
+    ) {
+      const { shouldLockAdminToBillingFn } = await import('@/lib/server/functions/billing')
+      if (await shouldLockAdminToBillingFn({ data: { pathname: location.pathname } })) {
+        throw redirect({ href: '/admin/settings/billing' })
+      }
     }
 
     return {
@@ -106,6 +118,9 @@ export const Route = createFileRoute('/admin')({
       getLatestVersion(),
       getPlanNotice(),
       loadMessages(locale),
+      // The rail's unread badge rides the document rather than a request of
+      // its own after hydration. Unreadable now, it is left to the bell.
+      context.queryClient.ensureQueryData(unreadCountQuery()).catch(() => null),
     ])
 
     const latestVersion =
@@ -135,38 +150,10 @@ export const Route = createFileRoute('/admin')({
   },
   // The layout loader (avatar/version/plan-notice/messages) is stable across
   // intra-admin navigation, so cache it for 5 min instead of re-running the
-  // Promise.all on every child route change. beforeLoad still runs each nav to
-  // re-assert the auth guard.
+  // Promise.all on every child route change.
   staleTime: 5 * 60 * 1000,
   component: AdminLayout,
 })
-
-function EntityModalChunkFallback({
-  searchParam,
-  title,
-}: {
-  searchParam: 'post' | 'entry' | 'article'
-  title: string
-}) {
-  const navigate = useNavigate()
-  const { pathname, search } = useRouterState({ select: (s) => s.location })
-  const close = () => {
-    const { [searchParam]: _cleared, ...rest } = search as Record<string, unknown>
-    void navigate({ to: pathname, search: rest, replace: true })
-  }
-
-  return (
-    <Dialog open onOpenChange={(next) => !next && close()}>
-      <DialogContent className="flex h-[85vh] w-[95vw] flex-col gap-0 p-0 sm:w-[90vw] lg:max-w-5xl xl:max-w-6xl">
-        <DialogTitle className="sr-only">{title}</DialogTitle>
-        <div className="flex h-full flex-col gap-3 p-6">
-          <Skeleton className="h-8 w-1/3 rounded-md" />
-          <Skeleton className="min-h-0 flex-1 rounded-lg" />
-        </div>
-      </DialogContent>
-    </Dialog>
-  )
-}
 
 function useEntityIdFromUrl(key: 'post' | 'entry' | 'article'): string | undefined {
   return useRouterState({
@@ -175,6 +162,59 @@ function useEntityIdFromUrl(key: 'post' | 'entry' | 'article'): string | undefin
       return value
     },
   })
+}
+
+/**
+ * The post, changelog entry and article modals any admin page opens from the
+ * URL. They read the location and permissions themselves, so opening one (a
+ * search-only navigation) renders them and not the layout around them. Each
+ * opens its dialog at once and loads its content inside it (entity-modals.tsx).
+ */
+function EntityModals({
+  currentUser,
+}: {
+  currentUser: ComponentProps<typeof PostModal>['currentUser'] | null
+}) {
+  const postId = useEntityIdFromUrl('post')
+  const entryId = useEntityIdFromUrl('entry')
+  const articleId = useEntityIdFromUrl('article')
+  const onRoadmap = useRouterState({
+    select: (s) =>
+      s.location.pathname === '/admin/roadmap' || s.location.pathname.startsWith('/admin/roadmap/'),
+  })
+  const canViewChangelogDrafts = useHasPermission(PERMISSIONS.CHANGELOG_VIEW_DRAFT)
+  const canManageHelpCenter = useHasPermission(PERMISSIONS.HELP_CENTER_MANAGE)
+  const feedbackEnabled = useProductEnabled('feedback')
+  const changelogEnabled = useProductEnabled('changelog')
+  const helpCenterEnabled = useProductEnabled('helpCenter')
+
+  return (
+    <>
+      {currentUser && feedbackEnabled && postId && !onRoadmap && (
+        <PostModal postId={postId} currentUser={currentUser} />
+      )}
+      {changelogEnabled && canViewChangelogDrafts && entryId && (
+        <ChangelogModal entryId={entryId} />
+      )}
+      {helpCenterEnabled && canManageHelpCenter && articleId && (
+        <ArticleModal articleId={articleId} />
+      )}
+    </>
+  )
+}
+
+/**
+ * The first navigation after hydration reuses the guard this document was
+ * rendered with instead of asking the server again. Each part is selected:
+ * the route context is a new object after every navigation, the parts are not.
+ */
+function useSeedAdminGuard() {
+  const user = Route.useRouteContext({ select: (context) => context.user })
+  const principal = Route.useRouteContext({ select: (context) => context.principal })
+  const permissions = Route.useRouteContext({ select: (context) => context.permissions })
+  useEffect(() => {
+    if (user && principal && permissions) adminGuard.seed({ user, principal, permissions })
+  }, [user, principal, permissions])
 }
 
 function AdminLayout() {
@@ -187,22 +227,11 @@ function AdminLayout() {
     locale,
     messages,
   } = Route.useLoaderData()
-  const postId = useEntityIdFromUrl('post')
-  const entryId = useEntityIdFromUrl('entry')
-  const articleId = useEntityIdFromUrl('article')
-  const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const onRoadmap = pathname === '/admin/roadmap' || pathname.startsWith('/admin/roadmap/')
-  const canViewChangelogDrafts = useHasPermission(PERMISSIONS.CHANGELOG_VIEW_DRAFT)
-  const canManageHelpCenter = useHasPermission(PERMISSIONS.HELP_CENTER_MANAGE)
+  useSeedAdminGuard()
 
   // Mark team members online for conversation routing across the whole admin (not just
   // the inbox), but only when the support inbox feature is on.
-  const { settings } = useRouteContext({ from: '__root__' })
-  const conversationsEnabled =
-    (settings?.featureFlags as { supportInbox?: boolean } | undefined)?.supportInbox ?? false
-  const feedbackEnabled = isProductEnabled(settings?.featureFlags, 'feedback')
-  const changelogEnabled = isProductEnabled(settings?.featureFlags, 'changelog')
-  const helpCenterEnabled = isProductEnabled(settings?.featureFlags, 'helpCenter')
+  const conversationsEnabled = useFeatureFlag('supportInbox')
   useAdminPresence(Boolean(initialUserData) && conversationsEnabled)
 
   // For public routes (login, signup), render just the outlet without the admin layout
@@ -235,27 +264,7 @@ function AdminLayout() {
               </div>
             </div>
           </main>
-          {currentUser && feedbackEnabled && postId && !onRoadmap && (
-            <Suspense fallback={<EntityModalChunkFallback searchParam="post" title="Edit post" />}>
-              <PostModal postId={postId} currentUser={currentUser} />
-            </Suspense>
-          )}
-          {changelogEnabled && canViewChangelogDrafts && entryId && (
-            <Suspense
-              fallback={
-                <EntityModalChunkFallback searchParam="entry" title="Edit changelog entry" />
-              }
-            >
-              <ChangelogModal entryId={entryId} />
-            </Suspense>
-          )}
-          {helpCenterEnabled && canManageHelpCenter && articleId && (
-            <Suspense
-              fallback={<EntityModalChunkFallback searchParam="article" title="Edit article" />}
-            >
-              <ArticleModal articleId={articleId} />
-            </Suspense>
-          )}
+          <EntityModals currentUser={currentUser} />
         </div>
       </TooltipProvider>
     </IntlProvider>

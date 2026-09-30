@@ -13,6 +13,12 @@ import type { JSONContent } from '@tiptap/core'
 import type { ConversationId } from '@quackback/ids'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useVisitorSurfaceRpc, type VisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
+import {
+  createValueStore,
+  useDebouncedStoreValue,
+  useStoreValue,
+  type ReadableStore,
+} from '@/lib/client/value-store'
 import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 
 /** True when the composer doc carries an inline image or post embed, which makes
@@ -25,33 +31,68 @@ export function docHasContentNode(doc: JSONContent | null): boolean {
   return walk(doc.content)
 }
 
+/** What the composer holds: the editor's plain text and its TipTap doc. */
+export interface ComposerDocDraft {
+  /** Plain text: gates send, drives typing and help search. */
+  text: string
+  /** The doc, sent as contentJson. */
+  doc: JSONContent | null
+  /** The doc carries an inline image or embed, so it is worth sending without text. */
+  hasContentNode: boolean
+}
+
 /**
- * Composer-doc state: the rich editor's plain text (gates send + drives
- * typing/help-search), the TipTap doc persisted as contentJson (held in a ref —
- * it changes on every keystroke), a reactive "doc carries an inline
- * image/embed" mirror so the send gate enables for a no-text message, and the
- * reset signal that clears the editor after a send.
+ * The composer's draft, held outside React state. The editor writes it on
+ * every keystroke, and a state update there would re-render the whole thread
+ * around the composer. What the thread draws from the draft subscribes to just
+ * that value (useComposerDocValue); everything else reads the latest draft
+ * when it acts.
+ */
+export interface ComposerDocStore extends ReadableStore<ComposerDocDraft> {
+  set(text: string, doc: JSONContent | null): void
+}
+
+function createComposerDocStore(): ComposerDocStore {
+  const store = createValueStore<ComposerDocDraft>({ text: '', doc: null, hasContentNode: false })
+  return {
+    ...store,
+    set: (text, doc) => store.set({ text, doc, hasContentNode: docHasContentNode(doc) }),
+  }
+}
+
+/**
+ * The composer's draft store and the reset signal that clears the editor
+ * after a send (it keys the editor, so a bump remounts it empty).
  */
 export function useComposerDoc() {
-  const [text, setText] = useState('')
-  const docRef = useRef<JSONContent | null>(null)
-  const [hasContentNode, setHasContentNode] = useState(false)
+  const [draft] = useState(createComposerDocStore)
   const [resetSignal, setResetSignal] = useState(0)
 
-  const onChange = useCallback((nextText: string, doc: JSONContent | null) => {
-    setText(nextText)
-    docRef.current = doc
-    setHasContentNode(docHasContentNode(doc))
-  }, [])
-
   const clear = useCallback(() => {
-    setText('')
-    docRef.current = null
-    setHasContentNode(false)
+    draft.set('', null)
     setResetSignal((n) => n + 1)
-  }, [])
+  }, [draft])
 
-  return { text, docRef, hasContentNode, resetSignal, onChange, clear }
+  return { draft, resetSignal, clear }
+}
+
+/**
+ * One value drawn from the composer's draft. The component re-renders only
+ * when the value changes (compared with Object.is), so `select` should return
+ * a primitive.
+ */
+export function useComposerDocValue<T>(
+  draft: ComposerDocStore,
+  select: (draft: ComposerDocDraft) => T
+): T {
+  return useStoreValue(draft, select)
+}
+
+const selectText = (draft: ComposerDocDraft) => draft.text
+
+/** The draft's text, updated once its changes have paused for `delayMs`. */
+export function useDebouncedComposerText(draft: ComposerDocStore, delayMs: number): string {
+  return useDebouncedStoreValue(draft, selectText, delayMs)
 }
 
 /** Near-end slack for the tail-follow effect below: within ~a row and a half
@@ -215,12 +256,18 @@ export function useOlderMessages({
  * side (`whenLastFrom`) — opening + reading marks read, not only replying, and
  * a surface's own outbound sends never trigger a write. Keyed on the last
  * message id so benign array re-creation doesn't re-fire it.
+ *
+ * `readThrough` is the caller's current read watermark. When it already covers
+ * the newest message there is nothing to clear, so reopening a read thread
+ * writes nothing. It is read when the newest message changes, never tracked:
+ * a watermark moved back by "mark unread" must not re-mark the thread read.
  */
 export function useMarkReadOnIncoming({
   conversationId,
   messages,
   whenLastFrom,
   enabled = true,
+  readThrough,
   getHeaders,
   onMarked,
 }: {
@@ -228,21 +275,29 @@ export function useMarkReadOnIncoming({
   messages: ConversationMessageDTO[]
   whenLastFrom: 'visitor' | 'agent'
   enabled?: boolean
+  readThrough?: string | null
   getHeaders?: () => Record<string, string>
   onMarked?: () => void
 }) {
   const lastMessage = messages.at(-1)
   const lastMessageId = lastMessage?.id
   const lastSenderType = lastMessage?.senderType
+  const lastCreatedAtRef = useRef(lastMessage?.createdAt)
+  lastCreatedAtRef.current = lastMessage?.createdAt
   const { markConversationRead } = useVisitorSurfaceRpc()
   const getHeadersRef = useRef(getHeaders)
   getHeadersRef.current = getHeaders
   const onMarkedRef = useRef(onMarked)
   onMarkedRef.current = onMarked
+  const readThroughRef = useRef(readThrough)
+  readThroughRef.current = readThrough
 
   useEffect(() => {
     if (!conversationId || !enabled) return
     if (lastSenderType !== whenLastFrom) return
+    const through = readThroughRef.current
+    const lastCreatedAt = lastCreatedAtRef.current
+    if (through && lastCreatedAt && Date.parse(through) >= Date.parse(lastCreatedAt)) return
     const headers = getHeadersRef.current?.()
     void markConversationRead({
       data: { conversationId },

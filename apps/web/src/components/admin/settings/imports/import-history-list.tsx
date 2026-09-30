@@ -13,40 +13,10 @@ import {
 import { EmptyState } from '@/components/shared/empty-state'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { ArchiveBoxIcon } from '@heroicons/react/24/solid'
-
-export interface ImportRunErrorEntry {
-  row: number
-  message: string
-  field?: string
-}
-
-export interface ImportRunTotals {
-  rows: number
-  created: number
-  updated: number
-  skipped: number
-  errors: number
-}
-
-export interface ImportRunListItem {
-  id: string
-  source: 'csv' | 'uservoice' | 'canny' | 'api'
-  fileName: string
-  status: 'pending' | 'dry_run' | 'running' | 'completed' | 'failed'
-  totals: ImportRunTotals | null
-  errorReport: ImportRunErrorEntry[] | null
-  createdAt: string
-  finishedAt: string | null
-}
+import { settingsQueries } from '@/lib/client/queries/settings'
+import type { ImportRunListItem } from '@/lib/server/functions/data-runs'
 
 const IN_FLIGHT_STATUSES = new Set(['pending', 'dry_run', 'running'])
-
-async function fetchImportRuns(): Promise<ImportRunListItem[]> {
-  const res = await fetch('/api/import/runs')
-  if (!res.ok) throw new Error('Failed to load import history')
-  const body = (await res.json()) as { runs: ImportRunListItem[] }
-  return body.runs
-}
 
 const STATUS_LABEL: Record<ImportRunListItem['status'], string> = {
   pending: 'Queued',
@@ -88,8 +58,7 @@ function downloadErrorReport(run: ImportRunListItem): void {
 
 export function ImportHistoryList() {
   const { data: runs, isLoading } = useQuery({
-    queryKey: ['import-runs'],
-    queryFn: fetchImportRuns,
+    ...settingsQueries.importRuns(),
     refetchInterval: (query) => {
       const rows = query.state.data
       return rows?.some((r) => IN_FLIGHT_STATUSES.has(r.status)) ? 2000 : false

@@ -1,4 +1,4 @@
-import { slugify } from '@/lib/shared/utils'
+import { slugify } from '@/lib/shared/utils/slugify'
 import type { TicketFormField } from '@/lib/shared/tickets'
 
 /**

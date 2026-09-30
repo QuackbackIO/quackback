@@ -28,7 +28,8 @@ let routeContext: unknown = {
 }
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => navigate,
-  useRouteContext: () => routeContext,
+  useRouteContext: (opts?: { select?: (context: never) => unknown }) =>
+    opts?.select ? opts.select(routeContext as never) : routeContext,
 }))
 
 const getPublicUserProfileFn = vi.fn()

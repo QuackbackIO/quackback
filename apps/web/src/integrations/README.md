@@ -51,7 +51,8 @@ copy must describe actual behavior too.
    the server registry into client code or provider-reachable shared helpers.
 4. Reuse `DestinationPicker`, `NotificationChannelRouter`, `StatusSyncConfig`, and
    `CustomerContextConfig`. Provider UI supplies options and connection forms;
-   common history and recovery stay shared.
+   common history and recovery stay shared. Sync history is the current
+   installation's list, shown only while that provider has an active destination.
 5. Exercise the provider through the worker, not only its API wrapper. Extend
    `sync/__tests__/provider-contracts.db.test.ts` or use the same transactional
    fixture with mocked HTTP. Verify current content, account changes, remote

@@ -717,6 +717,10 @@ export const identityProvider = pgTable(
     /** How the client secret reaches the token endpoint ('post' | 'basic');
      *  'post' when null. Some providers accept only one of the two. */
     tokenEndpointAuthMethod: text('token_endpoint_auth_method'),
+    /** Whether sign-in sends a `nonce` and requires the ID token to echo it
+     *  ('check' | 'off'); 'check' when null. The connection test sets 'off' for
+     *  a provider that never echoes it. See lib/shared/oidc-request.ts. */
+    idTokenNonce: text('id_token_nonce'),
     enabled: boolean('enabled').notNull().default(false),
     /** JIT signup toggle — preserves the legacy auto-provision opt-out. */
     autoCreateUsers: boolean('auto_create_users').notNull().default(true),
@@ -838,8 +842,8 @@ export const principal = pgTable(
      * session). Read by the SSO-enforcement bootstrap guard to refuse
      * enabling enforcement without a recent SSO sign-in window — stops
      * an admin who only signed in via magic-link from locking themselves
-     * out. Null = never signed in via SSO. Written by the
-     * /oauth2/callback/:providerId hooks.after middleware.
+     * out. Null = never signed in via SSO. Written by the OIDC callback
+     * hooks.after middleware (`/callback/:id`).
      */
     lastSsoSignInAt: timestamp('last_sso_sign_in_at', { withTimezone: true }),
     // A reachable address for a principal whose account email cannot receive

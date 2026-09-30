@@ -1,5 +1,8 @@
 import { DEFAULT_LOCALE, resolveLocale } from './i18n'
 
+/** Sticky manual override so browser-detect doesn't fight an explicit choice. */
+export const HC_LOCALE_COOKIE = 'hc_locale'
+
 /**
  * Join a public numeric id and slug as `{urlId}-{slug}`.
  */

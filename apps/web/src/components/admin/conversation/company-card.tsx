@@ -5,7 +5,8 @@ import { BuildingOffice2Icon } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { getCompanyForPrincipalFn, qualifyCompanyFn } from '@/lib/server/functions/companies'
+import { qualifyCompanyFn } from '@/lib/server/functions/companies'
+import { conversationPanelQueries } from '@/lib/client/queries/conversation-panels'
 
 /**
  * Company context for the conversation detail panel: the visitor's company with
@@ -27,10 +28,8 @@ export function CompanyCard({
   const [editing, setEditing] = useState(false)
   const queryClient = useQueryClient()
   const { data: company, isPending } = useQuery({
-    queryKey: ['admin', 'company', 'for-principal', principalId],
-    queryFn: () => getCompanyForPrincipalFn({ data: { principalId } }),
+    ...conversationPanelQueries.company(principalId),
     enabled: enabled && !!principalId,
-    staleTime: 60_000,
   })
 
   if (isPending) return null

@@ -43,6 +43,7 @@ import {
 } from '@/lib/server/domains/principals/principal.service'
 import { listPortalUsers, removePortalUser } from '@/lib/server/domains/users/user.service'
 import { getPortalUserDetail } from '@/lib/server/domains/users/user.detail'
+import type { PortalUserDetail } from '@/lib/server/domains/users/user.types'
 import {
   listSegments,
   createSegment,
@@ -594,6 +595,7 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
       log.debug({ type: data.type }, 'fetch integration by type not found')
       return {
         integration: null,
+        syncHistoryAvailable: false,
         platformCredentialFields,
         platformCredentialsConfigured,
         platformCredentialsManaged,
@@ -639,7 +641,22 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
 
     const notificationChannels = [...channelMap.values()]
     const { readSyncHealth } = await import('@/lib/server/integrations/sync/health')
+    const {
+      connectionIsDestination,
+      readSlackAssistantEnabled,
+      syncHistoryAvailable,
+      writesLedger,
+    } = await import('@/lib/server/integrations/sync/availability')
     const syncHealth = await readSyncHealth(integration)
+    const syncHistoryAvailableFlag = syncHistoryAvailable({
+      provider: data.type,
+      status: integration.status,
+      config: integrationConfig,
+      notificationChannels,
+      writesLedger: writesLedger(definition),
+      connectionIsDestination: connectionIsDestination(definition),
+      slackAssistantEnabled: await readSlackAssistantEnabled(data.type),
+    }).available
 
     return {
       integration: {
@@ -661,6 +678,7 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
           lastErrorAt: integration.lastErrorAt?.toISOString() ?? null,
         },
       },
+      syncHistoryAvailable: syncHistoryAvailableFlag,
       platformCredentialFields,
       platformCredentialsConfigured,
       platformCredentialsManaged,
@@ -822,6 +840,22 @@ export const listPortalUsersFn = createServerFn({ method: 'GET' })
     }
   })
 
+/** A portal user's details with their dates serialized for the client. */
+export function serializePortalUserDetail(detail: PortalUserDetail) {
+  return {
+    ...detail,
+    joinedAt: detail.joinedAt.toISOString(),
+    createdAt: detail.createdAt.toISOString(),
+    engagedPosts: detail.engagedPosts.map((post) => ({
+      ...post,
+      createdAt: post.createdAt.toISOString(),
+      engagedAt: post.engagedAt.toISOString(),
+    })),
+  }
+}
+
+export type PortalUserDetailDTO = ReturnType<typeof serializePortalUserDetail>
+
 /**
  * Get a portal user's details.
  */
@@ -833,23 +867,13 @@ export const getPortalUserFn = createServerFn({ method: 'GET' })
 
     const result = await getPortalUserDetail(data.principalId as PrincipalId)
 
-    // Serialize Date fields for client
     if (!result) {
       log.debug({ principal_id: data.principalId }, 'get portal user not found')
       return null
     }
 
     log.debug({ principal_id: data.principalId }, 'get portal user found')
-    return {
-      ...result,
-      joinedAt: result.joinedAt.toISOString(),
-      createdAt: result.createdAt.toISOString(),
-      engagedPosts: result.engagedPosts.map((post) => ({
-        ...post,
-        createdAt: post.createdAt.toISOString(),
-        engagedAt: post.engagedAt.toISOString(),
-      })),
-    }
+    return serializePortalUserDetail(result)
   })
 
 /**

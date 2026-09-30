@@ -41,6 +41,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
     },
     select: () => ({
       from: () => ({
+        where: () => Promise.resolve([]),
         limit: () => Promise.resolve([]),
         orderBy: () => Promise.resolve([]),
       }),

@@ -22,7 +22,8 @@ vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ invalidate: vi.fn() }),
   useRouterState: ({ select }: { select: (s: unknown) => unknown }) =>
     select({ location: { pathname: '/admin/feedback' } }),
-  useRouteContext: () => mockGetRouteContext(),
+  useRouteContext: (opts?: { select?: (context: unknown) => unknown }) =>
+    opts?.select ? opts.select(mockGetRouteContext()) : mockGetRouteContext(),
   Link: ({
     to,
     children,

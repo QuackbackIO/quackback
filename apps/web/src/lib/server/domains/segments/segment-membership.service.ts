@@ -12,6 +12,8 @@
  */
 import { db, userSegments, eq, and, inArray, sql } from '@/lib/server/db'
 import { recordAuditEvent, type AuditActor } from '@/lib/server/audit/log'
+import { memoizePerRequest } from '@/lib/server/request-memo'
+import { forgetRequestSegmentIds, SEGMENT_IDS_MEMO_PREFIX } from '@/lib/server/auth/request-session'
 import type { PrincipalId, SegmentId } from '@quackback/ids'
 
 export type MembershipSource = 'manual' | 'sso' | 'widget' | 'api' | 'dynamic'
@@ -80,6 +82,7 @@ export async function addMember(input: AddMemberInput): Promise<void> {
         END
       ) < ${SOURCE_PRIORITY[input.source]}`,
     })
+  forgetRequestSegmentIds()
 
   // Audit fires whenever an actor is supplied — including the no-op
   // "preserve stickier source" path. The behaviour is intentional:
@@ -114,6 +117,7 @@ export async function removeMember(input: RemoveMemberInput): Promise<void> {
         eq(userSegments.segmentId, input.segmentId)
       )
     )
+  forgetRequestSegmentIds()
   if (input.actor) {
     await recordAuditEvent({
       event: 'segment.member.removed',
@@ -161,6 +165,7 @@ export async function reconcileSsoMemberships(input: {
           inArray(userSegments.segmentId, toRemove as never[])
         )
       )
+    forgetRequestSegmentIds()
   }
   for (const segmentId of toAdd) {
     await addMember({
@@ -214,6 +219,7 @@ export async function reconcileWidgetMemberships(input: {
           inArray(userSegments.segmentId, toRemove as never[])
         )
       )
+    forgetRequestSegmentIds()
   }
   for (const segmentId of toAdd) {
     await addMember({
@@ -227,15 +233,18 @@ export async function reconcileWidgetMemberships(input: {
 
 /**
  * Resolve a principal's segment memberships for use in policy decisions.
- * Cache at the request level — do not call once per row.
+ * Read once per request (every policy actor in it asks); do not call once per
+ * row. A membership write in the request forgets it.
  */
-export async function segmentIdsForPrincipal(
+export function segmentIdsForPrincipal(
   principalId: PrincipalId | null
 ): Promise<ReadonlySet<SegmentId>> {
-  if (!principalId) return new Set()
-  const rows = await db
-    .select({ segmentId: userSegments.segmentId })
-    .from(userSegments)
-    .where(eq(userSegments.principalId, principalId))
-  return new Set(rows.map((r) => r.segmentId as SegmentId))
+  if (!principalId) return Promise.resolve(new Set())
+  return memoizePerRequest(`${SEGMENT_IDS_MEMO_PREFIX}${principalId}`, async () => {
+    const rows = await db
+      .select({ segmentId: userSegments.segmentId })
+      .from(userSegments)
+      .where(eq(userSegments.principalId, principalId))
+    return new Set(rows.map((r) => r.segmentId as SegmentId))
+  })
 }
