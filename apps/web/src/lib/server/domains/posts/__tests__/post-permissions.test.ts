@@ -7,7 +7,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { PostId, PrincipalId } from '@quackback/ids'
+import { createId, type PostId, type PrincipalId } from '@quackback/ids'
+import { DEFAULT_PORTAL_CONFIG } from '@/lib/server/domains/settings'
 
 // --- Mock tracking ---
 
@@ -34,6 +35,7 @@ function createChainMock() {
 
 // Track what findFirst returns per call
 const mockFindFirst = vi.fn()
+const mockPostVoteFindFirst = vi.fn()
 
 vi.mock('@/lib/server/db', async (importOriginal) => {
   const { sql: realSql } = await vi.importActual<typeof import('drizzle-orm')>('drizzle-orm')
@@ -45,6 +47,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
       transaction: vi.fn(async (work) => work({ update: vi.fn(() => createChainMock()) })),
       query: {
         posts: { findFirst: (...args: unknown[]) => mockFindFirst(...args) },
+        postVotes: { findFirst: (...args: unknown[]) => mockPostVoteFindFirst(...args) },
         postStatuses: {
           findFirst: vi.fn().mockResolvedValue({ id: 'post_status_mock', isDefault: true }),
         },
@@ -91,11 +94,82 @@ const USER_ACTOR = {
 }
 
 const POST_ID = 'post_mock' as PostId
+const EDIT_POST_ID = createId('post') as PostId
+const EDIT_AUTHOR_ID = createId('principal') as PrincipalId
+const EDIT_AUTHOR = {
+  principalId: EDIT_AUTHOR_ID,
+  role: 'user' as const,
+}
 
 describe('post.permissions', () => {
   beforeEach(() => {
     updateSetCalls.length = 0
     vi.clearAllMocks()
+  })
+
+  // ===========================================================================
+  // Author editing
+  // ===========================================================================
+
+  describe('author editing', () => {
+    const authoredPost = {
+      id: EDIT_POST_ID,
+      title: 'Original title',
+      content: 'Original content',
+      contentJson: null,
+      deletedAt: null,
+      principalId: EDIT_AUTHOR_ID,
+      statusId: null,
+      postStatus: null,
+      voteCount: 1,
+      moderationState: 'published' as const,
+    }
+
+    it('allows an author to edit when the only vote is their automatic self-vote', async () => {
+      mockFindFirst.mockResolvedValueOnce(authoredPost)
+      mockPostVoteFindFirst.mockResolvedValueOnce(null)
+      const { canEditPost } = await import('../post.permissions')
+
+      await expect(canEditPost(EDIT_POST_ID, EDIT_AUTHOR, DEFAULT_PORTAL_CONFIG)).resolves.toEqual({
+        allowed: true,
+      })
+    })
+
+    it('still blocks an author when another person has voted', async () => {
+      mockFindFirst.mockResolvedValueOnce({ ...authoredPost, voteCount: 2 })
+      mockPostVoteFindFirst.mockResolvedValueOnce({ id: createId('post_vote') })
+      const { canEditPost } = await import('../post.permissions')
+
+      await expect(canEditPost(EDIT_POST_ID, EDIT_AUTHOR, DEFAULT_PORTAL_CONFIG)).resolves.toEqual({
+        allowed: false,
+        reason: 'Cannot edit posts that have received votes from other users',
+      })
+    })
+
+    it('reports the post as editable to the portal when only the author has voted', async () => {
+      mockFindFirst.mockResolvedValueOnce(authoredPost)
+      mockPostVoteFindFirst.mockResolvedValueOnce(null)
+      const { getPostPermissions } = await import('../post.permissions')
+
+      await expect(getPostPermissions(EDIT_POST_ID, EDIT_AUTHOR)).resolves.toEqual({
+        canEdit: { allowed: true },
+        canDelete: { allowed: false, reason: 'Cannot delete posts that have received votes' },
+      })
+    })
+
+    it('enforces the same self-vote rule in the edit mutation', async () => {
+      mockFindFirst.mockResolvedValueOnce(authoredPost)
+      mockPostVoteFindFirst.mockResolvedValueOnce(null)
+      const { userEditPost } = await import('../post.user-actions')
+
+      await expect(
+        userEditPost(
+          EDIT_POST_ID,
+          { title: 'Updated title', content: 'Updated content' },
+          EDIT_AUTHOR
+        )
+      ).resolves.toBeDefined()
+    })
   })
 
   // ===========================================================================

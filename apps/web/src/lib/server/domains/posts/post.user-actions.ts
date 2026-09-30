@@ -33,6 +33,7 @@ import { contentHoldReason } from '@/lib/server/content/content-holds'
 import { recordAuditEvent } from '@/lib/server/audit/log'
 import { logger } from '@/lib/server/logger'
 import { recalculateCanonicalVoteCount } from './post.merge-ids'
+import { hasVotesFromOtherUsers } from './post.engagement'
 
 const log = logger.child({ component: 'post-user-actions' })
 
@@ -159,8 +160,11 @@ export async function userEditPost(
           'Cannot edit posts that have been reviewed by the team'
         )
       }
-      if (existingPost.voteCount > 0) {
-        throw new ForbiddenError('EDIT_NOT_ALLOWED', 'Cannot edit posts that have received votes')
+      if (existingPost.voteCount > 0 && (await hasVotesFromOtherUsers(postId, actor.principalId))) {
+        throw new ForbiddenError(
+          'EDIT_NOT_ALLOWED',
+          'Cannot edit posts that have received votes from other users'
+        )
       }
       // Check for comments from others
       const hasOtherComments = await hasCommentsFromOthers(postId, actor.principalId)

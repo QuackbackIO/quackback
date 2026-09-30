@@ -14,6 +14,7 @@ import { isTeamMember, Role } from '@/lib/shared/roles'
 import { DEFAULT_PORTAL_CONFIG, type PortalConfig } from '@/lib/server/domains/settings'
 import type { PermissionCheckResult } from './post.types'
 import { logger } from '@/lib/server/logger'
+import { hasVotesFromOtherUsers } from './post.engagement'
 
 const log = logger.child({ component: 'post-permissions' })
 
@@ -73,8 +74,11 @@ export async function canEditPost(
 
   // Check for engagement (votes, comments from others)
   if (!config.features.allowEditAfterEngagement) {
-    if (post.voteCount > 0) {
-      return { allowed: false, reason: 'Cannot edit posts that have received votes' }
+    if (post.voteCount > 0 && (await hasVotesFromOtherUsers(postId, actor.principalId))) {
+      return {
+        allowed: false,
+        reason: 'Cannot edit posts that have received votes from other users',
+      }
     }
 
     const hasOtherComments = await hasCommentsFromOthers(postId, actor.principalId)
@@ -235,10 +239,18 @@ export async function getPostPermissions(
     }
   }
 
-  // Vote check affects both (if still allowed)
+  // A new post starts with the author's automatic upvote. That self-vote is
+  // not engagement and must not immediately lock the author out of editing.
   if (post.voteCount > 0) {
-    if (canEdit.allowed && !config.features.allowEditAfterEngagement) {
-      canEdit = { allowed: false, reason: 'Cannot edit posts that have received votes' }
+    if (
+      canEdit.allowed &&
+      !config.features.allowEditAfterEngagement &&
+      (await hasVotesFromOtherUsers(postId, actor.principalId))
+    ) {
+      canEdit = {
+        allowed: false,
+        reason: 'Cannot edit posts that have received votes from other users',
+      }
     }
     if (canDelete.allowed && !config.features.allowDeleteAfterEngagement) {
       canDelete = { allowed: false, reason: 'Cannot delete posts that have received votes' }
