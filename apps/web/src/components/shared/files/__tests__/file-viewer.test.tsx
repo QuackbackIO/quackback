@@ -403,6 +403,18 @@ describe('FileViewer fetching', () => {
     await new Promise((r) => setTimeout(r, 0))
     expect(screen.getByTestId('engine')).toHaveTextContent('contract.pdf|42|')
   })
+
+  it('keeps the bytes in hand when coming straight back to a file', async () => {
+    fetchMock.mockImplementationOnce(async () => okBytes(1234))
+    fetchMock.mockImplementation(pendingUntilAborted)
+    renderViewer({ files: [invoice, contract] })
+    expect(await screen.findByTestId('engine')).toHaveTextContent('invoice.pdf|1234|')
+    fireEvent.click(screen.getByRole('button', { name: 'Next file' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    fireEvent.click(screen.getByRole('button', { name: 'Previous file' }))
+    expect(await screen.findByTestId('engine')).toHaveTextContent('invoice.pdf|1234|')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
 })
 
 describe('FileViewer fallback', () => {

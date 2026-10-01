@@ -262,8 +262,10 @@ export default function FileViewer({
 
   const needsFetch =
     kind !== null && mode !== 'none' && !(mode === 'full' && file.size > FULL_FETCH_BUDGET)
+  // Coming back to the file already in hand keeps its bytes.
+  const haveBytes = fetched?.key === file.key
   useEffect(() => {
-    if (!open || !needsFetch) return
+    if (!open || !needsFetch || haveBytes) return
     const controller = new AbortController()
     const key = file.key
     fetchFileBytes(file, mode, controller.signal).then(
@@ -277,7 +279,7 @@ export default function FileViewer({
       }
     )
     return () => controller.abort()
-  }, [open, needsFetch, mode, file])
+  }, [open, needsFetch, haveBytes, mode, file])
 
   const counted = useRef(new Set<string>())
   useEffect(() => {

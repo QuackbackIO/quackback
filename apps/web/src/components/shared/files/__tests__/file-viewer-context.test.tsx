@@ -4,7 +4,7 @@
  * viewer (loaded on first use), and closing it hands focus back.
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FileViewerProvider, useFileViewer } from '../file-viewer-context'
 import type { ViewerFile } from '../types'
 
@@ -35,6 +35,12 @@ function Opener({ files, index }: { files: ViewerFile[]; index: number }) {
     </button>
   )
 }
+
+// The provider loads the viewer lazily; transform it once up front so the
+// first open in a busy run is not timed against the module transform.
+beforeAll(async () => {
+  await import('../file-viewer')
+})
 
 beforeEach(() => {
   vi.stubGlobal(
