@@ -3,7 +3,7 @@
  * slides, in slide order. No thumbnail: nothing here can render a slide.
  */
 import { openZip } from '@/lib/server/content/zip-budget'
-import { decodeXmlEntities, elementContents } from '@/lib/server/domains/assistant/docx-text'
+import { decodeXmlEntities, elementContents } from '@/lib/server/content/docx-text'
 import { appPropertyCount } from './document'
 import { normalizeExcerpt, EXCERPT_MAX_CHARS, type PreviewResult } from './result'
 

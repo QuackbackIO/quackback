@@ -4,7 +4,7 @@
  * archive's index passes the zip budget.
  */
 import { openZip } from '@/lib/server/content/zip-budget'
-import { docxDocumentText } from '@/lib/server/domains/assistant/docx-text'
+import { docxDocumentText } from '@/lib/server/content/docx-text'
 import { normalizeExcerpt, type PreviewResult } from './result'
 
 const KB = 1024

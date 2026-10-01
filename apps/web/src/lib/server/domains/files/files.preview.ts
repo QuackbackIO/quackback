@@ -10,7 +10,7 @@
  * recorded as 'failed' and the job succeeds; only a fault in storage, the
  * database or a missing parser throws, so the queue retries.
  */
-import { isValidTypeId, type FileId } from '@quackback/ids'
+import type { FileId } from '@quackback/ids'
 import {
   db,
   files,
@@ -18,24 +18,12 @@ import {
   eq,
   and,
   isNull,
-  type ConversationAttachment,
   type ConversationMessage,
   type FileRecord,
   type FilePreviewMeta,
 } from '@/lib/server/db'
-import type { JobHandler } from '@/lib/server/jobs/definitions'
 import { getS3Object, uploadObject } from '@/lib/server/storage/s3'
 import { maxBytesForFamily, type FileFamily } from '@/lib/shared/files/file-types'
-import {
-  publishConversationOnlyEvent,
-  publishTicketEvent,
-} from '@/lib/server/realtime/conversation-channels'
-import { broadcastInboxMessageUpdated } from '@/lib/server/domains/conversation/message.actions'
-import {
-  loadAuthors,
-  fallbackAuthor,
-  toMessageDTO,
-} from '@/lib/server/domains/conversation/conversation.query'
 import { logger } from '@/lib/server/logger'
 import {
   Deadline,
@@ -46,6 +34,7 @@ import {
   previewKind,
   type PreviewResult,
 } from './preview'
+import { withFilePreview } from './files.service'
 
 export const FILE_PREVIEW_QUEUE = 'file-preview'
 
@@ -179,16 +168,9 @@ async function writeOutcome(
       .for('update')
     if (!message?.attachments?.some((a) => a.fileId === file.id)) return null
 
-    const hasPreview = Object.keys(meta).length > 0
-    const attachments = message.attachments.map((a): ConversationAttachment => {
-      if (a.fileId !== file.id) return a
-      const { preview: _stale, ...rest } = a
-      return {
-        ...rest,
-        family: file.family as FileFamily,
-        ...(hasPreview ? { preview: meta } : {}),
-      }
-    })
+    const attachments = message.attachments.map((a) =>
+      a.fileId === file.id ? withFilePreview(a, file.family, meta) : a
+    )
     const [patched] = await tx
       .update(conversationMessages)
       .set({ attachments })
@@ -198,43 +180,14 @@ async function writeOutcome(
   })
 }
 
-/**
- * Tell open threads the attachment changed, the way a message edit does:
- * agents' inbox threads, the visitor's own thread for a customer-visible
- * message, and the ticket thread the message shows in.
- */
-async function publishAttachmentPreview(message: ConversationMessage): Promise<void> {
-  const author = message.principalId
-    ? ((await loadAuthors([message.principalId])).get(message.principalId) ??
-      fallbackAuthor(message.principalId))
-    : null
-  let ticketId = message.ticketId
-  if (message.conversationId) {
-    await broadcastInboxMessageUpdated(message)
-    if (!message.isInternal) {
-      publishConversationOnlyEvent(message.conversationId, {
-        kind: 'message_edited',
-        conversationId: message.conversationId,
-        message: toMessageDTO(message, author),
-      })
-    }
-    const { resolvePairTicketIdForConversation } =
-      await import('@/lib/server/domains/tickets/pair-thread.service')
-    ticketId = await resolvePairTicketIdForConversation(message.conversationId)
-  }
-  if (ticketId) {
-    publishTicketEvent(ticketId, {
-      kind: 'ticket_message_updated',
-      ticketId,
-      message: toMessageDTO(message, author),
-    })
-  }
-}
-
 /** Derive and store one file's preview. Throws only for faults worth retrying. */
 export async function generateFilePreview(
   fileId: FileId,
-  options: { budgetMs?: number } = {}
+  options: {
+    budgetMs?: number
+    /** Told about the message whose attachment now carries the preview. */
+    onMessagePatched?: (message: ConversationMessage) => Promise<void>
+  } = {}
 ): Promise<PreviewOutcome> {
   const [file] = await db.select().from(files).where(eq(files.id, fileId)).limit(1)
   if (!file || file.deletedAt || file.previewStatus === 'ready') return 'skipped'
@@ -263,9 +216,9 @@ export async function generateFilePreview(
   const outcome = result ? result.status : 'failed'
   const patched = await writeOutcome(file, outcome, meta, result?.excerpt)
 
-  if (patched) {
+  if (patched && options.onMessagePatched) {
     try {
-      await publishAttachmentPreview(patched)
+      await options.onMessagePatched(patched)
     } catch (err) {
       // Open threads miss the live update and show the preview on reload.
       log.warn({ err, fileId }, 'file preview update not published')
@@ -279,20 +232,10 @@ export async function generateFilePreview(
   return outcome
 }
 
-export const runFilePreview: JobHandler = async (job) => {
-  const fileId = job.payload.fileId
-  if (typeof fileId !== 'string' || !isValidTypeId(fileId, 'file')) return
-  try {
-    await generateFilePreview(fileId as FileId)
-  } catch (err) {
-    // With no attempts left the file stops waiting for a preview.
-    if (job.attempts >= job.maxAttempts) {
-      await db
-        .update(files)
-        .set({ previewStatus: 'failed' })
-        .where(and(eq(files.id, fileId as FileId), eq(files.previewStatus, 'pending')))
-        .catch(() => {})
-    }
-    throw err
-  }
+/** A file whose preview attempts are spent stops waiting for one. */
+export async function markFilePreviewFailed(fileId: FileId): Promise<void> {
+  await db
+    .update(files)
+    .set({ previewStatus: 'failed' })
+    .where(and(eq(files.id, fileId), eq(files.previewStatus, 'pending')))
 }

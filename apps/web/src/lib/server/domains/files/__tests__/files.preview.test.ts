@@ -78,7 +78,8 @@ vi.mock('@/lib/server/realtime/conversation-channels', async (importOriginal) =>
   }),
 }))
 
-import { runFilePreview, generateFilePreview } from '../files.preview'
+import { generateFilePreview } from '../files.preview'
+import { runFilePreview, previewFileAndPublish } from '@/lib/server/messages/file-preview-job'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -389,7 +390,7 @@ describe.skipIf(!fixture.available)('file-preview job (real DB, rolled back)', (
       .set({ messageId: first.id, attachedAt: new Date() })
       .where(eq(files.id, row.id))
 
-    await generateFilePreview(row.id)
+    await previewFileAndPublish(row.id)
 
     const [firstAfter] = await testDb
       .select()
@@ -423,7 +424,7 @@ describe.skipIf(!fixture.available)('file-preview job (real DB, rolled back)', (
       family: 'text',
       bytes: textBytes('d'),
     })
-    await generateFilePreview(row.id)
+    await previewFileAndPublish(row.id)
     expect(published).toHaveLength(0)
   })
 })

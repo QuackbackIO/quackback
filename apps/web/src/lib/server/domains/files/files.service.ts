@@ -10,7 +10,17 @@
  */
 import { createHash } from 'node:crypto'
 import { isValidTypeId, type FileId, type PrincipalId } from '@quackback/ids'
-import { db, files, eq, and, inArray, isNull, sql, type Transaction } from '@/lib/server/db'
+import {
+  db,
+  files,
+  conversationMessages,
+  eq,
+  and,
+  inArray,
+  isNull,
+  sql,
+  type Transaction,
+} from '@/lib/server/db'
 import type { ConversationAttachment, FilePreviewMeta, FileRecord } from '@/lib/server/db'
 import { sniffFile, isRefusedFromUnverifiedSender } from '@/lib/server/content/file-sniff'
 import { generateStorageKey, uploadObject, getPublicUrlOrNull } from '@/lib/server/storage/s3'
@@ -245,10 +255,44 @@ export async function linkFilesToMessage(
 ): Promise<void> {
   const ids = attachments.map((a) => a.fileId).filter((id): id is string => !!id)
   if (ids.length === 0) return
-  await executor
+  const linked = await executor
     .update(files)
     .set({ messageId: messageId as never, attachedAt: new Date() })
     .where(and(inArray(files.id, ids as FileId[]), isNull(files.attachedAt)))
+    .returning({ id: files.id, family: files.family, meta: files.meta })
+
+  // The preview job may have written a file's preview after the send read the
+  // row and before this link: it found no message to patch then, so the
+  // message takes the row's current preview here. Linking locks the row, so a
+  // job that writes later finds the message and patches it itself.
+  const fresh = new Map(linked.map((r) => [r.id as string, r]))
+  let changed = false
+  const next = attachments.map((a) => {
+    const row = a.fileId ? fresh.get(a.fileId) : undefined
+    if (!row || JSON.stringify(row.meta ?? {}) === JSON.stringify(a.preview ?? {})) return a
+    changed = true
+    return withFilePreview(a, row.family, row.meta ?? {})
+  })
+  if (changed) {
+    await executor
+      .update(conversationMessages)
+      .set({ attachments: next })
+      .where(eq(conversationMessages.id, messageId as never))
+  }
+}
+
+/** An attachment carrying its file's current family and preview. */
+export function withFilePreview(
+  attachment: ConversationAttachment,
+  family: string,
+  meta: FilePreviewMeta
+): ConversationAttachment {
+  const { preview: _stale, ...rest } = attachment
+  return {
+    ...rest,
+    family: family as FileFamily,
+    ...(Object.keys(meta).length > 0 ? { preview: meta } : {}),
+  }
 }
 
 /** Count a viewer open, so usage by format is measurable. */

@@ -403,7 +403,7 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
     retryBackoffMs: 5_000,
     retentionMs: DAY_MS,
     failedRetentionMs: 7 * DAY_MS,
-    handler: () => import('@/lib/server/domains/files/files.preview').then((m) => m.runFilePreview),
+    handler: () => import('@/lib/server/messages/file-preview-job').then((m) => m.runFilePreview),
   },
   {
     // Removes uploads never sent and files whose message was deleted for good.

@@ -339,5 +339,48 @@ describe.skipIf(!fixture.available)('files service (real DB, rolled back)', () =
       expect(after!.messageId).toBe(first.id)
       expect(after!.attachedAt).toBeInstanceOf(Date)
     })
+
+    it('carries a preview the job wrote after the send read the file onto the message', async () => {
+      const visitor = await newPrincipal()
+      const [conversation] = await testDb
+        .insert(conversations)
+        .values({ visitorPrincipalId: visitor, channel: 'messenger' })
+        .returning()
+      const row = await storeFile({
+        bytes: pdf(),
+        name: 'a.pdf',
+        source: 'agent',
+        unverifiedSender: false,
+      })
+      // The send reads the row before the preview exists...
+      const atts = await resolveAttachments(
+        [{ fileId: row.id, url: '', name: '', contentType: '', size: 0 }],
+        { canAttachAnyFile: true }
+      )
+      expect(atts[0]!.preview).toBeUndefined()
+      // ...the job finishes while the file has no message to patch...
+      await testDb
+        .update(files)
+        .set({ previewStatus: 'ready', meta: { pages: 3 } })
+        .where(eq(files.id, row.id))
+      // ...and the send then writes its message and links the file.
+      const [message] = await testDb
+        .insert(conversationMessages)
+        .values({
+          conversationId: conversation!.id,
+          principalId: visitor,
+          senderType: 'agent',
+          content: '',
+          attachments: atts,
+        })
+        .returning()
+      await linkFilesToMessage(testDb, atts, message!.id)
+
+      const [after] = await testDb
+        .select()
+        .from(conversationMessages)
+        .where(eq(conversationMessages.id, message!.id))
+      expect(after!.attachments![0]).toMatchObject({ fileId: row.id, preview: { pages: 3 } })
+    })
   })
 })
