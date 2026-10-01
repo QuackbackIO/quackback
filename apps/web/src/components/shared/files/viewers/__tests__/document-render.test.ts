@@ -84,6 +84,11 @@ describe('sanitizeDocumentHtml', () => {
     expect(sources.filter(Boolean).every((s) => s!.startsWith('data:'))).toBe(true)
     expect(sources.filter(Boolean)).toHaveLength(2)
     expect(out).not.toContain('evil.example')
+    // An image that only linked out is hidden rather than drawn as a broken frame.
+    for (const img of Array.from(doc.querySelectorAll('img, image'))) {
+      const embedded = (img.getAttribute('src') ?? img.getAttribute('href'))?.startsWith('data:')
+      expect(img.hasAttribute('hidden')).toBe(!embedded)
+    }
   })
 })
 

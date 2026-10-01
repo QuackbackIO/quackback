@@ -95,8 +95,8 @@ export function rowsNote(sheet: Pick<SheetData, 'totalRows' | 'truncated'>): str
 
 const MIN_COLUMN_PX = 64
 const MAX_COLUMN_PX = 320
-const CHAR_PX = 7.5
-const CELL_PADDING_PX = 18
+const CHAR_PX = 8
+const CELL_PADDING_PX = 20
 /** Rows sampled to size columns; enough to see the shape without reading 5,000. */
 const WIDTH_SAMPLE_ROWS = 200
 

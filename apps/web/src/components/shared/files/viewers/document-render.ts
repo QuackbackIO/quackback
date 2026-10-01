@@ -168,12 +168,15 @@ function documentPurifier(): ReturnType<typeof DOMPurify> {
       return
     }
     if (tag === 'img' || tag === 'image') {
+      let embedded = false
       for (const name of ['src', 'href', 'xlink:href']) {
         const value = node.getAttribute(name)
-        if (value !== null && !value.trim().toLowerCase().startsWith('data:image/')) {
-          node.removeAttribute(name)
-        }
+        if (value === null) continue
+        if (value.trim().toLowerCase().startsWith('data:image/')) embedded = true
+        else node.removeAttribute(name)
       }
+      // An image the file only links to shows nothing, not a broken frame.
+      if (!embedded) node.setAttribute('hidden', '')
     }
   })
   purifier = instance
