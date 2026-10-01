@@ -1,8 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { Suspense } from 'react'
+import { sectionSearchValue } from '@/components/admin/analytics/analytics-sections'
 import { AnalyticsPage } from '@/components/admin/analytics/analytics-page'
 
 export const Route = createFileRoute('/admin/analytics')({
+  // The open section lives in the URL so a section can be linked to. An
+  // unknown value is dropped and the page opens on the overview.
+  validateSearch: (raw: Record<string, unknown>) => ({ section: sectionSearchValue(raw.section) }),
   component: AnalyticsRoute,
 })
 

@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState, type ReactNode } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { isProductEnabled, type FeatureFlags } from '@/lib/shared/types/settings'
 import { analyticsQueries, type AnalyticsPeriod } from '@/lib/client/queries/analytics'
 import { formatDistanceToNow } from 'date-fns'
@@ -19,7 +20,7 @@ import { MENU_ICON, MENU_ROW } from '@/components/ui/menu'
 import { cn } from '@/lib/shared/utils'
 import { FunnelIcon, CalendarDaysIcon } from '@heroicons/react/24/solid'
 import { CHART_HEIGHT_CLASS, channelLabel, formatResponseTime } from './analytics-constants'
-import { SECTION_NAV_ITEMS, type Section } from './analytics-sections'
+import { SECTION_NAV_ITEMS, parseSection, type Section } from './analytics-sections'
 import { AnalyticsSectionSelect } from './analytics-section-select'
 import { AnalyticsSummaryCards, type MetricKey } from './analytics-summary-cards'
 import { AnalyticsVisitorCards, type VisitorMetricKey } from './analytics-visitor-cards'
@@ -157,7 +158,16 @@ export function AnalyticsPage() {
   )
 
   const [period, setPeriod] = useState<AnalyticsPeriod>('30d')
-  const [section, setSection] = useState<Section>('overview')
+  // The section is part of the URL; one the workspace has switched off opens the overview.
+  const search = useSearch({ strict: false }) as { section?: string }
+  const navigate = useNavigate()
+  const requested = parseSection(search.section)
+  const section: Section = sections.some((i) => i.key === requested) ? requested : 'overview'
+  const setSection = (next: Section) =>
+    void navigate({
+      to: '/admin/analytics',
+      search: (prev: Record<string, unknown>) => ({ ...prev, section: next }),
+    })
   const [activeMetric, setActiveMetric] = useState<MetricKey>('posts')
   const [visitorMetric, setVisitorMetric] = useState<VisitorMetricKey>('visitors')
   const [surface, setSurface] = useState<'all' | 'portal' | 'widget'>('all')

@@ -20,3 +20,13 @@ export const SECTION_NAV_ITEMS: SectionNavItem[] = [
   { key: 'changelog', label: 'Changelog', icon: ENTITY_ICONS.changelog },
   { key: 'users', label: 'Users', icon: UsersIcon },
 ]
+
+/** The section a `?section=` value names; anything unknown opens the overview. */
+export function parseSection(value: unknown): Section {
+  return SECTION_NAV_ITEMS.find((i) => i.key === value)?.key ?? 'overview'
+}
+
+/** The section a `?section=` value names, or undefined when it names none. */
+export function sectionSearchValue(value: unknown): Section | undefined {
+  return SECTION_NAV_ITEMS.find((i) => i.key === value)?.key
+}
