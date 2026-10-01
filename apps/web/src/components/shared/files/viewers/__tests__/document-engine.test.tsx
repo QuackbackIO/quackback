@@ -72,12 +72,62 @@ describe('DocumentEngine', () => {
     const { container } = render(<DocumentEngine {...p} />)
     const el = await frame(container)
 
-    expect(el.getAttribute('sandbox')).toBe('')
+    // Popups only, so links can open a new tab; never scripts or an origin.
+    expect(el.getAttribute('sandbox')!.split(/\s+/).sort()).toEqual([
+      'allow-popups',
+      'allow-popups-to-escape-sandbox',
+    ])
     const srcdoc = el.getAttribute('srcdoc') ?? ''
     expect(srcdoc).toContain(`content="${DOCUMENT_CSP}"`)
     expect(srcdoc).toContain('Quarterly plan')
     expect(srcdoc).not.toMatch(/<script|javascript:|tracker\.example/i)
     expect(p.onError).not.toHaveBeenCalled()
+  })
+
+  it('opens web and mail links in a new tab, as PDF links do, and drops every other link', async () => {
+    const p = props(file('plan.docx'), toArrayBuffer(docxFixture()))
+    const { container } = render(<DocumentEngine {...p} />)
+    const el = await frame(container)
+    const doc = new DOMParser().parseFromString(el.getAttribute('srcdoc') ?? '', 'text/html')
+
+    const links = Array.from(doc.querySelectorAll('a[href]'))
+    expect(links.map((a) => a.getAttribute('href')).sort()).toEqual([
+      'https://example.com/docs',
+      'mailto:help@example.com',
+    ])
+    for (const a of links) {
+      expect(a.getAttribute('target')).toBe('_blank')
+      expect(a.getAttribute('rel')).toBe('noopener noreferrer')
+    }
+    // The script link and the in-document anchor keep their text, not a target.
+    expect(doc.body.textContent).toContain('Click me')
+    expect(doc.body.textContent).toContain('Back to the top')
+  })
+
+  it('takes the keyboard back when a click moves focus into the frame', async () => {
+    const p = props(file('plan.docx'), toArrayBuffer(docxFixture()))
+    const { container } = render(<DocumentEngine {...p} />)
+    const el = await frame(container)
+    el.focus()
+    expect(document.activeElement).toBe(el)
+    window.dispatchEvent(new Event('blur'))
+    // Focus returns to the engine's own area, inside the viewer, so Escape,
+    // the arrows, zoom and find reach the viewer again.
+    await waitFor(() => expect(document.activeElement).toBe(el.parentElement))
+    expect(el.parentElement).toHaveAttribute('tabindex', '-1')
+  })
+
+  it('leaves focus alone when the window loses it elsewhere', async () => {
+    const p = props(file('plan.docx'), toArrayBuffer(docxFixture()))
+    const { container } = render(<DocumentEngine {...p} />)
+    await frame(container)
+    const outside = document.createElement('button')
+    document.body.appendChild(outside)
+    outside.focus()
+    window.dispatchEvent(new Event('blur'))
+    await new Promise((r) => setTimeout(r, 10))
+    expect(document.activeElement).toBe(outside)
+    outside.remove()
   })
 
   it('never puts the document into the page itself', async () => {

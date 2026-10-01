@@ -31,6 +31,8 @@ const HOSTILE_BODY =
   `<w:p><w:r><w:t>Quarterly plan</w:t></w:r></w:p>` +
   `<w:p><w:hyperlink r:id="rId2"><w:r><w:t>Click me</w:t></w:r></w:hyperlink></w:p>` +
   `<w:p><w:hyperlink r:id="rId3"><w:r><w:t>Read the docs</w:t></w:r></w:hyperlink></w:p>` +
+  `<w:p><w:hyperlink r:id="rId7"><w:r><w:t>Email us</w:t></w:r></w:hyperlink></w:p>` +
+  `<w:p><w:hyperlink w:anchor="intro"><w:r><w:t>Back to the top</w:t></w:r></w:hyperlink></w:p>` +
   picture('rId5') +
   picture('rId4') +
   `<w:altChunk r:id="rId6"/>`
@@ -51,6 +53,7 @@ export function docxFixture(opts: { extraEntries?: number; body?: string } = {})
         `<Relationship Id="rId4" Type="${REL}/image" Target="http://tracker.example/pixel.png" TargetMode="External"/>` +
         `<Relationship Id="rId5" Type="${REL}/image" Target="media/dot.png"/>` +
         `<Relationship Id="rId6" Type="${REL}/aFChunk" Target="chunk.html"/>` +
+        `<Relationship Id="rId7" Type="${REL}/hyperlink" Target="mailto:help@example.com" TargetMode="External"/>` +
         `</Relationships>`
     ),
     'word/document.xml': strToU8(

@@ -2,16 +2,23 @@
  * Word documents to a sandboxed frame. docx-preview builds the file's DOM in
  * an inert document (one with no browsing context, so nothing in it loads or
  * runs) that is never attached to the app; the result is serialized,
- * sanitized, and shown in an `<iframe sandbox="">` (no scripts, an opaque
- * origin, no popups) whose own content security policy forbids every load
- * except inline styles and `data:` images and fonts. File-derived HTML never
- * reaches the app's DOM.
+ * sanitized, and shown in an `<iframe sandbox>` (no scripts, an opaque
+ * origin) whose own content security policy forbids every load except inline
+ * styles and `data:` images and fonts. Its only permission is opening web and
+ * mail links in a new tab. File-derived HTML never reaches the app's DOM.
  */
 import DOMPurify from 'dompurify'
 import { parseAsync, renderDocument, type HElement, type Options } from 'docx-preview'
 
 export const DOCUMENT_CSP =
   "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:"
+
+/**
+ * The frame's sandbox: popups, and popups free of the sandbox, so a link opens
+ * as an ordinary new tab. Never scripts, never the app's origin, never
+ * navigating the app.
+ */
+export const DOCUMENT_SANDBOX = 'allow-popups allow-popups-to-escape-sandbox'
 
 /**
  * docx-preview settings. Its defaults render embedded HTML ("alt chunks") into
@@ -167,7 +174,7 @@ function documentPurifier(): ReturnType<typeof DOMPurify> {
   if (!sanitizerWorks(instance)) throw new Error('The HTML sanitizer is unavailable')
   instance.addHook('afterSanitizeAttributes', (node) => {
     const tag = node.nodeName.toLowerCase()
-    if (tag === 'a') {
+    if (tag === 'a' || tag === 'area') {
       const href = node.getAttribute('href')?.trim() ?? ''
       node.removeAttribute('xlink:href')
       if (href && LINK_SCHEME.test(href)) {
@@ -251,7 +258,7 @@ export function buildDocumentSrcdoc(
     `html,body{margin:0;padding:0;background:${desk};color-scheme:light}`,
     `.docx-wrapper{background:${desk} !important;padding:24px 16px !important;gap:20px;zoom:${zoom}}`,
     '.docx-wrapper>section.docx{background:#fff !important;margin:0 !important;box-shadow:0 2px 14px rgb(0 0 0 / .14) !important;flex-shrink:0}',
-    'a[href]{cursor:default}',
+    'a[href]{cursor:pointer}',
     '</style></head><body>',
     bodyHtml,
     '</body></html>',

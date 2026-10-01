@@ -24,6 +24,7 @@ const HOSTILE = `
 <a href="mailto:help@example.com">mail link</a>
 <a href="#bookmark">fragment link</a>
 <a href="//evil.example/x">protocol-relative link</a>
+<map name="m"><area href="javascript:alert(1)" alt="js area"><area href="https://ok.example/area" alt="web area"></map>
 <iframe srcdoc="<script>alert(1)</script>"></iframe>
 <object data="x.swf"></object><embed src="x.swf">
 <form action="https://evil.example/collect"><input name="a"><button formaction="https://evil.example/b">go</button><textarea>t</textarea><select><option>o</option></select></form>
@@ -75,6 +76,14 @@ describe('sanitizeDocumentHtml', () => {
     }
     expect(out).not.toMatch(/javascript:/i)
     expect(doc.body.textContent).toContain('js link')
+  })
+
+  it('treats image-map areas as links too', () => {
+    const areas = Array.from(doc.querySelectorAll('area'))
+    const web = areas.filter((a) => a.hasAttribute('href'))
+    expect(web.map((a) => a.getAttribute('href'))).toEqual(['https://ok.example/area'])
+    expect(web[0]!.getAttribute('target')).toBe('_blank')
+    expect(web[0]!.getAttribute('rel')).toBe('noopener noreferrer')
   })
 
   it('keeps only embedded images, never a remote one', () => {

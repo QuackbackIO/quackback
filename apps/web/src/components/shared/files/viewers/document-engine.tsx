@@ -2,8 +2,9 @@
  * Word documents (.docx, .docm). The package's index is checked against the
  * zip budget, docx-preview renders it away from the page, and the sanitized
  * result is shown in a sandboxed frame as white pages on the desk. The frame
- * runs no script, so zoom re-renders its document at the new scale, and its
- * links do not navigate (people follow them from the downloaded file).
+ * runs no script, so zoom re-renders its document at the new scale; its web
+ * and mail links open in a new tab, as a PDF's do, and a click inside it
+ * hands the keyboard straight back to the viewer.
  */
 import {
   useCallback,
@@ -18,7 +19,12 @@ import { useIntl, type IntlShape } from 'react-intl'
 import type { EngineToolbar, ViewerEngineProps, ViewerFile } from '../types'
 import { ViewerSkeleton } from '../viewer-skeleton'
 import { BudgetTimeoutError, checkZipBudget, withTimeout } from './budgets'
-import { buildDocumentSrcdoc, renderDocumentHtml, type RenderedDocument } from './document-render'
+import {
+  DOCUMENT_SANDBOX,
+  buildDocumentSrcdoc,
+  renderDocumentHtml,
+  type RenderedDocument,
+} from './document-render'
 import { macroNote } from './macros'
 import { ZOOM_MAX, ZOOM_MIN, clampZoom } from './zoom'
 
@@ -73,6 +79,7 @@ function useDarkTheme(): boolean {
 export default function DocumentEngine({ file, data, onToolbar, onError }: ViewerEngineProps) {
   const intl = useIntl()
   const deskRef = useRef<HTMLDivElement>(null)
+  const frameRef = useRef<HTMLIFrameElement>(null)
   const [rendered, setRendered] = useState<RenderedDocument | null>(null)
   const [zoom, setZoom] = useState(1)
   const [fit, setFit] = useState(1)
@@ -110,6 +117,27 @@ export default function DocumentEngine({ file, data, onToolbar, onError }: Viewe
     }
   }, [data])
 
+  // A click inside the frame focuses it, and its document runs no script to
+  // hand keys back, so Escape, the arrows, zoom and find would stop reaching
+  // the viewer. Focus moves into a frame by blurring this window; once it has
+  // landed on the frame, take it back to the desk.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const onBlur = () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        const frame = frameRef.current
+        if (frame && document.activeElement === frame)
+          deskRef.current?.focus({ preventScroll: true })
+      }, 0)
+    }
+    window.addEventListener('blur', onBlur)
+    return () => {
+      window.removeEventListener('blur', onBlur)
+      clearTimeout(timer)
+    }
+  }, [])
+
   const changeZoom = useCallback((value: number) => setZoom(clampZoom(value, fit)), [fit])
   const note = documentNote(file, intl)
 
@@ -130,12 +158,14 @@ export default function DocumentEngine({ file, data, onToolbar, onError }: Viewe
   return (
     <div
       ref={deskRef}
-      className="flex min-h-0 min-w-0 flex-1 bg-[oklch(0.935_0_0)] dark:bg-[oklch(0.11_0_0)]"
+      tabIndex={-1}
+      className="flex min-h-0 min-w-0 flex-1 bg-[oklch(0.935_0_0)] outline-none dark:bg-[oklch(0.11_0_0)]"
     >
       {srcdoc ? (
         <iframe
+          ref={frameRef}
           title={file.name}
-          sandbox=""
+          sandbox={DOCUMENT_SANDBOX}
           srcDoc={srcdoc}
           referrerPolicy="no-referrer"
           className="block min-h-0 flex-1 border-0"
