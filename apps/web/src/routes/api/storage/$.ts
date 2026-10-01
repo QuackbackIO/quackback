@@ -193,6 +193,63 @@ export async function handleProxyUpload({ request }: { request: Request }): Prom
   return new Response(null, { status: 200 })
 }
 
+interface UserContentCors {
+  /** A separate user-content origin is configured, so responses vary on Origin. */
+  active: boolean
+  /** The origin granted read access to this response, if the request came from it. */
+  allowOrigin: string | null
+}
+
+/**
+ * CORS for the file viewer when files are served from a separate origin
+ * (`USER_CONTENT_URL`). The app then fetches bytes cross-origin, so exactly the
+ * app's origin may read them. No credentials: the read capability is in the
+ * URL, and no cookie belongs on this host.
+ */
+async function userContentCors(request: Request): Promise<UserContentCors> {
+  const { userContentOrigin } = await import('@/lib/server/storage/asset-url')
+  if (!userContentOrigin()) return { active: false, allowOrigin: null }
+  const { config } = await import('@/lib/server/config')
+  const appOrigin = new URL(config.baseUrl).origin
+  return {
+    active: true,
+    allowOrigin: request.headers.get('origin') === appOrigin ? appOrigin : null,
+  }
+}
+
+function withUserContentCors(response: Response, cors: UserContentCors): Response {
+  if (!cors.active) return response
+  response.headers.append('Vary', 'Origin')
+  if (cors.allowOrigin) {
+    response.headers.set('Access-Control-Allow-Origin', cors.allowOrigin)
+    response.headers.set(
+      'Access-Control-Expose-Headers',
+      'Content-Range, Content-Length, Accept-Ranges'
+    )
+  }
+  return response
+}
+
+/**
+ * OPTIONS /api/storage/*
+ *
+ * The preflight a cross-origin Range request may need when files are served
+ * from a separate origin. Grants nothing to any other origin, or when no
+ * separate origin is configured.
+ */
+export async function handleStorageOptions({ request }: { request: Request }): Promise<Response> {
+  const cors = await userContentCors(request)
+  const headers = new Headers()
+  if (cors.active) headers.set('Vary', 'Origin')
+  if (cors.allowOrigin) {
+    headers.set('Access-Control-Allow-Origin', cors.allowOrigin)
+    headers.set('Access-Control-Allow-Methods', 'GET, HEAD')
+    headers.set('Access-Control-Allow-Headers', 'Range')
+    headers.set('Access-Control-Max-Age', '86400')
+  }
+  return new Response(null, { status: 204, headers })
+}
+
 /**
  * GET /api/storage/*
  * Serve files from S3 storage.
@@ -202,8 +259,15 @@ export async function handleProxyUpload({ request }: { request: Request }): Prom
  *
  * Otherwise, redirects to a presigned S3 URL (302) so the browser fetches
  * directly from S3 — no bytes are proxied through the server.
+ *
+ * Every answer, refusals included, carries the user-content CORS grant when
+ * one applies, so the viewer can tell a refusal from a network failure.
  */
 export async function handleStorageGet({ request }: { request: Request }): Promise<Response> {
+  return withUserContentCors(await serveStorageGet(request), await userContentCors(request))
+}
+
+async function serveStorageGet(request: Request): Promise<Response> {
   const {
     isS3Usable,
     generatePresignedGetUrl,
@@ -387,6 +451,8 @@ export const Route = createFileRoute('/api/storage/$')({
       PUT: handleProxyUpload,
 
       GET: handleStorageGet,
+
+      OPTIONS: handleStorageOptions,
     },
   },
 })

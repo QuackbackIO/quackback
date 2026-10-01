@@ -27,6 +27,24 @@ const log = logger.child({ component: 'config' })
  */
 const WILDCARD_HOST_RE = /[*?]/
 
+/**
+ * The origin a `USER_CONTENT_URL` value names, or null when it is not a bare
+ * http(s) origin. A path would be dropped from every file link built on it, so
+ * it is refused rather than ignored.
+ */
+function userContentOrigin(value: string): string | null {
+  if (WILDCARD_HOST_RE.test(value)) return null
+  try {
+    const url = new URL(value)
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null
+    if (url.username || url.password || url.search || url.hash) return null
+    if (url.pathname !== '/' || value.includes('#') || value.includes('?')) return null
+    return url.origin
+  } catch {
+    return null
+  }
+}
+
 // =============================================================================
 // Schema Helpers
 // =============================================================================
@@ -187,6 +205,13 @@ const configSchema = z
     s3ForcePathStyle: envBoolean,
     s3PublicUrl: z.string().optional(),
     s3Proxy: envBoolean,
+    /**
+     * A separate origin user files are served from, e.g. `https://files.example.com`
+     * pointed at this app. Attachment links handed to browsers load from there,
+     * so a file opened in a tab runs nowhere near the app's cookies and storage.
+     * Single-workspace installs only; see the getter.
+     */
+    userContentUrl: z.string().optional(),
 
     // AI (optional)
     openaiApiKey: z.string().optional(),
@@ -227,6 +252,16 @@ const configSchema = z
           'Once a wildcard custom domain is attached, RAILWAY_PUBLIC_DOMAIN becomes ' +
           '`*.example.com`; under QUACKBACK_TENANCY=pooled the per-request origin comes ' +
           'from the workspace record, so set BASE_URL to a real fleet hostname.',
+      })
+    }
+
+    if (cfg.userContentUrl !== undefined && !userContentOrigin(cfg.userContentUrl)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['userContentUrl'],
+        message:
+          `USER_CONTENT_URL is ${cfg.userContentUrl}, which is not a bare http(s) origin. ` +
+          'Set it to a scheme and host with no path, query or wildcard, e.g. https://files.example.com.',
       })
     }
 
@@ -316,6 +351,7 @@ function buildConfigFromEnv(): unknown {
     s3ForcePathStyle: env('S3_FORCE_PATH_STYLE'),
     s3PublicUrl: env('S3_PUBLIC_URL'),
     s3Proxy: env('S3_PROXY'),
+    userContentUrl: env('USER_CONTENT_URL'),
 
     // AI
     openaiApiKey: env('OPENAI_API_KEY'),
@@ -373,6 +409,14 @@ function loadConfig(): Config {
   }
 
   _config = result.data
+  if (_config.tenancyMode === 'pooled' && _config.userContentUrl) {
+    // Logged here because this runs once per process.
+    log.warn(
+      { userContentUrl: _config.userContentUrl },
+      'USER_CONTENT_URL is ignored under QUACKBACK_TENANCY=pooled: the storage route resolves ' +
+        'the workspace from the Host header, so one shared host cannot serve every workspace'
+    )
+  }
   return _config
 }
 
@@ -545,6 +589,17 @@ export const config = {
   },
   get s3Proxy() {
     return loadConfig().s3Proxy
+  },
+  /**
+   * The origin user files are served from, or undefined to serve them from the
+   * app's own origin. Always undefined under pooled tenancy, where the storage
+   * route resolves the workspace from the Host header and a shared host would
+   * name no workspace.
+   */
+  get userContentUrl(): string | undefined {
+    const cfg = loadConfig()
+    if (cfg.tenancyMode === 'pooled' || !cfg.userContentUrl) return undefined
+    return userContentOrigin(cfg.userContentUrl) ?? undefined
   },
 
   // AI

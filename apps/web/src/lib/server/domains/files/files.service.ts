@@ -15,6 +15,7 @@ import type { ConversationAttachment, FilePreviewMeta, FileRecord } from '@/lib/
 import { sniffFile, isRefusedFromUnverifiedSender } from '@/lib/server/content/file-sniff'
 import { generateStorageKey, uploadObject, getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { isTrustedAttachmentUrl } from '@/lib/server/storage/trusted-url'
+import { toUserContentUrl } from '@/lib/server/storage/asset-url'
 import {
   familyFor,
   maxBytesForFamily,
@@ -73,10 +74,12 @@ export function cleanFileName(raw: string | null | undefined): string {
   return cleaned.slice(0, 255 - ext.length) + ext
 }
 
+/** The upload response. Its URL is for the uploader's browser, so it loads from the user-content origin. */
 export function toUploadedFile(row: FileRecord): UploadedFile {
+  const url = getPublicUrlOrNull(row.storageKey)
   return {
     fileId: row.id,
-    url: getPublicUrlOrNull(row.storageKey) ?? '',
+    url: url ? toUserContentUrl(url) : '',
     name: row.name,
     contentType: row.contentType,
     size: row.size,
@@ -162,7 +165,11 @@ function legacyAttachment(a: ConversationAttachment): ConversationAttachment {
   return { url: a.url, name, contentType, size }
 }
 
-/** The attachment a message stores for a file row: every field from the row. */
+/**
+ * The attachment a message stores for a file row: every field from the row.
+ * The URL stays a host-independent ref; `attachmentForClient` places it on an
+ * origin at read time.
+ */
 export function attachmentFromFile(row: FileRecord): ConversationAttachment {
   const meta = row.meta ?? {}
   return {

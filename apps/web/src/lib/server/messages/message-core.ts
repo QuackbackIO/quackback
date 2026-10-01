@@ -8,6 +8,7 @@
 import type { ConversationMessage, ConversationAttachment } from '@/lib/server/db'
 import { ValidationError } from '@/lib/shared/errors'
 import { resignStoredAssetUrl, getPublicUrlOrNull } from '@/lib/server/storage/s3'
+import { toUserContentUrl } from '@/lib/server/storage/asset-url'
 import type { FileFamily } from '@/lib/shared/files/file-types'
 import { truncate } from '@/lib/shared/utils/string'
 import type { TiptapContent } from '@/lib/shared/db-types'
@@ -24,22 +25,28 @@ import {
 import { liftInlineImagesToAttachments } from '@/lib/shared/conversation/lift-inline-images'
 
 export const PREVIEW_LENGTH = 120
+
+function clientFileUrl(key: string | undefined): string | null {
+  const url = getPublicUrlOrNull(key)
+  return url ? toUserContentUrl(url) : null
+}
 /**
  * The client form of a stored attachment. The URL gets a current read
  * capability (the stored one may have been minted under an older secret), and
- * the preview's storage keys become URLs the browser can load.
+ * the preview's storage keys become URLs the browser can load. All three load
+ * from the user-content origin when one is configured.
  */
 export function attachmentForClient(a: ConversationAttachment): ClientAttachment {
   const { preview, family, ...base } = a
   const out: ClientAttachment = {
     ...base,
-    url: resignStoredAssetUrl(a.url),
+    url: toUserContentUrl(resignStoredAssetUrl(a.url)),
     ...(family ? { family: family as FileFamily } : {}),
   }
   if (!preview) return out
   const { thumbKey, renditionKey, ...rest } = preview
-  const thumbUrl = getPublicUrlOrNull(thumbKey)
-  const renditionUrl = getPublicUrlOrNull(renditionKey)
+  const thumbUrl = clientFileUrl(thumbKey)
+  const renditionUrl = clientFileUrl(renditionKey)
   return {
     ...out,
     preview: {
