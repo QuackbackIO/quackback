@@ -2,7 +2,7 @@
 // @vitest-environment-options {"settings":{"disableCSSFileLoading":true,"disableJavaScriptFileLoading":true,"disableIframePageLoading":true,"handleDisabledFileLoadingAsSuccess":true}}
 import './browser-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render as rtlRender, waitFor } from '@testing-library/react'
+import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import { strToU8 } from 'fflate'
 import type { EngineToolbar, ViewerEngineProps, ViewerFile } from '../../types'
@@ -151,6 +151,26 @@ describe('DocumentEngine', () => {
       </IntlProvider>
     )
     await waitFor(() => expect(lastToolbar(p).note).toBe('4 Seiten'))
+  })
+
+  it('shows the viewer’s loading state until the pages are ready', async () => {
+    const p = props(file('plan.docx'), toArrayBuffer(docxFixture()))
+    const { container } = render(<DocumentEngine {...p} />)
+    expect(screen.getByRole('status', { name: 'Loading file' })).toBeInTheDocument()
+    await frame(container)
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('reports a document with nothing in it as empty instead of a blank page', async () => {
+    const p = props(
+      file('blank.docx'),
+      toArrayBuffer(
+        docxFixture({ body: '<w:p/><w:p><w:r><w:t xml:space="preserve">  </w:t></w:r></w:p>' })
+      )
+    )
+    const { container } = render(<DocumentEngine {...p} />)
+    await waitFor(() => expect(p.onError).toHaveBeenCalledWith('empty'))
+    expect(container.querySelector('iframe')).toBeNull()
   })
 
   it('refuses a package over the zip budget before parsing it', async () => {

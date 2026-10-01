@@ -38,6 +38,16 @@ export interface RenderedDocument {
   html: string
   /** The widest page, in CSS pixels at 100%. */
   pageWidthPx: number
+  /** No page holds any text, picture or table: only blank paper. */
+  empty: boolean
+}
+
+/** Whether rendered pages carry anything a reader would see besides blank paper. */
+function hasContent(pages: readonly Element[]): boolean {
+  return pages.some(
+    (page) =>
+      (page.textContent ?? '').trim() !== '' || page.querySelector('img, svg, table') !== null
+  )
 }
 
 /**
@@ -77,13 +87,15 @@ export async function renderDocumentHtml(bytes: ArrayBuffer): Promise<RenderedDo
   const container = inert.createElement('div')
   for (const node of nodes) container.appendChild(node)
 
+  const pages = Array.from(container.querySelectorAll<HTMLElement>('section.docx'))
   let widest = 0
-  for (const section of Array.from(container.querySelectorAll<HTMLElement>('section.docx'))) {
+  for (const section of pages) {
     widest = Math.max(widest, pageWidthPx(section.style.width) ?? 0)
   }
   return {
     html: sanitizeDocumentHtml(container.innerHTML),
     pageWidthPx: widest || DEFAULT_PAGE_WIDTH_PX,
+    empty: !hasContent(pages),
   }
 }
 

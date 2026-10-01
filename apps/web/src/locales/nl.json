@@ -133,6 +133,7 @@
   "files.viewer.failureCorrupt": "Dit bestand kan niet worden weergegeven",
   "files.viewer.failureTooLarge": "Te groot voor een voorbeeld",
   "files.viewer.failureUnavailable": "Dit bestand is niet meer beschikbaar",
+  "files.viewer.failureEmpty": "Dit bestand is leeg",
   "files.viewer.download": "Downloaden",
   "files.viewer.close": "Sluiten",
   "files.viewer.back": "Terug",

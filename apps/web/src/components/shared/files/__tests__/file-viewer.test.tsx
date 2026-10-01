@@ -477,6 +477,13 @@ describe('FileViewer fallback', () => {
     expect(await screen.findByText("This file can't be previewed")).toBeInTheDocument()
   })
 
+  it('says a file is empty when the engine finds nothing in it', async () => {
+    failWith = 'empty'
+    renderViewer()
+    expect(await screen.findByText('This file is empty')).toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: 'Download' }).length).toBeGreaterThanOrEqual(2)
+  })
+
   it('catches an engine that crashes', async () => {
     throwOnRender = true
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})

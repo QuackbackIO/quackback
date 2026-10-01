@@ -133,6 +133,7 @@
   "files.viewer.failureCorrupt": "لا يمكن معاينة هذا الملف",
   "files.viewer.failureTooLarge": "كبير جدًا لعرض معاينة",
   "files.viewer.failureUnavailable": "هذا الملف غير متوفر بعد الآن",
+  "files.viewer.failureEmpty": "هذا الملف فارغ",
   "files.viewer.download": "تنزيل",
   "files.viewer.close": "إغلاق",
   "files.viewer.back": "رجوع",

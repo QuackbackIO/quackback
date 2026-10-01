@@ -55,6 +55,11 @@ export function sheetSourceFor(name: string, contentType = ''): SheetSource {
 export type SheetParseResult =
   { ok: true; sheets: SheetData[] } | { ok: false; failure: 'corrupt' | 'too_large' }
 
+/** True when no cell of the sheet holds any text. */
+export function isEmptySheet(sheet: Pick<SheetData, 'rows'>): boolean {
+  return sheet.rows.every((row) => row.every((value) => value === ''))
+}
+
 /** "A", "Z", "AA", "ZZ", "AAA" for 0-based column indexes. */
 export function columnLabel(index: number): string {
   let label = ''

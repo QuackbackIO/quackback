@@ -17,6 +17,7 @@ import {
 import { useIntl, type IntlShape } from 'react-intl'
 import { fileExtension } from '@/lib/shared/files/file-types'
 import type { EngineToolbar, ViewerEngineProps, ViewerFile } from '../types'
+import { ViewerSkeleton } from '../viewer-skeleton'
 import { BudgetTimeoutError, checkZipBudget, withTimeout } from './budgets'
 import { buildDocumentSrcdoc, renderDocumentHtml, type RenderedDocument } from './document-render'
 import { ZOOM_MAX, ZOOM_MIN, clampZoom } from './zoom'
@@ -92,6 +93,10 @@ export default function DocumentEngine({ file, data, onToolbar, onError }: Viewe
     withTimeout(renderDocumentHtml(data)).then(
       (doc) => {
         if (cancelled) return
+        if (doc.empty) {
+          fail('empty')
+          return
+        }
         const fitted = documentFitZoom(deskRef.current?.clientWidth ?? 0, doc.pageWidthPx)
         setFit(fitted)
         setZoom(fitted)
@@ -128,7 +133,7 @@ export default function DocumentEngine({ file, data, onToolbar, onError }: Viewe
       ref={deskRef}
       className="flex min-h-0 min-w-0 flex-1 bg-[oklch(0.935_0_0)] dark:bg-[oklch(0.11_0_0)]"
     >
-      {srcdoc && (
+      {srcdoc ? (
         <iframe
           title={file.name}
           sandbox=""
@@ -136,6 +141,8 @@ export default function DocumentEngine({ file, data, onToolbar, onError }: Viewe
           referrerPolicy="no-referrer"
           className="block min-h-0 flex-1 border-0"
         />
+      ) : (
+        <ViewerSkeleton />
       )}
     </div>
   )

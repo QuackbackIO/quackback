@@ -133,6 +133,7 @@
   "files.viewer.failureCorrupt": "無法預覽此檔案",
   "files.viewer.failureTooLarge": "檔案過大，無法預覽",
   "files.viewer.failureUnavailable": "此檔案已無法使用",
+  "files.viewer.failureEmpty": "此檔案是空的",
   "files.viewer.download": "下載",
   "files.viewer.close": "關閉",
   "files.viewer.back": "返回",

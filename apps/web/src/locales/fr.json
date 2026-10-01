@@ -133,6 +133,7 @@
   "files.viewer.failureCorrupt": "Ce fichier ne peut pas être prévisualisé",
   "files.viewer.failureTooLarge": "Trop volumineux pour un aperçu",
   "files.viewer.failureUnavailable": "Ce fichier n'est plus disponible",
+  "files.viewer.failureEmpty": "Ce fichier est vide",
   "files.viewer.download": "Télécharger",
   "files.viewer.close": "Fermer",
   "files.viewer.back": "Retour",

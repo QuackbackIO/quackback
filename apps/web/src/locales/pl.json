@@ -133,6 +133,7 @@
   "files.viewer.failureCorrupt": "Nie można wyświetlić podglądu tego pliku",
   "files.viewer.failureTooLarge": "Plik jest zbyt duży, aby wyświetlić podgląd",
   "files.viewer.failureUnavailable": "Ten plik jest już niedostępny",
+  "files.viewer.failureEmpty": "Ten plik jest pusty",
   "files.viewer.download": "Pobierz",
   "files.viewer.close": "Zamknij",
   "files.viewer.back": "Wstecz",

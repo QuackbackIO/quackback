@@ -62,8 +62,10 @@ export interface EngineToolbar {
 /**
  * Why an engine could not show a file. The shell turns each into the same
  * fallback (what happened, plus Download), so no engine draws its own error.
+ * `empty` is a file that opened fine and holds nothing to show (a workbook
+ * with no cells, a document with no text), rather than a blank content area.
  */
-export type EngineFailure = 'unsupported' | 'corrupt' | 'too_large' | 'unavailable'
+export type EngineFailure = 'unsupported' | 'corrupt' | 'too_large' | 'unavailable' | 'empty'
 
 export interface ViewerEngineProps {
   file: ViewerFile

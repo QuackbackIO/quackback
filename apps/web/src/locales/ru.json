@@ -133,6 +133,7 @@
   "files.viewer.failureCorrupt": "Не удалось показать предпросмотр этого файла",
   "files.viewer.failureTooLarge": "Слишком большой для предпросмотра",
   "files.viewer.failureUnavailable": "Этот файл больше не доступен",
+  "files.viewer.failureEmpty": "Этот файл пуст",
   "files.viewer.download": "Скачать",
   "files.viewer.close": "Закрыть",
   "files.viewer.back": "Назад",

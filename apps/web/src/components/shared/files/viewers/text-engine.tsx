@@ -32,9 +32,11 @@ export default function TextEngine({
   data,
   truncated,
   onToolbar,
+  onError,
   compact,
 }: ViewerEngineProps) {
   const intl = useIntl()
+  const empty = !truncated && data !== null && data.byteLength === 0
   const lines = useMemo(() => {
     const text = decodeText(data)
     const shown = !truncated && isJsonName(file.name) ? (prettyJson(text) ?? text) : text
@@ -74,6 +76,11 @@ export default function TextEngine({
   const toggleWrap = useCallback(() => setWrap((on) => !on), [])
 
   useEffect(() => {
+    if (empty) onError('empty')
+  }, [empty, onError])
+
+  useEffect(() => {
+    if (empty) return
     onToolbar({
       find: { open: openFind },
       wrap: { on: wrap, toggle: toggleWrap },
@@ -87,7 +94,7 @@ export default function TextEngine({
             { count: lines.length }
           ),
     })
-  }, [onToolbar, openFind, toggleWrap, wrap, truncated, lines.length, intl])
+  }, [empty, onToolbar, openFind, toggleWrap, wrap, truncated, lines.length, intl])
 
   const matches = useMemo(
     () => (findOpen ? findMatches(lines, query) : []),
@@ -129,6 +136,8 @@ export default function TextEngine({
     setFindOpen(false)
     scrollRef.current?.focus()
   }
+
+  if (empty) return null
 
   const gutter = `${Math.max(2, String(lines.length).length) + 2}ch`
 

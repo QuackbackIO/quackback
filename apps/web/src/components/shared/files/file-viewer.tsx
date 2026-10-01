@@ -38,6 +38,7 @@ import { formatBytes, MAX_ATTACHMENT_BYTES } from '@/lib/shared/files/file-types
 import { cn } from '@/lib/shared/utils'
 import { downloadUrl } from './download-url'
 import { FileBadge } from './file-badge'
+import { ViewerSkeleton } from './viewer-skeleton'
 import {
   VIEWER_ARROWS_ATTR,
   type EngineFailure,
@@ -82,6 +83,7 @@ const FAILURE_MESSAGE: Record<EngineFailure, { id: string; defaultMessage: strin
     id: 'files.viewer.failureUnavailable',
     defaultMessage: 'This file is no longer available',
   },
+  empty: { id: 'files.viewer.failureEmpty', defaultMessage: 'This file is empty' },
 }
 
 /** The same-origin URL for a stored file's bytes (`?proxy=1` streams through this origin). */
@@ -657,23 +659,6 @@ function WrapButton({ wrap }: { wrap: NonNullable<EngineToolbar['wrap']> }) {
     >
       <ArrowTurnDownLeftIcon className="size-[17px]" />
     </ToolButton>
-  )
-}
-
-/** The one loading state: a page-ish block resting on the desk. */
-export function ViewerSkeleton() {
-  const intl = useIntl()
-  return (
-    <div
-      role="status"
-      aria-label={intl.formatMessage({
-        id: 'files.viewer.loadingAria',
-        defaultMessage: 'Loading file',
-      })}
-      className="flex flex-1 items-start justify-center overflow-hidden px-4 py-6 sm:px-16 sm:py-7"
-    >
-      <div className="aspect-[1/1.29] w-full max-w-[600px] animate-pulse rounded-[2px] bg-background/80 shadow-sm motion-reduce:animate-none" />
-    </div>
   )
 }
 

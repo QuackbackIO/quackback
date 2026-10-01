@@ -6,8 +6,9 @@
  */
 import { useEffect, useEffectEvent, useState } from 'react'
 import type { ViewerEngineProps } from '../types'
+import { ViewerSkeleton } from '../viewer-skeleton'
 import { ENGINE_TIMEOUT_MS } from './budgets'
-import { sheetSourceFor, type SheetData, type SheetParseResult } from './sheet-model'
+import { isEmptySheet, sheetSourceFor, type SheetData, type SheetParseResult } from './sheet-model'
 import type { SheetRequest } from './sheet-parse'
 import { createSheetWorker } from './sheet-worker-client'
 import { SheetView } from './sheet-view'
@@ -36,8 +37,9 @@ export default function SheetEngine({ file, data, onToolbar, onError }: ViewerEn
       if (settled) return
       finish()
       const result = event.data
-      if (result.ok) setSheets(result.sheets)
-      else fail(result.failure)
+      if (!result.ok) fail(result.failure)
+      else if (result.sheets.every(isEmptySheet)) fail('empty')
+      else setSheets(result.sheets)
     }
     worker.onerror = () => {
       if (settled) return
@@ -52,7 +54,6 @@ export default function SheetEngine({ file, data, onToolbar, onError }: ViewerEn
     return finish
   }, [data, file.name, file.contentType])
 
-  if (!sheets) return <div className="min-h-0 flex-1 bg-background" />
-  if (sheets.length === 0) return null
+  if (!sheets) return <ViewerSkeleton />
   return <SheetView sheets={sheets} onNote={(note) => onToolbar({ note })} />
 }

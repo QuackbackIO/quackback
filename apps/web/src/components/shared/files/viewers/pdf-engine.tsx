@@ -26,6 +26,7 @@ import {
 } from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import type { ViewerEngineProps } from '../types'
+import { ViewerSkeleton } from '../viewer-skeleton'
 import { withTimeout } from './budgets'
 import { PdfFindBar } from './pdf-find-bar'
 import {
@@ -366,7 +367,7 @@ export default function PdfEngine({ data, onToolbar, onError, compact }: ViewerE
           tabIndex={-1}
           className="min-h-0 min-w-0 flex-1 overflow-auto bg-[oklch(0.935_0_0)] outline-none dark:bg-[oklch(0.11_0_0)]"
         >
-          {pdf && (
+          {pdf ? (
             <div
               className="mx-auto flex w-max min-w-full flex-col items-center"
               style={{ padding, gap: PAGE_GAP }}
@@ -393,6 +394,8 @@ export default function PdfEngine({ data, onToolbar, onError, compact }: ViewerE
                 )
               })}
             </div>
+          ) : (
+            <ViewerSkeleton />
           )}
         </div>
       </div>

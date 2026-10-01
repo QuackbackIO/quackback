@@ -133,6 +133,7 @@
   "files.viewer.failureCorrupt": "无法预览此文件",
   "files.viewer.failureTooLarge": "文件过大，无法预览",
   "files.viewer.failureUnavailable": "此文件已不可用",
+  "files.viewer.failureEmpty": "此文件为空",
   "files.viewer.download": "下载",
   "files.viewer.close": "关闭",
   "files.viewer.back": "返回",

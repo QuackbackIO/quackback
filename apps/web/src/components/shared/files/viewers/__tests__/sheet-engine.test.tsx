@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render as rtlRender, waitFor } from '@testing-library/react'
+import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import * as XLSX from 'xlsx'
 import { strToU8 } from 'fflate'
@@ -135,6 +135,29 @@ describe('SheetEngine', () => {
     )
     expect(InProcessWorker.instances[0]!.received[0]!.source).toBe('csv')
     expect(p.onToolbar).toHaveBeenLastCalledWith({ note: '2 rows' })
+  })
+
+  it('shows the viewer’s loading state while the worker parses', async () => {
+    InProcessWorker.hang = true
+    render(<SheetEngine {...props('customers.xlsx', workbook())} />)
+    expect(screen.getByRole('status', { name: 'Loading file' })).toBeInTheDocument()
+    expect(screen.queryByRole('grid')).toBeNull()
+  })
+
+  it('reports a workbook with no cells as empty instead of a blank grid', async () => {
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([]), 'Sheet1')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([]), 'Sheet2')
+    const p = props('blank.xlsx', XLSX.write(wb, { type: 'array', bookType: 'xlsx' }))
+    render(<SheetEngine {...p} />)
+    await waitFor(() => expect(p.onError).toHaveBeenCalledWith('empty'))
+    expect(screen.queryByRole('grid')).toBeNull()
+  })
+
+  it('reports an empty CSV as empty', async () => {
+    const p = props('export.csv', new ArrayBuffer(0))
+    render(<SheetEngine {...p} />)
+    await waitFor(() => expect(p.onError).toHaveBeenCalledWith('empty'))
   })
 
   it('reports a damaged workbook as corrupt', async () => {

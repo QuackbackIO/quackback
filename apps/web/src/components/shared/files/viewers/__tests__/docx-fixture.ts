@@ -27,7 +27,16 @@ function picture(relId: string): string {
   return `<w:p><w:r><w:drawing><wp:inline><wp:extent cx="952500" cy="952500"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:blipFill><a:blip r:embed="${relId}"/></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="952500" cy="952500"/></a:xfrm></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
 }
 
-export function docxFixture(opts: { extraEntries?: number } = {}): Uint8Array {
+const HOSTILE_BODY =
+  `<w:p><w:r><w:t>Quarterly plan</w:t></w:r></w:p>` +
+  `<w:p><w:hyperlink r:id="rId2"><w:r><w:t>Click me</w:t></w:r></w:hyperlink></w:p>` +
+  `<w:p><w:hyperlink r:id="rId3"><w:r><w:t>Read the docs</w:t></w:r></w:hyperlink></w:p>` +
+  picture('rId5') +
+  picture('rId4') +
+  `<w:altChunk r:id="rId6"/>`
+
+/** `body` replaces the document's paragraphs (an empty string makes a blank document). */
+export function docxFixture(opts: { extraEntries?: number; body?: string } = {}): Uint8Array {
   const files: Zippable = {
     '[Content_Types].xml': strToU8(
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="html" ContentType="text/html"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`
@@ -46,12 +55,7 @@ export function docxFixture(opts: { extraEntries?: number } = {}): Uint8Array {
     ),
     'word/document.xml': strToU8(
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${NS}><w:body>` +
-        `<w:p><w:r><w:t>Quarterly plan</w:t></w:r></w:p>` +
-        `<w:p><w:hyperlink r:id="rId2"><w:r><w:t>Click me</w:t></w:r></w:hyperlink></w:p>` +
-        `<w:p><w:hyperlink r:id="rId3"><w:r><w:t>Read the docs</w:t></w:r></w:hyperlink></w:p>` +
-        picture('rId5') +
-        picture('rId4') +
-        `<w:altChunk r:id="rId6"/>` +
+        (opts.body ?? HOSTILE_BODY) +
         `<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>` +
         `</w:body></w:document>`
     ),

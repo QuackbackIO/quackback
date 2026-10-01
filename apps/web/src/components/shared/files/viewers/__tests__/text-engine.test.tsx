@@ -164,6 +164,12 @@ describe('TextEngine', () => {
     expect(screen.queryByRole('link')).toBeNull()
   })
 
+  it('reports an empty file as empty instead of one blank line', () => {
+    const { onError, container } = renderText('')
+    expect(onError).toHaveBeenCalledWith('empty')
+    expect(container.querySelector('[data-line-text]')).toBeNull()
+  })
+
   it('leaves out the line count for a file it only partly has', () => {
     const { toolbar } = renderText('a\nb', { truncated: true })
     expect(toolbar().note).toBeUndefined()
