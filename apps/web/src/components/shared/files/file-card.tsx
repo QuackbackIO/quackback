@@ -81,20 +81,17 @@ export function attachmentMetaLine(
         : fallback
     case 'spreadsheet':
     case 'csv': {
+      // Rows alone keep the line to one clear count; a sheet count on top of
+      // rows reads as two different numbers competing for attention, so rows
+      // win whenever both are known. Only once rows aren't known yet does the
+      // sheet count stand in as the next-most-useful thing to show.
       const sheetCount = preview?.sheets?.length ?? 0
       const rows = preview?.rows
-      if (sheetCount > 1 && rows != null) {
-        return `${plural('files.count.sheets', '{count, plural, one {# sheet} other {# sheets}}', sheetCount)} · ${plural('files.count.rows', '{count, plural, one {# row} other {# rows}}', rows)}`
+      if (rows != null) {
+        return `${plural('files.count.rows', '{count, plural, one {# row} other {# rows}}', rows)} · ${bytes}`
       }
       if (sheetCount > 1) {
-        return plural(
-          'files.count.sheets',
-          '{count, plural, one {# sheet} other {# sheets}}',
-          sheetCount
-        )
-      }
-      if (rows != null) {
-        return plural('files.count.rows', '{count, plural, one {# row} other {# rows}}', rows)
+        return `${plural('files.count.sheets', '{count, plural, one {# sheet} other {# sheets}}', sheetCount)} · ${bytes}`
       }
       return fallback
     }

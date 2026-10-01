@@ -48,7 +48,7 @@ describe('attachmentMetaLine', () => {
     expect(attachmentMetaLine('a.pdf', 'pdf', 1024, { pages: 1 }, intl)).toBe('1 page · 1 KB')
   })
 
-  it('shows sheet count and row count together for a multi-sheet workbook', () => {
+  it('shows row count with size for a multi-sheet workbook, dropping the sheet count to keep the line short', () => {
     expect(
       attachmentMetaLine(
         'b.xlsx',
@@ -57,11 +57,23 @@ describe('attachmentMetaLine', () => {
         { sheets: ['Articles', 'Tags', 'Summary'], rows: 1248 },
         intl
       )
-    ).toBe('3 sheets · 1,248 rows')
+    ).toBe('1,248 rows · 312 KB')
   })
 
-  it('shows rows alone for a single-sheet spreadsheet or a CSV', () => {
-    expect(attachmentMetaLine('c.csv', 'csv', 1024, { rows: 1248 }, intl)).toBe('1,248 rows')
+  it('shows rows with size for a single-sheet spreadsheet or a CSV', () => {
+    expect(attachmentMetaLine('c.csv', 'csv', 1024, { rows: 1248 }, intl)).toBe('1,248 rows · 1 KB')
+  })
+
+  it('shows sheet count with size when the sheet count is known but rows are not', () => {
+    expect(
+      attachmentMetaLine(
+        'b.xlsx',
+        'spreadsheet',
+        387 * 1024,
+        { sheets: ['Articles', 'Tags', 'Summary'] },
+        intl
+      )
+    ).toBe('3 sheets · 387 KB')
   })
 
   it('falls back to the family name and size when a spreadsheet has no counts', () => {
@@ -182,7 +194,7 @@ describe('FilePreviewCard', () => {
         onOpen={() => {}}
       />
     )
-    expect(getByText('10 rows')).toBeTruthy()
+    expect(getByText('10 rows · 184 KB')).toBeTruthy()
     expect(getByText('Contains macros')).toBeTruthy()
   })
 })
