@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import '@testing-library/jest-dom/vitest'
+import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render } from '@testing-library/react'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
@@ -31,7 +32,7 @@ const { Route } = await import('../settings.index')
 function renderIndex(permissions: PermissionKey[], flags: Record<string, boolean> = {}) {
   hoisted.permissions = new Set(permissions)
   hoisted.flags = flags
-  const Page = (Route as unknown as { options: { component: () => JSX.Element } }).options.component
+  const Page = (Route as unknown as { options: { component: () => ReactNode } }).options.component
   render(<Page />)
 }
 
