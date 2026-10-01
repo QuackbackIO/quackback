@@ -191,6 +191,7 @@
   "files.family.archive": "Archivo comprimido",
   "files.family.other": "Archivo",
   "files.card.open": "Abrir {name}",
+  "files.card.openWithMeta": "Abrir {name}, {detail}",
   "files.card.download": "Descargar {name}",
   "files.tray.remove": "Quitar {name}",
   "files.tray.retry": "Reintentar",

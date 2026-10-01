@@ -191,6 +191,7 @@
   "files.family.archive": "壓縮檔",
   "files.family.other": "檔案",
   "files.card.open": "開啟{name}",
+  "files.card.openWithMeta": "開啟{name}，{detail}",
   "files.card.download": "下載{name}",
   "files.tray.remove": "移除{name}",
   "files.tray.retry": "重試",

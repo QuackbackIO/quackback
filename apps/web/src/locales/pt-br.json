@@ -191,6 +191,7 @@
   "files.family.archive": "Arquivo compactado",
   "files.family.other": "Arquivo",
   "files.card.open": "Abrir {name}",
+  "files.card.openWithMeta": "Abrir {name}, {detail}",
   "files.card.download": "Baixar {name}",
   "files.tray.remove": "Remover {name}",
   "files.tray.retry": "Tentar novamente",

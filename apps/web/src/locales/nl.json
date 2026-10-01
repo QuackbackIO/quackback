@@ -191,6 +191,7 @@
   "files.family.archive": "Archief",
   "files.family.other": "Bestand",
   "files.card.open": "{name} openen",
+  "files.card.openWithMeta": "{name} openen, {detail}",
   "files.card.download": "{name} downloaden",
   "files.tray.remove": "{name} verwijderen",
   "files.tray.retry": "Opnieuw proberen",

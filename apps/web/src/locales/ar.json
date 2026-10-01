@@ -191,6 +191,7 @@
   "files.family.archive": "أرشيف",
   "files.family.other": "ملف",
   "files.card.open": "فتح {name}",
+  "files.card.openWithMeta": "فتح {name}، {detail}",
   "files.card.download": "تنزيل {name}",
   "files.tray.remove": "إزالة {name}",
   "files.tray.retry": "إعادة المحاولة",

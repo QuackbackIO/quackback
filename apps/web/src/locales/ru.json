@@ -191,6 +191,7 @@
   "files.family.archive": "Архив",
   "files.family.other": "Файл",
   "files.card.open": "Открыть {name}",
+  "files.card.openWithMeta": "Открыть {name}, {detail}",
   "files.card.download": "Скачать {name}",
   "files.tray.remove": "Удалить {name}",
   "files.tray.retry": "Повторить",

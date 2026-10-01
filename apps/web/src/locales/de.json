@@ -191,6 +191,7 @@
   "files.family.archive": "Archiv",
   "files.family.other": "Datei",
   "files.card.open": "{name} öffnen",
+  "files.card.openWithMeta": "{name} öffnen, {detail}",
   "files.card.download": "{name} herunterladen",
   "files.tray.remove": "{name} entfernen",
   "files.tray.retry": "Erneut versuchen",

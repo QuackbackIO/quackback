@@ -42,7 +42,7 @@ describe('AttachmentList', () => {
   it('renders images before file cards regardless of input order', () => {
     const { container } = render(<AttachmentList attachments={[pdf('a.pdf'), image('shot.png')]} />)
     const img = container.querySelector('img')
-    const card = container.querySelector('[aria-label="Open a.pdf"]')
+    const card = container.querySelector('[aria-label="Open a.pdf, PDF, 10 B"]')
     expect(img).not.toBeNull()
     expect(card).not.toBeNull()
     // The image row's DOM position precedes the file-cards grid.
@@ -100,7 +100,7 @@ describe('AttachmentList', () => {
         <AttachmentList attachments={messages[1]!.attachments} context={{ messageId: 'm2' }} />
       </ConversationGalleryProvider>
     )
-    fireEvent.click(getByLabelText('Open c.pdf'))
+    fireEvent.click(getByLabelText('Open c.pdf, PDF, 10 B'))
     expect(open).toHaveBeenCalledTimes(1)
     const [files, index] = open.mock.calls[0]!
     expect(files.map((f: { name: string }) => f.name)).toEqual(['a.pdf', 'b.pdf', 'c.pdf'])
@@ -115,7 +115,7 @@ describe('AttachmentList', () => {
         context={{ messageId: 'orphan', senderName: 'Dana', sentAt: '2026-01-01T00:00:00.000Z' }}
       />
     )
-    fireEvent.click(getByLabelText('Open y.pdf'))
+    fireEvent.click(getByLabelText('Open y.pdf, PDF, 10 B'))
     expect(open).toHaveBeenCalledTimes(1)
     const [files, index] = open.mock.calls[0]!
     expect(files.map((f: { name: string }) => f.name)).toEqual(['x.pdf', 'y.pdf'])
@@ -131,7 +131,7 @@ describe('AttachmentList', () => {
       family: 'video',
     }
     const { getByLabelText } = render(<AttachmentList attachments={[video]} />)
-    const button = getByLabelText('Open v.mp4')
+    const button = getByLabelText('Open v.mp4, Video, 10 B')
     expect(button.closest('.col-span-2')).not.toBeNull()
   })
 
@@ -139,7 +139,7 @@ describe('AttachmentList', () => {
     const { getByLabelText, queryByText } = render(
       <AttachmentList attachments={[pdf('note.pdf')]} compact />
     )
-    expect(getByLabelText('Open note.pdf')).toBeTruthy()
+    expect(getByLabelText('Open note.pdf, PDF, 10 B')).toBeTruthy()
     // FileIconCard/FilePreviewCard don't exist here; FileRow has no "col-span-2".
     expect(queryByText('Contains macros')).toBeNull()
   })

@@ -4,6 +4,7 @@ import { render as rtlRender, fireEvent } from '@testing-library/react'
 import { createIntl, IntlProvider } from 'react-intl'
 import {
   attachmentMetaLine,
+  attachmentAriaLabel,
   hasPreviewWorthShowing,
   resolveFamily,
   FilePreviewCard,
@@ -132,6 +133,33 @@ describe('attachmentMetaLine', () => {
   })
 })
 
+describe('attachmentAriaLabel', () => {
+  it('names the family and the specific count a sighted person only sees in the badge/meta line', () => {
+    expect(attachmentAriaLabel('invoice.pdf', 'pdf', 184 * 1024, { pages: 2 }, intl)).toBe(
+      'Open invoice.pdf, PDF, 2 pages, 184 KB'
+    )
+  })
+
+  it('names the family and size alone when there is no specific count yet', () => {
+    expect(attachmentAriaLabel('b.xlsx', 'spreadsheet', 1024, {}, intl)).toBe(
+      'Open b.xlsx, Spreadsheet, 1 KB'
+    )
+  })
+
+  it('renders in German when the locale is German', () => {
+    const de = createIntl({
+      locale: 'de',
+      messages: {
+        'files.card.openWithMeta': '{name} öffnen, {detail}',
+        'files.count.pages': '{count, plural, one {# Seite} other {# Seiten}}',
+      },
+    })
+    expect(attachmentAriaLabel('invoice.pdf', 'pdf', 184 * 1024, { pages: 2 }, de)).toBe(
+      'invoice.pdf öffnen, PDF, 2 Seiten, 184 KB'
+    )
+  })
+})
+
 describe('resolveFamily', () => {
   it('prefers the stored family', () => {
     expect(resolveFamily(attachment({ family: 'pdf', contentType: 'application/zip' }))).toBe('pdf')
@@ -173,7 +201,7 @@ describe('FilePreviewCard', () => {
     const { getByRole } = render(
       <FilePreviewCard attachment={attachment({ preview: { pages: 2 } })} onOpen={onOpen} />
     )
-    const openButton = getByRole('button', { name: 'Open invoice.pdf' })
+    const openButton = getByRole('button', { name: 'Open invoice.pdf, PDF, 2 pages, 184 KB' })
     fireEvent.click(openButton)
     expect(onOpen).toHaveBeenCalledTimes(1)
 
@@ -209,7 +237,7 @@ describe('FileIconCard', () => {
         onOpen={onOpen}
       />
     )
-    const button = getByRole('button', { name: 'Open invoice.pdf' })
+    const button = getByRole('button', { name: 'Open invoice.pdf, Document, 4 pages, 184 KB' })
     fireEvent.click(button)
     expect(onOpen).toHaveBeenCalledTimes(1)
   })
@@ -219,7 +247,7 @@ describe('FileRow', () => {
   it('opens the viewer and exposes a separate, accessible download link', () => {
     const onOpen = vi.fn()
     const { getByRole } = render(<FileRow attachment={attachment()} onOpen={onOpen} />)
-    fireEvent.click(getByRole('button', { name: 'Open invoice.pdf' }))
+    fireEvent.click(getByRole('button', { name: 'Open invoice.pdf, PDF, 184 KB' }))
     expect(onOpen).toHaveBeenCalledTimes(1)
     expect(getByRole('link', { name: 'Download invoice.pdf' })).toHaveAttribute(
       'href',

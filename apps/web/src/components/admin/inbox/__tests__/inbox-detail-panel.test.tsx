@@ -440,7 +440,7 @@ describe('<InboxDetailPanel> Files section', () => {
     expect(screen.getByText('2')).toBeInTheDocument()
     expect(screen.getAllByText(/\.pdf$/).map((el) => el.textContent)).toEqual(['b.pdf', 'a.pdf'])
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open b.pdf' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open b.pdf, PDF, 10 B' }))
     expect(filesHoisted.openViewer).toHaveBeenCalledTimes(1)
     const [files, index] = filesHoisted.openViewer.mock.calls[0] as [{ name: string }[], number]
     expect(files.map((f) => f.name)).toEqual(['b.pdf', 'a.pdf'])

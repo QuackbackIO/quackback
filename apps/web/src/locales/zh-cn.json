@@ -191,6 +191,7 @@
   "files.family.archive": "压缩包",
   "files.family.other": "文件",
   "files.card.open": "打开{name}",
+  "files.card.openWithMeta": "打开{name}，{detail}",
   "files.card.download": "下载{name}",
   "files.tray.remove": "移除{name}",
   "files.tray.retry": "重试",
