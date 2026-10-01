@@ -1,0 +1,90 @@
+/**
+ * The conversation-wide gallery an attachment card opens into: every file in
+ * the loaded thread, in message order, so the viewer's arrow keys move
+ * through the whole conversation rather than just the one message a card
+ * lives on. `AttachmentList` reads this via `useConversationGallery` to find
+ * where its own attachments sit in that flat order.
+ *
+ * Mounted once around the message list in both thread components
+ * (`agent-conversation-thread.tsx`, `visitor-conversation-thread.tsx`) — never
+ * around the composer, which has no business with this gallery.
+ */
+import { createContext, useContext, useMemo, type ReactNode } from 'react'
+import { toViewerFile, type ViewerFile } from './types'
+import type { ConversationAttachment } from '@/lib/shared/conversation/types'
+
+/** The minimum a message needs to carry to contribute to the gallery. */
+export interface GalleryMessage {
+  id: string
+  isInternal: boolean
+  attachments: ConversationAttachment[]
+  createdAt: string
+  senderType: 'visitor' | 'agent' | 'system'
+  isAssistant: boolean
+  author: { displayName: string | null } | null
+}
+
+export interface ConversationGalleryApi {
+  /** Every attachment in the thread, in message order. */
+  files: ViewerFile[]
+  /** Where one message's Nth attachment sits in `files`, or -1 if the
+   *  message contributed nothing (filtered out, or not found). */
+  indexOf: (messageId: string, localIndex: number) => number
+}
+
+const EMPTY: ConversationGalleryApi = { files: [], indexOf: () => -1 }
+
+const ConversationGalleryContext = createContext<ConversationGalleryApi>(EMPTY)
+
+export function useConversationGallery(): ConversationGalleryApi {
+  return useContext(ConversationGalleryContext)
+}
+
+function senderNameOf(m: GalleryMessage): string | undefined {
+  if (m.author?.displayName) return m.author.displayName
+  if (m.isAssistant) return 'Assistant'
+  if (m.senderType === 'agent') return 'Agent'
+  if (m.senderType === 'visitor') return 'Visitor'
+  return undefined
+}
+
+export function ConversationGalleryProvider({
+  messages,
+  includeInternal = false,
+  children,
+}: {
+  messages: GalleryMessage[]
+  /** Agent threads pass true — internal notes are agent-only; the visitor
+   *  widget/portal leave this at its default so a note's attachments (which
+   *  should never reach a visitor DTO in the first place) can never surface
+   *  in their gallery either. */
+  includeInternal?: boolean
+  children: ReactNode
+}) {
+  const value = useMemo<ConversationGalleryApi>(() => {
+    const files: ViewerFile[] = []
+    const startIndexByMessage = new Map<string, number>()
+    for (const m of messages) {
+      if (m.isInternal && !includeInternal) continue
+      if (!m.attachments || m.attachments.length === 0) continue
+      startIndexByMessage.set(m.id, files.length)
+      const senderName = senderNameOf(m)
+      m.attachments.forEach((a, index) => {
+        files.push(toViewerFile(a, { senderName, sentAt: m.createdAt, messageId: m.id, index }))
+      })
+    }
+    return {
+      files,
+      indexOf: (messageId, localIndex) => {
+        const start = startIndexByMessage.get(messageId)
+        return start === undefined ? -1 : start + localIndex
+      },
+    }
+  }, [messages, includeInternal])
+
+  return (
+    <ConversationGalleryContext.Provider value={value}>
+      {children}
+    </ConversationGalleryContext.Provider>
+  )
+}
