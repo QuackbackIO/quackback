@@ -130,9 +130,11 @@
 }
 
 /*
- * Dark mode raises the admin page into a sheet. The surfaces are set on the canvas only, so
- * the public portal and the widget keep the document-level dark tokens above.
+ * Dark mode raises the admin page into a sheet. Overlays portal to the body, outside the canvas,
+ * so the same surfaces are set at the document level while an admin shell is mounted. The
+ * public portal and the widget have no admin shell and keep the document-level dark tokens above.
  */
+.dark[data-visual-theme='refined']:has([data-admin-shell]),
 .dark[data-visual-theme='refined'] [data-admin-canvas] {
   --background: #131316;
   --card: #18181b;

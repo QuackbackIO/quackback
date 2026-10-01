@@ -116,7 +116,8 @@ describe('refined theme chrome rules', () => {
 })
 
 describe('refined theme dark sheet', () => {
-  const sheet = block(".dark[data-visual-theme='refined'] [data-admin-canvas] {")
+  const D = ".dark[data-visual-theme='refined']"
+  const sheet = block(`${D} [data-admin-canvas] {`)
 
   it('defines the sheet and card surfaces on the admin canvas', () => {
     expect(sheet).toContain('--background: #131316;')
@@ -124,6 +125,19 @@ describe('refined theme dark sheet', () => {
     expect(sheet).toContain('--popover: #18181b;')
     expect(sheet).toContain('--muted: #1f1f23;')
     expect(sheet).toContain('--border: #27272a;')
+  })
+
+  it('applies the same sheet tokens at the document level while an admin shell is mounted', () => {
+    const doc = block(`${D}:has([data-admin-shell]),`)
+    expect(doc).toBe(sheet)
+  })
+
+  it('touches no portal or widget selector with the sheet tokens', () => {
+    const start = css.indexOf(`\n${D}:has([data-admin-shell]),`)
+    const header = css.slice(start, css.indexOf('{', start))
+    expect(header.match(/\n\.dark/g)).toHaveLength(2)
+    expect(header).not.toMatch(/portal|widget/i)
+    expect(css).not.toMatch(/\.dark\[data-visual-theme='refined'\]:not\(:has/)
   })
 
   it('leaves the document-level dark tokens, and so the portal and widget, unchanged', () => {
