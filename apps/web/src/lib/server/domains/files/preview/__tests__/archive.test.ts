@@ -12,6 +12,17 @@ describe('deriveArchivePreview', () => {
     expect(await deriveArchivePreview(zip)).toEqual({ status: 'ready', meta: { entries: 3 } })
   })
 
+  it('counts files only, the way the listing does, not folders', async () => {
+    const zip = zipSync({
+      'logs/': new Uint8Array(0),
+      'logs/b.log': strToU8('b'),
+      'logs/old/': new Uint8Array(0),
+      'a.txt': strToU8('a'),
+      './': new Uint8Array(0),
+    })
+    expect(await deriveArchivePreview(zip)).toEqual({ status: 'ready', meta: { entries: 2 } })
+  })
+
   it('counts past the budget an office package is held to, without inflating', async () => {
     const files: Record<string, Uint8Array> = {}
     for (let i = 0; i < 2500; i++) files[`f${i}`] = new Uint8Array(0)

@@ -18,6 +18,36 @@ describe('deriveTextPreview', () => {
     expect(result.meta.text).toBe('first\nsecond\nthird')
   })
 
+  it('counts lines the way the viewer shows them, whatever ends them', async () => {
+    const count = async (s: string) => (await deriveTextPreview(encode(s))).meta.lines
+    // A final line break ends the last line; it does not start another.
+    expect(await count('a\nb\n')).toBe(2)
+    expect(await count('a\nb')).toBe(2)
+    expect(await count('a\n\n')).toBe(2)
+    expect(await count('\n')).toBe(1)
+    // A carriage return on its own breaks a line too, as the viewer reads it.
+    expect(await count('a\rb\rc')).toBe(3)
+    expect(await count('a\r\rb\r')).toBe(3)
+    expect(await count('a\r\nb\r\n')).toBe(2)
+  })
+
+  it('shows the first lines of a file whose lines end in carriage returns', async () => {
+    const result = await deriveTextPreview(encode('first\rsecond\rthird'))
+    expect(result.meta.text).toBe('first\nsecond\nthird')
+  })
+
+  it('reads UTF-16 text marked by its byte order mark, as the viewer does', async () => {
+    const utf16le = (s: string) => {
+      const out = new Uint8Array(2 + s.length * 2)
+      out.set([0xff, 0xfe])
+      for (let i = 0; i < s.length; i++) out[2 + i * 2] = s.charCodeAt(i)
+      return out
+    }
+    const result = await deriveTextPreview(utf16le('one\r\ntwo\r\nthree\r\n'))
+    expect(result.meta.lines).toBe(3)
+    expect(result.meta.text).toBe('one\ntwo\nthree')
+  })
+
   it('truncates long lines on the card and keeps indentation', async () => {
     const result = await deriveTextPreview(encode(`  indented\n${'z'.repeat(5000)}\n`))
     const [first, second] = result.meta.text!.split('\n')
