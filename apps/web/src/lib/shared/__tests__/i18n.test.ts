@@ -73,6 +73,11 @@ describe('normalizeLocale', () => {
     expect(normalizeLocale('nl-BE')).toBe('nl')
     expect(normalizeLocale('NL-nl')).toBe('nl')
   })
+  it('maps Polish tags to pl', () => {
+    expect(normalizeLocale('pl')).toBe('pl')
+    expect(normalizeLocale('pl-PL')).toBe('pl')
+    expect(normalizeLocale('PL-pl')).toBe('pl')
+  })
 })
 
 describe('resolveLocale', () => {
@@ -110,6 +115,11 @@ describe('resolveLocale', () => {
     expect(resolveLocale('nl-BE,fr-BE;q=0.8')).toBe('nl')
     expect(resolveLocale('en', 'nl')).toBe('nl')
   })
+  it('resolves Polish from the header', () => {
+    expect(resolveLocale('pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7')).toBe('pl')
+    expect(resolveLocale('pl,de;q=0.8')).toBe('pl')
+    expect(resolveLocale('en', 'pl')).toBe('pl')
+  })
   it('respects an explicit Chinese locale override', () => {
     expect(resolveLocale('en', 'zh-Hant')).toBe('zh-tw')
     expect(resolveLocale('en', 'zh-CN')).toBe('zh-cn')
@@ -143,6 +153,9 @@ describe('SUPPORTED_LOCALES', () => {
   })
   it('includes nl', () => {
     expect(SUPPORTED_LOCALES).toContain('nl')
+  })
+  it('includes pl', () => {
+    expect(SUPPORTED_LOCALES).toContain('pl')
   })
   it('DEFAULT_LOCALE is en', () => {
     expect(DEFAULT_LOCALE).toBe('en')
