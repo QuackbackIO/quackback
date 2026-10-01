@@ -15,11 +15,11 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { useIntl, type IntlShape } from 'react-intl'
-import { fileExtension } from '@/lib/shared/files/file-types'
 import type { EngineToolbar, ViewerEngineProps, ViewerFile } from '../types'
 import { ViewerSkeleton } from '../viewer-skeleton'
 import { BudgetTimeoutError, checkZipBudget, withTimeout } from './budgets'
 import { buildDocumentSrcdoc, renderDocumentHtml, type RenderedDocument } from './document-render'
+import { macroNote } from './macros'
 import { ZOOM_MAX, ZOOM_MIN, clampZoom } from './zoom'
 
 /** The desk's padding around the pages inside the frame, plus room for its scrollbar. */
@@ -34,7 +34,7 @@ export function documentFitZoom(deskWidth: number, pageWidthPx: number): number 
 
 /** "4 pages", "Contains macros", or both. */
 export function documentNote(
-  file: Pick<ViewerFile, 'name' | 'preview'>,
+  file: Pick<ViewerFile, 'name' | 'contentType' | 'preview'>,
   intl: IntlShape
 ): string | undefined {
   const parts: string[] = []
@@ -50,9 +50,8 @@ export function documentNote(
       )
     )
   }
-  if (file.preview?.macro || fileExtension(file.name) === 'docm') {
-    parts.push(intl.formatMessage({ id: 'files.viewer.macros', defaultMessage: 'Contains macros' }))
-  }
+  const macros = macroNote(file, intl)
+  if (macros) parts.push(macros)
   return parts.length > 0 ? parts.join(' · ') : undefined
 }
 

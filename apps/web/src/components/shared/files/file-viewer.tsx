@@ -526,6 +526,11 @@ export default function FileViewer({
             )}
           </div>
         </header>
+        {compact && toolbar.note && (
+          <p className="shrink-0 truncate border-b border-border bg-background px-3 py-1.5 text-xs text-muted-foreground">
+            {toolbar.note}
+          </p>
+        )}
 
         <div className="relative flex min-h-0 flex-1 bg-[oklch(0.935_0_0)] dark:bg-[oklch(0.11_0_0)]">
           {shown.status === 'loading' ? (

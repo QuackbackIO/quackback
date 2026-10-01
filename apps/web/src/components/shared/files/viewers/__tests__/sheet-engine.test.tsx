@@ -66,7 +66,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-function file(name: string): ViewerFile {
+function file(name: string, extra: Partial<ViewerFile> = {}): ViewerFile {
   return {
     key: name,
     url: `/api/storage/files/${name}`,
@@ -74,6 +74,7 @@ function file(name: string): ViewerFile {
     contentType: '',
     size: 1,
     family: 'spreadsheet',
+    ...extra,
   }
 }
 
@@ -125,6 +126,20 @@ describe('SheetEngine', () => {
     expect(worker!.transferred).toHaveLength(1)
     expect(worker!.transferred[0]).not.toBe(data)
     expect(data.byteLength).toBe(size)
+  })
+
+  it.each([
+    ['a macro-enabled extension', file('budget.xlsm')],
+    [
+      'a macro-enabled type',
+      file('budget', { contentType: 'application/vnd.ms-excel.sheet.macroEnabled.12' }),
+    ],
+    ['the preview job finding macros', file('budget.xls', { preview: { macro: true } })],
+  ])('notes macros for %s, beside the row count', async (_, f) => {
+    const p = { ...props(f.name, workbook()), file: f }
+    const { container } = render(<SheetEngine {...p} />)
+    await waitFor(() => expect(container.querySelector('[data-cell="A2"]')).not.toBeNull())
+    expect(p.onToolbar).toHaveBeenLastCalledWith({ note: '3 rows · Contains macros' })
   })
 
   it('reads CSV through the delimited-text parser', async () => {

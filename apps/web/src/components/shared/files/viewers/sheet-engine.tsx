@@ -5,16 +5,20 @@
  * budget to parse is reported as too large and its worker is stopped.
  */
 import { useEffect, useEffectEvent, useState } from 'react'
+import { useIntl } from 'react-intl'
 import type { ViewerEngineProps } from '../types'
 import { ViewerSkeleton } from '../viewer-skeleton'
 import { ENGINE_TIMEOUT_MS } from './budgets'
+import { macroNote } from './macros'
 import { isEmptySheet, sheetSourceFor, type SheetData, type SheetParseResult } from './sheet-model'
 import type { SheetRequest } from './sheet-parse'
 import { createSheetWorker } from './sheet-worker-client'
 import { SheetView } from './sheet-view'
 
 export default function SheetEngine({ file, data, onToolbar, onError }: ViewerEngineProps) {
+  const intl = useIntl()
   const [sheets, setSheets] = useState<SheetData[] | null>(null)
+  const macros = macroNote(file, intl)
   const fail = useEffectEvent(onError)
 
   useEffect(() => {
@@ -55,5 +59,10 @@ export default function SheetEngine({ file, data, onToolbar, onError }: ViewerEn
   }, [data, file.name, file.contentType])
 
   if (!sheets) return <ViewerSkeleton />
-  return <SheetView sheets={sheets} onNote={(note) => onToolbar({ note })} />
+  return (
+    <SheetView
+      sheets={sheets}
+      onNote={(note) => onToolbar({ note: macros ? `${note} · ${macros}` : note })}
+    />
+  )
 }

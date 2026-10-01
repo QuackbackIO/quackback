@@ -589,6 +589,12 @@ describe('FileViewer compact (widget)', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
+  it('keeps the engine note in a quiet line, so a macro warning is never hidden', async () => {
+    toolbarFor = () => ({ note: '1 page · Contains macros' })
+    renderViewer({ compact: true })
+    expect(await screen.findByText('1 page · Contains macros')).toBeVisible()
+  })
+
   it('pages with a pager under the content', async () => {
     const go = vi.fn()
     toolbarFor = () => ({ page: { current: 3, total: 6, go } })
