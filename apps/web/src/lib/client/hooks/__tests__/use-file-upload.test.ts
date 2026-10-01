@@ -51,9 +51,7 @@ describe('useFileUpload', () => {
   it('reports a failed upload through onError and rethrows', async () => {
     mockUpload.mockRejectedValue(new Error('Over 25 MB'))
     const onError = vi.fn()
-    const { result } = renderHook(() =>
-      useFileUpload({ endpoint: '/api/upload/file', onError })
-    )
+    const { result } = renderHook(() => useFileUpload({ endpoint: '/api/upload/file', onError }))
     const file = new File(['x'], 'a.txt', { type: 'text/plain' })
 
     await expect(result.current.upload(file, {})).rejects.toThrow('Over 25 MB')

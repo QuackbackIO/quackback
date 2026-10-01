@@ -247,7 +247,7 @@ describe('useConversationComposerAttachments', () => {
   })
 
   it('creates a local preview URL for an image and revokes it on remove', async () => {
-    const upload = vi.fn(() => new Promise(() => {}))
+    const upload = vi.fn(() => new Promise<ReturnType<typeof uploadedFileFor>>(() => {}))
     const { result } = renderHook(() => useConversationComposerAttachments(upload))
 
     act(() => {

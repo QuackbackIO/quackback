@@ -133,8 +133,7 @@ export function NewConversationDialog({
   })
 
   const isEmpty = isEmptyTiptapDoc(messageJson as TiptapContent | undefined)
-  const canSend =
-    !!target && (!isEmpty || attachments.length > 0) && !send.isPending && !uploading
+  const canSend = !!target && (!isEmpty || attachments.length > 0) && !send.isPending && !uploading
 
   const submit = () => {
     if (!canSend || !target) return

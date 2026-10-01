@@ -179,7 +179,12 @@ export function useConversationComposerAttachments(
       const file = filesRef.current.get(localId)
       if (!file) return Promise.resolve()
       const generation = generationRef.current
-      patchItem(localId, { status: 'uploading', progress: 0, error: undefined, retryable: undefined })
+      patchItem(localId, {
+        status: 'uploading',
+        progress: 0,
+        error: undefined,
+        retryable: undefined,
+      })
       return runUpload(localId, file, generation)
     },
     [runUpload, patchItem]

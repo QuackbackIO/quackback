@@ -44,7 +44,7 @@ function ImageTile({ item, onRemove, onRetry }: TileProps) {
         </div>
       )}
       {failed && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 bg-destructive/85 p-1 text-center text-[9px] font-medium leading-tight text-white">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 bg-destructive/85 p-1 text-center text-[11px] font-medium leading-tight text-white">
           <span className="line-clamp-2" title={item.error}>
             {item.error}
           </span>

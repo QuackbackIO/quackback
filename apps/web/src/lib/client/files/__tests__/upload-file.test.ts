@@ -162,7 +162,10 @@ describe('uploadFile', () => {
 describe('checkFileBeforeUpload', () => {
   it('rejects an empty file', () => {
     const f = file('empty.txt', 0, 'text/plain')
-    expect(checkFileBeforeUpload(f)).toMatchObject({ message: 'The file is empty', reason: 'empty' })
+    expect(checkFileBeforeUpload(f)).toMatchObject({
+      message: 'The file is empty',
+      reason: 'empty',
+    })
   })
 
   it('rejects a file over the generic 25 MB cap', () => {
