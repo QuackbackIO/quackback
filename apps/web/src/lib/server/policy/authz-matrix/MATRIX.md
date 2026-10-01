@@ -820,7 +820,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/workflows.ts`::runWorkflowManuallyFn | conversation.reply |
 | `lib/server/functions/workspace-wipe.ts`::wipeCloudWorkspaceFn | END_USER (any authenticated) |
 
-### Public REST API (`withApiKeyAuth`) — 125 surfaces
+### Public REST API (`withApiKeyAuth`) — 126 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -861,6 +861,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `routes/api/v1/conversations/$conversationId.tags.ts`::DELETE | conversation.set_tags |
 | `routes/api/v1/conversations/$conversationId.ts`::GET | conversation.view |
 | `routes/api/v1/conversations/index.ts`::GET | conversation.view |
+| `routes/api/v1/files/index.ts`::POST | conversation.reply |
 | `routes/api/v1/help-center/articles/$articleId.feedback.ts`::POST | PUBLIC (any valid key) |
 | `routes/api/v1/help-center/articles/$articleId.ts`::GET | PUBLIC (any valid key) |
 | `routes/api/v1/help-center/articles/$articleId.ts`::PATCH | help_center.manage |
@@ -970,7 +971,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 3. MCP tools
 
-39 tools. "Team" = requires an admin/member role in addition to the scope.
+40 tools. "Team" = requires an admin/member role in addition to the scope.
 
 | Tool | Scope(s) | Team |
 | --- | --- | :---: |
@@ -1011,6 +1012,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | update_article | write:article | ✓ |
 | update_changelog | write:changelog | ✓ |
 | update_comment | write:feedback | · |
+| upload_file | write:chat | ✓ |
 | vote_post | write:feedback | · |
 | widget_install_status | read:feedback | ✓ |
 
@@ -1026,7 +1028,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-224 of 1047 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+224 of 1048 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 

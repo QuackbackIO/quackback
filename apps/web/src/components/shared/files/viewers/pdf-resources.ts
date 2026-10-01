@@ -25,7 +25,7 @@ let files: Record<ResourceKind, Record<string, string>> | null = null
 export function selfHostedPdfFiles(): Record<ResourceKind, Record<string, string>> {
   files ??= {
     cMapUrl: byFileName(
-      import.meta.glob<string>('/node_modules/pdfjs-dist/cmaps/*.bcmap', {
+      import.meta.glob<string>('../../../../../node_modules/pdfjs-dist/cmaps/*.bcmap', {
         query: '?url&no-inline',
         import: 'default',
         eager: true,
@@ -33,7 +33,7 @@ export function selfHostedPdfFiles(): Record<ResourceKind, Record<string, string
       })
     ),
     standardFontDataUrl: byFileName(
-      import.meta.glob<string>('/node_modules/pdfjs-dist/standard_fonts/*.{pfb,ttf}', {
+      import.meta.glob<string>('../../../../../node_modules/pdfjs-dist/standard_fonts/*.{pfb,ttf}', {
         query: '?url&no-inline',
         import: 'default',
         eager: true,
@@ -41,7 +41,7 @@ export function selfHostedPdfFiles(): Record<ResourceKind, Record<string, string
       })
     ),
     wasmUrl: byFileName(
-      import.meta.glob<string>('/node_modules/pdfjs-dist/wasm/{openjpeg,jbig2}.wasm', {
+      import.meta.glob<string>('../../../../../node_modules/pdfjs-dist/wasm/{openjpeg,jbig2}.wasm', {
         query: '?url&no-inline',
         import: 'default',
         eager: true,
