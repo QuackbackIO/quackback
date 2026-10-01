@@ -135,4 +135,34 @@ describe('ConversationGalleryProvider', () => {
     })
     expect(result.current.files[0]!.senderName).toBe('Mitarbeiter')
   })
+
+  it('labels a visitor’s own files "You" in their own (widget/portal) view of the thread', () => {
+    const messages: GalleryMessage[] = [
+      msg({ id: 'm1', senderType: 'visitor', attachments: [att('a.pdf')] }),
+    ]
+    const { result } = renderHook(() => useConversationGallery(), {
+      wrapper: ({ children }) => (
+        <IntlProvider locale="en-US" messages={{}}>
+          <ConversationGalleryProvider messages={messages}>{children}</ConversationGalleryProvider>
+        </IntlProvider>
+      ),
+    })
+    expect(result.current.files[0]!.senderName).toBe('You')
+  })
+
+  it('still labels a visitor’s files "Visitor" in the agent inbox view', () => {
+    const messages: GalleryMessage[] = [
+      msg({ id: 'm1', senderType: 'visitor', attachments: [att('a.pdf')] }),
+    ]
+    const { result } = renderHook(() => useConversationGallery(), {
+      wrapper: ({ children }) => (
+        <IntlProvider locale="en-US" messages={{}}>
+          <ConversationGalleryProvider messages={messages} includeInternal>
+            {children}
+          </ConversationGalleryProvider>
+        </IntlProvider>
+      ),
+    })
+    expect(result.current.files[0]!.senderName).toBe('Visitor')
+  })
 })

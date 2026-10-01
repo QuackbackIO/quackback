@@ -62,7 +62,7 @@ export function useConversationGallery(): ConversationGalleryApi {
   return useContext(ConversationGalleryContext)
 }
 
-function senderNameOf(m: GalleryMessage, intl: IntlShape): string | undefined {
+function senderNameOf(m: GalleryMessage, intl: IntlShape, visitorIsSelf: boolean): string | undefined {
   if (m.author?.displayName) return m.author.displayName
   if (m.isAssistant) {
     return intl.formatMessage({ id: 'files.sender.assistant', defaultMessage: 'Assistant' })
@@ -71,7 +71,12 @@ function senderNameOf(m: GalleryMessage, intl: IntlShape): string | undefined {
     return intl.formatMessage({ id: 'files.sender.agent', defaultMessage: 'Agent' })
   }
   if (m.senderType === 'visitor') {
-    return intl.formatMessage({ id: 'files.sender.visitor', defaultMessage: 'Visitor' })
+    // In the visitor's own view of their thread (the widget/portal) a
+    // visitor-authored file is the viewer's own, same as the bubble's "You";
+    // in the agent inbox it belongs to someone else, so it stays "Visitor".
+    return visitorIsSelf
+      ? intl.formatMessage({ id: 'widget.messenger.you', defaultMessage: 'You' })
+      : intl.formatMessage({ id: 'files.sender.visitor', defaultMessage: 'Visitor' })
   }
   return undefined
 }
@@ -79,6 +84,7 @@ function senderNameOf(m: GalleryMessage, intl: IntlShape): string | undefined {
 export function ConversationGalleryProvider({
   messages,
   includeInternal = false,
+  visitorIsSelf = !includeInternal,
   children,
 }: {
   messages: GalleryMessage[]
@@ -87,6 +93,14 @@ export function ConversationGalleryProvider({
    *  should never reach a visitor DTO in the first place) can never surface
    *  in their gallery either. */
   includeInternal?: boolean
+  /** Whether the person viewing this thread IS the visitor whose messages
+   *  carry senderType 'visitor' — true in the widget/portal's own view of
+   *  their conversation (where a visitor's file is labeled "You", matching
+   *  the bubble), false in the agent inbox (where it belongs to someone
+   *  else and stays "Visitor"). Defaults to the opposite of `includeInternal`
+   *  since today's two mounts line up exactly that way; pass it explicitly
+   *  if that ever stops holding. */
+  visitorIsSelf?: boolean
   children: ReactNode
 }) {
   const intl = useIntl()
@@ -98,7 +112,7 @@ export function ConversationGalleryProvider({
       const safe = (m.attachments ?? []).filter(isSafeAttachment)
       if (safe.length === 0) continue
       startIndexByMessage.set(m.id, files.length)
-      const senderName = senderNameOf(m, intl)
+      const senderName = senderNameOf(m, intl, visitorIsSelf)
       safe.forEach((a, index) => {
         files.push(toViewerFile(a, { senderName, sentAt: m.createdAt, messageId: m.id, index }))
       })
@@ -110,7 +124,7 @@ export function ConversationGalleryProvider({
         return start === undefined ? -1 : start + localIndex
       },
     }
-  }, [messages, includeInternal, intl])
+  }, [messages, includeInternal, visitorIsSelf, intl])
 
   return (
     <ConversationGalleryContext.Provider value={value}>
