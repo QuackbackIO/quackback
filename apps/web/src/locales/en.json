@@ -505,7 +505,7 @@
   "portal.feedback.filter.search": "Search…",
   "widget.home.posting.selectBoard": "Select a board",
   "widget.home.posting.noAccess": "You don't have access to post on this board",
-  "widget.messenger.attach": "Attach image",
+  "widget.messenger.attach": "Attach files",
   "widget.messenger.block.collect.choose": "Choose…",
   "widget.messenger.block.collect.invalidNumber": "Enter a number.",
   "widget.messenger.block.collect.required": "This field is required.",

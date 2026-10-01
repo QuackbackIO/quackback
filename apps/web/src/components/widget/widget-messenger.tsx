@@ -7,7 +7,7 @@ import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { VisitorSurfaceRpcProvider } from '@/lib/client/visitor-surface-rpc'
 import { widgetVisitorRpc } from '@/lib/client/widget-visitor-rpc'
 import { useConversationPresence, markAgentPresentInCache } from './use-messenger-presence'
-import { useWidgetImageUpload } from './use-widget-image-upload'
+import { useWidgetFileUpload } from './use-widget-file-upload'
 
 interface WidgetMessengerProps {
   /** Whether the help center is available (gates in-conversation article suggestions). */
@@ -41,7 +41,7 @@ export function WidgetMessenger({
   // Presence (online/offline + office hours) comes from the one shared query —
   // SSR-seeded, polled once, and shared with every other widget surface.
   const presence = useConversationPresence(true)
-  const { upload } = useWidgetImageUpload()
+  const { upload } = useWidgetFileUpload()
 
   const onAgentActivity = useCallback(() => markAgentPresentInCache(queryClient), [queryClient])
 
@@ -72,7 +72,7 @@ export function WidgetMessenger({
         ensureSession={ensureSession}
         sessionVersion={sessionVersion}
         currentUser={user}
-        uploadImage={upload}
+        uploadFile={upload}
         presence={presence}
         onAgentActivity={onAgentActivity}
         helpSearch={helpSearch}

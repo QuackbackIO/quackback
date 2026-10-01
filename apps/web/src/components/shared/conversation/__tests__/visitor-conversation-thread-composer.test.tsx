@@ -171,7 +171,14 @@ async function renderThread({
         <VisitorSurfaceRpcProvider value={rpc as unknown as VisitorSurfaceRpc}>
           <VisitorConversationThread
             conversationTarget={existing ? CONVERSATION_ID : 'new'}
-            uploadImage={async () => 'https://example.com/a.png'}
+            uploadFile={async (file) => ({
+              fileId: 'file_1',
+              url: 'https://example.com/a.png',
+              name: file.name,
+              contentType: file.type,
+              size: file.size,
+              family: 'image',
+            })}
             presence={{ agentsOnline: true, withinOfficeHours: null, nextOpenAt: null }}
             linkPreviews={linkPreviews}
             helpSearch={helpSearch ? { search: helpSearch, onSelect: () => {} } : undefined}
