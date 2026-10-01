@@ -3,7 +3,7 @@
  * the body text. Only two parts are inflated, each with a cap, after the
  * archive's index passes the zip budget.
  */
-import { openZip } from '@/lib/server/content/zip-budget'
+import { openZip } from '@/lib/shared/files/zip-budget'
 import { docxDocumentText } from '@/lib/server/content/docx-text'
 import { normalizeExcerpt, type PreviewResult } from './result'
 

@@ -2,7 +2,7 @@
  * PowerPoint (.pptx, .pptm): the slide count and the text of the first
  * slides, in slide order. No thumbnail: nothing here can render a slide.
  */
-import { openZip } from '@/lib/server/content/zip-budget'
+import { openZip } from '@/lib/shared/files/zip-budget'
 import { decodeXmlEntities, elementContents } from '@/lib/server/content/docx-text'
 import { appPropertyCount } from './document'
 import { normalizeExcerpt, EXCERPT_MAX_CHARS, type PreviewResult } from './result'

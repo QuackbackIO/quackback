@@ -2,7 +2,7 @@
  * Minimal Word (.docx) text extraction for knowledge-document ingest.
  *
  * Deliberately dependency-free in the same sense as `./pdf-text`: a .docx is
- * a zip of XML, so the zip reader in `content/zip-budget` checks the archive
+ * a zip of XML, so the zip reader in `lib/shared/files/zip-budget` checks the archive
  * against its budget, inflates only `word/document.xml`, and a small scanner
  * pulls the text layer out of it — `<w:t>` run contents joined within a
  * paragraph, `</w:p>` treated as a line break, `<w:tab/>`/`<w:br/>` as their
@@ -14,7 +14,7 @@
  * extracts as empty, which the ingest service rejects with a clear error
  * rather than storing an empty document.
  */
-import { openZip } from '@/lib/server/content/zip-budget'
+import { openZip } from '@/lib/shared/files/zip-budget'
 
 /** A numeric character reference, or nothing when it names no character text can hold. */
 function codePoint(n: number): string {

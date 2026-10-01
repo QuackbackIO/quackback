@@ -93,6 +93,29 @@ describe('sniffFile: documents', () => {
       family: 'archive',
     })
   })
+  it('reads a zip that claims millions of entries in bounded time', () => {
+    // A 188-byte zip whose zip64 end record claims five million entries: a
+    // reader that trusts the count walks millions of phantom entries.
+    const b = new Uint8Array(188)
+    const v = new DataView(b.buffer)
+    const z64 = 60
+    v.setUint32(z64, 0x06064b50, true) // zip64 end record
+    v.setUint32(z64 + 24, 5_000_000, true) // entries on this disk
+    v.setUint32(z64 + 32, 5_000_000, true) // entries
+    v.setUint32(z64 + 48, 0, true) // directory offset
+    const eocd = 188 - 22
+    v.setUint32(eocd - 20, 0x07064b50, true) // zip64 locator
+    v.setUint32(eocd - 12, z64, true)
+    v.setUint32(eocd, 0x06054b50, true)
+    v.setUint16(eocd + 8, 0xffff, true)
+    v.setUint16(eocd + 10, 0xffff, true)
+    v.setUint32(eocd + 16, 0xffffffff, true)
+    b.set([0x50, 0x4b, 0x03, 0x04])
+    const started = performance.now()
+    expect(sniffFile(b, 'a.docx').family).toBe('archive')
+    expect(performance.now() - started).toBeLessThan(50)
+  })
+
   it('does not trust a corrupt zip to be anything', () => {
     expect(sniffFile(bytes([0x50, 0x4b, 0x03, 0x04], 'garbage'), 'a.docx').family).toBe('archive')
   })

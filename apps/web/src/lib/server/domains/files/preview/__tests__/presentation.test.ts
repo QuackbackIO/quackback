@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { zipSync, strToU8 } from 'fflate'
 import { derivePresentationPreview } from '../presentation'
-import { ZipBudgetError } from '@/lib/server/content/zip-budget'
+import { ZipBudgetError } from '@/lib/shared/files/zip-budget'
 
 function slide(...paragraphs: string[]): string {
   return (

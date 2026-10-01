@@ -6,7 +6,7 @@
  * against a clock: a file that takes longer than `ENGINE_TIMEOUT_MS` is
  * treated as too large to show.
  */
-import { unzipSync } from 'fflate'
+import { readZipIndex, ZipBudgetError, type ZipEntry } from '@/lib/shared/files/zip-budget'
 import type { EngineFailure } from '../types'
 
 export const MAX_ZIP_ENTRIES = 2_000
@@ -28,26 +28,25 @@ export function checkZipBudget(
 ): ZipBudgetResult {
   const maxEntries = limits.maxEntries ?? MAX_ZIP_ENTRIES
   const maxBytes = limits.maxUncompressedBytes ?? MAX_ZIP_UNCOMPRESSED_BYTES
-  let entries = 0
-  let uncompressedBytes = 0
-  let overBudget = false
+  // The index reader checks every entry against the bytes actually present
+  // and refuses an index that lists more than `maxEntries`, so a zip that
+  // claims millions of entries is refused before any walk.
+  let entries: ZipEntry[]
   try {
-    unzipSync(bytes, {
-      filter(file) {
-        entries++
-        uncompressedBytes += file.originalSize
-        if (file.originalSize > Math.max(file.size, 1) * MAX_DEFLATE_RATIO) overBudget = true
-        return false
-      },
-    })
-  } catch {
-    return { ok: false, failure: 'corrupt' }
+    entries = readZipIndex(bytes, { maxEntries })
+  } catch (error) {
+    return { ok: false, failure: error instanceof ZipBudgetError ? 'too_large' : 'corrupt' }
   }
-  if (entries === 0) return { ok: false, failure: 'corrupt' }
-  if (overBudget || entries > maxEntries || uncompressedBytes > maxBytes) {
-    return { ok: false, failure: 'too_large' }
+  if (entries.length === 0) return { ok: false, failure: 'corrupt' }
+  let uncompressedBytes = 0
+  for (const entry of entries) {
+    uncompressedBytes += entry.originalSize
+    if (entry.originalSize > Math.max(entry.compressedSize, 1) * MAX_DEFLATE_RATIO) {
+      return { ok: false, failure: 'too_large' }
+    }
   }
-  return { ok: true, entries, uncompressedBytes }
+  if (uncompressedBytes > maxBytes) return { ok: false, failure: 'too_large' }
+  return { ok: true, entries: entries.length, uncompressedBytes }
 }
 
 /** True when the bytes open with a zip local file header. */

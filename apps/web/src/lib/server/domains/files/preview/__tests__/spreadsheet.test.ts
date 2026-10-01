@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import XLSX from 'xlsx'
 import { zipSync } from 'fflate'
 import { deriveSpreadsheetPreview } from '../spreadsheet'
-import { ZipBudgetError } from '@/lib/server/content/zip-budget'
+import { ZipBudgetError } from '@/lib/shared/files/zip-budget'
 
 const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 

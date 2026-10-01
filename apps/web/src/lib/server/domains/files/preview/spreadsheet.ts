@@ -5,7 +5,7 @@
  * declared sizes first; it then reads only the first sheet, and only its
  * first rows, with formulas, styles and HTML off.
  */
-import { openZip, verifyZipSizes } from '@/lib/server/content/zip-budget'
+import { openZip, verifyZipSizes } from '@/lib/shared/files/zip-budget'
 import {
   NO_DEADLINE,
   cell,

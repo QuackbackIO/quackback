@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { zipSync, strToU8 } from 'fflate'
 import { deriveDocumentPreview } from '../document'
-import { ZipBudgetError } from '@/lib/server/content/zip-budget'
+import { ZipBudgetError } from '@/lib/shared/files/zip-budget'
 
 function documentXml(...paragraphs: string[]): string {
   return (

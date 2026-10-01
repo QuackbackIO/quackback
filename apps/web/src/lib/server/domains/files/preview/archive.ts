@@ -3,7 +3,7 @@
  * the office-package budget does not apply; a generous cap keeps a forged
  * index from making the walk itself expensive.
  */
-import { readZipIndex } from '@/lib/server/content/zip-budget'
+import { readZipIndex } from '@/lib/shared/files/zip-budget'
 import type { PreviewResult } from './result'
 
 const MAX_ENTRIES = 1_000_000

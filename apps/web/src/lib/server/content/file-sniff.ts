@@ -12,7 +12,7 @@
  * names of its entries) without inflating anything: a zip bomb costs nothing
  * here.
  */
-import { unzipSync } from 'fflate'
+import { readZipIndex } from '@/lib/shared/files/zip-budget'
 import {
   fileExtension,
   isBlockedExtension,
@@ -85,21 +85,17 @@ function result(
 
 /**
  * Entry names from a zip's central directory, without inflating any entry.
- * Null when the bytes are not a readable zip.
+ * Null when the bytes are not a readable zip or list more entries than any
+ * package this sniffer names would. The index reader checks each entry
+ * against the bytes actually present, so a zip that claims millions of
+ * entries costs at most one pass over its own bytes.
  */
 function zipEntryNames(buf: Uint8Array): string[] | null {
-  const names: string[] = []
   try {
-    unzipSync(buf, {
-      filter(file) {
-        if (names.length < 10_000) names.push(file.name)
-        return false
-      },
-    })
+    return readZipIndex(buf, { maxEntries: 10_000 }).map((entry) => entry.name)
   } catch {
     return null
   }
-  return names
 }
 
 /**

@@ -23,6 +23,26 @@ function withDeclaredSize(zip: Uint8Array, size: number): Uint8Array {
 }
 
 describe('checkZipBudget', () => {
+  it('refuses a zip that claims millions of entries without walking them', () => {
+    const b = new Uint8Array(188)
+    const v = new DataView(b.buffer)
+    const z64 = 60
+    v.setUint32(z64, 0x06064b50, true)
+    v.setUint32(z64 + 24, 5_000_000, true)
+    v.setUint32(z64 + 32, 5_000_000, true)
+    const eocd = 188 - 22
+    v.setUint32(eocd - 20, 0x07064b50, true)
+    v.setUint32(eocd - 12, z64, true)
+    v.setUint32(eocd, 0x06054b50, true)
+    v.setUint16(eocd + 8, 0xffff, true)
+    v.setUint16(eocd + 10, 0xffff, true)
+    v.setUint32(eocd + 16, 0xffffffff, true)
+    b.set([0x50, 0x4b, 0x03, 0x04])
+    const started = performance.now()
+    expect(checkZipBudget(b)).toEqual({ ok: false, failure: 'too_large' })
+    expect(performance.now() - started).toBeLessThan(50)
+  })
+
   it('passes a small package and reports what its index declares', () => {
     const zip = zipOf({
       '[Content_Types].xml': strToU8('<Types/>'),
