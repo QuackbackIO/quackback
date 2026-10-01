@@ -18,6 +18,13 @@ function image(name: string): ConversationAttachment {
 }
 
 describe('AttachmentList', () => {
+  it("lines attachments up with their own message's side", () => {
+    const own = render(<AttachmentList attachments={[pdf('a.pdf')]} align="end" />)
+    expect(own.container.firstElementChild!.className).toContain('items-end')
+    const peer = render(<AttachmentList attachments={[pdf('a.pdf')]} />)
+    expect(peer.container.firstElementChild!.className).toContain('items-start')
+  })
+
   it('renders nothing for an empty list', () => {
     const { container } = render(<AttachmentList attachments={[]} />)
     expect(container.firstChild).toBeNull()

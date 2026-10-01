@@ -770,6 +770,7 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
           <AttachmentList
             attachments={message.attachments}
             context={{ senderName: authorName, sentAt: message.createdAt, messageId: message.id }}
+            align={self ? 'end' : 'start'}
           />
         )}
 
@@ -948,6 +949,7 @@ export function VisitorMessageBubble({
           attachments={attachments}
           context={{ senderName: authorName, sentAt, messageId }}
           compact={compact}
+          align={self ? 'end' : 'start'}
         />
       )}
 

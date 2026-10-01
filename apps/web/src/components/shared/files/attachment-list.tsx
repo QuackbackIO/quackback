@@ -12,6 +12,7 @@
  * thread. Outside a `ConversationGalleryProvider` (an isolated render, e.g. a
  * unit test) it falls back to a gallery of just this message's attachments.
  */
+import { cn } from '@/lib/shared/utils/cn'
 import { useFileViewer } from './file-viewer-context'
 import { useConversationGallery } from './conversation-gallery'
 import { toViewerFile, type ViewerFile } from './types'
@@ -54,12 +55,15 @@ export interface AttachmentListProps {
   /** Narrow surfaces (the widget): non-image, non-video files render as a
    *  compact row instead of a card. */
   compact?: boolean
+  /** The side of the thread the message sits on; attachments line up with it. */
+  align?: 'start' | 'end'
 }
 
 export function AttachmentList({
   attachments,
   context = {},
   compact = false,
+  align = 'start',
 }: AttachmentListProps) {
   const { open } = useFileViewer()
   const gallery = useConversationGallery()
@@ -94,14 +98,21 @@ export function AttachmentList({
   const localIndexOf = new Map(safe.map((a, i) => [a, i]))
 
   return (
-    <div className="mt-1.5 flex w-full max-w-[520px] flex-col gap-2">
+    <div
+      className={cn(
+        'mt-1.5 flex w-full max-w-[520px] flex-col gap-2',
+        align === 'end' ? 'items-end' : 'items-start'
+      )}
+    >
       {images.length > 0 && (
-        <ImageRow images={images} localIndexOf={localIndexOf} onOpen={openAt} />
+        <ImageRow images={images} localIndexOf={localIndexOf} onOpen={openAt} compact={compact} />
       )}
       {files.length > 0 && (
         <div
           className={
-            compact ? 'flex flex-col gap-1.5' : 'grid grid-cols-[repeat(2,minmax(0,248px))] gap-2'
+            compact
+              ? 'flex w-full max-w-[280px] flex-col gap-1.5'
+              : 'grid grid-cols-[repeat(2,minmax(0,248px))] gap-2'
           }
         >
           {files.map((a) => {
@@ -138,10 +149,12 @@ function ImageRow({
   images,
   localIndexOf,
   onOpen,
+  compact,
 }: {
   images: ConversationAttachment[]
   localIndexOf: Map<ConversationAttachment, number>
   onOpen: (localIndex: number) => void
+  compact: boolean
 }) {
   if (images.length === 1) {
     const a = images[0]!
@@ -151,9 +164,16 @@ function ImageRow({
         type="button"
         onClick={() => onOpen(localIndex)}
         aria-label={`Open ${a.name || 'image'}`}
-        className="block w-fit max-w-[248px] cursor-zoom-in overflow-hidden rounded-[10px] border border-border bg-muted"
+        className={cn(
+          'block w-fit cursor-zoom-in overflow-hidden rounded-[10px] border border-border bg-muted',
+          compact ? 'max-w-[200px]' : 'max-w-[248px]'
+        )}
       >
-        <img src={a.url} alt="" className="block max-h-80 w-full object-contain" />
+        <img
+          src={a.url}
+          alt=""
+          className={cn('block w-full object-contain', compact ? 'max-h-60' : 'max-h-80')}
+        />
       </button>
     )
   }
