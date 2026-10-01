@@ -174,7 +174,9 @@ function DownloadLink({ url, name, className }: { url: string; name: string; cla
       aria-label={label}
       title={intl.formatMessage({ id: 'files.viewer.download', defaultMessage: 'Download' })}
       className={cn(
-        'flex shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover/card:opacity-100 group-focus-within/card:opacity-100',
+        // Hidden until hover/focus on a pointer that supports hover; a touch
+        // device has no hover to reveal it, so it stays visible there instead.
+        'flex shrink-0 items-center justify-center rounded-md text-muted-foreground transition-opacity [@media(hover:hover)]:opacity-0 hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover/card:opacity-100 group-focus-within/card:opacity-100',
         className
       )}
     >

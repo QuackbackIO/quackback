@@ -226,4 +226,11 @@ describe('FileRow', () => {
       downloadUrl(attachment().url, 'invoice.pdf')
     )
   })
+
+  it('keeps the download icon visible without hover, for touch devices', () => {
+    const { getByRole } = render(<FileRow attachment={attachment()} onOpen={() => {}} />)
+    const classes = getByRole('link', { name: 'Download invoice.pdf' }).className.split(/\s+/)
+    expect(classes).not.toContain('opacity-0')
+    expect(classes).toContain('[@media(hover:hover)]:opacity-0')
+  })
 })
