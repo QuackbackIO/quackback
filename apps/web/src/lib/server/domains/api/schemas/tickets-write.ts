@@ -17,13 +17,25 @@ import {
 import { UnauthorizedErrorSchema, NotFoundErrorSchema, ValidationErrorSchema } from './common'
 import { TICKET_TYPES, TICKET_PRIORITIES, TicketSchema, TicketMessageSchema } from './tickets'
 
-// Attachment ref accepted on a write (name/contentType optional; the service
-// re-validates count/size/url).
+// Attachment ref accepted on a write: a stored file by id (upload it first
+// with POST /files, then attach the fileId it returns — url/name/contentType/
+// size are rebuilt from the stored file and do not need to be repeated here),
+// or a legacy trusted URL (url + size, no fileId). The service re-validates
+// either shape.
 const TicketWriteAttachmentSchema = z.object({
-  url: z.string().meta({ example: 'https://cdn.example.com/uploads/screenshot.png' }),
+  fileId: z.string().optional().meta({
+    description: 'Id returned by POST /files',
+    example: 'file_01h455vb4pex5vsknk084sn02q',
+  }),
+  url: z.string().optional().meta({
+    description: 'A trusted, already-stored URL; only used when fileId is omitted',
+  }),
   name: z.string().optional().meta({ example: 'screenshot.png' }),
   contentType: z.string().optional().meta({ example: 'image/png' }),
-  size: z.number().meta({ description: 'Size in bytes', example: 48213 }),
+  size: z
+    .number()
+    .optional()
+    .meta({ description: 'Size in bytes; required only when fileId is omitted', example: 48213 }),
 })
 
 // Request bodies for the ticket write routes.
