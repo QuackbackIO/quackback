@@ -179,13 +179,6 @@ const hostPageHtml = () =>
 const SWEEP_PAGES: { path: string; as: Actor }[] = [
   ...[
     'analytics',
-    'automation',
-    'automation/agent',
-    'automation/connectors',
-    'automation/copilot',
-    'automation/performance',
-    'automation/skills',
-    'automation/workflows',
     'changelog',
     'feedback',
     'help-center',
@@ -196,6 +189,7 @@ const SWEEP_PAGES: { path: string; as: Actor }[] = [
     'users?sort=newest',
   ].map((page) => ({ path: `/admin/${page}`, as: 'admin' as const })),
   ...[
+    'agent',
     'billing',
     'boards',
     'changelog',
@@ -204,7 +198,9 @@ const SWEEP_PAGES: { path: string; as: Actor }[] = [
     'channels/github',
     'channels/messenger',
     'companies',
+    'connectors',
     'conversation-data',
+    'copilot',
     'developers',
     'domains',
     'general',
@@ -222,6 +218,7 @@ const SWEEP_PAGES: { path: string; as: Actor }[] = [
     'portal',
     'security/authentication',
     'security/sso/new',
+    'skills',
     'sla',
     'statuses',
     'tags',
@@ -229,6 +226,7 @@ const SWEEP_PAGES: { path: string; as: Actor }[] = [
     'ticket-types',
     'widget',
     'widget/install',
+    'workflows',
   ].map((page) => ({ path: `/admin/settings/${page}`, as: 'admin' as const })),
   ...['/roadmap', '/changelog', '/hc', '/support', '/notifications'].map((path) => ({
     path,

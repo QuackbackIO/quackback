@@ -3,9 +3,9 @@ import { setSupportSurfaces } from '../../utils/db-helpers'
 
 /**
  * Smoke coverage for the rebuilt workflows admin surface (support platform
- * §4.6): the grouped list at /admin/automation/workflows, the "New workflow"
+ * §4.6): the grouped list at /admin/settings/workflows, the "New workflow"
  * template gallery, and the fullscreen builder at
- * /admin/automation/workflows/$workflowId.
+ * /admin/settings/workflows/$workflowId.
  *
  * The "Route by keywords" template ships with two needs-setup team
  * placeholders (see workflow-templates.ts), so creating it is also the
@@ -48,7 +48,7 @@ async function openTemplateGallery(page: Page) {
  *  that deletion works end to end. Loops (rather than asserting a single
  *  row) so it also mops up any workflow left behind by a prior failed run. */
 async function deleteWorkflowsNamed(page: Page, name: string) {
-  await page.goto('/admin/automation/workflows')
+  await page.goto('/admin/settings/workflows')
   for (let i = 0; i < 5; i++) {
     const row = workflowRow(page, name)
     if (!(await row.isVisible().catch(() => false))) return
@@ -78,7 +78,7 @@ test.describe('Admin Workflows', { tag: '@smoke' }, () => {
   })
 
   test('list page renders with a New workflow control', async ({ page }) => {
-    await page.goto('/admin/automation/workflows')
+    await page.goto('/admin/settings/workflows')
 
     await expect(page.getByRole('heading', { name: 'Workflows', exact: true })).toBeVisible({
       timeout: 15000,
@@ -89,7 +89,7 @@ test.describe('Admin Workflows', { tag: '@smoke' }, () => {
   test('create from template shows issues, an unresolved step, and needs-setup on the list', async ({
     page,
   }) => {
-    await page.goto('/admin/automation/workflows')
+    await page.goto('/admin/settings/workflows')
 
     const galleryDialog = await openTemplateGallery(page)
 
@@ -104,7 +104,7 @@ test.describe('Admin Workflows', { tag: '@smoke' }, () => {
 
     // Picking the template creates the workflow and navigates to its builder.
     await templateCard.click()
-    await expect(page).toHaveURL(/\/admin\/automation\/workflows\/[^/]+$/, { timeout: 15000 })
+    await expect(page).toHaveURL(/\/admin\/settings\/workflows\/[^/]+$/, { timeout: 15000 })
 
     // Top bar: name + a Save control (disabled — nothing edited yet).
     await expect(page.getByRole('textbox', { name: 'Workflow name' })).toHaveValue(TEMPLATE_NAME, {
@@ -142,7 +142,7 @@ test.describe('Admin Workflows', { tag: '@smoke' }, () => {
 
     // Back to the list: the created workflow shows "Needs setup" and Draft.
     await page.getByRole('link', { name: 'Back to workflows' }).click()
-    await expect(page).toHaveURL(/\/admin\/automation\/workflows$/, { timeout: 15000 })
+    await expect(page).toHaveURL(/\/admin\/settings\/workflows$/, { timeout: 15000 })
     const row = workflowRow(page, TEMPLATE_NAME)
     await expect(row).toBeVisible({ timeout: 15000 })
     await expect(row.getByText('Needs setup')).toBeVisible()
@@ -156,7 +156,7 @@ test.describe('Admin Workflows', { tag: '@smoke' }, () => {
   test('front-door triage bot hero template opens with reply-button paths and needs setup', async ({
     page,
   }) => {
-    await page.goto('/admin/automation/workflows')
+    await page.goto('/admin/settings/workflows')
 
     const galleryDialog = await openTemplateGallery(page)
 
@@ -170,7 +170,7 @@ test.describe('Admin Workflows', { tag: '@smoke' }, () => {
     })
     await expect(templateCard).toBeVisible()
     await templateCard.click()
-    await expect(page).toHaveURL(/\/admin\/automation\/workflows\/[^/]+$/, { timeout: 15000 })
+    await expect(page).toHaveURL(/\/admin\/settings\/workflows\/[^/]+$/, { timeout: 15000 })
 
     await expect(page.getByRole('textbox', { name: 'Workflow name' })).toHaveValue(
       FRONT_DOOR_TEMPLATE_NAME,
@@ -210,7 +210,7 @@ test.describe('Admin Workflows', { tag: '@smoke' }, () => {
 
     // Cleanup: delete through the row's own dropdown + confirm dialog.
     await page.getByRole('link', { name: 'Back to workflows' }).click()
-    await expect(page).toHaveURL(/\/admin\/automation\/workflows$/, { timeout: 15000 })
+    await expect(page).toHaveURL(/\/admin\/settings\/workflows$/, { timeout: 15000 })
     await deleteWorkflowsNamed(page, FRONT_DOOR_TEMPLATE_NAME)
     await expect(workflowRow(page, FRONT_DOOR_TEMPLATE_NAME)).toBeHidden()
   })

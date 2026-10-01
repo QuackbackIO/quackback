@@ -286,24 +286,11 @@
       "htmlTransferKB": 27.5,
       "componentRenders": 330
     },
-    "sweep:doc:admin:/admin/automation": {
-      "dbQueries": 8,
-      "htmlKB": 123.2
-    },
-    "sweep:ui:admin:/admin/automation": {
-      "dbQueries": 8,
-      "serverRequests": 1,
-      "requests": 125,
-      "jsRequests": 120,
-      "jsKB": 446.6,
-      "htmlTransferKB": 27,
-      "componentRenders": 579
-    },
-    "sweep:doc:admin:/admin/automation/agent": {
+    "sweep:doc:admin:/admin/settings/agent": {
       "dbQueries": 6,
       "htmlKB": 126.1
     },
-    "sweep:ui:admin:/admin/automation/agent": {
+    "sweep:ui:admin:/admin/settings/agent": {
       "dbQueries": 16,
       "serverRequests": 3,
       "requests": 126,
@@ -312,11 +299,11 @@
       "htmlTransferKB": 28.2,
       "componentRenders": 459
     },
-    "sweep:doc:admin:/admin/automation/connectors": {
+    "sweep:doc:admin:/admin/settings/connectors": {
       "dbQueries": 7,
       "htmlKB": 147.4
     },
-    "sweep:ui:admin:/admin/automation/connectors": {
+    "sweep:ui:admin:/admin/settings/connectors": {
       "dbQueries": 7,
       "serverRequests": 1,
       "requests": 103,
@@ -325,11 +312,11 @@
       "htmlTransferKB": 28.8,
       "componentRenders": 343
     },
-    "sweep:doc:admin:/admin/automation/copilot": {
+    "sweep:doc:admin:/admin/settings/copilot": {
       "dbQueries": 6,
       "htmlKB": 122.5
     },
-    "sweep:ui:admin:/admin/automation/copilot": {
+    "sweep:ui:admin:/admin/settings/copilot": {
       "dbQueries": 16,
       "serverRequests": 3,
       "requests": 122,
@@ -338,24 +325,11 @@
       "htmlTransferKB": 27.9,
       "componentRenders": 380
     },
-    "sweep:doc:admin:/admin/automation/performance": {
-      "dbQueries": 24,
-      "htmlKB": 127.2
-    },
-    "sweep:ui:admin:/admin/automation/performance": {
-      "dbQueries": 24,
-      "serverRequests": 1,
-      "requests": 96,
-      "jsRequests": 91,
-      "jsKB": 463.8,
-      "htmlTransferKB": 28.3,
-      "componentRenders": 322
-    },
-    "sweep:doc:admin:/admin/automation/skills": {
+    "sweep:doc:admin:/admin/settings/skills": {
       "dbQueries": 7,
       "htmlKB": 118.1
     },
-    "sweep:ui:admin:/admin/automation/skills": {
+    "sweep:ui:admin:/admin/settings/skills": {
       "dbQueries": 7,
       "serverRequests": 1,
       "requests": 103,
@@ -364,11 +338,11 @@
       "htmlTransferKB": 27.3,
       "componentRenders": 288
     },
-    "sweep:doc:admin:/admin/automation/workflows": {
+    "sweep:doc:admin:/admin/settings/workflows": {
       "dbQueries": 7,
       "htmlKB": 133.3
     },
-    "sweep:ui:admin:/admin/automation/workflows": {
+    "sweep:ui:admin:/admin/settings/workflows": {
       "dbQueries": 13,
       "serverRequests": 2,
       "requests": 140,
