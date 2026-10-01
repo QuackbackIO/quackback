@@ -66,4 +66,19 @@ describe('extractDocxText', () => {
   it('returns an empty string for input that is not a zip at all', () => {
     expect(extractDocxText(strToU8('not a docx file'))).toBe('')
   })
+
+  it('refuses an archive whose index is over the zip budget', () => {
+    const files: Record<string, Uint8Array> = {
+      'word/document.xml': strToU8(
+        '<w:document><w:body>' + paragraph('Hidden behind padding') + '</w:body></w:document>'
+      ),
+    }
+    for (let i = 0; i < 2001; i++) files[`pad/${i}.xml`] = new Uint8Array(0)
+    expect(extractDocxText(zipSync(files))).toBe('')
+  })
+
+  it('drops numeric entities that are not characters instead of throwing', () => {
+    const bytes = buildDocx(paragraph('a&#x110000;b&#0;c&#xD800;d'))
+    expect(extractDocxText(bytes)).toBe('abcd')
+  })
 })
