@@ -27,6 +27,7 @@ import { AnalyticsVisitorCards, type VisitorMetricKey } from './analytics-visito
 import { AnalyticsVisitorPanels } from './analytics-visitor-panels'
 import { AnalyticsStatRow, type AnalyticsStatProps } from './analytics-stat-row'
 import { AnalyticsQuinnSection } from './analytics-quinn-section'
+import { AnalyticsSlaCards } from './analytics-sla-cards'
 import { AnalyticsEmpty } from './analytics-empty'
 import { AnalyticsBoardChart } from './analytics-board-chart'
 import { AnalyticsChangelogCard } from './analytics-changelog-card'
@@ -453,6 +454,7 @@ export function AnalyticsPage() {
                         <AnalyticsCsatDistribution distribution={data.csat.distribution} />
                       </StatSection>
                     )}
+                    <AnalyticsSlaCards range={range} />
                   </div>
                 )}
 
