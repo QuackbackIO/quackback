@@ -4,6 +4,7 @@ import type { ConversationId, ConversationMessageId, TicketId } from '@quackback
 import { listFlaggedMessagesFn } from '@/lib/server/functions/conversation'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Spinner } from '@/components/shared/spinner'
+import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
 
 /** A flagged-message row's navigation target, discriminated by which parent it
@@ -14,16 +15,6 @@ import { cn } from '@/lib/shared/utils'
  *  deep-link-jump capability yet (§2.5). */
 export type SavedMessageTarget =
   { conversationId: ConversationId; messageId: ConversationMessageId } | { ticketId: TicketId }
-
-function relativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
-  const m = Math.floor(diff / 60_000)
-  if (m < 1) return 'now'
-  if (m < 60) return `${m}m`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h`
-  return `${Math.floor(h / 24)}d`
-}
 
 /**
  * The middle column for the "Saved messages" view: the agent's own flagged
@@ -88,9 +79,11 @@ export function SavedMessagesColumn({
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate text-sm font-medium">{m.authorName ?? 'Unknown'}</span>
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {relativeTime(m.flaggedAt)}
-                </span>
+                <TimeAgo
+                  date={m.flaggedAt}
+                  short
+                  className="shrink-0 text-xs text-muted-foreground"
+                />
               </div>
               <p className="truncate text-xs text-muted-foreground">{m.preview}</p>
               <p className="truncate text-xs text-muted-foreground/60">

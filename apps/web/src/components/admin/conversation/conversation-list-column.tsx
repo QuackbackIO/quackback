@@ -34,6 +34,7 @@ import { Badge } from '@/components/ui/badge'
 
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
+import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
 import { useActivationAction } from '@/lib/client/hooks/use-activation-action'
 import { ActivationActionButton } from '@/components/admin/activation-action-button'
@@ -42,16 +43,6 @@ import { useUserRole } from '@/lib/client/hooks/use-root-context'
 
 /** Ignore scroll-by hovers; only warm a thread the pointer actually rests on. */
 const PREFETCH_DELAY_MS = 120
-
-function relativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
-  const m = Math.floor(diff / 60_000)
-  if (m < 1) return 'now'
-  if (m < 60) return `${m}m`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h`
-  return `${Math.floor(h / 24)}d`
-}
 
 /** Stable string id for any inbox item (a conversation or ticket TypeID). */
 function itemId(item: InboxItemDTO): string {
@@ -606,9 +597,7 @@ export const ConversationRow = memo(function ConversationRow({
               )}
               {item.searchSnippet && (
                 <>
-                  <span className="text-xs text-muted-foreground">
-                    {relativeTime(c.lastMessageAt)}
-                  </span>
+                  <TimeAgo date={c.lastMessageAt} short className="text-xs text-muted-foreground" />
                   {/* Rightmost on the row, so the column's left edge is the
                       same constant offset from the right edge on every row. */}
                   {assigneeColumn(c)}
@@ -641,9 +630,7 @@ export const ConversationRow = memo(function ConversationRow({
                     {CONVERSATION_SPAM_FILED_BY_LABELS[c.spamReason]}
                   </Badge>
                 )}
-                <span className="text-xs text-muted-foreground">
-                  {relativeTime(c.lastMessageAt)}
-                </span>
+                <TimeAgo date={c.lastMessageAt} short className="text-xs text-muted-foreground" />
                 {/* Rightmost on the row, so the column's left edge is the
                     same constant offset from the right edge on every row. */}
                 {assigneeColumn(c)}
@@ -706,9 +693,7 @@ const TicketRow = memo(function TicketRow({
             <p className="min-w-0 truncate text-xs text-muted-foreground">
               {t.lastMessagePreview ?? 'No messages yet'}
             </p>
-            <span className="shrink-0 text-xs text-muted-foreground">
-              {relativeTime(t.updatedAt)}
-            </span>
+            <TimeAgo date={t.updatedAt} short className="shrink-0 text-xs text-muted-foreground" />
           </div>
         </div>
       </button>

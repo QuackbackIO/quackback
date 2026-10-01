@@ -9,7 +9,7 @@ import { act } from 'react'
 import { hydrateRoot } from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { TimeAgo } from '../time-ago'
+import { getShortTimeAgo, TimeAgo } from '../time-ago'
 
 const POSTED = new Date('2026-09-26T10:00:00.000Z')
 
@@ -33,5 +33,44 @@ describe('TimeAgo hydration', () => {
 
     expect(errors).toEqual([])
     expect(container.textContent).toBe('about 2 hours ago')
+  })
+
+  it('hydrates the short label without error when it ticked over a minute', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-09-26T10:04:59.900Z'))
+    const container = document.createElement('div')
+    container.innerHTML = renderToString(<TimeAgo date={POSTED} short />)
+    expect(container.textContent).toBe('4m')
+
+    vi.setSystemTime(new Date('2026-09-26T10:05:00.400Z'))
+    const errors: unknown[] = []
+    await act(async () => {
+      hydrateRoot(container, <TimeAgo date={POSTED} short />, {
+        onRecoverableError: (error) => errors.push(error),
+      })
+    })
+
+    expect(errors).toEqual([])
+    expect(container.textContent).toBe('5m')
+  })
+})
+
+describe('getShortTimeAgo', () => {
+  it.each([
+    ['2026-09-26T10:00:59.000Z', 'now'],
+    ['2026-09-26T10:01:00.000Z', '1m'],
+    ['2026-09-26T10:59:59.000Z', '59m'],
+    ['2026-09-26T11:00:00.000Z', '1h'],
+    ['2026-09-27T09:59:59.000Z', '23h'],
+    ['2026-09-27T10:00:00.000Z', '1d'],
+  ])('at %s reads %s', (now, label) => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(now))
+    expect(getShortTimeAgo(POSTED)).toBe(label)
+  })
+
+  it('is empty for a missing or invalid date', () => {
+    expect(getShortTimeAgo(null)).toBe('')
+    expect(getShortTimeAgo('not a date')).toBe('')
   })
 })
