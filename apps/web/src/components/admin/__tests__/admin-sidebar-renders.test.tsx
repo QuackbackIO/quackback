@@ -196,11 +196,11 @@ describe('AdminSidebar renders', () => {
       permissions: [PERMISSIONS.ASSISTANT_MANAGE],
     }
     const { router, container } = await mount()
-    expect(container.querySelector('aside a[href="/admin/automation"]')).toBeTruthy()
+    expect(container.querySelector('aside a[href="/admin/settings"]')).toBeTruthy()
 
     adminAnswer = { principal: { role: 'member' }, permissions: [] }
     await act(() => router.invalidate())
 
-    expect(container.querySelector('aside a[href="/admin/automation"]')).toBeNull()
+    expect(container.querySelector('aside a[href="/admin/settings"]')).toBeNull()
   })
 })

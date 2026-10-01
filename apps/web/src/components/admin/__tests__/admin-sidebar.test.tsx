@@ -62,14 +62,16 @@ vi.mock('@/components/notifications', () => ({ NotificationBell: () => null }))
 
 vi.mock('@/lib/server/functions/conversation', () => ({ setAgentAvailabilityFn: vi.fn() }))
 
-const { mockSiblings, mockBillingEnabled, mockPending, moderationQueryEnabled } = vi.hoisted(() => ({
-  mockPending: { current: 0 },
-  moderationQueryEnabled: { current: null as boolean | null },
-  mockSiblings: {
-    current: [] as Array<{ instanceId: string; displayName: string; url: string | null }>,
-  },
-  mockBillingEnabled: { current: false },
-}))
+const { mockSiblings, mockBillingEnabled, mockPending, moderationQueryEnabled } = vi.hoisted(
+  () => ({
+    mockPending: { current: 0 },
+    moderationQueryEnabled: { current: null as boolean | null },
+    mockSiblings: {
+      current: [] as Array<{ instanceId: string; displayName: string; url: string | null }>,
+    },
+    mockBillingEnabled: { current: false },
+  })
+)
 
 vi.mock('@/lib/server/functions/owner-workspaces', () => ({
   listOwnerWorkspacesFn: vi.fn(async () => mockSiblings.current),
@@ -78,13 +80,15 @@ vi.mock('@/lib/server/functions/owner-workspaces', () => ({
 
 import { AdminSidebar, buildRailItems } from '../admin-sidebar'
 import { DEFAULT_FEATURE_FLAGS } from '@/lib/shared/types/settings'
+import { ALL_PERMISSIONS, PERMISSIONS } from '@/lib/shared/permissions'
 
 function renderSidebar(
   userRole: 'admin' | 'member',
-  opts: { flags?: Record<string, boolean>; name?: string } = {}
+  opts: { flags?: Record<string, boolean>; name?: string; permissions?: string[] } = {}
 ) {
   mockRole.current = userRole
   mockGetRouteContext.mockReturnValue({
+    permissions: opts.permissions ?? (userRole === 'admin' ? ALL_PERMISSIONS : []),
     session: { user: { name: 'Test', email: 'test@example.com', image: null } },
     settings: {
       featureFlags: opts.flags ?? {},
@@ -159,8 +163,8 @@ const ALL_ON = {
 }
 
 describe('buildRailItems', () => {
-  it('orders Home, Feedback, Roadmap, Changelog, Support, Help Center, Status, Analytics, AI & Automation, Users', () => {
-    const items = buildRailItems(ALL_ON, true)
+  it('orders Home, Feedback, Roadmap, Changelog, Support, Help Center, Status, Analytics, Users', () => {
+    const items = buildRailItems(ALL_ON)
     expect(items.map((i) => [i.label, i.href])).toEqual([
       ['Home', '/admin'],
       ['Feedback', '/admin/feedback'],
@@ -170,18 +174,17 @@ describe('buildRailItems', () => {
       ['Help Center', '/admin/help-center'],
       ['Status', '/admin/status'],
       ['Analytics', '/admin/analytics'],
-      ['AI & Automation', '/admin/automation'],
       ['Users', '/admin/users'],
     ])
   })
 
-  it('keeps Home when every product is off, and gates AI & Automation on permission', () => {
-    const items = buildRailItems({}, false)
+  it('keeps Home when every product is off', () => {
+    const items = buildRailItems({})
     expect(items.map((i) => i.label)).toEqual(['Home', 'Analytics', 'Users'])
   })
 
   it('matches Home on its own path only', () => {
-    const items = buildRailItems(ALL_ON, true)
+    const items = buildRailItems(ALL_ON)
     expect(items.find((i) => i.label === 'Home')!.exact).toBe(true)
     expect(items.filter((i) => i.exact).length).toBe(1)
   })
@@ -205,17 +208,31 @@ describe('AdminSidebar — Home logo', () => {
   })
 })
 
-describe('AdminSidebar — settings cog visibility', () => {
+describe('AdminSidebar — settings entry', () => {
   afterEach(() => cleanup())
 
-  it('shows the settings cog to admins', () => {
+  it('shows Settings to admins', () => {
     const { container } = renderSidebar('admin')
     expect(container.querySelectorAll('a[href="/admin/settings"]').length).toBeGreaterThan(0)
   })
 
-  it('hides the settings cog from non-admin team members', () => {
+  it('hides Settings from a team member who can open no settings page', () => {
     const { container } = renderSidebar('member')
     expect(container.querySelectorAll('a[href="/admin/settings"]').length).toBe(0)
+  })
+
+  it('shows Settings to an assistant manager, who has no legacy admin role', () => {
+    const { container } = renderSidebar('member', { permissions: [PERMISSIONS.ASSISTANT_MANAGE] })
+    expect(container.querySelectorAll('a[href="/admin/settings"]').length).toBeGreaterThan(0)
+  })
+
+  it('shows Settings to a workflow manager only while the Support inbox is on', () => {
+    const permissions = [PERMISSIONS.WORKFLOW_MANAGE]
+    const on = renderSidebar('member', { permissions, flags: { supportInbox: true } })
+    expect(on.container.querySelectorAll('a[href="/admin/settings"]').length).toBeGreaterThan(0)
+    cleanup()
+    const off = renderSidebar('member', { permissions, flags: { supportInbox: false } })
+    expect(off.container.querySelectorAll('a[href="/admin/settings"]').length).toBe(0)
   })
 })
 
@@ -226,6 +243,7 @@ describe('AdminSidebar — labeled rail', () => {
     for (const stored of [undefined, 'legacy', 'refined'] as const) {
       mockRole.current = 'admin'
       mockGetRouteContext.mockReturnValue({
+        permissions: ALL_PERMISSIONS,
         session: { user: { name: 'Test', email: 'test@example.com', image: null } },
         settings: { featureFlags: {}, visualTheme: stored },
         visualTheme: stored,
@@ -253,17 +271,13 @@ describe('AdminSidebar — labeled rail', () => {
   })
 })
 
-describe('AdminSidebar — AI & Automation visibility', () => {
+describe('AdminSidebar — AI & Automation', () => {
   afterEach(() => cleanup())
 
-  it('shows AI & Automation to admins, linking to the area index', () => {
-    const { container } = renderSidebar('admin')
-    expect(container.querySelectorAll('a[href="/admin/automation"]').length).toBeGreaterThan(0)
-  })
-
-  it('hides AI & Automation from non-admin team members', () => {
-    const { container } = renderSidebar('member')
-    expect(container.querySelectorAll('a[href="/admin/automation"]').length).toBe(0)
+  it('has no rail item: the pages live under Settings', () => {
+    const { container } = renderSidebar('admin', { flags: ALL_ON })
+    expect(container.querySelector('a[href^="/admin/automation"]')).toBeNull()
+    expect(container.textContent).not.toContain('AI & Automation')
   })
 })
 
@@ -276,12 +290,6 @@ describe('AdminSidebar rail', () => {
   it('has a labelled Home item pointing at /admin', () => {
     const { container } = renderSidebar('admin', { flags: ALL_ON })
     expect(container.querySelector('aside nav a[href="/admin"]')?.textContent).toContain('Home')
-  })
-
-  it('links AI & Automation to the area index', () => {
-    const { container } = renderSidebar('admin', { flags: ALL_ON })
-    expect(container.querySelector('aside a[href="/admin/automation"]')).toBeTruthy()
-    expect(container.querySelector('aside a[href="/admin/automation/agent"]')).toBeNull()
   })
 
   it('shows the pending moderation count on Feedback only when above zero', () => {

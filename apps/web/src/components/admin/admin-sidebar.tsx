@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link, useRouter, useRouterState } from '@tanstack/react-router'
 import {
@@ -14,7 +14,6 @@ import {
   QuestionMarkCircleIcon,
   HomeIcon,
   SignalIcon,
-  SparklesIcon,
 } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
@@ -40,14 +39,16 @@ import {
 } from '@/lib/server/functions/owner-workspaces'
 import { friendlySiblingAddress, WorkspaceSwitcher } from '@/components/admin/workspace-switcher'
 import { usePermission } from '@/lib/client/hooks/use-permission'
+import { usePermissions } from '@/lib/client/use-permissions'
+import { buildNavSections, canOpenSettings } from '@/components/admin/settings/settings-nav'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { isProductEnabled, type FeatureFlags, type ProductId } from '@/lib/shared/types/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { ENTITY_ICONS } from '@/components/admin/entity-icon'
 import {
   useBillingEnabled,
+  useCloudEnabled,
   useSessionContext,
-  useUserRole,
   useWorkspaceSettings,
 } from '@/lib/client/hooks/use-root-context'
 
@@ -77,8 +78,6 @@ interface AdminSidebarProps {
   }
   latestVersion?: LatestVersionResult | null
 }
-
-const AUTOMATION_HREF = '/admin/automation'
 
 interface RailItem {
   label: string
@@ -113,21 +112,12 @@ const RAIL_ITEMS: RailItem[] = [
   },
   { label: 'Status', href: '/admin/status', icon: SignalIcon, product: 'status' },
   { label: 'Analytics', href: '/admin/analytics', icon: ChartBarIcon },
-  // The area index sends each viewer to the first page they can open.
-  { label: 'AI & Automation', href: AUTOMATION_HREF, icon: SparklesIcon },
   { label: 'Users', href: '/admin/users', icon: UsersIcon },
 ]
 
-/** The rail items a viewer sees: products that are on, and AI & Automation for those who can open it. */
-export function buildRailItems(
-  flags: Partial<FeatureFlags> | undefined,
-  canOpenAutomation: boolean
-): RailItem[] {
-  return RAIL_ITEMS.filter((item) => {
-    if (item.product && !isProductEnabled(flags, item.product)) return false
-    if (item.href === AUTOMATION_HREF) return canOpenAutomation
-    return true
-  })
+/** The rail items a viewer sees: the products that are on. */
+export function buildRailItems(flags: Partial<FeatureFlags> | undefined): RailItem[] {
+  return RAIL_ITEMS.filter((item) => !item.product || isProductEnabled(flags, item.product))
 }
 
 function railControlClass(isActive = false) {
@@ -248,23 +238,25 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
   // navigation, while these stay the same until the viewer or workspace changes.
   const session = useSessionContext()
   const settings = useWorkspaceSettings()
-  const userRole = useUserRole()
   const billingEnabled = useBillingEnabled()
-  // The settings area is admin-only (every tab gates on requireAuth(['admin'])).
-  // Members would only ever land on the access-denied page, so hide the cog.
-  const isAdmin = userRole === 'admin'
-  const canManageAssistant = usePermission(PERMISSIONS.ASSISTANT_MANAGE)
-  const canManageWorkflows = usePermission(PERMISSIONS.WORKFLOW_MANAGE)
-  const canOpenAutomation = canManageAssistant || canManageWorkflows
+  const cloudEnabled = useCloudEnabled()
+  const permissions = usePermissions()
 
   const flags = settings?.featureFlags as FeatureFlags | undefined
+  // Settings is offered to anyone who can open at least one of its pages; the
+  // rest would only reach an access-denied page.
+  const showSettings = useMemo(
+    () =>
+      canOpenSettings(buildNavSections(flags, Boolean(billingEnabled), cloudEnabled), permissions),
+    [flags, billingEnabled, cloudEnabled, permissions]
+  )
   // The org's own logo (resolved in brandingData by the root loader, same source
   // PortalBrandMark uses); fall back to the Quackback mark when none is set.
   const branding = (settings as { brandingData?: SettingsBrandingData } | undefined)?.brandingData
   const orgLogo = branding?.logoUrl ?? branding?.headerLogoUrl ?? '/logo.png'
   const orgName = branding?.name ?? 'Quackback'
 
-  const railItems = buildRailItems(flags, canOpenAutomation)
+  const railItems = buildRailItems(flags)
   // Posts and comments waiting for review. Shown on Feedback when there are any.
   const feedbackEnabled = isProductEnabled(flags, 'feedback')
   const canReviewPosts = usePermission(PERMISSIONS.POST_APPROVE)
@@ -362,7 +354,9 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
             {/* Bottom Section */}
             <div className="flex flex-col gap-0.5 px-2">
               {/* Settings (admin-only) */}
-              {isAdmin && <NavItem href="/admin/settings" icon={Cog6ToothIcon} label="Settings" />}
+              {showSettings && (
+                <NavItem href="/admin/settings" icon={Cog6ToothIcon} label="Settings" />
+              )}
 
               {billingEnabled && siblings.length > 0 ? (
                 <WorkspaceSwitcher siblings={siblings} onOpen={(id) => openSibling.mutate(id)} />
@@ -522,7 +516,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                 />
               ))}
               <div className="h-px bg-border/40 my-4" />
-              {isAdmin && (
+              {showSettings && (
                 <MobileNavLink
                   href="/admin/settings"
                   icon={Cog6ToothIcon}
