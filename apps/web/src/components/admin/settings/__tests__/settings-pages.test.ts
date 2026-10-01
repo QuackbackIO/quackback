@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildNavSections } from '../settings-nav'
+import { buildNavSections } from '../settings-nav-sections'
 import { buildSettingsModules } from '../settings-modules'
 import {
   AUTOMATION_PAGES,
@@ -81,15 +81,15 @@ describe('settings page registry', () => {
     }
   })
 
-  it('is the source of every AI & Automation nav label and icon', () => {
+  it('is the source of every AI & Automation nav label, and has an icon for each', () => {
     const section = buildNavSections(ALL_FLAGS, true, true).find(
       (candidate) => candidate.label === 'AI & Automation'
     )!
     expect(section.items).toHaveLength(5)
-    for (const item of section.items as Array<{ label: string; to: string; icon: unknown }>) {
+    for (const item of section.items as Array<{ label: string; to: string }>) {
       const path = item.to as keyof typeof AUTOMATION_PAGES
       expect(item.label).toBe(AUTOMATION_PAGES[path].defaultMessage)
-      expect(item.icon).toBe(AUTOMATION_PAGE_ICONS[path])
+      expect(AUTOMATION_PAGE_ICONS[path]).toBeTruthy()
     }
   })
 })

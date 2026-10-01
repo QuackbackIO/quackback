@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { PERMISSIONS, SYSTEM_ROLE_PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
-import { buildNavSections, canOpenSettings, navSectionsFor } from '../settings-nav'
+import { buildNavSections, canOpenSettings, navSectionsFor } from '../settings-nav-sections'
 
 type Sections = ReturnType<typeof buildNavSections>
 

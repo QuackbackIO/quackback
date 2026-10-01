@@ -5,235 +5,29 @@ import { cn } from '@/lib/shared/utils'
 import { NAV_ICON_CLASS, NAV_ITEM_CLASS } from '@/components/shared/nav-tokens'
 import { FilterSection } from '@/components/shared/filter-section'
 import { usePermissions } from '@/lib/client/use-permissions'
-import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
-import { isProductEnabled, type FeatureFlags } from '@/lib/shared/types'
-import {
-  AUTOMATION_PAGES,
-  SETTINGS_PAGES,
-  type AutomationPagePath,
-  type SettingsPagePath,
-} from './settings-pages'
 import { AUTOMATION_PAGE_ICONS, SETTINGS_PAGE_ICONS } from './settings-page-icons'
-import { buildSettingsModules } from './settings-modules'
+import {
+  buildNavSections,
+  isNavGroup,
+  navSectionsFor,
+  type NavEntry,
+  type NavGroup,
+  type NavItem,
+  type NavSection,
+} from './settings-nav-sections'
 import {
   useBillingEnabled,
   useCloudEnabled,
   useFeatureFlags,
 } from '@/lib/client/hooks/use-root-context'
 
-interface NavItem {
-  label: string
-  to: string
-  icon: ComponentType<{ className?: string }>
-  /** Highlight only on this path, not nested child pages. */
-  exact?: boolean
-  /** The permission the page checks when it opens; the nav offers it only to holders. */
-  permission?: PermissionKey
-}
+type IconComponent = ComponentType<{ className?: string }>
 
-/**
- * A module with several pages. It has no page of its own: its pages are the
- * rows under it, the module of the current page is open, and opening a closed
- * one goes to its first page.
- */
-interface NavGroup {
-  label: string
-  icon: ComponentType<{ className?: string }>
-  kids: NavEntry[]
-}
+const ICONS: Record<string, IconComponent> = { ...SETTINGS_PAGE_ICONS, ...AUTOMATION_PAGE_ICONS }
 
-type NavEntry = NavItem | NavGroup
-
-interface NavSection {
-  label: string
-  items: NavEntry[]
-}
-
-/** A nav row whose label and icon come from the page registry. */
-function navPage(to: SettingsPagePath) {
-  const { label } = SETTINGS_PAGES[to]
-  return { label, to, icon: SETTINGS_PAGE_ICONS[to] }
-}
-
-/** A nav row for an AI & Automation page; its label is the message's default text. */
-function navAutomationPage(to: AutomationPagePath, permission: PermissionKey) {
-  return {
-    label: AUTOMATION_PAGES[to].defaultMessage,
-    to,
-    icon: AUTOMATION_PAGE_ICONS[to],
-    permission,
-  }
-}
-
-export function isNavGroup(entry: NavEntry): entry is NavGroup {
-  return 'kids' in entry
-}
-
-/**
- * The settings IA (SETTINGS-IA-SPEC Option B): four stable sections (Modules,
- * AI & Automation, Workspace, Data). Flags hide ITEMS (or whole product
- * accordions), never sections, so the sidebar layout does not reflow when a
- * flag flips. A section a viewer holds no permission for is left out.
- *
- * @param billingEnabled Whether this workspace has a valid billing projection
- *   configured. Not a feature flag — a flag answers "has the admin turned it
- *   on", and this answers "does this deployment sell anything". False on
- *   every self-hosted install, which is why the Billing row is absent there.
- */
-export function buildNavSections(
-  flags?: Partial<FeatureFlags>,
-  billingEnabled = false,
-  cloudEnabled = false
-): NavSection[] {
-  const products: NavEntry[] = buildSettingsModules(flags).map((module): NavEntry => {
-    const [only, ...rest] = module.pages
-    if (only && rest.length === 0) {
-      return { label: only.label, to: only.to, icon: only.icon, permission: only.permission }
-    }
-    return {
-      label: module.label,
-      icon: module.icon,
-      kids: module.pages.map(({ label, to, icon, permission }) => ({
-        label,
-        to,
-        icon,
-        permission,
-      })),
-    }
-  })
-
-  return [
-    { label: 'Modules', items: products },
-    {
-      label: 'AI & Automation',
-      items: [
-        navAutomationPage('/admin/settings/agent', PERMISSIONS.ASSISTANT_MANAGE),
-        navAutomationPage('/admin/settings/copilot', PERMISSIONS.ASSISTANT_MANAGE),
-        navAutomationPage('/admin/settings/skills', PERMISSIONS.ASSISTANT_MANAGE),
-        navAutomationPage('/admin/settings/connectors', PERMISSIONS.ASSISTANT_MANAGE),
-        ...(flags?.supportInbox
-          ? [navAutomationPage('/admin/settings/workflows', PERMISSIONS.WORKFLOW_MANAGE)]
-          : []),
-      ],
-    },
-    {
-      label: 'Workspace',
-      items: [
-        {
-          ...navPage('/admin/settings/general'),
-          permission: PERMISSIONS.SETTINGS_MANAGE,
-        },
-        ...(cloudEnabled
-          ? [
-              {
-                ...navPage('/admin/settings/domains'),
-                permission: PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
-              },
-            ]
-          : []),
-        { ...navPage('/admin/settings/notifications') },
-        {
-          ...navPage('/admin/settings/portal'),
-          permission: PERMISSIONS.SETTINGS_BRANDING,
-        },
-        {
-          ...navPage('/admin/settings/widget'),
-          permission: PERMISSIONS.SETTINGS_MANAGE,
-        },
-        {
-          ...navPage('/admin/settings/members'),
-          permission: PERMISSIONS.MEMBER_VIEW,
-        },
-        {
-          ...navPage('/admin/settings/security/authentication'),
-          permission: PERMISSIONS.AUTH_MANAGE,
-        },
-        {
-          ...navPage('/admin/settings/developers'),
-          permission: PERMISSIONS.API_KEY_MANAGE,
-        },
-        {
-          ...navPage('/admin/settings/labs'),
-          permission: PERMISSIONS.SETTINGS_MANAGE,
-        },
-        {
-          ...navPage('/admin/settings/integrations'),
-          permission: PERMISSIONS.INTEGRATION_VIEW,
-        },
-        ...(billingEnabled
-          ? [
-              {
-                ...navPage('/admin/settings/billing'),
-                permission: PERMISSIONS.BILLING_MANAGE,
-              },
-            ]
-          : []),
-      ],
-    },
-    {
-      label: 'Data',
-      items: [
-        {
-          ...navPage('/admin/settings/people'),
-          permission: PERMISSIONS.USER_ATTRIBUTE_VIEW,
-        },
-        {
-          ...navPage('/admin/settings/companies'),
-          permission: PERMISSIONS.COMPANY_VIEW,
-        },
-        ...(isProductEnabled(flags, 'support')
-          ? [
-              {
-                ...navPage('/admin/settings/conversation-data'),
-                permission: PERMISSIONS.CONVERSATION_MANAGE,
-              },
-            ]
-          : []),
-        {
-          ...navPage('/admin/settings/imports'),
-          permission: PERMISSIONS.SETTINGS_MANAGE,
-        },
-      ],
-    },
-  ]
-}
-
-/**
- * The sections as a viewer with these permissions sees them: a page whose
- * route would answer Access denied is left out, and a section left with no
- * pages goes with it.
- */
-export function navSectionsFor(
-  sections: NavSection[],
-  permissions: ReadonlySet<PermissionKey>
-): NavSection[] {
-  const visible = (entry: NavEntry): NavEntry | null => {
-    if (!isNavGroup(entry)) {
-      return !entry.permission || permissions.has(entry.permission) ? entry : null
-    }
-    const kids = entry.kids.map(visible).filter((kid): kid is NavEntry => kid !== null)
-    return kids.length > 0 ? { ...entry, kids } : null
-  }
-  return sections
-    .map((section) => ({
-      ...section,
-      items: section.items.map(visible).filter((entry): entry is NavEntry => entry !== null),
-    }))
-    .filter((section) => section.items.length > 0)
-}
-
-/**
- * Whether a viewer can open at least one settings page, which is what the rail's
- * Settings entry needs. Notifications has no permission and is reached from the
- * bell, so it does not count.
- */
-export function canOpenSettings(
-  sections: NavSection[],
-  permissions: ReadonlySet<PermissionKey>
-): boolean {
-  const gated = (entry: NavEntry): boolean =>
-    isNavGroup(entry) ? entry.kids.some(gated) : entry.permission !== undefined
-  return navSectionsFor(sections, permissions).some((section) => section.items.some(gated))
+/** The icon of a row or module, keyed by its page path. */
+function iconFor(path: string): IconComponent {
+  return ICONS[path]!
 }
 
 function settingsRowClass(active: boolean) {
@@ -315,7 +109,7 @@ function NavGroupRows({ group, parentOpen }: { group: NavGroup; parentOpen: bool
   const [override, setOverride] = useState<boolean | null>(null)
   useEffect(() => setOverride(null), [inGroup])
   const open = override ?? inGroup
-  const Icon = group.icon
+  const Icon = iconFor(group.id)
 
   const toggle = () => {
     if (open || inGroup) {
@@ -368,7 +162,7 @@ const rowStateProps = {
 }
 
 function rowContent(item: NavItem) {
-  const Icon = item.icon
+  const Icon = iconFor(item.to)
   return (
     <>
       <Icon className={NAV_ICON_CLASS} />
@@ -382,7 +176,6 @@ const sameRow = (prev: NavLinkProps, next: NavLinkProps) =>
   prev.tabbable === next.tabbable &&
   prev.item.to === next.item.to &&
   prev.item.label === next.item.label &&
-  prev.item.icon === next.item.icon &&
   prev.item.exact === next.item.exact
 
 /**

@@ -1,7 +1,7 @@
 import type { ComponentType } from 'react'
-import { SETTINGS_PAGES, type SettingsPagePath } from './settings-pages'
+import { buildSettingsModuleRows, type SettingsModuleRowPage } from './settings-nav-sections'
 import { SETTINGS_PAGE_ICONS } from './settings-page-icons'
-import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
+import type { PermissionKey } from '@/lib/shared/permissions'
 import { isProductEnabled, type FeatureFlags } from '@/lib/shared/types'
 
 export interface SettingsModulePage {
@@ -19,41 +19,9 @@ export interface SettingsModule {
   pages: SettingsModulePage[]
 }
 
-/** The permission each module page's route checks when it opens. */
-const MODULE_PAGE_PERMISSIONS = {
-  '/admin/settings/boards': PERMISSIONS.BOARD_MANAGE,
-  '/admin/settings/statuses': PERMISSIONS.STATUS_MANAGE,
-  '/admin/settings/tags': PERMISSIONS.TAG_MANAGE,
-  '/admin/settings/moderation': PERMISSIONS.SETTINGS_MODERATION,
-  '/admin/settings/channels': PERMISSIONS.SETTINGS_MANAGE,
-  '/admin/settings/channels/email': PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
-  '/admin/settings/channels/github': PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
-  '/admin/settings/macros': PERMISSIONS.CONVERSATION_MANAGE,
-  '/admin/settings/office-hours': PERMISSIONS.OFFICE_HOURS_MANAGE,
-  '/admin/settings/sla': PERMISSIONS.SLA_MANAGE,
-  '/admin/settings/ticket-types': PERMISSIONS.TICKET_MANAGE_TYPES,
-  '/admin/settings/ticket-statuses': PERMISSIONS.TICKET_MANAGE_TYPES,
-  '/admin/settings/help-center': PERMISSIONS.HELP_CENTER_MANAGE,
-  '/admin/settings/changelog': PERMISSIONS.CHANGELOG_MANAGE,
-  '/admin/settings/status': PERMISSIONS.STATUS_PAGE_MANAGE,
-} as const satisfies Partial<Record<SettingsPagePath, PermissionKey>>
-
-type ModulePagePath = keyof typeof MODULE_PAGE_PERMISSIONS
-
-/** A module page whose label and icon come from the page registry. */
-function modulePage(to: ModulePagePath): SettingsModulePage {
-  const { label } = SETTINGS_PAGES[to]
-  return {
-    label,
-    to,
-    icon: SETTINGS_PAGE_ICONS[to],
-    permission: MODULE_PAGE_PERMISSIONS[to as ModulePagePath],
-  }
-}
-
-function moduleHead(to: SettingsPagePath) {
-  const { label } = SETTINGS_PAGES[to]
-  return { label, icon: SETTINGS_PAGE_ICONS[to] }
+/** A module page with its icon added. */
+function withIcon(page: SettingsModuleRowPage): SettingsModulePage {
+  return { ...page, icon: SETTINGS_PAGE_ICONS[page.to] }
 }
 
 function pathIsUnder(pathname: string, to: string): boolean {
@@ -62,74 +30,12 @@ function pathIsUnder(pathname: string, to: string): boolean {
 
 /** Product modules shown under Settings, Modules. A module with several pages expands in the nav. */
 export function buildSettingsModules(flags?: Partial<FeatureFlags>): SettingsModule[] {
-  const modules: SettingsModule[] = [
-    {
-      id: 'feedback',
-      ...moduleHead('/admin/settings/feedback'),
-      pages: [
-        modulePage('/admin/settings/boards'),
-        modulePage('/admin/settings/statuses'),
-        modulePage('/admin/settings/tags'),
-        modulePage('/admin/settings/moderation'),
-      ],
-    },
-  ]
-
-  const supportPages: SettingsModulePage[] = []
-  if (flags?.supportInbox) {
-    supportPages.push(modulePage('/admin/settings/channels'))
-  } else if (isProductEnabled(flags, 'support')) {
-    supportPages.push(
-      modulePage('/admin/settings/channels/email'),
-      modulePage('/admin/settings/channels/github')
-    )
-  }
-  if (isProductEnabled(flags, 'support')) {
-    supportPages.push(
-      modulePage('/admin/settings/macros'),
-      modulePage('/admin/settings/office-hours'),
-      modulePage('/admin/settings/sla')
-    )
-  }
-  if (flags?.supportTickets) {
-    supportPages.push(
-      modulePage('/admin/settings/ticket-types'),
-      modulePage('/admin/settings/ticket-statuses')
-    )
-  }
-  if (supportPages.length > 0) {
-    modules.push({
-      id: 'support',
-      ...moduleHead('/admin/settings/support'),
-      pages: supportPages,
-    })
-  }
-
-  if (isProductEnabled(flags, 'helpCenter')) {
-    modules.push({
-      id: 'helpCenter',
-      ...moduleHead('/admin/settings/help-center'),
-      pages: [modulePage('/admin/settings/help-center')],
-    })
-  }
-
-  if (isProductEnabled(flags, 'changelog')) {
-    modules.push({
-      id: 'changelog',
-      ...moduleHead('/admin/settings/changelog'),
-      pages: [modulePage('/admin/settings/changelog')],
-    })
-  }
-
-  if (isProductEnabled(flags, 'status')) {
-    modules.push({
-      id: 'status',
-      ...moduleHead('/admin/settings/status'),
-      pages: [modulePage('/admin/settings/status')],
-    })
-  }
-
-  return modules
+  return buildSettingsModuleRows(flags).map(({ id, label, to, pages }) => ({
+    id,
+    label,
+    icon: SETTINGS_PAGE_ICONS[to],
+    pages: pages.map(withIcon),
+  }))
 }
 
 /**

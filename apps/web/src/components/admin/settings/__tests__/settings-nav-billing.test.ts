@@ -8,7 +8,7 @@
  * are split only because lint forbids `lib/` importing from `components/`.
  */
 import { describe, expect, it } from 'vitest'
-import { buildNavSections, isNavGroup } from '../settings-nav'
+import { buildNavSections, isNavGroup } from '../settings-nav-sections'
 
 const FLAGS = { supportInbox: true, supportTickets: true }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildNavSections, isNavGroup } from '../settings-nav'
+import { buildNavSections, isNavGroup } from '../settings-nav-sections'
 
 /** Flatten a section's entries to labels, expanding product accordions. */
 function itemLabels(sections: ReturnType<typeof buildNavSections>, section: string): string[] {
