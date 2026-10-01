@@ -1,11 +1,20 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render, waitFor } from '@testing-library/react'
+import { act, cleanup, render as rtlRender, waitFor } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import * as XLSX from 'xlsx'
 import { strToU8 } from 'fflate'
 import type { ViewerEngineProps, ViewerFile } from '../../types'
 import { handleSheetRequest, type SheetRequest } from '../sheet-parse'
 import { withLayoutSize } from './layout-size'
+
+function render(node: React.ReactNode) {
+  return rtlRender(
+    <IntlProvider locale="en-US" messages={{}}>
+      {node}
+    </IntlProvider>
+  )
+}
 
 /**
  * Stands in for the browser Worker: the same message protocol, answered by

@@ -5,6 +5,7 @@
  * away from it the page keeps its size and drops its pixels.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useIntl } from 'react-intl'
 import { AnnotationMode, TextLayer, type PDFDocumentProxy, type RenderTask } from 'pdfjs-dist'
 import type { TextContent } from 'pdfjs-dist/types/src/display/api'
 import { cn } from '@/lib/shared/utils'
@@ -81,6 +82,7 @@ export function PdfPage({
   revealNonce: number
   register: (pageNumber: number, el: HTMLElement | null) => void
 }) {
+  const intl = useIntl()
   const canvasHost = useRef<HTMLDivElement>(null)
   const textHost = useRef<HTMLDivElement>(null)
   const textRuns = useRef<{ divs: HTMLElement[]; runs: string[]; index: PageTextIndex } | null>(
@@ -192,7 +194,10 @@ export function PdfPage({
       ref={ref}
       data-page={pageNumber}
       role="group"
-      aria-label={`Page ${pageNumber}`}
+      aria-label={intl.formatMessage(
+        { id: 'files.pdf.pageAria', defaultMessage: 'Page {number}' },
+        { number: pageNumber }
+      )}
       className="relative shrink-0 bg-white shadow-[0_2px_14px_rgb(0_0_0/0.14)]"
       style={{ width, height }}
     >
@@ -245,6 +250,7 @@ export function PdfThumb({
   onSelect: (pageNumber: number) => void
   register: (pageNumber: number, el: HTMLElement | null) => void
 }) {
+  const intl = useIntl()
   const host = useRef<HTMLSpanElement>(null)
   const buttonRef = useRef<HTMLButtonElement | null>(null)
   const ref = useCallback(
@@ -284,7 +290,10 @@ export function PdfThumb({
       ref={ref}
       type="button"
       data-page={pageNumber}
-      aria-label={`Page ${pageNumber}`}
+      aria-label={intl.formatMessage(
+        { id: 'files.pdf.pageAria', defaultMessage: 'Page {number}' },
+        { number: pageNumber }
+      )}
       aria-current={current ? 'page' : undefined}
       onClick={() => onSelect(pageNumber)}
       className={cn(

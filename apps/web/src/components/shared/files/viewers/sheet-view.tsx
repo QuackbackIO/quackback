@@ -5,6 +5,7 @@
  * show as text in the cell bar and are never evaluated.
  */
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useIntl } from 'react-intl'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { cn } from '@/lib/shared/utils'
 import {
@@ -37,14 +38,15 @@ export function SheetView({
   /** The quiet line for the viewer's toolbar: "1,248 rows". */
   onNote: (note: string) => void
 }) {
+  const intl = useIntl()
   const [active, setActive] = useState(0)
   const [selected, setSelected] = useState<CellAddress>({ r: 0, c: 0 })
   const sheet = sheets[active] ?? sheets[0]!
 
   const reportNote = useEffectEvent(onNote)
   useEffect(() => {
-    reportNote(rowsNote(sheet))
-  }, [sheet])
+    reportNote(rowsNote(sheet, intl))
+  }, [sheet, intl])
 
   function showSheet(index: number) {
     setActive(index)
@@ -260,6 +262,7 @@ function SheetTabs({
   active: number
   onChange: (index: number) => void
 }) {
+  const intl = useIntl()
   const listRef = useRef<HTMLDivElement>(null)
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -276,7 +279,7 @@ function SheetTabs({
     <div
       ref={listRef}
       role="tablist"
-      aria-label="Sheets"
+      aria-label={intl.formatMessage({ id: 'files.sheet.tabsAria', defaultMessage: 'Sheets' })}
       onKeyDown={onKeyDown}
       className="flex min-h-[38px] shrink-0 items-center gap-0.5 overflow-x-auto border-t border-border/60 bg-background px-2"
     >

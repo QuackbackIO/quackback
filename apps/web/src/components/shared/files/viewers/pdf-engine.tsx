@@ -16,6 +16,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { useIntl } from 'react-intl'
 import {
   GlobalWorkerOptions,
   TextLayer,
@@ -62,6 +63,7 @@ interface PageSize {
 const NO_MATCHES: readonly TextMatch[] = []
 
 export default function PdfEngine({ data, onToolbar, onError, compact }: ViewerEngineProps) {
+  const intl = useIntl()
   const rootRef = useRef<HTMLDivElement>(null)
   const deskRef = useRef<HTMLDivElement>(null)
   const railRef = useRef<HTMLElement>(null)
@@ -328,7 +330,7 @@ export default function PdfEngine({ data, onToolbar, onError, compact }: ViewerE
       {!compact && pdf && (
         <nav
           ref={railRef}
-          aria-label="Pages"
+          aria-label={intl.formatMessage({ id: 'files.pdf.railAria', defaultMessage: 'Pages' })}
           className="flex w-28 shrink-0 flex-col items-center gap-3.5 overflow-y-auto border-r border-border bg-background px-3 py-3.5"
         >
           {sizes.map((size, i) => (

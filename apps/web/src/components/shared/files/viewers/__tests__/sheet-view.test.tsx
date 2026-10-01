@@ -1,9 +1,18 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render as rtlRender, screen, within } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import { SheetView } from '../sheet-view'
 import type { SheetData } from '../sheet-model'
 import { withLayoutSize } from './layout-size'
+
+function render(node: React.ReactNode) {
+  return rtlRender(
+    <IntlProvider locale="en-US" messages={{}}>
+      {node}
+    </IntlProvider>
+  )
+}
 
 let restoreLayout: () => void
 beforeEach(() => {
@@ -158,5 +167,34 @@ describe('SheetView', () => {
   it('renders an empty sheet without failing', () => {
     render(<SheetView sheets={[sheet('Empty', [[]])]} onNote={() => {}} />)
     expect(screen.getByRole('grid')).toBeInTheDocument()
+  })
+
+  it('reports the row count and the tabs aria-label in German', () => {
+    const onNote = vi.fn()
+    const small = sheet(
+      'Redirects',
+      [
+        ['From', 'To'],
+        ['/a', '/b'],
+      ],
+      { totalRows: 1248 }
+    )
+    rtlRender(
+      <IntlProvider
+        locale="de"
+        messages={{
+          'files.count.rows': '{count, plural, one {# Zeile} other {# Zeilen}}',
+          'files.sheet.tabsAria': 'Tabellenblätter',
+        }}
+      >
+        <SheetView sheets={[invoice, small]} onNote={onNote} />
+      </IntlProvider>
+    )
+    expect(screen.getByRole('tablist', { name: 'Tabellenblätter' })).toBeInTheDocument()
+    expect(onNote).toHaveBeenLastCalledWith('4 Zeilen')
+
+    const tabs = within(screen.getByRole('tablist')).getAllByRole('tab')
+    fireEvent.click(tabs[1]!)
+    expect(onNote).toHaveBeenLastCalledWith('1.248 Zeilen')
   })
 })

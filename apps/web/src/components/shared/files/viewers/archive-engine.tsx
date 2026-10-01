@@ -5,6 +5,7 @@
  * to far more than its own size is flagged in the note.
  */
 import { useEffect, useMemo } from 'react'
+import { useIntl, type IntlShape } from 'react-intl'
 import { unzipSync } from 'fflate'
 import { DocumentIcon, FolderIcon } from '@heroicons/react/24/outline'
 import { formatBytes } from '@/lib/shared/files/file-types'
@@ -18,8 +19,6 @@ const SUSPICIOUS_RATIO = 100
 const SUSPICIOUS_UNPACKED = 1024 * 1024 * 1024
 /** Below this, a high ratio is just a small file of repeated bytes. */
 const RATIO_FLOOR = 1024 * 1024
-
-const count = new Intl.NumberFormat('en-US')
 
 interface TreeNode {
   name: string
@@ -115,38 +114,57 @@ function readListing(bytes: Uint8Array): Listing {
   return { rows, hidden: total - rows.length, files, unpacked, more }
 }
 
-function noteFor(listing: Listing, packedBytes: number): string {
-  const files = `${count.format(listing.files)}${listing.more ? '+' : ''} ${listing.files === 1 && !listing.more ? 'file' : 'files'}`
-  const parts = [files, `${formatBytes(listing.unpacked)} unpacked`]
+function noteFor(listing: Listing, packedBytes: number, intl: IntlShape): string {
+  const files = intl.formatMessage(
+    {
+      id: listing.more ? 'files.count.filesCapped' : 'files.count.files',
+      defaultMessage: listing.more
+        ? '{count, plural, one {#+ file} other {#+ files}}'
+        : '{count, plural, one {# file} other {# files}}',
+    },
+    { count: listing.files }
+  )
+  const parts = [
+    files,
+    intl.formatMessage(
+      { id: 'files.archive.unpacked', defaultMessage: '{size} unpacked' },
+      { size: formatBytes(listing.unpacked) }
+    ),
+  ]
   const ratio = packedBytes > 0 ? listing.unpacked / packedBytes : 0
   if (
     listing.unpacked > SUSPICIOUS_UNPACKED ||
     (listing.unpacked >= RATIO_FLOOR && ratio > SUSPICIOUS_RATIO)
   ) {
-    parts.push('Unusually large when unpacked')
+    parts.push(
+      intl.formatMessage({
+        id: 'files.archive.unusuallyLarge',
+        defaultMessage: 'Unusually large when unpacked',
+      })
+    )
   }
   return parts.join(' · ')
 }
 
 export default function ArchiveEngine({ data, onToolbar, onError }: ViewerEngineProps) {
-  const result = useMemo(() => {
+  const intl = useIntl()
+  const listing = useMemo(() => {
     if (!data) return null
     try {
-      const bytes = new Uint8Array(data)
-      const listing = readListing(bytes)
-      return { listing, note: noteFor(listing, bytes.byteLength) }
+      return readListing(new Uint8Array(data))
     } catch {
       return null
     }
   }, [data])
+  const packedBytes = data?.byteLength ?? 0
+  const note = listing ? noteFor(listing, packedBytes, intl) : undefined
 
   useEffect(() => {
-    if (result) onToolbar({ note: result.note })
+    if (listing) onToolbar({ note })
     else onError('corrupt')
-  }, [result, onToolbar, onError])
+  }, [listing, note, onToolbar, onError])
 
-  if (!result) return null
-  const { listing } = result
+  if (!listing) return null
 
   return (
     <div className="min-w-0 flex-1 overflow-auto bg-background">
@@ -154,10 +172,10 @@ export default function ArchiveEngine({ data, onToolbar, onError }: ViewerEngine
         <thead>
           <tr>
             <th className="sticky top-0 border-b border-border bg-background px-3.5 py-2 text-left text-[11.5px] font-medium text-muted-foreground">
-              Name
+              {intl.formatMessage({ id: 'files.archive.columnName', defaultMessage: 'Name' })}
             </th>
             <th className="sticky top-0 border-b border-border bg-background px-3.5 py-2 text-right text-[11.5px] font-medium text-muted-foreground">
-              Size
+              {intl.formatMessage({ id: 'files.archive.columnSize', defaultMessage: 'Size' })}
             </th>
           </tr>
         </thead>
@@ -194,9 +212,13 @@ export default function ArchiveEngine({ data, onToolbar, onError }: ViewerEngine
           {(listing.hidden > 0 || listing.more) && (
             <tr>
               <td colSpan={2} className="px-3.5 py-2.5 text-xs text-muted-foreground">
-                {listing.more
-                  ? `and ${count.format(listing.hidden)}+ more`
-                  : `and ${count.format(listing.hidden)} more`}
+                {intl.formatMessage(
+                  {
+                    id: listing.more ? 'files.archive.andMoreCapped' : 'files.archive.andMore',
+                    defaultMessage: listing.more ? 'and {hidden}+ more' : 'and {hidden} more',
+                  },
+                  { hidden: intl.formatNumber(listing.hidden) }
+                )}
               </td>
             </tr>
           )}

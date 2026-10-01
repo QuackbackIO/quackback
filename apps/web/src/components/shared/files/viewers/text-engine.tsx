@@ -5,6 +5,7 @@
  * wrap are reported to the shell; the find bar lives in the content area.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useIntl } from 'react-intl'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { formatBytes } from '@/lib/shared/files/file-types'
 import { cn } from '@/lib/shared/utils'
@@ -25,7 +26,6 @@ import {
 } from './text-lines'
 
 const LINE_HEIGHT = 20
-const count = new Intl.NumberFormat('en-US')
 
 export default function TextEngine({
   file,
@@ -34,6 +34,7 @@ export default function TextEngine({
   onToolbar,
   compact,
 }: ViewerEngineProps) {
+  const intl = useIntl()
   const lines = useMemo(() => {
     const text = decodeText(data)
     const shown = !truncated && isJsonName(file.name) ? (prettyJson(text) ?? text) : text
@@ -78,9 +79,15 @@ export default function TextEngine({
       wrap: { on: wrap, toggle: toggleWrap },
       note: truncated
         ? undefined
-        : `${count.format(lines.length)} ${lines.length === 1 ? 'line' : 'lines'}`,
+        : intl.formatMessage(
+            {
+              id: 'files.count.lines',
+              defaultMessage: '{count, plural, one {# line} other {# lines}}',
+            },
+            { count: lines.length }
+          ),
     })
-  }, [onToolbar, openFind, toggleWrap, wrap, truncated, lines.length])
+  }, [onToolbar, openFind, toggleWrap, wrap, truncated, lines.length, intl])
 
   const matches = useMemo(
     () => (findOpen ? findMatches(lines, query) : []),
@@ -217,13 +224,17 @@ export default function TextEngine({
         </div>
         {truncated && (
           <p className="border-t border-white/10 px-4 py-3 font-sans text-xs text-zinc-400">
-            Showing the first {formatBytes(TEXT_HEAD_BYTES)} ·{' '}
+            {intl.formatMessage(
+              { id: 'files.viewer.showingFirst', defaultMessage: 'Showing the first {size}' },
+              { size: formatBytes(TEXT_HEAD_BYTES) }
+            )}{' '}
+            ·{' '}
             <a
               href={file.url}
               download={file.name}
               className="text-zinc-200 underline underline-offset-2 hover:text-white"
             >
-              Download
+              {intl.formatMessage({ id: 'files.viewer.download', defaultMessage: 'Download' })}
             </a>
           </p>
         )}

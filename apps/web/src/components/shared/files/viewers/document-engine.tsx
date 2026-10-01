@@ -14,6 +14,7 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
+import { useIntl, type IntlShape } from 'react-intl'
 import { fileExtension } from '@/lib/shared/files/file-types'
 import type { EngineToolbar, ViewerEngineProps, ViewerFile } from '../types'
 import { BudgetTimeoutError, checkZipBudget, withTimeout } from './budgets'
@@ -31,11 +32,26 @@ export function documentFitZoom(deskWidth: number, pageWidthPx: number): number 
 }
 
 /** "4 pages", "Contains macros", or both. */
-export function documentNote(file: Pick<ViewerFile, 'name' | 'preview'>): string | undefined {
+export function documentNote(
+  file: Pick<ViewerFile, 'name' | 'preview'>,
+  intl: IntlShape
+): string | undefined {
   const parts: string[] = []
   const pages = file.preview?.pages
-  if (pages) parts.push(`${pages.toLocaleString('en-US')} ${pages === 1 ? 'page' : 'pages'}`)
-  if (file.preview?.macro || fileExtension(file.name) === 'docm') parts.push('Contains macros')
+  if (pages) {
+    parts.push(
+      intl.formatMessage(
+        {
+          id: 'files.count.pages',
+          defaultMessage: '{count, plural, one {# page} other {# pages}}',
+        },
+        { count: pages }
+      )
+    )
+  }
+  if (file.preview?.macro || fileExtension(file.name) === 'docm') {
+    parts.push(intl.formatMessage({ id: 'files.viewer.macros', defaultMessage: 'Contains macros' }))
+  }
   return parts.length > 0 ? parts.join(' · ') : undefined
 }
 
@@ -55,6 +71,7 @@ function useDarkTheme(): boolean {
 }
 
 export default function DocumentEngine({ file, data, onToolbar, onError }: ViewerEngineProps) {
+  const intl = useIntl()
   const deskRef = useRef<HTMLDivElement>(null)
   const [rendered, setRendered] = useState<RenderedDocument | null>(null)
   const [zoom, setZoom] = useState(1)
@@ -90,7 +107,7 @@ export default function DocumentEngine({ file, data, onToolbar, onError }: Viewe
   }, [data])
 
   const changeZoom = useCallback((value: number) => setZoom(clampZoom(value, fit)), [fit])
-  const note = documentNote(file)
+  const note = documentNote(file, intl)
 
   useEffect(() => {
     if (!rendered) return

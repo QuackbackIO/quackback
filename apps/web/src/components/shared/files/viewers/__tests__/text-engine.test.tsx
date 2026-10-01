@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { act } from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import TextEngine from '../text-engine'
 import type { EngineToolbar, ViewerFile } from '../../types'
@@ -34,7 +35,16 @@ function renderText(
     family = 'text',
     truncated = false,
     compact = false,
-  }: { name?: string; family?: FileFamily; truncated?: boolean; compact?: boolean } = {}
+    locale = 'en-US',
+    messages = {},
+  }: {
+    name?: string
+    family?: FileFamily
+    truncated?: boolean
+    compact?: boolean
+    locale?: string
+    messages?: Record<string, string>
+  } = {}
 ) {
   const data = new TextEncoder().encode(text)
   const file: ViewerFile = {
@@ -50,16 +60,18 @@ function renderText(
     toolbars.push(t)
   })
   const onError = vi.fn()
-  const result = render(
-    <TextEngine
-      file={file}
-      data={data.buffer.slice(0) as ArrayBuffer}
-      truncated={truncated}
-      src={`${file.url}&proxy=1`}
-      onToolbar={onToolbar}
-      onError={onError}
-      compact={compact}
-    />
+  const result = rtlRender(
+    <IntlProvider locale={locale} messages={messages}>
+      <TextEngine
+        file={file}
+        data={data.buffer.slice(0) as ArrayBuffer}
+        truncated={truncated}
+        src={`${file.url}&proxy=1`}
+        onToolbar={onToolbar}
+        onError={onError}
+        compact={compact}
+      />
+    </IntlProvider>
   )
   return { ...result, toolbar: () => toolbars.at(-1)!, onError }
 }
@@ -83,6 +95,14 @@ describe('TextEngine', () => {
     expect(toolbar().note).toBe('3 lines')
     expect(toolbar().wrap?.on).toBe(false)
     expect(toolbar().find).toBeDefined()
+  })
+
+  it('reports the line count in German when the viewer locale is German', () => {
+    const { toolbar } = renderText('one\ntwo\nthree', {
+      locale: 'de',
+      messages: { 'files.count.lines': '{count, plural, one {# Zeile} other {# Zeilen}}' },
+    })
+    expect(toolbar().note).toBe('3 Zeilen')
   })
 
   it('wraps lines when the shell toggles wrap', () => {

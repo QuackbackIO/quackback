@@ -3,6 +3,7 @@
  * and the small rules the grid applies to it. Kept free of any parsing
  * library so the grid's chunk never carries one.
  */
+import type { IntlShape } from 'react-intl'
 import { fileExtension } from '@/lib/shared/files/file-types'
 
 /** Rows read per sheet; one more is read to learn whether the sheet goes on. */
@@ -85,12 +86,24 @@ export function looksLikeHeader(sheet: SheetData): boolean {
   return new Set(filled.map((v) => v.trim().toLowerCase())).size === filled.length
 }
 
-const count = new Intl.NumberFormat('en-US')
-
 /** The viewer's quiet note for a sheet: "1,248 rows" or "First 5,000 rows". */
-export function rowsNote(sheet: Pick<SheetData, 'totalRows' | 'truncated'>): string {
-  if (sheet.truncated) return `First ${count.format(MAX_SHEET_ROWS)} rows`
-  return `${count.format(sheet.totalRows)} ${sheet.totalRows === 1 ? 'row' : 'rows'}`
+export function rowsNote(
+  sheet: Pick<SheetData, 'totalRows' | 'truncated'>,
+  intl: IntlShape
+): string {
+  if (sheet.truncated) {
+    return intl.formatMessage(
+      {
+        id: 'files.sheet.truncatedRows',
+        defaultMessage: 'First {count, plural, one {# row} other {# rows}}',
+      },
+      { count: MAX_SHEET_ROWS }
+    )
+  }
+  return intl.formatMessage(
+    { id: 'files.count.rows', defaultMessage: '{count, plural, one {# row} other {# rows}}' },
+    { count: sheet.totalRows }
+  )
 }
 
 const MIN_COLUMN_PX = 64

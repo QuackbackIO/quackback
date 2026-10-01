@@ -2,13 +2,22 @@
 // @vitest-environment-options {"settings":{"disableCSSFileLoading":true,"disableJavaScriptFileLoading":true,"disableIframePageLoading":true,"handleDisabledFileLoadingAsSuccess":true}}
 import './browser-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render, waitFor } from '@testing-library/react'
+import { act, cleanup, render as rtlRender, waitFor } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import { strToU8 } from 'fflate'
 import type { EngineToolbar, ViewerEngineProps, ViewerFile } from '../../types'
 import DocumentEngine from '../document-engine'
 import { DOCUMENT_CSP } from '../document-render'
 import { docxFixture, toArrayBuffer } from './docx-fixture'
 import { withLayoutSize } from './layout-size'
+
+function render(node: React.ReactNode) {
+  return rtlRender(
+    <IntlProvider locale="en-US" messages={{}}>
+      {node}
+    </IntlProvider>
+  )
+}
 
 let restoreLayout: () => void
 beforeEach(() => {
@@ -127,6 +136,21 @@ describe('DocumentEngine', () => {
     )
     render(<DocumentEngine {...flagged} />)
     await waitFor(() => expect(lastToolbar(flagged).note).toBe('Contains macros'))
+  })
+
+  it('notes the page count in German when the viewer locale is German', async () => {
+    const p = props(file('plan.docx', { preview: { pages: 4 } }), toArrayBuffer(docxFixture()))
+    rtlRender(
+      <IntlProvider
+        locale="de"
+        messages={{
+          'files.count.pages': '{count, plural, one {# Seite} other {# Seiten}}',
+        }}
+      >
+        <DocumentEngine {...p} />
+      </IntlProvider>
+    )
+    await waitFor(() => expect(lastToolbar(p).note).toBe('4 Seiten'))
   })
 
   it('refuses a package over the zip budget before parsing it', async () => {

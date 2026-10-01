@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { createIntl } from 'react-intl'
 import {
   cellRef,
   columnLabel,
@@ -7,6 +8,8 @@ import {
   rowsNote,
   type SheetData,
 } from '../sheet-model'
+
+const intl = createIntl({ locale: 'en-US', messages: {} })
 
 function sheet(rows: string[][], types?: string[]): SheetData {
   return {
@@ -92,13 +95,25 @@ describe('looksLikeHeader', () => {
 
 describe('rowsNote', () => {
   it('counts rows with a thousands separator', () => {
-    expect(rowsNote({ totalRows: 1248, truncated: false })).toBe('1,248 rows')
-    expect(rowsNote({ totalRows: 1, truncated: false })).toBe('1 row')
-    expect(rowsNote({ totalRows: 0, truncated: false })).toBe('0 rows')
+    expect(rowsNote({ totalRows: 1248, truncated: false }, intl)).toBe('1,248 rows')
+    expect(rowsNote({ totalRows: 1, truncated: false }, intl)).toBe('1 row')
+    expect(rowsNote({ totalRows: 0, truncated: false }, intl)).toBe('0 rows')
   })
 
   it('says only the first rows show when the sheet was cut', () => {
-    expect(rowsNote({ totalRows: 80_000, truncated: true })).toBe('First 5,000 rows')
+    expect(rowsNote({ totalRows: 80_000, truncated: true }, intl)).toBe('First 5,000 rows')
+  })
+
+  it('renders in German when the viewer locale is German', () => {
+    const de = createIntl({
+      locale: 'de',
+      messages: {
+        'files.count.rows': '{count, plural, one {# Zeile} other {# Zeilen}}',
+        'files.sheet.truncatedRows': 'Erste {count, plural, one {# Zeile} other {# Zeilen}}',
+      },
+    })
+    expect(rowsNote({ totalRows: 1248, truncated: false }, de)).toBe('1.248 Zeilen')
+    expect(rowsNote({ totalRows: 80_000, truncated: true }, de)).toBe('Erste 5.000 Zeilen')
   })
 })
 

@@ -1,9 +1,18 @@
 // @vitest-environment happy-dom
-import { render, screen, within } from '@testing-library/react'
+import { render as rtlRender, screen, within } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import { strToU8, zipSync, type Zippable } from 'fflate'
 import { describe, expect, it, vi } from 'vitest'
 import ArchiveEngine from '../archive-engine'
 import type { EngineToolbar, ViewerFile } from '../../types'
+
+function render(node: React.ReactNode) {
+  return rtlRender(
+    <IntlProvider locale="en-US" messages={{}}>
+      {node}
+    </IntlProvider>
+  )
+}
 
 function renderZip(entries: Zippable | Uint8Array) {
   const bytes = entries instanceof Uint8Array ? entries : zipSync(entries, { level: 6 })
@@ -92,5 +101,40 @@ describe('ArchiveEngine', () => {
     const { note, onError } = renderZip({})
     expect(onError).not.toHaveBeenCalled()
     expect(note()).toBe('0 files · 0 B unpacked')
+  })
+
+  it('notes the file count in German when the viewer locale is German', () => {
+    const bytes = zipSync({ 'a.txt': strToU8('x'), 'b.txt': strToU8('x') }, { level: 6 })
+    const file: ViewerFile = {
+      key: 'a.zip',
+      url: '/api/storage/files/a.zip',
+      name: 'a.zip',
+      contentType: 'application/zip',
+      size: bytes.byteLength,
+      family: 'archive',
+    }
+    const toolbars: EngineToolbar[] = []
+    rtlRender(
+      <IntlProvider
+        locale="de"
+        messages={{
+          'files.count.files': '{count, plural, one {# Datei} other {# Dateien}}',
+          'files.archive.unpacked': '{size} entpackt',
+        }}
+      >
+        <ArchiveEngine
+          file={file}
+          data={
+            bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+          }
+          truncated={false}
+          src="/api/storage/files/a.zip?proxy=1"
+          onToolbar={(t) => toolbars.push(t)}
+          onError={vi.fn()}
+          compact={false}
+        />
+      </IntlProvider>
+    )
+    expect(toolbars.at(-1)?.note).toBe('2 Dateien · 2 B entpackt')
   })
 })
