@@ -13,6 +13,30 @@ describe('documentLocale', () => {
     expect(documentLocale(['__root__', '/auth/reset-password'], 'zh-cn')).toBe('zh-cn')
     expect(documentLocale(['__root__', '/widget'], 'ar')).toBe('ar')
   })
+  it('localizes the AI & Automation pages under settings and the workflow builder', () => {
+    for (const id of [
+      '/admin/settings/agent',
+      '/admin/settings/copilot',
+      '/admin/settings/skills',
+      '/admin/settings/connectors',
+      '/admin/settings/connectors_/$connectorId',
+      '/admin/settings/workflows',
+      '/admin/settings_/workflows/$workflowId',
+    ]) {
+      expect(documentLocale(['__root__', '/admin', id], 'zh-cn'), id).toBe('zh-cn')
+    }
+  })
+  it('keeps the other settings pages on the default', () => {
+    for (const id of [
+      '/admin/settings',
+      '/admin/settings/general',
+      '/admin/settings/agents',
+      '/admin/settings/integrations',
+      '/admin/settings/widget',
+    ]) {
+      expect(documentLocale(['__root__', '/admin', '/admin/settings', id], 'zh-cn'), id).toBe('en')
+    }
+  })
   it('keeps untranslated auth utility pages on the default locale', () => {
     // These render hard-coded English with no IntlProvider — labeling them
     // `lang="ar" dir="rtl"` would misstate the language and flip the layout.
