@@ -12,8 +12,8 @@ const MODULES = {
   '../automation.assistant': () => import('../automation.assistant'),
   '../automation.performance': () => import('../automation.performance'),
   '../settings.ai': () => import('../settings.ai'),
-  '../automation.connectors.$connectorId': () => import('../automation.connectors.$connectorId'),
-  '../automation.workflows.$workflowId': () => import('../automation.workflows.$workflowId'),
+  '../automation.connectors_.$connectorId': () => import('../automation.connectors_.$connectorId'),
+  '../automation_.workflows.$workflowId': () => import('../automation_.workflows.$workflowId'),
   '../automation.index': () => import('../automation.index'),
 } as const
 
@@ -55,7 +55,7 @@ describe('retired /admin/automation URLs', () => {
   })
 
   it('moves a connector detail page and its OAuth result', async () => {
-    const out = await redirectOf('../automation.connectors.$connectorId', {
+    const out = await redirectOf('../automation.connectors_.$connectorId', {
       ...at('?oauth=connected'),
       params: { connectorId: 'conn_1' },
     })
@@ -63,7 +63,7 @@ describe('retired /admin/automation URLs', () => {
   })
 
   it('moves a workflow builder', async () => {
-    const out = await redirectOf('../automation.workflows.$workflowId', {
+    const out = await redirectOf('../automation_.workflows.$workflowId', {
       ...at(),
       params: { workflowId: 'wf_1' },
     })
