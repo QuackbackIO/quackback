@@ -3,7 +3,7 @@ import { act } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import MediaEngine from '../media-engine'
-import type { EngineToolbar, ViewerFile } from '../../types'
+import { VIEWER_ARROWS_ATTR, type EngineToolbar, type ViewerFile } from '../../types'
 
 function renderMedia(over: Partial<ViewerFile> & { name: string }) {
   const file: ViewerFile = {
@@ -160,6 +160,14 @@ describe('MediaEngine video and audio', () => {
     Object.defineProperty(video, 'error', { value: { code: 4 } })
     fireEvent.error(video)
     expect(onError).toHaveBeenCalledWith('unsupported')
+  })
+
+  it('keeps the arrow keys on a video or audio player, where they seek', () => {
+    const video = renderMedia({ name: 'repro.mp4', family: 'video', contentType: 'video/mp4' })
+    expect(video.container.querySelector('video')).toHaveAttribute(VIEWER_ARROWS_ATTR)
+    video.unmount()
+    const audio = renderMedia({ name: 'call.mp3', family: 'audio', contentType: 'audio/mpeg' })
+    expect(audio.container.querySelector('audio')).toHaveAttribute(VIEWER_ARROWS_ATTR)
   })
 
   it('plays audio on a quiet card', () => {

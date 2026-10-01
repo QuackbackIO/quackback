@@ -38,7 +38,13 @@ import { formatBytes, MAX_ATTACHMENT_BYTES } from '@/lib/shared/files/file-types
 import { cn } from '@/lib/shared/utils'
 import { downloadUrl } from './download-url'
 import { FileBadge } from './file-badge'
-import type { EngineFailure, EngineToolbar, ViewerEngineProps, ViewerFile } from './types'
+import {
+  VIEWER_ARROWS_ATTR,
+  type EngineFailure,
+  type EngineToolbar,
+  type ViewerEngineProps,
+  type ViewerFile,
+} from './types'
 import { ENGINES, engineFor, fetchModeFor, TEXT_HEAD_BYTES, type EngineKind } from './viewers'
 
 export interface FileViewerProps {
@@ -64,12 +70,6 @@ export interface FileViewerProps {
 const FULL_FETCH_BUDGET = MAX_ATTACHMENT_BYTES
 
 const ZOOM_STEP = 0.25
-
-/**
- * Engine content areas that use Left/Right themselves (a code pane that
- * scrolls sideways) carry this attribute, and the arrows stay theirs.
- */
-export const VIEWER_ARROWS_ATTR = 'data-viewer-arrows'
 
 const FAILURE_MESSAGE: Record<EngineFailure, { id: string; defaultMessage: string }> = {
   unsupported: {

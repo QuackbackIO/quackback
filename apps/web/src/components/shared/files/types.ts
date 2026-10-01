@@ -82,5 +82,12 @@ export interface ViewerEngineProps {
   compact: boolean
 }
 
+/**
+ * Engine content areas that use Left/Right themselves (a code pane that
+ * scrolls sideways, a player that seeks) carry this attribute, and the shell
+ * leaves the arrows to them instead of moving through the gallery.
+ */
+export const VIEWER_ARROWS_ATTR = 'data-viewer-arrows'
+
 /** How the shell gets a file's bytes before handing them to its engine. */
 export type FetchMode = 'none' | 'head' | 'full'

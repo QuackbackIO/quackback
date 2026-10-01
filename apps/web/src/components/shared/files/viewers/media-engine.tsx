@@ -16,10 +16,13 @@ import {
 import { fileExtension } from '@/lib/shared/files/file-types'
 import { cn } from '@/lib/shared/utils'
 import { FileBadge } from '../file-badge'
-import type { EngineFailure, ViewerEngineProps } from '../types'
+import { VIEWER_ARROWS_ATTR, type EngineFailure, type ViewerEngineProps } from '../types'
 
 const MIN_ZOOM = 0.25
 const MAX_ZOOM = 5
+
+/** Players seek with Left/Right, so the gallery leaves those keys to them. */
+const PLAYER_ARROWS = { [VIEWER_ARROWS_ATTR]: '' }
 
 const clampZoom = (value: number) =>
   Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number(value.toFixed(4))))
@@ -139,6 +142,7 @@ function VideoView({ file, onToolbar, onError }: ViewerEngineProps) {
   return (
     <div className="relative min-w-0 flex-1 bg-[#0b0b0d]">
       <video
+        {...PLAYER_ARROWS}
         src={file.url}
         controls
         preload="metadata"
@@ -167,6 +171,7 @@ function AudioView({ file, onToolbar, onError }: ViewerEngineProps) {
         />
         <p className="max-w-full truncate text-sm font-medium text-foreground">{file.name}</p>
         <audio
+          {...PLAYER_ARROWS}
           src={file.url}
           controls
           preload="metadata"
