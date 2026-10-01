@@ -111,7 +111,12 @@ function AssistantAgentSettings() {
         page="/admin/settings/agent"
         description={statusLine}
         actions={
-          <AgentPauseControl deployment={deployment} available={inboxOn} onChange={setDeployment} />
+          <AgentPauseControl
+            deployment={deployment}
+            available={inboxOn}
+            ticketsOn={Boolean(flags?.supportTickets)}
+            onChange={setDeployment}
+          />
         }
       >
         {settingsQuery.isPending ? (

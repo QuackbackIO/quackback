@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { useIntl } from 'react-intl'
-import { Link } from '@tanstack/react-router'
+import { Link, useRouter } from '@tanstack/react-router'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { AUTOSAVE } from '@/lib/client/autosave'
+import { updateFeatureFlagsFn } from '@/lib/server/functions/feature-flags'
 import { PauseIcon, PlayIcon } from '@heroicons/react/24/solid'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { Button } from '@/components/ui/button'
@@ -29,8 +32,7 @@ export function useAgentStatusLine(
     return ticketsOn
       ? intl.formatMessage({
           id: 'automation.agent.deployment.unavailableTickets',
-          defaultMessage:
-            'Messenger replies need the Support inbox. Turn Support off and on again in Settings → General to add it.',
+          defaultMessage: 'Messenger replies need the Support inbox.',
         })
       : intl.formatMessage({
           id: 'automation.agent.deployment.unavailable',
@@ -53,14 +55,29 @@ export function useAgentStatusLine(
 export function AgentPauseControl({
   deployment,
   available = true,
+  ticketsOn = false,
   onChange,
 }: {
   deployment: WidgetAssistantDeployment
   available?: boolean
+  /** Tickets are on without the inbox: the action turns the inbox on. */
+  ticketsOn?: boolean
   onChange: (deployment: WidgetAssistantDeployment) => void
 }) {
   const intl = useIntl()
   const canOpenGeneral = useHasPermission(PERMISSIONS.SETTINGS_MANAGE)
+  const queryClient = useQueryClient()
+  const router = useRouter()
+  const turnOnInbox = useMutation({
+    meta: AUTOSAVE,
+    mutationFn: () => updateFeatureFlagsFn({ data: { supportInbox: true } }),
+    onSuccess: () => {
+      // The flags live in the root route context; invalidating re-runs it so the
+      // page, rail and settings nav reflect the inbox.
+      void router.invalidate()
+      void queryClient.invalidateQueries({ queryKey: ['settings', 'portalConfig'] })
+    },
+  })
   const updateDeployment = useUpdateWidgetAssistantDeployment()
   const [confirmingEnabled, setConfirmingEnabled] = useState<boolean | null>(null)
   const live = deployment.enabled && deployment.respond
@@ -83,6 +100,22 @@ export function AgentPauseControl({
   if (!available) {
     // General needs settings.manage; anyone else would only be sent to sign in.
     if (!canOpenGeneral) return null
+    if (ticketsOn) {
+      return (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={turnOnInbox.isPending}
+          onClick={() => turnOnInbox.mutate()}
+        >
+          {intl.formatMessage({
+            id: 'automation.agent.deployment.turnOnInbox',
+            defaultMessage: 'Turn on inbox',
+          })}
+        </Button>
+      )
+    }
     return (
       <Button type="button" variant="outline" size="sm" asChild>
         <Link to="/admin/settings/general">

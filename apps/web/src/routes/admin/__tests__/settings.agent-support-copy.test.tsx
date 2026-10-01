@@ -2,10 +2,15 @@
 import '@testing-library/jest-dom/vitest'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 
-const hoisted = vi.hoisted(() => ({ flags: {} as Record<string, boolean>, canManage: true }))
+const hoisted = vi.hoisted(() => ({
+  flags: {} as Record<string, boolean>,
+  canManage: true,
+  updateFlags: vi.fn(),
+  invalidate: vi.fn(),
+}))
 
 vi.mock('@tanstack/react-router', () => ({
   createFileRoute: () => (options: Record<string, unknown>) => ({
@@ -14,14 +19,22 @@ vi.mock('@tanstack/react-router', () => ({
     useNavigate: () => vi.fn(),
   }),
   redirect: vi.fn(),
+  useRouter: () => ({ invalidate: hoisted.invalidate }),
   useBlocker: () => ({ status: 'idle', reset: vi.fn(), proceed: vi.fn() }),
   Link: ({ to, children }: { to: string; children: ReactNode }) => <a href={to}>{children}</a>,
 }))
 vi.mock('@tanstack/react-query', () => ({
   useQuery: () => ({ isPending: false, isError: false }),
-  useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useQueryClient: () => ({}),
+  useMutation: (options: { mutationFn: () => Promise<unknown>; onSuccess?: () => void }) => ({
+    mutateAsync: vi.fn(),
+    mutate: () => void options.mutationFn().then(() => options.onSuccess?.()),
+    isPending: false,
+  }),
+  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
   queryOptions: (options: unknown) => options,
+}))
+vi.mock('@/lib/server/functions/feature-flags', () => ({
+  updateFeatureFlagsFn: hoisted.updateFlags,
 }))
 vi.mock('@/lib/client/use-permissions', () => ({
   useHasPermission: () => hoisted.canManage,
@@ -101,7 +114,25 @@ describe('Agent page without the Support inbox', () => {
     expect(screen.getByTestId('description')).toHaveTextContent(/need the Support inbox/)
     expect(screen.getByTestId('description')).not.toHaveTextContent('Replying in Messenger')
     expect(screen.queryByRole('button', { name: 'Pause Agent' })).toBeNull()
-    expect(screen.getByRole('link', { name: 'Open product settings' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Turn on inbox' })).toBeInTheDocument()
+  })
+
+  it('lets a tickets-only admin turn the inbox on from the page', async () => {
+    hoisted.updateFlags.mockResolvedValue({})
+    renderPage({ supportInbox: false, supportTickets: true })
+    expect(screen.queryByRole('link', { name: 'Open product settings' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Turn on inbox' }))
+    expect(hoisted.updateFlags).toHaveBeenCalledWith({ data: { supportInbox: true } })
+    await waitFor(() => expect(hoisted.invalidate).toHaveBeenCalled())
+  })
+
+  it('shows a tickets-only viewer without settings.manage no action', () => {
+    renderPage({ supportInbox: false, supportTickets: true }, false)
+    expect(screen.queryByRole('button', { name: 'Turn on inbox' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Open product settings' })).toBeNull()
+    expect(screen.getByTestId('description')).toHaveTextContent(
+      'Messenger replies need the Support inbox.'
+    )
   })
 
   it('shows the live line and the pause control once the inbox is on', () => {
