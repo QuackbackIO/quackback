@@ -20,6 +20,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react'
+import { useIntl } from 'react-intl'
 import {
   ArrowDownTrayIcon,
   ArrowLeftIcon,
@@ -69,11 +70,17 @@ const ZOOM_STEP = 0.25
  */
 export const VIEWER_ARROWS_ATTR = 'data-viewer-arrows'
 
-const FAILURE_COPY: Record<EngineFailure, string> = {
-  unsupported: 'No preview for this file type',
-  corrupt: "This file can't be previewed",
-  too_large: 'Too large to preview',
-  unavailable: 'This file is no longer available',
+const FAILURE_MESSAGE: Record<EngineFailure, { id: string; defaultMessage: string }> = {
+  unsupported: {
+    id: 'files.viewer.failureUnsupported',
+    defaultMessage: 'No preview for this file type',
+  },
+  corrupt: { id: 'files.viewer.failureCorrupt', defaultMessage: "This file can't be previewed" },
+  too_large: { id: 'files.viewer.failureTooLarge', defaultMessage: 'Too large to preview' },
+  unavailable: {
+    id: 'files.viewer.failureUnavailable',
+    defaultMessage: 'This file is no longer available',
+  },
 }
 
 /** The same-origin URL for a stored file's bytes (`?proxy=1` streams through this origin). */
@@ -237,6 +244,7 @@ export default function FileViewer({
   onClosed,
   engines = ENGINES,
 }: FileViewerProps) {
+  const intl = useIntl()
   const [current, setCurrent] = useState(() =>
     Math.min(Math.max(0, index), Math.max(0, files.length - 1))
   )
@@ -353,12 +361,16 @@ export default function FileViewer({
     .join(' · ')
 
   const Engine = kind ? engines[kind] : undefined
+  const downloadLabel = intl.formatMessage({
+    id: 'files.viewer.download',
+    defaultMessage: 'Download',
+  })
   const download = (
     <a
       href={file.url}
       download={file.name}
-      aria-label="Download"
-      title="Download"
+      aria-label={downloadLabel}
+      title={downloadLabel}
       className={TOOL_BUTTON}
     >
       <ArrowDownTrayIcon className="size-[17px]" />
@@ -366,7 +378,13 @@ export default function FileViewer({
   )
   const gallery = files.length > 1 && (
     <>
-      <ToolButton label="Previous file" onClick={() => go(-1)}>
+      <ToolButton
+        label={intl.formatMessage({
+          id: 'files.viewer.previousFile',
+          defaultMessage: 'Previous file',
+        })}
+        onClick={() => go(-1)}
+      >
         <ChevronLeftIcon className="size-[17px]" />
       </ToolButton>
       <span
@@ -375,9 +393,18 @@ export default function FileViewer({
           compact && 'sr-only'
         )}
       >
-        {current + 1} of {files.length}
+        {intl.formatMessage(
+          { id: 'files.viewer.counter', defaultMessage: '{current} of {total}' },
+          { current: current + 1, total: files.length }
+        )}
       </span>
-      <ToolButton label="Next file" onClick={() => go(1)}>
+      <ToolButton
+        label={intl.formatMessage({
+          id: 'files.viewer.nextFile',
+          defaultMessage: 'Next file',
+        })}
+        onClick={() => go(1)}
+      >
         <ChevronRightIcon className="size-[17px]" />
       </ToolButton>
     </>
@@ -423,7 +450,10 @@ export default function FileViewer({
           )}
         >
           {compact ? (
-            <ToolButton label="Back" onClick={onClose}>
+            <ToolButton
+              label={intl.formatMessage({ id: 'files.viewer.back', defaultMessage: 'Back' })}
+              onClick={onClose}
+            >
               <ArrowLeftIcon className="size-[17px]" />
             </ToolButton>
           ) : (
@@ -465,20 +495,29 @@ export default function FileViewer({
                 )}
                 {toolbar.page && (
                   <span className="px-1.5 text-[12.5px] whitespace-nowrap text-muted-foreground tabular-nums max-sm:hidden">
-                    Page {toolbar.page.current} of {toolbar.page.total}
+                    {intl.formatMessage(
+                      { id: 'files.viewer.page', defaultMessage: 'Page {current} of {total}' },
+                      { current: toolbar.page.current, total: toolbar.page.total }
+                    )}
                   </span>
                 )}
                 {toolbar.zoom && <ZoomGroup zoom={toolbar.zoom} />}
                 {toolbar.wrap && <WrapButton wrap={toolbar.wrap} />}
                 {toolbar.find && (
-                  <ToolButton label="Find" onClick={toolbar.find.open}>
+                  <ToolButton
+                    label={intl.formatMessage({ id: 'files.find.label', defaultMessage: 'Find' })}
+                    onClick={toolbar.find.open}
+                  >
                     <MagnifyingGlassIcon className="size-[17px]" />
                   </ToolButton>
                 )}
                 {hasEngineTools && <Separator />}
                 {gallery}
                 {download}
-                <ToolButton label="Close" onClick={onClose}>
+                <ToolButton
+                  label={intl.formatMessage({ id: 'files.viewer.close', defaultMessage: 'Close' })}
+                  onClick={onClose}
+                >
                   <XMarkIcon className="size-[17px]" />
                 </ToolButton>
               </>
@@ -514,15 +553,24 @@ export default function FileViewer({
         {compact && toolbar.page && (
           <div className="flex shrink-0 items-center justify-center gap-2.5 border-t border-border bg-background p-2 text-[12.5px] text-muted-foreground tabular-nums">
             <ToolButton
-              label="Previous page"
+              label={intl.formatMessage({
+                id: 'files.viewer.previousPage',
+                defaultMessage: 'Previous page',
+              })}
               disabled={toolbar.page.current <= 1}
               onClick={() => toolbar.page?.go(toolbar.page.current - 1)}
             >
               <ChevronLeftIcon className="size-[17px]" />
             </ToolButton>
-            Page {toolbar.page.current} of {toolbar.page.total}
+            {intl.formatMessage(
+              { id: 'files.viewer.page', defaultMessage: 'Page {current} of {total}' },
+              { current: toolbar.page.current, total: toolbar.page.total }
+            )}
             <ToolButton
-              label="Next page"
+              label={intl.formatMessage({
+                id: 'files.viewer.nextPage',
+                defaultMessage: 'Next page',
+              })}
               disabled={toolbar.page.current >= toolbar.page.total}
               onClick={() => toolbar.page?.go(toolbar.page.current + 1)}
             >
@@ -571,10 +619,15 @@ function Separator() {
 }
 
 function ZoomGroup({ zoom }: { zoom: NonNullable<EngineToolbar['zoom']> }) {
+  const intl = useIntl()
   return (
-    <div role="group" aria-label="Zoom" className="flex items-center max-sm:hidden">
+    <div
+      role="group"
+      aria-label={intl.formatMessage({ id: 'files.viewer.zoomGroupAria', defaultMessage: 'Zoom' })}
+      className="flex items-center max-sm:hidden"
+    >
       <ToolButton
-        label="Zoom out"
+        label={intl.formatMessage({ id: 'files.viewer.zoomOut', defaultMessage: 'Zoom out' })}
         disabled={zoom.value <= zoom.min + 1e-6}
         onClick={() => zoom.set(zoomStep(zoom, -1))}
       >
@@ -584,7 +637,7 @@ function ZoomGroup({ zoom }: { zoom: NonNullable<EngineToolbar['zoom']> }) {
         {Math.round(zoom.value * 100)}%
       </span>
       <ToolButton
-        label="Zoom in"
+        label={intl.formatMessage({ id: 'files.viewer.zoomIn', defaultMessage: 'Zoom in' })}
         disabled={zoom.value >= zoom.max - 1e-6}
         onClick={() => zoom.set(zoomStep(zoom, 1))}
       >
@@ -595,8 +648,13 @@ function ZoomGroup({ zoom }: { zoom: NonNullable<EngineToolbar['zoom']> }) {
 }
 
 function WrapButton({ wrap }: { wrap: NonNullable<EngineToolbar['wrap']> }) {
+  const intl = useIntl()
   return (
-    <ToolButton label="Wrap lines" pressed={wrap.on} onClick={wrap.toggle}>
+    <ToolButton
+      label={intl.formatMessage({ id: 'files.viewer.wrapLines', defaultMessage: 'Wrap lines' })}
+      pressed={wrap.on}
+      onClick={wrap.toggle}
+    >
       <ArrowTurnDownLeftIcon className="size-[17px]" />
     </ToolButton>
   )
@@ -604,10 +662,14 @@ function WrapButton({ wrap }: { wrap: NonNullable<EngineToolbar['wrap']> }) {
 
 /** The one loading state: a page-ish block resting on the desk. */
 export function ViewerSkeleton() {
+  const intl = useIntl()
   return (
     <div
       role="status"
-      aria-label="Loading file"
+      aria-label={intl.formatMessage({
+        id: 'files.viewer.loadingAria',
+        defaultMessage: 'Loading file',
+      })}
       className="flex flex-1 items-start justify-center overflow-hidden px-4 py-6 sm:px-16 sm:py-7"
     >
       <div className="aspect-[1/1.29] w-full max-w-[600px] animate-pulse rounded-[2px] bg-background/80 shadow-sm motion-reduce:animate-none" />
@@ -620,6 +682,8 @@ export function ViewerSkeleton() {
  * happened in one sentence, and Download (unless the file is gone).
  */
 export function ViewerFallback({ file, failure }: { file: ViewerFile; failure: EngineFailure }) {
+  const intl = useIntl()
+  const message = FAILURE_MESSAGE[failure]
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
       <FileBadge
@@ -628,7 +692,7 @@ export function ViewerFallback({ file, failure }: { file: ViewerFile; failure: E
         size="lg"
         className="size-14 rounded-xl text-[13px]"
       />
-      <p className="text-sm font-medium text-foreground">{FAILURE_COPY[failure]}</p>
+      <p className="text-sm font-medium text-foreground">{intl.formatMessage(message)}</p>
       {failure !== 'unavailable' && (
         <a
           href={file.url}
@@ -636,7 +700,7 @@ export function ViewerFallback({ file, failure }: { file: ViewerFile; failure: E
           className={buttonVariants({ variant: 'outline', size: 'sm' })}
         >
           <ArrowDownTrayIcon />
-          Download
+          {intl.formatMessage({ id: 'files.viewer.download', defaultMessage: 'Download' })}
         </a>
       )}
     </div>

@@ -5,13 +5,12 @@
  * open. The engine owns the matching and the highlighting.
  */
 import type { KeyboardEvent, ReactNode, RefObject } from 'react'
+import { useIntl } from 'react-intl'
 import { ChevronDownIcon, ChevronUpIcon, XMarkIcon } from '@heroicons/react/24/outline'
-
-const count = new Intl.NumberFormat('en-US')
 
 export function FindBar({
   inputRef,
-  label = 'Find in file',
+  label,
   query,
   onQueryChange,
   current,
@@ -21,6 +20,7 @@ export function FindBar({
   onClose,
 }: {
   inputRef: RefObject<HTMLInputElement | null>
+  /** Defaults to "Find in file" when not given. */
   label?: string
   query: string
   onQueryChange: (query: string) => void
@@ -32,6 +32,10 @@ export function FindBar({
   onStep: (delta: 1 | -1) => void
   onClose: () => void
 }) {
+  const intl = useIntl()
+  const resolvedLabel =
+    label ?? intl.formatMessage({ id: 'files.find.ariaInFile', defaultMessage: 'Find in file' })
+
   function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter') {
       e.preventDefault()
@@ -47,8 +51,8 @@ export function FindBar({
       <input
         ref={inputRef}
         type="search"
-        aria-label={label}
-        placeholder="Find"
+        aria-label={resolvedLabel}
+        placeholder={intl.formatMessage({ id: 'files.find.label', defaultMessage: 'Find' })}
         value={query}
         onChange={(e) => onQueryChange(e.target.value)}
         onKeyDown={onKeyDown}
@@ -57,17 +61,37 @@ export function FindBar({
       <span className="min-w-16 px-1 text-right tabular-nums" aria-live="polite">
         {query
           ? total === 0
-            ? 'No matches'
-            : `${count.format(current + 1)} of ${count.format(total)}${capped ? '+' : ''}`
+            ? intl.formatMessage({ id: 'files.find.noMatches', defaultMessage: 'No matches' })
+            : intl.formatMessage(
+                {
+                  id: capped ? 'files.find.matchCountCapped' : 'files.find.matchCount',
+                  defaultMessage: capped ? '{current} of {total}+' : '{current} of {total}',
+                },
+                { current: current + 1, total }
+              )
           : ''}
       </span>
-      <FindButton label="Previous match" onClick={() => onStep(-1)} disabled={total === 0}>
+      <FindButton
+        label={intl.formatMessage({
+          id: 'files.find.previousMatch',
+          defaultMessage: 'Previous match',
+        })}
+        onClick={() => onStep(-1)}
+        disabled={total === 0}
+      >
         <ChevronUpIcon className="size-4" />
       </FindButton>
-      <FindButton label="Next match" onClick={() => onStep(1)} disabled={total === 0}>
+      <FindButton
+        label={intl.formatMessage({ id: 'files.find.nextMatch', defaultMessage: 'Next match' })}
+        onClick={() => onStep(1)}
+        disabled={total === 0}
+      >
         <ChevronDownIcon className="size-4" />
       </FindButton>
-      <FindButton label="Close find" onClick={onClose}>
+      <FindButton
+        label={intl.formatMessage({ id: 'files.find.close', defaultMessage: 'Close find' })}
+        onClick={onClose}
+      >
         <XMarkIcon className="size-4" />
       </FindButton>
     </div>

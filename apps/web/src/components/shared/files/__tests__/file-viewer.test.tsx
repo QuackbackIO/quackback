@@ -7,6 +7,7 @@
  */
 import { useEffect, type ComponentType } from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import FileViewer, { type FileViewerProps } from '../file-viewer'
 import type { EngineFailure, EngineToolbar, ViewerEngineProps, ViewerFile } from '../types'
@@ -90,10 +91,15 @@ function pendingUntilAborted(_url: string, init?: RequestInit) {
   })
 }
 
-function renderViewer(props: Partial<FileViewerProps> = {}) {
+function renderViewer(
+  props: Partial<FileViewerProps> = {},
+  intl: { locale?: string; messages?: Record<string, string> } = {}
+) {
   const onClose = vi.fn()
   const result = render(
-    <FileViewer files={[invoice]} index={0} open onClose={onClose} engines={ENGINES} {...props} />
+    <IntlProvider locale={intl.locale ?? 'en-US'} messages={intl.messages ?? {}}>
+      <FileViewer files={[invoice]} index={0} open onClose={onClose} engines={ENGINES} {...props} />
+    </IntlProvider>
   )
   return { ...result, onClose }
 }
@@ -381,7 +387,9 @@ describe('FileViewer fetching', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
     const signal = fetchMock.mock.calls[0]![1]!.signal as AbortSignal
     rerender(
-      <FileViewer files={[invoice]} index={0} open={false} onClose={onClose} engines={ENGINES} />
+      <IntlProvider locale="en-US" messages={{}}>
+        <FileViewer files={[invoice]} index={0} open={false} onClose={onClose} engines={ENGINES} />
+      </IntlProvider>
     )
     expect(signal.aborted).toBe(true)
   })
@@ -477,6 +485,21 @@ describe('FileViewer fallback', () => {
     expect(await screen.findByTestId('engine')).toHaveTextContent('contract.pdf|1000|')
     expect(screen.queryByText('This file is no longer available')).toBeNull()
   })
+
+  it('shows the fallback translated when the viewer locale is German', async () => {
+    renderViewer(
+      { files: [deck] },
+      {
+        locale: 'de',
+        messages: {
+          'files.viewer.failureUnsupported': 'Keine Vorschau für diesen Dateityp',
+          'files.viewer.download': 'Herunterladen',
+        },
+      }
+    )
+    expect(await screen.findByText('Keine Vorschau für diesen Dateityp')).toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: 'Herunterladen' }).length).toBeGreaterThanOrEqual(1)
+  })
 })
 
 describe('FileViewer focus', () => {
@@ -494,14 +517,16 @@ describe('FileViewer focus', () => {
     const { rerender, onClose } = renderViewer({ opener })
     await waitFor(() => expect(screen.getByRole('dialog')).toHaveFocus())
     rerender(
-      <FileViewer
-        files={[invoice]}
-        index={0}
-        open={false}
-        opener={opener}
-        onClose={onClose}
-        engines={ENGINES}
-      />
+      <IntlProvider locale="en-US" messages={{}}>
+        <FileViewer
+          files={[invoice]}
+          index={0}
+          open={false}
+          opener={opener}
+          onClose={onClose}
+          engines={ENGINES}
+        />
+      </IntlProvider>
     )
     await waitFor(() => expect(opener).toHaveFocus())
     opener.remove()

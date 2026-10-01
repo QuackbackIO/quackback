@@ -10,6 +10,7 @@
  * around the composer, which has no business with this gallery.
  */
 import { createContext, useContext, useMemo, type ReactNode } from 'react'
+import { useIntl, type IntlShape } from 'react-intl'
 import { toViewerFile, type ViewerFile } from './types'
 import type { ConversationAttachment } from '@/lib/shared/conversation/types'
 
@@ -40,11 +41,17 @@ export function useConversationGallery(): ConversationGalleryApi {
   return useContext(ConversationGalleryContext)
 }
 
-function senderNameOf(m: GalleryMessage): string | undefined {
+function senderNameOf(m: GalleryMessage, intl: IntlShape): string | undefined {
   if (m.author?.displayName) return m.author.displayName
-  if (m.isAssistant) return 'Assistant'
-  if (m.senderType === 'agent') return 'Agent'
-  if (m.senderType === 'visitor') return 'Visitor'
+  if (m.isAssistant) {
+    return intl.formatMessage({ id: 'files.sender.assistant', defaultMessage: 'Assistant' })
+  }
+  if (m.senderType === 'agent') {
+    return intl.formatMessage({ id: 'files.sender.agent', defaultMessage: 'Agent' })
+  }
+  if (m.senderType === 'visitor') {
+    return intl.formatMessage({ id: 'files.sender.visitor', defaultMessage: 'Visitor' })
+  }
   return undefined
 }
 
@@ -61,6 +68,7 @@ export function ConversationGalleryProvider({
   includeInternal?: boolean
   children: ReactNode
 }) {
+  const intl = useIntl()
   const value = useMemo<ConversationGalleryApi>(() => {
     const files: ViewerFile[] = []
     const startIndexByMessage = new Map<string, number>()
@@ -68,7 +76,7 @@ export function ConversationGalleryProvider({
       if (m.isInternal && !includeInternal) continue
       if (!m.attachments || m.attachments.length === 0) continue
       startIndexByMessage.set(m.id, files.length)
-      const senderName = senderNameOf(m)
+      const senderName = senderNameOf(m, intl)
       m.attachments.forEach((a, index) => {
         files.push(toViewerFile(a, { senderName, sentAt: m.createdAt, messageId: m.id, index }))
       })
@@ -80,7 +88,7 @@ export function ConversationGalleryProvider({
         return start === undefined ? -1 : start + localIndex
       },
     }
-  }, [messages, includeInternal])
+  }, [messages, includeInternal, intl])
 
   return (
     <ConversationGalleryContext.Provider value={value}>

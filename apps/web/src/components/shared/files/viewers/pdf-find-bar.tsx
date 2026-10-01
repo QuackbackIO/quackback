@@ -4,6 +4,7 @@
  * (and only the bar).
  */
 import { useEffect, useRef, type KeyboardEvent } from 'react'
+import { useIntl } from 'react-intl'
 import { ChevronDownIcon, ChevronUpIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 
@@ -28,6 +29,7 @@ export function PdfFindBar({
   /** Changes each time find is asked for, to focus the field again. */
   focusNonce: number
 }) {
+  const intl = useIntl()
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -51,8 +53,11 @@ export function PdfFindBar({
     query.trim() === '' || searching
       ? ''
       : count === 0
-        ? 'No matches'
-        : `${active + 1} of ${count.toLocaleString('en-US')}`
+        ? intl.formatMessage({ id: 'files.find.noMatches', defaultMessage: 'No matches' })
+        : intl.formatMessage(
+            { id: 'files.find.matchCount', defaultMessage: '{current} of {total}' },
+            { current: active + 1, total: count }
+          )
 
   return (
     <div
@@ -65,8 +70,11 @@ export function PdfFindBar({
         value={query}
         onChange={(event) => onQuery(event.target.value)}
         onKeyDown={onKeyDown}
-        aria-label="Find in document"
-        placeholder="Find"
+        aria-label={intl.formatMessage({
+          id: 'files.find.ariaInDocument',
+          defaultMessage: 'Find in document',
+        })}
+        placeholder={intl.formatMessage({ id: 'files.find.label', defaultMessage: 'Find' })}
         className="h-7 w-44 bg-transparent px-2 text-sm outline-none placeholder:text-muted-foreground"
       />
       <span aria-live="polite" className="min-w-14 px-1 text-xs tabular-nums text-muted-foreground">
@@ -76,7 +84,10 @@ export function PdfFindBar({
         variant="ghost"
         size="icon-sm"
         className="size-7"
-        aria-label="Previous match"
+        aria-label={intl.formatMessage({
+          id: 'files.find.previousMatch',
+          defaultMessage: 'Previous match',
+        })}
         disabled={count === 0}
         onClick={() => onStep(-1)}
       >
@@ -86,7 +97,10 @@ export function PdfFindBar({
         variant="ghost"
         size="icon-sm"
         className="size-7"
-        aria-label="Next match"
+        aria-label={intl.formatMessage({
+          id: 'files.find.nextMatch',
+          defaultMessage: 'Next match',
+        })}
         disabled={count === 0}
         onClick={() => onStep(1)}
       >
@@ -96,7 +110,7 @@ export function PdfFindBar({
         variant="ghost"
         size="icon-sm"
         className="size-7"
-        aria-label="Close find"
+        aria-label={intl.formatMessage({ id: 'files.find.close', defaultMessage: 'Close find' })}
         onClick={onClose}
       >
         <XMarkIcon />

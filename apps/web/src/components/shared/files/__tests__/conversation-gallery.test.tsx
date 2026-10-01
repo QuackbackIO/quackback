@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest'
 import { renderHook } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import {
   ConversationGalleryProvider,
   useConversationGallery,
@@ -34,7 +35,9 @@ describe('ConversationGalleryProvider', () => {
     ]
     const { result } = renderHook(() => useConversationGallery(), {
       wrapper: ({ children }) => (
-        <ConversationGalleryProvider messages={messages}>{children}</ConversationGalleryProvider>
+        <IntlProvider locale="en-US" messages={{}}>
+          <ConversationGalleryProvider messages={messages}>{children}</ConversationGalleryProvider>
+        </IntlProvider>
       ),
     })
     expect(result.current.files.map((f) => f.name)).toEqual(['a.pdf', 'b.pdf', 'c.pdf'])
@@ -47,7 +50,9 @@ describe('ConversationGalleryProvider', () => {
     ]
     const { result } = renderHook(() => useConversationGallery(), {
       wrapper: ({ children }) => (
-        <ConversationGalleryProvider messages={messages}>{children}</ConversationGalleryProvider>
+        <IntlProvider locale="en-US" messages={{}}>
+          <ConversationGalleryProvider messages={messages}>{children}</ConversationGalleryProvider>
+        </IntlProvider>
       ),
     })
     expect(result.current.indexOf('m1', 0)).toBe(0)
@@ -63,7 +68,9 @@ describe('ConversationGalleryProvider', () => {
     ]
     const { result } = renderHook(() => useConversationGallery(), {
       wrapper: ({ children }) => (
-        <ConversationGalleryProvider messages={messages}>{children}</ConversationGalleryProvider>
+        <IntlProvider locale="en-US" messages={{}}>
+          <ConversationGalleryProvider messages={messages}>{children}</ConversationGalleryProvider>
+        </IntlProvider>
       ),
     })
     expect(result.current.files.map((f) => f.name)).toEqual(['public.pdf'])
@@ -77,9 +84,11 @@ describe('ConversationGalleryProvider', () => {
     ]
     const { result } = renderHook(() => useConversationGallery(), {
       wrapper: ({ children }) => (
-        <ConversationGalleryProvider messages={messages} includeInternal>
-          {children}
-        </ConversationGalleryProvider>
+        <IntlProvider locale="en-US" messages={{}}>
+          <ConversationGalleryProvider messages={messages} includeInternal>
+            {children}
+          </ConversationGalleryProvider>
+        </IntlProvider>
       ),
     })
     expect(result.current.files.map((f) => f.name)).toEqual(['secret.pdf', 'public.pdf'])
@@ -89,5 +98,19 @@ describe('ConversationGalleryProvider', () => {
     const { result } = renderHook(() => useConversationGallery())
     expect(result.current.files).toEqual([])
     expect(result.current.indexOf('m1', 0)).toBe(-1)
+  })
+
+  it('falls back to a localized sender label when the author has no display name', () => {
+    const messages: GalleryMessage[] = [
+      msg({ id: 'm1', senderType: 'agent', attachments: [att('a.pdf')] }),
+    ]
+    const { result } = renderHook(() => useConversationGallery(), {
+      wrapper: ({ children }) => (
+        <IntlProvider locale="de" messages={{ 'files.sender.agent': 'Mitarbeiter' }}>
+          <ConversationGalleryProvider messages={messages}>{children}</ConversationGalleryProvider>
+        </IntlProvider>
+      ),
+    })
+    expect(result.current.files[0]!.senderName).toBe('Mitarbeiter')
   })
 })

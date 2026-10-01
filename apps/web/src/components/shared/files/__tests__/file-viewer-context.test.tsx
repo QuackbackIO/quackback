@@ -3,10 +3,19 @@
  * The provider every app root mounts: `open(files, index)` shows the one
  * viewer (loaded on first use), and closing it hands focus back.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FileViewerProvider, useFileViewer } from '../file-viewer-context'
 import type { ViewerFile } from '../types'
+
+function render(node: React.ReactNode) {
+  return rtlRender(
+    <IntlProvider locale="en-US" messages={{}}>
+      {node}
+    </IntlProvider>
+  )
+}
 
 const deck: ViewerFile = {
   key: 'deck',
