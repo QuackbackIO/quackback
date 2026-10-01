@@ -124,6 +124,14 @@ export function SectionSkeleton({ section }: { section: Section }) {
     )
   }
 
+  if (section === 'ai') {
+    return (
+      <StatSectionSkeleton cols={4}>
+        <Skeleton className="h-2 w-full rounded-full" />
+      </StatSectionSkeleton>
+    )
+  }
+
   if (section === 'changelog' || section === 'support') {
     return (
       <StatSectionSkeleton cols={3}>
