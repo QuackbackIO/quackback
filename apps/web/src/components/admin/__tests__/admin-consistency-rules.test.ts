@@ -46,7 +46,6 @@ describe('scopes', () => {
   it('excepts the shell primitives and layout files', () => {
     expect(inScope('page-shell', 'components/admin/settings/settings-page.tsx')).toBe(false)
     expect(inScope('page-shell', 'routes/admin/settings.tsx')).toBe(false)
-    expect(inScope('page-shell', 'routes/admin/automation.tsx')).toBe(false)
     expect(inScope('page-width', 'components/admin/settings/settings-page.tsx')).toBe(false)
   })
 })
@@ -188,10 +187,10 @@ describe('usedRegistryPaths', () => {
       { file: 'a.tsx', src: `export const A = () => <SettingsPage page="/admin/settings/tags" />` },
       {
         file: 'b.tsx',
-        src: `export const B = () => <SettingsPage page='/admin/automation/agent' area="automation" />`,
+        src: `export const B = () => <SettingsPage page='/admin/settings/agent' />`,
       },
       { file: 'c.tsx', src: `// <SettingsPage page="/admin/settings/boards" />` },
     ])
-    expect([...used].sort()).toEqual(['/admin/automation/agent', '/admin/settings/tags'])
+    expect([...used].sort()).toEqual(['/admin/settings/agent', '/admin/settings/tags'])
   })
 })

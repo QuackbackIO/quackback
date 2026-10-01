@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { buildNavSections } from '../settings-nav'
 import { buildSettingsModules } from '../settings-modules'
-import { buildAutomationNavSections } from '../../automation/automation-nav'
 import {
   AUTOMATION_PAGES,
   SETTINGS_PAGES,
   settingsPageLabel,
   type SettingsPagePath,
 } from '../settings-pages'
-import { SETTINGS_PAGE_ICONS } from '../settings-page-icons'
+import { AUTOMATION_PAGE_ICONS, SETTINGS_PAGE_ICONS } from '../settings-page-icons'
 
 const ALL_FLAGS = {
   supportInbox: true,
@@ -45,16 +44,15 @@ describe('settings page registry', () => {
       expect(SETTINGS_PAGE_ICONS[path as SettingsPagePath], path).toBeTruthy()
   })
 
-  it('maps the six automation paths to message descriptors', () => {
+  it('maps the five AI & Automation paths to message descriptors', () => {
     expect(Object.keys(AUTOMATION_PAGES).sort()).toEqual([
-      '/admin/automation/agent',
-      '/admin/automation/connectors',
-      '/admin/automation/copilot',
-      '/admin/automation/performance',
-      '/admin/automation/skills',
-      '/admin/automation/workflows',
+      '/admin/settings/agent',
+      '/admin/settings/connectors',
+      '/admin/settings/copilot',
+      '/admin/settings/skills',
+      '/admin/settings/workflows',
     ])
-    expect(AUTOMATION_PAGES['/admin/automation/agent']).toMatchObject({
+    expect(AUTOMATION_PAGES['/admin/settings/agent']).toMatchObject({
       id: 'automation.nav.agent',
       defaultMessage: 'Agent',
     })
@@ -83,18 +81,15 @@ describe('settings page registry', () => {
     }
   })
 
-  it('is the source of every automation nav label', () => {
-    const items = buildAutomationNavSections(
-      { supportInbox: true },
-      { assistant: true, workflows: true, analytics: true }
-    ).flatMap((section) => section.items)
-    expect(items).toHaveLength(6)
-    for (const item of items) {
-      const descriptor = (
-        AUTOMATION_PAGES as Record<string, { id: string; defaultMessage: string }>
-      )[item.to]
-      expect(item.labelId).toBe(descriptor!.id)
-      expect(item.defaultLabel).toBe(descriptor!.defaultMessage)
+  it('is the source of every AI & Automation nav label and icon', () => {
+    const section = buildNavSections(ALL_FLAGS, true, true).find(
+      (candidate) => candidate.label === 'AI & Automation'
+    )!
+    expect(section.items).toHaveLength(5)
+    for (const item of section.items as Array<{ label: string; to: string; icon: unknown }>) {
+      const path = item.to as keyof typeof AUTOMATION_PAGES
+      expect(item.label).toBe(AUTOMATION_PAGES[path].defaultMessage)
+      expect(item.icon).toBe(AUTOMATION_PAGE_ICONS[path])
     }
   })
 })

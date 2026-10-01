@@ -3,6 +3,7 @@ import {
   ArrowDownTrayIcon,
   BeakerIcon,
   BellIcon,
+  BoltIcon,
   BookOpenIcon,
   BuildingOfficeIcon,
   ChatBubbleLeftIcon,
@@ -16,11 +17,13 @@ import {
   EnvelopeIcon,
   FlagIcon,
   GlobeAltIcon,
+  LinkIcon,
   MegaphoneIcon,
   PuzzlePieceIcon,
   QueueListIcon,
   ShieldCheckIcon,
   SignalIcon,
+  SparklesIcon,
   Squares2X2Icon,
   TagIcon,
   TicketIcon,
@@ -28,7 +31,7 @@ import {
   UsersIcon,
 } from '@heroicons/react/24/solid'
 import { GitHubIcon } from '@/components/icons/integration-icons'
-import type { SettingsPagePath } from './settings-pages'
+import type { AutomationPagePath, SettingsPagePath } from './settings-pages'
 
 /**
  * The icon of each settings page, keyed like the label registry in
@@ -72,4 +75,16 @@ export const SETTINGS_PAGE_ICONS: Record<
   '/admin/settings/companies': BuildingOfficeIcon,
   '/admin/settings/conversation-data': ChatBubbleLeftIcon,
   '/admin/settings/imports': ArrowDownTrayIcon,
+}
+
+/** The icon of each AI & Automation page. */
+export const AUTOMATION_PAGE_ICONS: Record<
+  AutomationPagePath,
+  ComponentType<{ className?: string }>
+> = {
+  '/admin/settings/agent': SparklesIcon,
+  '/admin/settings/copilot': UserGroupIcon,
+  '/admin/settings/skills': BookOpenIcon,
+  '/admin/settings/connectors': LinkIcon,
+  '/admin/settings/workflows': BoltIcon,
 }

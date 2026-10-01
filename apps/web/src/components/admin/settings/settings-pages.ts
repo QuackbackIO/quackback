@@ -62,17 +62,19 @@ const automationMessages = defineMessages({
   connectors: { id: 'automation.nav.connectors', defaultMessage: 'Connectors' },
   skills: { id: 'automation.nav.skills', defaultMessage: 'Skills' },
   workflows: { id: 'automation.nav.workflows', defaultMessage: 'Workflows' },
-  performance: { id: 'automation.nav.performance', defaultMessage: 'Performance' },
 })
 
-/** The automation pages, labelled through the same messages the automation nav renders. */
+/**
+ * The AI & Automation pages, which are settings pages too. Their labels are
+ * messages, so the page title is translated; the settings nav shows each
+ * message's default text.
+ */
 export const AUTOMATION_PAGES = {
-  '/admin/automation/agent': automationMessages.agent,
-  '/admin/automation/copilot': automationMessages.copilot,
-  '/admin/automation/connectors': automationMessages.connectors,
-  '/admin/automation/skills': automationMessages.skills,
-  '/admin/automation/workflows': automationMessages.workflows,
-  '/admin/automation/performance': automationMessages.performance,
+  '/admin/settings/agent': automationMessages.agent,
+  '/admin/settings/copilot': automationMessages.copilot,
+  '/admin/settings/connectors': automationMessages.connectors,
+  '/admin/settings/skills': automationMessages.skills,
+  '/admin/settings/workflows': automationMessages.workflows,
 } as const
 
 export type AutomationPagePath = keyof typeof AUTOMATION_PAGES

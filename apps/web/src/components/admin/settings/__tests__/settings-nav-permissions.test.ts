@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { PERMISSIONS, SYSTEM_ROLE_PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
-import { buildNavSections, navSectionsFor } from '../settings-nav'
+import { buildNavSections, canOpenSettings, navSectionsFor } from '../settings-nav'
 
 type Sections = ReturnType<typeof buildNavSections>
 
@@ -65,6 +65,29 @@ describe('navSectionsFor', () => {
     expect(labels(only(PERMISSIONS.CONVERSATION_MANAGE), 'Data')).toEqual(['Conversations'])
   })
 
+  it('offers the AI & Automation pages by the permission each one checks', () => {
+    const only = (permission: PermissionKey) =>
+      navSectionsFor(buildNavSections({ supportInbox: true }, true, true), new Set([permission]))
+
+    expect(labels(only(PERMISSIONS.ASSISTANT_MANAGE), 'AI & Automation')).toEqual([
+      'Agent',
+      'Copilot',
+      'Skills',
+      'Connectors',
+    ])
+    expect(labels(only(PERMISSIONS.WORKFLOW_MANAGE), 'AI & Automation')).toEqual(['Workflows'])
+    expect(labels(only(PERMISSIONS.MEMBER_VIEW), 'AI & Automation')).toBeNull()
+  })
+
+  it('leaves the AI & Automation heading out when no row is visible', () => {
+    // Workflows needs the inbox; with it off a workflow manager has no row.
+    const sections = navSectionsFor(
+      buildNavSections({ supportInbox: false }, false, false),
+      new Set<PermissionKey>([PERMISSIONS.WORKFLOW_MANAGE])
+    )
+    expect(sections.map((s) => s.label)).not.toContain('AI & Automation')
+  })
+
   it('shows an owner every page', () => {
     const sections = buildNavSections({ supportInbox: true }, true, true)
     expect(navSectionsFor(sections, new Set(SYSTEM_ROLE_PERMISSIONS.owner))).toEqual(sections)
@@ -97,5 +120,26 @@ describe('navSectionsFor', () => {
       new Set<PermissionKey>([PERMISSIONS.MEMBER_VIEW])
     )
     expect(labels(sections, 'Modules')).toBeNull()
+  })
+})
+
+describe('canOpenSettings', () => {
+  const sections = buildNavSections({ supportInbox: true }, false, false)
+  const can = (...permissions: PermissionKey[]) => canOpenSettings(sections, new Set(permissions))
+
+  it('is true for a holder of any page permission, however small', () => {
+    expect(can(PERMISSIONS.ASSISTANT_MANAGE)).toBe(true)
+    expect(can(PERMISSIONS.WORKFLOW_MANAGE)).toBe(true)
+    expect(can(PERMISSIONS.MEMBER_VIEW)).toBe(true)
+  })
+
+  it('is false when nothing but the personal Notifications page is open', () => {
+    expect(can()).toBe(false)
+    expect(can(PERMISSIONS.POST_CREATE)).toBe(false)
+  })
+
+  it('follows the flags: a workflow manager has no page while the inbox is off', () => {
+    const off = buildNavSections({ supportInbox: false }, false, false)
+    expect(canOpenSettings(off, new Set([PERMISSIONS.WORKFLOW_MANAGE]))).toBe(false)
   })
 })

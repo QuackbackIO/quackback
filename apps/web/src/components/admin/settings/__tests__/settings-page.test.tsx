@@ -32,7 +32,7 @@ describe('SettingsPage', () => {
   })
 
   it('resolves automation pages through their message descriptor', () => {
-    renderPage(<SettingsPage page="/admin/automation/connectors" area="automation" />)
+    renderPage(<SettingsPage page="/admin/settings/connectors" />)
     expect(screen.getByRole('heading', { level: 1, name: 'Connectors' })).toBeInTheDocument()
   })
 
@@ -79,13 +79,6 @@ describe('SettingsPage', () => {
     expect(link.parentElement?.className).toContain('lg:hidden')
   })
 
-  it('points the back link at automation for the automation area', () => {
-    renderPage(<SettingsPage page="/admin/automation/skills" area="automation" />)
-    expect(screen.getByRole('link', { name: 'AI & Automation' }).getAttribute('href')).toBe(
-      '/admin/automation'
-    )
-  })
-
   it('passes crumbs to the header and drops the back link when a crumb links up', () => {
     renderPage(
       <SettingsPage
@@ -112,19 +105,12 @@ describe('SettingsPage', () => {
     expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull()
   })
 
-  it('derives the automation area from an automation page path', () => {
-    renderPage(<SettingsPage page="/admin/automation/skills" />)
-    expect(screen.getByRole('link', { name: 'AI & Automation' }).getAttribute('href')).toBe(
-      '/admin/automation'
-    )
-    expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull()
-  })
-
-  it('lets an explicit area win over the page path', () => {
-    renderPage(<SettingsPage page="/admin/automation/skills" area="settings" />)
+  it('gives an AI & Automation page the settings back link', () => {
+    renderPage(<SettingsPage page="/admin/settings/skills" />)
     expect(screen.getByRole('link', { name: 'Settings' }).getAttribute('href')).toBe(
       '/admin/settings'
     )
+    expect(screen.getByRole('heading', { level: 1, name: 'Skills' })).toBeInTheDocument()
   })
 
   it('renders actions, the save status slot and children', () => {

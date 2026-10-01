@@ -22,7 +22,6 @@ type SettingsPageProps = PageTitle & {
   actions?: ReactNode
   /** `form` is a single column of settings; `wide` is for tables, card grids and live previews. */
   width?: 'form' | 'wide'
-  area?: 'settings' | 'automation'
   /** False on the mobile index page, which is the back link's own target. */
   backLink?: boolean
   children?: ReactNode
@@ -33,13 +32,8 @@ const WIDTH_CLASS = { form: 'max-w-3xl', wide: 'max-w-5xl' } as const
 /** The form width, for a part of a wide page (a tab bar) that stays at form width. */
 export const FORM_WIDTH_CLASS = WIDTH_CLASS.form
 
-const BACK_LINK = {
-  settings: { to: '/admin/settings', label: 'Settings' },
-  automation: { to: '/admin/automation', label: 'AI & Automation' },
-} as const
-
 /**
- * The shell of every settings and automation page: the header (title from the
+ * The shell of every settings page: the header (title from the
  * page registry, breadcrumbs, save status, actions), the mobile back link, and
  * the page body at one of two widths.
  */
@@ -52,7 +46,6 @@ export function SettingsPage({
   logo,
   actions,
   width = 'form',
-  area,
   backLink = true,
   children,
 }: SettingsPageProps) {
@@ -70,16 +63,13 @@ export function SettingsPage({
     }
   }
 
-  const resolvedArea =
-    area ?? (page !== undefined && page in AUTOMATION_PAGES ? 'automation' : 'settings')
-  const back = BACK_LINK[resolvedArea]
   // A linked crumb is itself the way back; module-only crumbs have no page to go to.
   const hasBackCrumb = crumbs?.some((crumb) => crumb.to !== undefined) ?? false
   return (
     <div data-settings-page-body="" className={cn('space-y-6', WIDTH_CLASS[width])}>
       {backLink && !hasBackCrumb && (
         <div className="lg:hidden">
-          <BackLink to={back.to}>{back.label}</BackLink>
+          <BackLink to="/admin/settings">Settings</BackLink>
         </div>
       )}
       <PageHeader

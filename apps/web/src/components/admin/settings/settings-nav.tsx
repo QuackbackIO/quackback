@@ -7,8 +7,13 @@ import { FilterSection } from '@/components/shared/filter-section'
 import { usePermissions } from '@/lib/client/use-permissions'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { isProductEnabled, type FeatureFlags } from '@/lib/shared/types'
-import { SETTINGS_PAGES, type SettingsPagePath } from './settings-pages'
-import { SETTINGS_PAGE_ICONS } from './settings-page-icons'
+import {
+  AUTOMATION_PAGES,
+  SETTINGS_PAGES,
+  type AutomationPagePath,
+  type SettingsPagePath,
+} from './settings-pages'
+import { AUTOMATION_PAGE_ICONS, SETTINGS_PAGE_ICONS } from './settings-page-icons'
 import { buildSettingsModules } from './settings-modules'
 import {
   useBillingEnabled,
@@ -50,15 +55,25 @@ function navPage(to: SettingsPagePath) {
   return { label, to, icon: SETTINGS_PAGE_ICONS[to] }
 }
 
+/** A nav row for an AI & Automation page; its label is the message's default text. */
+function navAutomationPage(to: AutomationPagePath, permission: PermissionKey) {
+  return {
+    label: AUTOMATION_PAGES[to].defaultMessage,
+    to,
+    icon: AUTOMATION_PAGE_ICONS[to],
+    permission,
+  }
+}
+
 export function isNavGroup(entry: NavEntry): entry is NavGroup {
   return 'kids' in entry
 }
 
 /**
- * The settings IA (SETTINGS-IA-SPEC Option B): three stable sections. Flags hide
- * ITEMS (or whole product accordions), never sections, so the sidebar layout
- * does not reflow when a flag flips. AI & Automation lives outside settings
- * entirely, as its own main-nav area at /admin/automation (M5).
+ * The settings IA (SETTINGS-IA-SPEC Option B): four stable sections (Modules,
+ * AI & Automation, Workspace, Data). Flags hide ITEMS (or whole product
+ * accordions), never sections, so the sidebar layout does not reflow when a
+ * flag flips. A section a viewer holds no permission for is left out.
  *
  * @param billingEnabled Whether this workspace has a valid billing projection
  *   configured. Not a feature flag — a flag answers "has the admin turned it
@@ -89,6 +104,18 @@ export function buildNavSections(
 
   return [
     { label: 'Modules', items: products },
+    {
+      label: 'AI & Automation',
+      items: [
+        navAutomationPage('/admin/settings/agent', PERMISSIONS.ASSISTANT_MANAGE),
+        navAutomationPage('/admin/settings/copilot', PERMISSIONS.ASSISTANT_MANAGE),
+        navAutomationPage('/admin/settings/skills', PERMISSIONS.ASSISTANT_MANAGE),
+        navAutomationPage('/admin/settings/connectors', PERMISSIONS.ASSISTANT_MANAGE),
+        ...(flags?.supportInbox
+          ? [navAutomationPage('/admin/settings/workflows', PERMISSIONS.WORKFLOW_MANAGE)]
+          : []),
+      ],
+    },
     {
       label: 'Workspace',
       items: [
@@ -193,6 +220,20 @@ export function navSectionsFor(
       items: section.items.map(visible).filter((entry): entry is NavEntry => entry !== null),
     }))
     .filter((section) => section.items.length > 0)
+}
+
+/**
+ * Whether a viewer can open at least one settings page, which is what the rail's
+ * Settings entry needs. Notifications has no permission and is reached from the
+ * bell, so it does not count.
+ */
+export function canOpenSettings(
+  sections: NavSection[],
+  permissions: ReadonlySet<PermissionKey>
+): boolean {
+  const gated = (entry: NavEntry): boolean =>
+    isNavGroup(entry) ? entry.kids.some(gated) : entry.permission !== undefined
+  return navSectionsFor(sections, permissions).some((section) => section.items.some(gated))
 }
 
 function settingsRowClass(active: boolean) {

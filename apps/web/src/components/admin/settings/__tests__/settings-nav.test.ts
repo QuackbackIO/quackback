@@ -30,7 +30,7 @@ function allLabels(sections: ReturnType<typeof buildNavSections>): string[] {
 }
 
 describe('buildNavSections', () => {
-  it('always renders the three sections in order, regardless of flags', () => {
+  it('always renders the four sections in order, regardless of flags', () => {
     for (const flags of [
       undefined,
       {},
@@ -38,20 +38,35 @@ describe('buildNavSections', () => {
       { supportInbox: true },
     ]) {
       const sections = buildNavSections(flags)
-      expect(sections.map((s) => s.label)).toEqual(['Modules', 'Workspace', 'Data'])
+      expect(sections.map((s) => s.label)).toEqual([
+        'Modules',
+        'AI & Automation',
+        'Workspace',
+        'Data',
+      ])
     }
   })
 
-  it('has no AI & Automation section (elevated to its own main-nav area)', () => {
-    const sections = buildNavSections({
-      helpCenter: true,
-      supportInbox: true,
-      supportTickets: true,
-    })
-    expect(sections.map((s) => s.label)).not.toContain('AI & Automation')
+  it('lists the AI & Automation pages between Modules and Workspace', () => {
+    const sections = buildNavSections({ supportInbox: true })
+    expect(
+      sections
+        .find((s) => s.label === 'AI & Automation')!
+        .items.map((i) => [i.label, 'to' in i ? i.to : undefined])
+    ).toEqual([
+      ['Agent', '/admin/settings/agent'],
+      ['Copilot', '/admin/settings/copilot'],
+      ['Skills', '/admin/settings/skills'],
+      ['Connectors', '/admin/settings/connectors'],
+      ['Workflows', '/admin/settings/workflows'],
+    ])
+    expect(allLabels(sections)).not.toContain('Performance')
     expect(allLabels(sections)).not.toContain('Assistant')
-    expect(allLabels(sections)).not.toContain('Workflows')
-    expect(allLabels(sections)).not.toContain('Sandbox')
+  })
+
+  it('leaves Workflows out while the Support inbox is off, and keeps the other rows', () => {
+    const labels = itemLabels(buildNavSections({ supportInbox: false }), 'AI & Automation')
+    expect(labels).toEqual(['Agent', 'Copilot', 'Skills', 'Connectors'])
   })
 
   it('Modules lists Feedback & Roadmaps as a group of its own pages, with no hub row', () => {
@@ -257,14 +272,7 @@ describe('buildNavSections', () => {
   it('retired section names are gone (Administration, Customization, Customers, Support section)', () => {
     const sections = buildNavSections({ helpCenter: true, supportInbox: true })
     const sectionLabels = sections.map((s) => s.label)
-    for (const retired of [
-      'Administration',
-      'Customization',
-      'Customers',
-      'Support',
-      'General',
-      'AI & Automation',
-    ]) {
+    for (const retired of ['Administration', 'Customization', 'Customers', 'Support', 'General']) {
       expect(sectionLabels).not.toContain(retired)
     }
   })

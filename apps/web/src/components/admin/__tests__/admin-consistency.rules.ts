@@ -178,13 +178,12 @@ const isAdminFile = (file: string) =>
 const isSettingsOrAutomationFile = (file: string) =>
   isAdminFile(file) &&
   (/^routes\/admin\/(settings|automation)[._/]/.test(file) ||
-    /^routes\/admin\/(settings|automation)\.tsx$/.test(file) ||
+    /^routes\/admin\/settings\.tsx$/.test(file) ||
     /^components\/admin\/(settings|automation)\//.test(file))
 
 const SHELL_PRIMITIVES = new Set([
   'components/admin/settings/settings-page.tsx',
   'routes/admin/settings.tsx',
-  'routes/admin/automation.tsx',
 ])
 
 /** Whether `file` is one the rule looks at. */
