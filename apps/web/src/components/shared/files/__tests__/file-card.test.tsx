@@ -11,6 +11,7 @@ import {
   FileRow,
 } from '../file-card'
 import type { ConversationAttachment } from '@/lib/shared/conversation/types'
+import { downloadUrl } from '../download-url'
 
 const intl = createIntl({ locale: 'en-US', messages: {} })
 
@@ -177,7 +178,7 @@ describe('FilePreviewCard', () => {
     expect(onOpen).toHaveBeenCalledTimes(1)
 
     const download = getByRole('link', { name: 'Download invoice.pdf' })
-    expect(download).toHaveAttribute('href', attachment().url)
+    expect(download).toHaveAttribute('href', downloadUrl(attachment().url, 'invoice.pdf'))
     expect(download).toHaveAttribute('download', 'invoice.pdf')
     fireEvent.click(download)
     // The download link stops propagation so clicking it never also opens the viewer.
@@ -222,7 +223,7 @@ describe('FileRow', () => {
     expect(onOpen).toHaveBeenCalledTimes(1)
     expect(getByRole('link', { name: 'Download invoice.pdf' })).toHaveAttribute(
       'href',
-      attachment().url
+      downloadUrl(attachment().url, 'invoice.pdf')
     )
   })
 })

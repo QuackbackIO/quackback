@@ -15,6 +15,7 @@
 import { useIntl, type IntlShape } from 'react-intl'
 import { ArrowDownTrayIcon, PlayIcon } from '@heroicons/react/24/outline'
 import { FileBadge } from './file-badge'
+import { downloadUrl } from './download-url'
 import { FAMILY_NAME, familyFor, formatBytes, type FileFamily } from '@/lib/shared/files/file-types'
 import type { AttachmentPreview, ConversationAttachment } from '@/lib/shared/conversation/types'
 import { cn } from '@/lib/shared/utils/cn'
@@ -167,7 +168,7 @@ function DownloadLink({ url, name, className }: { url: string; name: string; cla
   )
   return (
     <a
-      href={url}
+      href={downloadUrl(url, name || 'file')}
       download={name || undefined}
       onClick={(e) => e.stopPropagation()}
       aria-label={label}
