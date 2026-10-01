@@ -908,7 +908,12 @@ export function VisitorMessageBubble({
   const isAiReply = !self && isAssistant
   const cited = isAiReply && citations && citations.length > 0 ? citations : null
   return (
-    <div className={self ? 'flex flex-col items-end' : 'flex flex-col items-start'}>
+    <div
+      // The scroll/flash target for "jump to message" deep-links, matching
+      // the admin thread's AgentMessageBubble root.
+      data-message-id={messageId}
+      className={self ? 'flex flex-col items-end' : 'flex flex-col items-start'}
+    >
       {cited && <AssistantSourcesTrace citations={cited} />}
       <div className={jumbo ? 'max-w-[85%]' : bubbleClasses(side)}>
         {jumbo ? (

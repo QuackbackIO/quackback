@@ -59,4 +59,13 @@ describe('VisitorMessageBubble', () => {
 
     expect(screen.queryByText(/AI/)).not.toBeInTheDocument()
   })
+
+  it('marks its root with data-message-id so "jump to message" can find it', () => {
+    const { container } = renderBubble({
+      side: 'peer',
+      content: 'Hi there',
+      messageId: 'conversation_msg_1',
+    })
+    expect(container.querySelector('[data-message-id="conversation_msg_1"]')).not.toBeNull()
+  })
 })
