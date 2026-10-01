@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { downloadFileName, isInlineType, redirectPolicy } from '../serve-policy'
+import {
+  attachmentDisposition,
+  cleanDownloadName,
+  downloadFileName,
+  isInlineType,
+  redirectPolicy,
+} from '../serve-policy'
 
 /**
  * What a stored file may do when a browser opens it. Its Content-Type comes
@@ -45,5 +51,33 @@ describe('downloadFileName', () => {
 
   it('never lets a quote or a line break into the header', () => {
     expect(downloadFileName('chat-files/a"b\r\nx: y.html')).toBe('a_b__x__y.html')
+  })
+})
+
+describe('attachmentDisposition', () => {
+  it('names the file exactly in filename* and in printable ASCII in filename', () => {
+    expect(attachmentDisposition("Q3 (draft)*'s.pdf")).toBe(
+      `attachment; filename="Q3 (draft)*'s.pdf"; filename*=UTF-8''Q3%20%28draft%29%2A%27s.pdf`
+    )
+    expect(attachmentDisposition('\u{1F4C4} 100%.pdf')).toBe(
+      `attachment; filename="_ 100_.pdf"; filename*=UTF-8''%F0%9F%93%84%20100%25.pdf`
+    )
+  })
+
+  it('never lets a quote, backslash or line break into the header', () => {
+    const header = attachmentDisposition('a"b\\c\r\nX-Evil: 1')
+    expect(header).not.toMatch(/[\r\n]/)
+    expect(header).toBe(
+      `attachment; filename="a_b_c__X-Evil: 1"; filename*=UTF-8''a%22b%5Cc%0D%0AX-Evil%3A%201`
+    )
+  })
+})
+
+describe('cleanDownloadName', () => {
+  it('keeps letters of every script and drops what could reorder or hide them', () => {
+    expect(cleanDownloadName('דוח.pdf')).toBe('דוח.pdf')
+    expect(cleanDownloadName('Invoice‮xcod.docm')).toBe('Invoicexcod.docm')
+    expect(cleanDownloadName(' ​ ')).toBeNull()
+    expect(cleanDownloadName(null)).toBeNull()
   })
 })

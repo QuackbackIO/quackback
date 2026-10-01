@@ -2,7 +2,13 @@ import { createFileRoute } from '@tanstack/react-router'
 import { readBodyWithLimit } from '@/lib/server/utils/read-body'
 import { logger } from '@/lib/server/logger'
 import { currentWorkspaceNamespace } from '@/lib/server/workspaces/workspace-keyed'
-import { redirectPolicy, servedFileHeaders } from '@/lib/server/storage/serve-policy'
+import {
+  cleanDownloadName,
+  downloadFileName,
+  downloadHeaders,
+  redirectPolicy,
+  servedFileHeaders,
+} from '@/lib/server/storage/serve-policy'
 
 const log = logger.child({ component: 'storage' })
 
@@ -269,6 +275,11 @@ export async function handleStorageOptions({ request }: { request: Request }): P
  *
  * Every answer, refusals included, carries the user-content CORS grant when
  * one applies, so the viewer can tell a refusal from a network failure.
+ *
+ * Download mode (`?download=1`, optionally `&filename=<name>`) answers as an
+ * attachment whatever the type, under the name asked for (made safe for a
+ * header) or the key's own. It rides on a read capability and never stands
+ * in for one, so a public key, which needs none, ignores it.
  */
 export async function handleStorageGet({ request }: { request: Request }): Promise<Response> {
   return withUserContentCors(await serveStorageGet(request), await userContentCors(request))
@@ -322,6 +333,13 @@ async function serveStorageGet(request: Request): Promise<Response> {
     : Infinity
   const privateMaxAge = Math.min(PRIVATE_MAX_AGE_SECONDS, linkSecondsLeft)
   const presignSeconds = Math.max(1, Math.min(PRESIGN_SECONDS, linkSecondsLeft))
+
+  const downloadName =
+    url.searchParams.get('download') === '1' && !isPublicStorageKey(key)
+      ? (cleanDownloadName(url.searchParams.get('filename')) ?? downloadFileName(key))
+      : null
+  const fileHeaders = (contentType: string) =>
+    downloadName ? downloadHeaders(downloadName) : servedFileHeaders(key, contentType)
   const cacheControl = isPublicStorageKey(key)
     ? 'public, max-age=31536000, immutable'
     : `private, max-age=${privateMaxAge}, immutable`
@@ -358,7 +376,7 @@ async function serveStorageGet(request: Request): Promise<Response> {
             // let a browser second-guess them on a same-origin response.
             'X-Content-Type-Options': 'nosniff',
             // Anything a browser could run is a download here, never a page.
-            ...servedFileHeaders(key, cached.contentType),
+            ...fileHeaders(cached.contentType),
           },
         })
       }
@@ -382,7 +400,7 @@ async function serveStorageGet(request: Request): Promise<Response> {
           Vary: 'Host',
           'X-Content-Type-Options': 'nosniff',
           'Accept-Ranges': acceptRanges || 'bytes',
-          ...servedFileHeaders(key, contentType),
+          ...fileHeaders(contentType),
         })
         if (contentLength !== undefined) headers.set('Content-Length', String(contentLength))
         if (contentRange) headers.set('Content-Range', contentRange)
@@ -400,19 +418,24 @@ async function serveStorageGet(request: Request): Promise<Response> {
           'Cache-Control': cacheControl,
           Vary: 'Host',
           'X-Content-Type-Options': 'nosniff',
-          ...servedFileHeaders(key, contentType),
+          ...fileHeaders(contentType),
         },
       })
     }
 
     // The redirect does not see the stored type, so the presigned URL either
     // forces the type its extension names (raster image, audio, video, PDF) or
-    // makes the file a download.
+    // makes the file a download. Download mode makes any file one.
     const policy = redirectPolicy(key)
-    const presignedUrl =
-      'inlineType' in policy
-        ? await generatePresignedGetUrl(key, presignSeconds, undefined, policy.inlineType)
-        : await generatePresignedGetUrl(key, presignSeconds, policy.downloadName, undefined)
+    const inlineType = 'inlineType' in policy ? policy.inlineType : undefined
+    const presignedName =
+      downloadName ?? ('downloadName' in policy ? policy.downloadName : undefined)
+    const presignedUrl = await generatePresignedGetUrl(
+      key,
+      presignSeconds,
+      presignedName,
+      inlineType
+    )
 
     return new Response(null, {
       status: 302,

@@ -89,6 +89,7 @@ import {
 } from '@/lib/server/workspaces/workspace-keyed'
 import { absolutizeOffHostAssetUrl, storedAssetKeyFromSrc } from './asset-url'
 import { composeNamespacedKey, workspaceNamespace } from './namespace'
+import { attachmentDisposition } from './serve-policy'
 import { currentWorkspaceId } from './workspace-scope'
 
 // ============================================================================
@@ -595,7 +596,7 @@ function workspaceStorage(selfReportedWorkspaceId: WorkspaceId): WorkspaceStorag
         Bucket: connection.bucket,
         Key,
         ...(downloadName
-          ? { ResponseContentDisposition: `attachment; filename="${downloadName}"` }
+          ? { ResponseContentDisposition: attachmentDisposition(downloadName) }
           : {}),
         ...(contentType ? { ResponseContentType: contentType } : {}),
       })
@@ -1165,9 +1166,9 @@ export function getPublicUrl(key: string): string {
  *   The sole caller (GET /api/storage 302 redirect) marks the redirect
  *   cacheable for 24h, so the presigned URL must outlive cached copies;
  *   48h keeps a 2x margin over that cache window.
- * @param downloadName - When set, S3 responds with
- *   `Content-Disposition: attachment; filename="<downloadName>"`, so the
- *   browser saves a friendly name instead of the raw object key.
+ * @param downloadName - When set, S3 responds with an attachment
+ *   Content-Disposition naming it (`attachmentDisposition`), so the browser
+ *   saves a friendly name instead of the raw object key.
  * @param contentType - When set, S3 responds with this Content-Type instead of
  *   the stored one, which came from whoever uploaded or sent the file.
  */
