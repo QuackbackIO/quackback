@@ -485,6 +485,7 @@ export async function sendVisitorMessage(
     contentJson: safeContentJson,
     authorName: authored.supportAuthor.displayName ?? 'A visitor',
     isFirstMessage: created,
+    attachments,
   })
 
   if (created) {
@@ -683,6 +684,7 @@ export async function startAgentConversation(
     contentJson: safeContentJson,
     agentName: authored.publicAuthor.displayName ?? 'Support',
     messageId: txResult.message.id,
+    attachments,
   })
 
   void emitConversationCreated(actor, agent, txResult.conversation)
@@ -843,6 +845,7 @@ export async function sendAgentMessage(
     capturedEmail: txResult.conversation.visitorEmail,
     channel: txResult.conversation.channel,
     messageId: txResult.message.id,
+    attachments,
   })
 
   // isFirstMessage only matters for a VISITOR message — this is an agent

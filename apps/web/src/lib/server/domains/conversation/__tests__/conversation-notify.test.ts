@@ -131,6 +131,18 @@ vi.mock('@/lib/server/email/recipient', async (orig) => {
   }
 })
 
+// Attachment byte loading + the email-safe link for whatever does not fit the
+// per-email budget. Defaults keep every pre-existing test (none of which pass
+// `attachments`) exercising nothing here.
+const getS3Object =
+  vi.fn<(key: string) => Promise<{ body: ReadableStream<Uint8Array>; contentType: string }>>()
+const getEmailSafeUrl = vi.fn<(key: string | null | undefined) => string | null>()
+vi.mock('@/lib/server/storage/s3', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/storage/s3')>()),
+  getS3Object: (...a: [string]) => getS3Object(...a),
+  getEmailSafeUrl: (...a: [string | null | undefined]) => getEmailSafeUrl(...a),
+}))
+
 vi.mock('@/lib/server/db', async (importOriginal) => {
   // A thenable chain. `.where()` resolves to the team rows (so a bare await on
   // the where() builder yields the array); `.limit()` resolves to the single
@@ -180,7 +192,22 @@ beforeEach(() => {
   // reported Message-ID exercised by nothing.
   sendConversationMessageEmail.mockResolvedValue({ sent: true })
   listParticipantReplyRecipients.mockResolvedValue([])
+  getEmailSafeUrl.mockImplementation((key) => (key ? `https://cdn.test/${key}?email=1` : null))
 })
+
+function streamOf(bytes: Uint8Array): ReadableStream<Uint8Array> {
+  let sent = false
+  return new ReadableStream({
+    pull(controller) {
+      if (!sent) {
+        controller.enqueue(bytes)
+        sent = true
+      } else {
+        controller.close()
+      }
+    },
+  })
+}
 
 describe('notifyVisitorMessage', () => {
   // WO-3 slice 5: notifyVisitorMessage is now EMAIL-ONLY — the in-app team
@@ -860,6 +887,125 @@ describe('conversation email body (P4.5)', () => {
     expect(call.bodyHtml).toBe(`<p>${'A'.repeat(200)}</p><p>second &lt;script&gt; line</p>`)
     // messagePreview stays the truncated excerpt.
     expect((call.messagePreview as string).length).toBeLessThan(body.length)
+  })
+})
+
+// Outbound email carries attachments: a real MIME part for a file that fits
+// the per-email budget, a plain link appended to the body for one that does
+// not load.
+describe('conversation email attachments', () => {
+  const visitorPrincipalId = 'principal_visitor' as PrincipalId
+
+  it('carries a loadable attachment as a real MIME part on an agent reply', async () => {
+    isPrincipalOnline.mockResolvedValue(false)
+    visitorRows = [{ type: 'user', email: 'account@x.com' }]
+    const bytes = new TextEncoder().encode('%PDF-1.4')
+    getS3Object.mockResolvedValue({ body: streamOf(bytes), contentType: 'application/pdf' })
+
+    await notifyAgentReply({
+      conversationId,
+      visitorPrincipalId,
+      content: 'see attached',
+      agentName: 'Agent',
+      channel: 'messenger',
+      attachments: [
+        {
+          url: '/api/storage/files/a.pdf?read=sig',
+          name: 'a.pdf',
+          contentType: 'application/pdf',
+          size: bytes.byteLength,
+        },
+      ],
+    })
+
+    const call = sendConversationMessageEmail.mock.calls[0][0]
+    expect(call.attachments).toEqual([
+      { filename: 'a.pdf', contentType: 'application/pdf', content: bytes },
+    ])
+    // Carried as a real part, not also linked in the body.
+    expect(call.bodyHtml).not.toContain('Attachments')
+  })
+
+  it('links a file whose bytes fail to load instead of dropping it silently', async () => {
+    isPrincipalOnline.mockResolvedValue(false)
+    visitorRows = [{ type: 'user', email: 'account@x.com' }]
+    getS3Object.mockRejectedValue(new Error('object not found'))
+
+    await notifyAgentReply({
+      conversationId,
+      visitorPrincipalId,
+      content: 'see attached',
+      agentName: 'Agent',
+      channel: 'messenger',
+      attachments: [
+        {
+          url: '/api/storage/files/a.pdf?read=sig',
+          name: 'a.pdf',
+          contentType: 'application/pdf',
+          size: 100,
+        },
+      ],
+    })
+
+    const call = sendConversationMessageEmail.mock.calls[0][0]
+    expect(call.attachments).toEqual([])
+    expect(call.bodyHtml).toContain('Attachments')
+    expect(call.bodyHtml).toContain('https://cdn.test/files/a.pdf?email=1')
+    expect(call.bodyHtml).toContain('a.pdf')
+  })
+
+  it('carries attachments on the first message of an agent-started conversation', async () => {
+    visitorRows = [{ type: 'user', email: 'account@x.com' }]
+    const bytes = new TextEncoder().encode('hello')
+    getS3Object.mockResolvedValue({ body: streamOf(bytes), contentType: 'text/plain' })
+
+    const { notifyConversationStarted } = await import('../conversation.notify')
+    await notifyConversationStarted({
+      conversationId,
+      visitorPrincipalId,
+      content: 'welcome',
+      agentName: 'Agent',
+      attachments: [
+        {
+          url: '/api/storage/files/notes.txt?read=sig',
+          name: 'notes.txt',
+          contentType: 'text/plain',
+          size: bytes.byteLength,
+        },
+      ],
+    })
+
+    const call = sendConversationMessageEmail.mock.calls[0][0]
+    expect(call.attachments).toEqual([
+      { filename: 'notes.txt', contentType: 'text/plain', content: bytes },
+    ])
+  })
+
+  it('carries the visitor attachment through to the team email', async () => {
+    isAnyAgentOnline.mockResolvedValue(false)
+    teamRows = [{ principalId: 'principal_admin', email: 'a@x.com', name: 'A' }]
+    const bytes = new TextEncoder().encode('screenshot-bytes')
+    getS3Object.mockResolvedValue({ body: streamOf(bytes), contentType: 'image/png' })
+
+    await notifyVisitorMessage({
+      conversation,
+      content: 'see my screenshot',
+      authorName: 'Visitor',
+      isFirstMessage: true,
+      attachments: [
+        {
+          url: '/api/storage/files/screenshot.png?read=sig',
+          name: 'screenshot.png',
+          contentType: 'image/png',
+          size: bytes.byteLength,
+        },
+      ],
+    })
+
+    const call = sendConversationMessageEmail.mock.calls[0][0]
+    expect(call.attachments).toEqual([
+      { filename: 'screenshot.png', contentType: 'image/png', content: bytes },
+    ])
   })
 })
 

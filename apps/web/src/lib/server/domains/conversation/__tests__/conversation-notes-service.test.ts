@@ -280,6 +280,11 @@ describe('addAgentNote', () => {
         },
       ],
     })
+    // A note's files are agent-only like the note itself: no email path is
+    // even reachable from here, so nothing emails them to the customer.
+    const { notifyAgentReply, notifyVisitorMessage } = await import('../conversation.notify')
+    expect(notifyAgentReply).not.toHaveBeenCalled()
+    expect(notifyVisitorMessage).not.toHaveBeenCalled()
   })
 
   it('rejects an image-only note whose attachment URL is not from our storage', async () => {
