@@ -212,7 +212,9 @@ function FilesSection({
   return (
     <div className="space-y-1.5 border-t border-border/30 pt-4">
       <div className="flex items-center justify-between">
-        <span className={MENU_LABEL}>Files</span>
+        <span className={MENU_LABEL}>
+          <FormattedMessage id="admin.inbox.filesSectionTitle" defaultMessage="Files" />
+        </span>
         <span className="text-xs text-muted-foreground">{entries.length}</span>
       </div>
       <div className="flex flex-col">

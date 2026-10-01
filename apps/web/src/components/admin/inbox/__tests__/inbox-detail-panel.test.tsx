@@ -12,6 +12,7 @@
  */
 import { describe, expect, it, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ConversationDTO } from '@/lib/shared/conversation/types'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
@@ -142,19 +143,21 @@ function renderPanel(
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const ui = (props: { openCopilotToken?: number }) => (
-    <QueryClientProvider client={client}>
-      <InboxDetailPanel
-        item={{ kind: 'conversation', id: conversation.id }}
-        conversation={conversation}
-        onChanged={vi.fn()}
-        onSelectItem={vi.fn()}
-        onTrackAsFeedback={vi.fn()}
-        onCreateTicket={vi.fn()}
-        onInsertFromCopilot={vi.fn()}
-        visible={panelShown}
-        {...props}
-      />
-    </QueryClientProvider>
+    <IntlProvider locale="en-US" messages={{}}>
+      <QueryClientProvider client={client}>
+        <InboxDetailPanel
+          item={{ kind: 'conversation', id: conversation.id }}
+          conversation={conversation}
+          onChanged={vi.fn()}
+          onSelectItem={vi.fn()}
+          onTrackAsFeedback={vi.fn()}
+          onCreateTicket={vi.fn()}
+          onInsertFromCopilot={vi.fn()}
+          visible={panelShown}
+          {...props}
+        />
+      </QueryClientProvider>
+    </IntlProvider>
   )
   const result = render(ui(extra))
   return {
