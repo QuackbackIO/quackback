@@ -143,6 +143,14 @@ describe('attachmentForClient', () => {
     expect(out.url).toBe(getPublicUrlOrNull(FILE_KEY))
     expect(out.preview?.thumbUrl).toBe(getPublicUrlOrNull(THUMB_KEY))
   })
+
+  it('never mints a link for a pipeline file named by URL alone, without its id', () => {
+    const { fileId: _id, ...byUrl } = stored()
+    expect(attachmentForClient(byUrl).url).toBe(`/api/storage/${FILE_KEY}?read=old`)
+    // Every other prefix keeps its fresh capability.
+    const other = { ...byUrl, url: '/api/storage/attachments/2026/10/a.pdf?read=old' }
+    expect(attachmentForClient(other).url).toBe(getPublicUrlOrNull('attachments/2026/10/a.pdf'))
+  })
 })
 
 describe('file pipeline URLs', () => {

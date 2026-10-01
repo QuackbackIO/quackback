@@ -9,6 +9,7 @@ import type { ConversationMessage, ConversationAttachment } from '@/lib/server/d
 import { ValidationError } from '@/lib/shared/errors'
 import { resignStoredAssetUrl, getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { toUserContentUrl } from '@/lib/server/storage/asset-url'
+import { namesPipelineFile } from '@/lib/server/storage/trusted-url'
 import type { FileFamily } from '@/lib/shared/files/file-types'
 import { truncate } from '@/lib/shared/utils/string'
 import type { TiptapContent } from '@/lib/shared/db-types'
@@ -41,7 +42,11 @@ export function attachmentForClient(a: ConversationAttachment): ClientAttachment
   const { preview, family, ...base } = a
   const out: ClientAttachment = {
     ...base,
-    url: toUserContentUrl(resignStoredAssetUrl(a.url)),
+    // A pipeline file gets a fresh link only through its id: one named by URL
+    // alone keeps the link it was stored with, which expires.
+    url: toUserContentUrl(
+      a.fileId || !namesPipelineFile(a.url) ? resignStoredAssetUrl(a.url) : a.url
+    ),
     ...(family ? { family: family as FileFamily } : {}),
   }
   if (!preview) return out

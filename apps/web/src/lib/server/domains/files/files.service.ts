@@ -24,7 +24,7 @@ import {
 import type { ConversationAttachment, FilePreviewMeta, FileRecord } from '@/lib/server/db'
 import { sniffFile, isRefusedFromUnverifiedSender } from '@/lib/server/content/file-sniff'
 import { generateStorageKey, uploadObject, getPublicUrlOrNull } from '@/lib/server/storage/s3'
-import { isTrustedAttachmentUrl } from '@/lib/server/storage/trusted-url'
+import { isTrustedAttachmentUrl, namesPipelineFile } from '@/lib/server/storage/trusted-url'
 import { toUserContentUrl } from '@/lib/server/storage/asset-url'
 import {
   familyFor,
@@ -170,6 +170,13 @@ export interface AttachmentSender {
 function legacyAttachment(a: ConversationAttachment): ConversationAttachment {
   if (!isTrustedAttachmentUrl(a?.url)) {
     throw new ValidationError('VALIDATION_ERROR', 'Invalid attachment')
+  }
+  // A pipeline file comes by id, whose row says who may attach it.
+  if (namesPipelineFile(a.url)) {
+    throw new ValidationError(
+      'VALIDATION_ERROR',
+      'Invalid attachment: attach this file by its fileId'
+    )
   }
   const name = stripInvisible(String(a.name ?? '')).slice(0, 255)
   const contentType = String(a.contentType ?? '').slice(0, 128)

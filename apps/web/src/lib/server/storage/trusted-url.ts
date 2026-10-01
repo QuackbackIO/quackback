@@ -1,5 +1,8 @@
 import { config } from '@/lib/server/config'
-import { isStoredAssetPath, trustedStorageHosts } from './asset-url'
+import { isStoredAssetPath, storedAssetKeyFromSrc, trustedStorageHosts } from './asset-url'
+
+/** The file pipeline's storage prefix (`FILES_PREFIX` in `domains/files/files.service.ts`). */
+export const PIPELINE_FILES_PREFIX = 'files'
 
 /**
  * Only accept attachment/image URLs that came from our own upload pipeline.
@@ -36,4 +39,34 @@ export function isTrustedAttachmentUrl(url: string): boolean {
   } catch {
     return false
   }
+}
+
+/** The key a URL under the public bucket URL (`S3_PUBLIC_URL`) names, or null. */
+function publicBucketKey(url: string): string | null {
+  try {
+    // Read inside the try: outside a booted process (a build, a unit test)
+    // there is no configuration, and so no public bucket URL to match.
+    if (!config.s3PublicUrl) return null
+    const base = new URL(config.s3PublicUrl)
+    const u = new URL(url, config.baseUrl)
+    const basePath = base.pathname.replace(/\/$/, '')
+    if (u.hostname !== base.hostname || !u.pathname.startsWith(`${basePath}/`)) return null
+    const key = decodeURIComponent(u.pathname.slice(basePath.length + 1))
+    return key && !key.includes('..') ? key : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Whether a URL names an object the file pipeline stored, on the storage
+ * route of any host or under the public bucket URL. Those files are attached
+ * by id, whose row says who may attach them, and are never inline: a bare URL
+ * to one would be re-signed on every read, past its link's expiry and
+ * without that check.
+ */
+export function namesPipelineFile(url: string): boolean {
+  if (typeof url !== 'string' || url.length === 0) return false
+  const key = storedAssetKeyFromSrc(url) ?? publicBucketKey(url)
+  return key !== null && key.split('/', 1)[0] === PIPELINE_FILES_PREFIX
 }

@@ -17,7 +17,7 @@ import {
   sanitizeMediaUrl,
   safePositiveInt,
 } from '@/lib/shared/utils/sanitize'
-import { isTrustedAttachmentUrl } from '@/lib/server/storage/trusted-url'
+import { isTrustedAttachmentUrl, namesPipelineFile } from '@/lib/server/storage/trusted-url'
 import { normalizeVideoMimeType } from '@/lib/shared/storage-config'
 
 function isExtraTrustedImageHost(rawSrc: string, extraHosts: string[] | undefined): boolean {
@@ -166,6 +166,8 @@ function sanitizeAttrs(
     case 'image':
     case 'resizableImage': {
       const rawSrc = String(attrs.src ?? '')
+      // Pipeline files are attachments, attached by id, never inline.
+      if (namesPipelineFile(rawSrc)) return { src: '', alt: '' }
       // Untrusted senders may only reference our own upload pipeline — mirror
       // the chatImage guard below. Clearing (not dropping) keeps the node
       // shape intact so the serializer renders nothing.
@@ -199,7 +201,7 @@ function sanitizeAttrs(
       // pixel that fires against an agent's browser. An untrusted/empty/unsafe
       // src clears both attrs so the serializer renders nothing.
       const rawSrc = String(attrs.src ?? '')
-      if (!isTrustedAttachmentUrl(rawSrc)) return { src: '', alt: '' }
+      if (!isTrustedAttachmentUrl(rawSrc) || namesPipelineFile(rawSrc)) return { src: '', alt: '' }
       const src = sanitizeImageUrl(rawSrc)
       if (!src) return { src: '', alt: '' }
       return { src, alt: String(attrs.alt ?? '').slice(0, 500) }
@@ -210,7 +212,9 @@ function sanitizeAttrs(
       // Native video is always an upload, never a remote embed. Keeping it on
       // the workspace's storage origin prevents a post from becoming a hidden
       // third-party tracking request.
-      if (!isTrustedAttachmentUrl(rawSrc)) return { src: '', mimeType: '', title: '' }
+      if (!isTrustedAttachmentUrl(rawSrc) || namesPipelineFile(rawSrc)) {
+        return { src: '', mimeType: '', title: '' }
+      }
       const src = sanitizeMediaUrl(rawSrc)
       if (!src) return { src: '', mimeType: '', title: '' }
       const mimeType = normalizeVideoMimeType(attrs.mimeType)

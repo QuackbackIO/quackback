@@ -24,9 +24,11 @@ vi.mock('@/lib/server/storage/s3', async (importOriginal) => ({
     key ? `/api/storage/${key}?read=fresh` : null,
 }))
 
-vi.mock('@/lib/server/storage/trusted-url', () => ({
+vi.mock('@/lib/server/storage/trusted-url', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/storage/trusted-url')>()),
   isTrustedAttachmentUrl: (url: string) =>
-    typeof url === 'string' && url.startsWith('/api/storage/'),
+    typeof url === 'string' &&
+    (url.startsWith('/api/storage/') || url.startsWith('http://localhost:3000/api/storage/')),
 }))
 
 const enqueued: Array<{ queue: string; payload: unknown; dedupeKey?: string }> = []
@@ -280,6 +282,43 @@ describe.skipIf(!fixture.available)('files service (real DB, rolled back)', () =
       await expect(
         resolveAttachments([{ ...ok, size: 26 * 1024 * 1024 }], { canAttachAnyFile: false })
       ).rejects.toThrow('Attachment too large')
+    })
+
+    it('refuses a legacy attachment that names a pipeline file: those come by id', async () => {
+      const owner = await newPrincipal()
+      const row = await storeFile({
+        bytes: pdf(),
+        name: 'a.pdf',
+        source: 'visitor',
+        uploadedById: owner,
+        unverifiedSender: true,
+      })
+      const urls = [
+        `/api/storage/${row.storageKey}?read=x&exp=1`,
+        `/api/storage/${row.storageKey}`,
+        `/api/storage/${encodeURIComponent(row.storageKey)}`,
+        `http://localhost:3000/api/storage/${row.storageKey}`,
+      ]
+      for (const url of urls) {
+        const legacy = { url, name: 'a.pdf', contentType: 'application/pdf', size: 10 }
+        await expect(resolveAttachments([legacy], { canAttachAnyFile: true }), url).rejects.toThrow(
+          'Invalid attachment'
+        )
+      }
+    })
+
+    it('keeps accepting legacy attachments under every other prefix', async () => {
+      for (const url of [
+        '/api/storage/attachments/2026/10/a.pdf?read=x',
+        '/api/storage/filesystem/a.pdf',
+        '/api/storage/chat-images/files/a.png',
+      ]) {
+        const legacy = { url, name: 'a.pdf', contentType: 'application/pdf', size: 10 }
+        await expect(
+          resolveAttachments([legacy], { canAttachAnyFile: false }),
+          url
+        ).resolves.toEqual([legacy])
+      }
     })
 
     it('drops bidirectional and invisible characters from a legacy attachment name', async () => {
