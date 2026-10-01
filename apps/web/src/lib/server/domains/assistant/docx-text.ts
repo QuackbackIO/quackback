@@ -34,16 +34,67 @@ export function decodeXmlEntities(raw: string): string {
     .replace(/&amp;/g, '&')
 }
 
+/** The tag name that starts at `from`, ending at whitespace, `/` or `to` (the `>`). */
+function tagName(xml: string, from: number, to: number): string {
+  let i = from
+  for (; i < to; i++) {
+    const c = xml.charCodeAt(i)
+    if (c === 0x20 || c === 0x09 || c === 0x0a || c === 0x0d || c === 0x2f) break
+  }
+  return xml.slice(from, i)
+}
+
+/**
+ * The content of each `name` element, in document order. Every search moves
+ * forward from where the last one ended, so markup with thousands of
+ * unclosed tags costs one pass rather than one pass per tag. Elements of one
+ * name do not nest in the parts read here; a missing end tag ends the scan.
+ */
+export function* elementContents(xml: string, name: string): Generator<string> {
+  const close = `</${name}>`
+  let p = 0
+  for (;;) {
+    const lt = xml.indexOf(`<${name}`, p)
+    if (lt < 0) return
+    const gt = xml.indexOf('>', lt)
+    if (gt < 0) return
+    p = gt + 1
+    // A longer name with the same prefix (`<w:pPr>`), or an empty element.
+    if (tagName(xml, lt + 1, gt) !== name || xml.charCodeAt(gt - 1) === 0x2f) continue
+    const end = xml.indexOf(close, gt + 1)
+    if (end < 0) return
+    yield xml.slice(gt + 1, end)
+    p = end + close.length
+  }
+}
+
 /**
  * Extract the text of one paragraph's runs: every `<w:t>` element's content,
- * with `<w:tab/>` and `<w:br/>` between runs kept as their characters.
+ * with `<w:tab/>` and `<w:br/>` between runs kept as their characters. One
+ * forward pass over the paragraph's tags.
  */
 function extractParagraphText(paragraphXml: string): string {
   const parts: string[] = []
-  const tokenRe = /<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<w:tab\s*\/>|<w:br\s*\/>/g
-  for (const match of paragraphXml.matchAll(tokenRe)) {
-    if (match[1] !== undefined) parts.push(decodeXmlEntities(match[1]))
-    else parts.push(match[0].startsWith('<w:tab') ? '\t' : '\n')
+  for (let p = 0; ;) {
+    const lt = paragraphXml.indexOf('<w:', p)
+    if (lt < 0) break
+    const gt = paragraphXml.indexOf('>', lt)
+    if (gt < 0) break
+    p = gt + 1
+    const name = tagName(paragraphXml, lt + 1, gt)
+    const empty = paragraphXml.charCodeAt(gt - 1) === 0x2f
+    if (name === 'w:t' && !empty) {
+      const end = paragraphXml.indexOf('</w:t>', gt + 1)
+      if (end < 0) break
+      parts.push(decodeXmlEntities(paragraphXml.slice(gt + 1, end)))
+      p = end + 6
+    } else if (
+      empty &&
+      (name === 'w:tab' || name === 'w:br') &&
+      !paragraphXml.slice(lt + 1 + name.length, gt - 1).trim()
+    ) {
+      parts.push(name === 'w:tab' ? '\t' : '\n')
+    }
   }
   return parts.join('')
 }
@@ -51,8 +102,8 @@ function extractParagraphText(paragraphXml: string): string {
 /** The text of a `word/document.xml` part, one line per paragraph. */
 export function docxDocumentText(documentXml: string): string {
   const lines: string[] = []
-  for (const match of documentXml.matchAll(/<w:p(?:\s[^>]*)?>([\s\S]*?)<\/w:p>/g)) {
-    const text = extractParagraphText(match[1])
+  for (const paragraph of elementContents(documentXml, 'w:p')) {
+    const text = extractParagraphText(paragraph)
     if (text.trim()) lines.push(text)
   }
 

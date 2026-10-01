@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { zipSync, strToU8 } from 'fflate'
-import { extractDocxText } from '../docx-text'
+import { extractDocxText, docxDocumentText } from '../docx-text'
 
 /**
  * Build the smallest .docx that carries real content: a zip whose
@@ -75,6 +75,19 @@ describe('extractDocxText', () => {
     }
     for (let i = 0; i < 2001; i++) files[`pad/${i}.xml`] = new Uint8Array(0)
     expect(extractDocxText(zipSync(files))).toBe('')
+  })
+
+  it('scans unclosed paragraphs in linear time', () => {
+    const started = performance.now()
+    expect(docxDocumentText('<w:p><w:t>x'.repeat(40_000))).toBe('')
+    expect(performance.now() - started).toBeLessThan(1000)
+  })
+
+  it('reads paragraphs with attributes and skips look-alike tags', () => {
+    const xml =
+      '<w:p w:rsidR="00A1"><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:t xml:space="preserve">Centered </w:t></w:r><w:r><w:t>title</w:t></w:r></w:p>' +
+      '<w:p/><w:p><w:r><w:t>Body</w:t></w:r></w:p>'
+    expect(docxDocumentText(xml)).toBe('Centered title\nBody')
   })
 
   it('drops numeric entities that are not characters instead of throwing', () => {
