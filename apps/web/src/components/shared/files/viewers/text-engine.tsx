@@ -227,15 +227,7 @@ export default function TextEngine({
             {intl.formatMessage(
               { id: 'files.viewer.showingFirst', defaultMessage: 'Showing the first {size}' },
               { size: formatBytes(TEXT_HEAD_BYTES) }
-            )}{' '}
-            ·{' '}
-            <a
-              href={file.url}
-              download={file.name}
-              className="text-zinc-200 underline underline-offset-2 hover:text-white"
-            >
-              {intl.formatMessage({ id: 'files.viewer.download', defaultMessage: 'Download' })}
-            </a>
+            )}
           </p>
         )}
       </div>

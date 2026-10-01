@@ -158,12 +158,10 @@ describe('TextEngine', () => {
     expect(container.querySelectorAll('mark')).toHaveLength(0)
   })
 
-  it('says when only the head of the file is shown, with Download', () => {
+  it('says when only the head of the file is shown, leaving Download to the header', () => {
     renderText('first lines', { truncated: true })
-    expect(screen.getByText(/Showing the first 256 KB/)).toBeInTheDocument()
-    const link = screen.getByRole('link', { name: 'Download' })
-    expect(link).toHaveAttribute('href', '/api/storage/files/notes.txt?read=tok')
-    expect(link).toHaveAttribute('download', 'notes.txt')
+    expect(screen.getByText('Showing the first 256 KB')).toBeInTheDocument()
+    expect(screen.queryByRole('link')).toBeNull()
   })
 
   it('leaves out the line count for a file it only partly has', () => {
