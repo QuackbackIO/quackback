@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ZOOM_MAX, ZOOM_MIN, clampZoom } from '../zoom'
 import { BudgetTimeoutError } from '../budgets'
+import { MAX_FIND_MATCHES } from '../find-limit'
 import {
   canvasScale,
   currentPage,
@@ -104,6 +105,12 @@ describe('findMatches', () => {
 
   it('treats the query as text, not a pattern', () => {
     expect(findMatches(['a.b axb'], 'a.b')).toEqual([{ page: 1, start: 0, end: 3 }])
+  })
+
+  it('stops counting where text find does, so the bar reads the same', () => {
+    const found = findMatches(['ab '.repeat(MAX_FIND_MATCHES), 'ab ab'], 'ab')
+    expect(found).toHaveLength(MAX_FIND_MATCHES)
+    expect(found.at(-1)!.page).toBe(1)
   })
 })
 

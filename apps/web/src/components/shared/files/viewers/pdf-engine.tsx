@@ -28,7 +28,8 @@ import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import type { ViewerEngineProps } from '../types'
 import { ViewerSkeleton } from '../viewer-skeleton'
 import { withTimeout } from './budgets'
-import { PdfFindBar } from './pdf-find-bar'
+import { FindBar } from './find-bar'
+import { MAX_FIND_MATCHES } from './find-limit'
 import {
   currentPage,
   findMatches,
@@ -232,7 +233,7 @@ export default function PdfEngine({ data, onToolbar, onError, compact }: ViewerE
   // ---- Find ---------------------------------------------------------------
 
   const [findOpen, setFindOpen] = useState(false)
-  const [focusNonce, setFocusNonce] = useState(0)
+  const findInputRef = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
   const [matches, setMatches] = useState<readonly TextMatch[]>(NO_MATCHES)
   const [activeMatch, setActiveMatch] = useState(-1)
@@ -293,7 +294,11 @@ export default function PdfEngine({ data, onToolbar, onError, compact }: ViewerE
 
   const openFind = useCallback(() => {
     setFindOpen(true)
-    setFocusNonce((n) => n + 1)
+    // Focus after the bar mounts; select so typing replaces the last query.
+    requestAnimationFrame(() => {
+      findInputRef.current?.focus()
+      findInputRef.current?.select()
+    })
   }, [])
 
   const closeFind = useCallback(() => {
@@ -351,15 +356,16 @@ export default function PdfEngine({ data, onToolbar, onError, compact }: ViewerE
       )}
       <div className="relative flex min-h-0 min-w-0 flex-1">
         {findOpen && pdf && (
-          <PdfFindBar
+          <FindBar
+            inputRef={findInputRef}
             query={query}
-            onQuery={setQuery}
-            count={matches.length}
-            active={activeMatch}
+            onQueryChange={setQuery}
+            current={activeMatch}
+            total={matches.length}
+            capped={matches.length >= MAX_FIND_MATCHES}
             searching={searching}
             onStep={step}
             onClose={closeFind}
-            focusNonce={focusNonce}
           />
         )}
         <div

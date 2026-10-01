@@ -11,6 +11,7 @@ import { formatBytes } from '@/lib/shared/files/file-types'
 import { cn } from '@/lib/shared/utils'
 import type { ViewerEngineProps } from '../types'
 import { FindBar } from './find-bar'
+import { MAX_FIND_MATCHES } from './find-limit'
 import { TEXT_HEAD_BYTES } from './index'
 import {
   decodeText,
@@ -18,7 +19,6 @@ import {
   isJsonName,
   lineStyleFor,
   markTokens,
-  MAX_MATCHES,
   prettyJson,
   splitLines,
   tokensFor,
@@ -154,7 +154,7 @@ export default function TextEngine({
           }}
           current={current}
           total={matches.length}
-          capped={matches.length >= MAX_MATCHES}
+          capped={matches.length >= MAX_FIND_MATCHES}
           onStep={step}
           onClose={closeFind}
         />

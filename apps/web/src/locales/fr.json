@@ -152,7 +152,6 @@
   "files.viewer.macros": "Contient des macros",
   "files.find.label": "Rechercher",
   "files.find.ariaInFile": "Rechercher dans le fichier",
-  "files.find.ariaInDocument": "Rechercher dans le document",
   "files.find.noMatches": "Aucun résultat",
   "files.find.matchCount": "{current} sur {total}",
   "files.find.matchCountCapped": "{current} sur {total}+",

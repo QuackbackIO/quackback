@@ -152,7 +152,6 @@
   "files.viewer.macros": "يحتوي على وحدات ماكرو",
   "files.find.label": "بحث",
   "files.find.ariaInFile": "البحث في الملف",
-  "files.find.ariaInDocument": "البحث في المستند",
   "files.find.noMatches": "لا توجد نتائج",
   "files.find.matchCount": "{current} من {total}",
   "files.find.matchCountCapped": "{current} من {total}+",

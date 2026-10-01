@@ -152,7 +152,6 @@
   "files.viewer.macros": "包含巨集",
   "files.find.label": "尋找",
   "files.find.ariaInFile": "在檔案中尋找",
-  "files.find.ariaInDocument": "在文件中尋找",
   "files.find.noMatches": "無相符項目",
   "files.find.matchCount": "{current} / {total}",
   "files.find.matchCountCapped": "{current} / {total}+",

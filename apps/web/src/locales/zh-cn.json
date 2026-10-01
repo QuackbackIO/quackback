@@ -152,7 +152,6 @@
   "files.viewer.macros": "包含宏",
   "files.find.label": "查找",
   "files.find.ariaInFile": "在文件中查找",
-  "files.find.ariaInDocument": "在文档中查找",
   "files.find.noMatches": "无匹配项",
   "files.find.matchCount": "{current} / {total}",
   "files.find.matchCountCapped": "{current} / {total}+",

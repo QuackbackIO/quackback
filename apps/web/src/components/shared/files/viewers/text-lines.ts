@@ -5,6 +5,7 @@
  */
 import { common, createLowlight } from 'lowlight'
 import { fileExtension } from '@/lib/shared/files/file-types'
+import { MAX_FIND_MATCHES } from './find-limit'
 
 /** A run of text with at most one highlight class. */
 export interface Token {
@@ -26,7 +27,6 @@ const WHOLE_HIGHLIGHT_BYTES = 100 * 1024
 const AUTO_HIGHLIGHT_BYTES = 20 * 1024
 /** Lines longer than this are drawn plain: highlighting them costs more than it shows. */
 const MAX_HIGHLIGHT_LINE = 2000
-export const MAX_MATCHES = 10_000
 
 const LANGUAGE_BY_EXTENSION: Record<string, string> = {
   json: 'json',
@@ -323,7 +323,7 @@ export function findMatches(lines: string[], query: string): Match[] {
       const at = hay.indexOf(needle, from)
       if (at === -1) break
       out.push({ line, start: at, end: at + needle.length })
-      if (out.length >= MAX_MATCHES) return out
+      if (out.length >= MAX_FIND_MATCHES) return out
       from = at + needle.length
     }
   }

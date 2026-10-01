@@ -152,7 +152,6 @@
   "files.viewer.macros": "Zawiera makra",
   "files.find.label": "Szukaj",
   "files.find.ariaInFile": "Szukaj w pliku",
-  "files.find.ariaInDocument": "Szukaj w dokumencie",
   "files.find.noMatches": "Brak wyników",
   "files.find.matchCount": "{current} z {total}",
   "files.find.matchCountCapped": "{current} z {total}+",

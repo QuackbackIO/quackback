@@ -6,7 +6,14 @@
  * minus the pixels. Each assertion reads what the engine itself decides.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render as rtlRender,
+  screen,
+  waitFor,
+} from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import type { EngineToolbar, ViewerEngineProps, ViewerFile } from '../../types'
 import { withLayoutSize } from './layout-size'
@@ -164,5 +171,32 @@ describe('PdfEngine', () => {
     await waitFor(() => expect(lastToolbar(p).page).toMatchObject({ current: 1, total: 3 }))
     expect(screen.queryByRole('status')).toBeNull()
     expect(screen.getByRole('group', { name: 'Page 1' })).toBeInTheDocument()
+  })
+
+  it('finds with the same bar as every other file: count, Enter, Shift+Enter, Escape', async () => {
+    fake.state.pages = [['Quarterly report'], ['Revenue grew'], ['Revenue fell', 'revenue held']]
+    const p = props()
+    render(<PdfEngine {...p} />)
+    await waitFor(() => expect(lastToolbar(p).find).toBeDefined())
+    act(() => lastToolbar(p).find!.open())
+    const input = await screen.findByRole('searchbox', { name: 'Find in file' })
+    await waitFor(() => expect(input).toHaveFocus())
+
+    fireEvent.change(input, { target: { value: 'revenue' } })
+    // No verdict while the pages are still being searched.
+    expect(screen.queryByText('No matches')).toBeNull()
+    expect(await screen.findByText('1 of 3')).toBeInTheDocument()
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(screen.getByText('2 of 3')).toBeInTheDocument()
+    fireEvent.keyDown(input, { key: 'Enter', shiftKey: true })
+    fireEvent.keyDown(input, { key: 'Enter', shiftKey: true })
+    expect(screen.getByText('3 of 3')).toBeInTheDocument()
+
+    fireEvent.change(input, { target: { value: 'profit' } })
+    expect(await screen.findByText('No matches')).toBeInTheDocument()
+
+    // Escape closes the bar and is marked handled, so the viewer stays open.
+    expect(fireEvent.keyDown(input, { key: 'Escape' })).toBe(false)
+    expect(screen.queryByRole('searchbox')).toBeNull()
   })
 })

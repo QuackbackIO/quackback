@@ -3,6 +3,7 @@
  * without a canvas: fitting pages to the desk, which page is current while
  * scrolling, which pages are worth drawing, and find-in-document matching.
  */
+import { MAX_FIND_MATCHES } from './find-limit'
 
 /** Fit-to-width never enlarges pages past this, so a wide dialog stays readable. */
 const FIT_MAX = 1.25
@@ -62,21 +63,25 @@ export interface TextMatch {
   end: number
 }
 
-/** Every case-insensitive occurrence of `query` in each page's text. */
+/**
+ * Every case-insensitive occurrence of `query` in each page's text, up to
+ * `MAX_FIND_MATCHES`.
+ */
 export function findMatches(pageTexts: readonly string[], query: string): TextMatch[] {
   const needle = query.trim().toLocaleLowerCase()
   if (needle === '') return []
   const matches: TextMatch[] = []
-  pageTexts.forEach((text, i) => {
+  for (const [i, text] of pageTexts.entries()) {
     const haystack = text.toLocaleLowerCase()
     let from = 0
     for (;;) {
       const at = haystack.indexOf(needle, from)
       if (at === -1) break
       matches.push({ page: i + 1, start: at, end: at + needle.length })
+      if (matches.length >= MAX_FIND_MATCHES) return matches
       from = at + needle.length
     }
-  })
+  }
   return matches
 }
 

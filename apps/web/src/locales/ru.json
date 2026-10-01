@@ -152,7 +152,6 @@
   "files.viewer.macros": "Содержит макросы",
   "files.find.label": "Поиск",
   "files.find.ariaInFile": "Поиск в файле",
-  "files.find.ariaInDocument": "Поиск в документе",
   "files.find.noMatches": "Нет совпадений",
   "files.find.matchCount": "{current} из {total}",
   "files.find.matchCountCapped": "{current} из {total}+",

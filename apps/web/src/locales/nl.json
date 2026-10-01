@@ -152,7 +152,6 @@
   "files.viewer.macros": "Bevat macro's",
   "files.find.label": "Zoeken",
   "files.find.ariaInFile": "Zoeken in bestand",
-  "files.find.ariaInDocument": "Zoeken in document",
   "files.find.noMatches": "Geen resultaten",
   "files.find.matchCount": "{current} van {total}",
   "files.find.matchCountCapped": "{current} van {total}+",
