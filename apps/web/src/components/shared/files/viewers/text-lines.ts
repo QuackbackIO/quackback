@@ -121,6 +121,17 @@ export function decodeText(data: ArrayBuffer | null): string {
   return new TextDecoder(encoding).decode(bytes).replace(/\r\n?/g, '\n')
 }
 
+/**
+ * The lines a reader sees: a final line break ends the last line rather than
+ * starting an empty one, as the preview job counts them. `text` has its line
+ * breaks already made LF (see `decodeText`).
+ */
+export function splitLines(text: string): string[] {
+  const lines = text.split('\n')
+  if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop()
+  return lines
+}
+
 export function isJsonName(name: string): boolean {
   const ext = fileExtension(name)
   return ext === 'json' || ext === 'har'

@@ -20,6 +20,7 @@ import {
   markTokens,
   MAX_MATCHES,
   prettyJson,
+  splitLines,
   tokensFor,
   TOKEN_COLOR,
   type Token,
@@ -40,7 +41,7 @@ export default function TextEngine({
   const lines = useMemo(() => {
     const text = decodeText(data)
     const shown = !truncated && isJsonName(file.name) ? (prettyJson(text) ?? text) : text
-    return shown.split('\n')
+    return splitLines(shown)
   }, [data, truncated, file.name])
 
   const style = useMemo(

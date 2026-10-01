@@ -90,6 +90,22 @@ describe('TextEngine', () => {
     )
   })
 
+  it('counts the lines a reader sees: a final line break ends the last line', () => {
+    const { container, toolbar } = renderText('alpha\nbeta\n')
+    expect(toolbar().note).toBe('2 lines')
+    expect(lineTexts(container)).toEqual(['alpha', 'beta'])
+  })
+
+  it('keeps a blank last line when the file ends in two line breaks, CR or LF', () => {
+    const lf = renderText('alpha\n\n')
+    expect(lf.toolbar().note).toBe('2 lines')
+    expect(lineTexts(lf.container)).toEqual(['alpha', ''])
+    lf.unmount()
+    const cr = renderText('alpha\rbeta\r')
+    expect(cr.toolbar().note).toBe('2 lines')
+    expect(lineTexts(cr.container)).toEqual(['alpha', 'beta'])
+  })
+
   it('reports find, wrap and the line count to the shell', () => {
     const { toolbar } = renderText('one\ntwo\nthree')
     expect(toolbar().note).toBe('3 lines')
