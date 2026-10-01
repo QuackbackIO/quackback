@@ -337,3 +337,26 @@ export function canOpenSettings(
     isNavGroup(entry) ? entry.kids.some(gated) : entry.permission !== undefined
   return navSectionsFor(sections, permissions).some((section) => section.items.some(gated))
 }
+
+const GENERAL_PATH = '/admin/settings/general'
+const NOTIFICATIONS_PATH = '/admin/settings/notifications'
+
+/**
+ * The page the Settings entry opens for a viewer: General when they may open
+ * it, otherwise the first page in nav order they hold the permission for, and
+ * the personal Notifications page when they hold none. It never names a page
+ * whose route would answer Access denied.
+ */
+export function firstSettingsPath(
+  sections: NavSection[],
+  permissions: ReadonlySet<PermissionKey>
+): string {
+  const gatedPaths: string[] = []
+  const collect = (entry: NavEntry) => {
+    if (isNavGroup(entry)) entry.kids.forEach(collect)
+    else if (entry.permission !== undefined) gatedPaths.push(entry.to)
+  }
+  navSectionsFor(sections, permissions).forEach((section) => section.items.forEach(collect))
+  if (gatedPaths.includes(GENERAL_PATH)) return GENERAL_PATH
+  return gatedPaths[0] ?? NOTIFICATIONS_PATH
+}

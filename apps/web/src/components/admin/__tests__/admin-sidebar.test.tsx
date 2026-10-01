@@ -80,7 +80,7 @@ vi.mock('@/lib/server/functions/owner-workspaces', () => ({
 
 import { AdminSidebar, buildRailItems } from '../admin-sidebar'
 import { DEFAULT_FEATURE_FLAGS } from '@/lib/shared/types/settings'
-import { ALL_PERMISSIONS, PERMISSIONS } from '@/lib/shared/permissions'
+import { ALL_PERMISSIONS, PERMISSIONS, SYSTEM_ROLE_PERMISSIONS } from '@/lib/shared/permissions'
 
 function renderSidebar(
   userRole: 'admin' | 'member',
@@ -216,8 +216,21 @@ describe('AdminSidebar — settings entry', () => {
     expect(container.querySelectorAll('a[href="/admin/settings"]').length).toBeGreaterThan(0)
   })
 
-  it('hides Settings from a team member who can open no settings page', () => {
-    const { container } = renderSidebar('member')
+  it('shows Settings to the Manager preset', () => {
+    const permissions = [...SYSTEM_ROLE_PERMISSIONS.manager]
+    const { container } = renderSidebar('member', { permissions })
+    expect(container.querySelectorAll('a[href="/admin/settings"]').length).toBeGreaterThan(0)
+  })
+
+  it('shows Settings to the Contributor preset', () => {
+    const permissions = [...SYSTEM_ROLE_PERMISSIONS.contributor]
+    const { container } = renderSidebar('member', { permissions })
+    expect(container.querySelectorAll('a[href="/admin/settings"]').length).toBeGreaterThan(0)
+  })
+
+  it('hides Settings from a custom role whose permissions open no settings page', () => {
+    const permissions = [PERMISSIONS.POST_CREATE, PERMISSIONS.CONVERSATION_REPLY]
+    const { container } = renderSidebar('member', { permissions })
     expect(container.querySelectorAll('a[href="/admin/settings"]').length).toBe(0)
   })
 

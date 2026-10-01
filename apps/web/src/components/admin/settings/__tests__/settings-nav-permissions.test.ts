@@ -6,7 +6,12 @@
  */
 import { describe, expect, it } from 'vitest'
 import { PERMISSIONS, SYSTEM_ROLE_PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
-import { buildNavSections, canOpenSettings, navSectionsFor } from '../settings-nav-sections'
+import {
+  buildNavSections,
+  canOpenSettings,
+  firstSettingsPath,
+  navSectionsFor,
+} from '../settings-nav-sections'
 
 type Sections = ReturnType<typeof buildNavSections>
 
@@ -141,5 +146,46 @@ describe('canOpenSettings', () => {
   it('follows the flags: a workflow manager has no page while the inbox is off', () => {
     const off = buildNavSections({ supportInbox: false }, false, false)
     expect(canOpenSettings(off, new Set([PERMISSIONS.WORKFLOW_MANAGE]))).toBe(false)
+  })
+})
+
+describe('firstSettingsPath', () => {
+  const preset = (role: 'owner' | 'manager' | 'contributor') =>
+    new Set<PermissionKey>(SYSTEM_ROLE_PERMISSIONS[role])
+  const flags = { supportInbox: true }
+  const sections = buildNavSections(flags, false, false)
+  const first = (permissions: Set<PermissionKey>, s = sections) => firstSettingsPath(s, permissions)
+
+  it('opens General for a viewer who holds settings.manage', () => {
+    expect(first(preset('owner'))).toBe('/admin/settings/general')
+  })
+
+  it('opens a page the Manager preset can open, not General', () => {
+    const manager = preset('manager')
+    expect(manager.has(PERMISSIONS.SETTINGS_MANAGE)).toBe(false)
+    const path = first(manager)
+    expect(path).not.toBe('/admin/settings/general')
+    expect(path).not.toBe('/admin/settings/notifications')
+    expect(canOpenSettings(sections, manager)).toBe(true)
+  })
+
+  it('opens a page the Contributor preset can open', () => {
+    const contributor = preset('contributor')
+    expect(first(contributor)).toBe('/admin/settings/members')
+  })
+
+  it('opens Agent for a role with only assistant.manage', () => {
+    expect(first(new Set([PERMISSIONS.ASSISTANT_MANAGE]))).toBe('/admin/settings/agent')
+  })
+
+  it('opens Workflows for a workflow manager while the inbox is on', () => {
+    expect(first(new Set([PERMISSIONS.WORKFLOW_MANAGE]))).toBe('/admin/settings/workflows')
+  })
+
+  it('opens Notifications for a viewer with no settings permission', () => {
+    expect(first(new Set())).toBe('/admin/settings/notifications')
+    expect(first(new Set([PERMISSIONS.WORKFLOW_MANAGE]), buildNavSections({}, false, false))).toBe(
+      '/admin/settings/notifications'
+    )
   })
 })
