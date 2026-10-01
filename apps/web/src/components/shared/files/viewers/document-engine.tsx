@@ -1,10 +1,12 @@
 /**
- * Word documents (.docx, .docm). The package's index is checked against the
- * zip budget, docx-preview renders it away from the page, and the sanitized
- * result is shown in a sandboxed frame as white pages on the desk. The frame
- * runs no script, so zoom re-renders its document at the new scale; its web
- * and mail links open in a new tab, as a PDF's do, and a click inside it
- * hands the keyboard straight back to the viewer.
+ * Word documents (.docx, .docm). The package is checked against the zip
+ * budget and rebuilt from its verified parts (on the page, since docx-preview
+ * needs its DOM; the budget bounds the work), docx-preview renders the rebuilt
+ * package away from the page, and the sanitized result is shown in a
+ * sandboxed frame as white pages on the desk. The frame runs no script, so
+ * zoom re-renders its document at the new scale; its web and mail links open
+ * in a new tab, as a PDF's do, and a click inside it hands the keyboard
+ * straight back to the viewer.
  */
 import {
   useCallback,
@@ -18,7 +20,7 @@ import {
 import { useIntl, type IntlShape } from 'react-intl'
 import type { EngineToolbar, ViewerEngineProps, ViewerFile } from '../types'
 import { ViewerSkeleton } from '../viewer-skeleton'
-import { BudgetTimeoutError, checkZipBudget, withTimeout } from './budgets'
+import { BudgetTimeoutError, rebuildZipPackage, withTimeout } from './budgets'
 import {
   DOCUMENT_SANDBOX,
   buildDocumentSrcdoc,
@@ -90,13 +92,13 @@ export default function DocumentEngine({ file, data, onToolbar, onError }: Viewe
   useEffect(() => {
     setRendered(null)
     if (!data) return
-    const budget = checkZipBudget(new Uint8Array(data))
-    if (!budget.ok) {
-      fail(budget.failure)
+    const rebuilt = rebuildZipPackage(new Uint8Array(data))
+    if (!rebuilt.ok) {
+      fail(rebuilt.failure)
       return
     }
     let cancelled = false
-    withTimeout(renderDocumentHtml(data)).then(
+    withTimeout(renderDocumentHtml(rebuilt.bytes)).then(
       (doc) => {
         if (cancelled) return
         if (doc.empty) {

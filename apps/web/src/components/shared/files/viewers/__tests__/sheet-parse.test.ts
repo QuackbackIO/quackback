@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx'
 import { strToU8, zipSync } from 'fflate'
 import { MAX_SHEET_COLUMNS, MAX_SHEET_ROWS, sheetSourceFor } from '../sheet-model'
 import { handleSheetRequest, parseSheets } from '../sheet-parse'
+import { declareSize, deferSizes } from './zip-fixtures'
 
 type BookType = 'xlsx' | 'xls' | 'ods' | 'xlsb'
 
@@ -117,6 +118,32 @@ describe('parseSheets: workbooks', () => {
       ok: false,
       failure: 'too_large',
     })
+  })
+
+  it('refuses a workbook whose sheet inflates past the size its headers declare', () => {
+    const rows = Array.from({ length: 500 }, (_, i) => [`row ${i}`, i])
+    const zip = new Uint8Array(bytesOf(book({ Big: XLSX.utils.aoa_to_sheet(rows) })))
+    const lying = declareSize(zip, 'xl/worksheets/sheet1.xml', 64)
+    expect(parseSheets(lying.buffer as ArrayBuffer, 'workbook')).toEqual({
+      ok: false,
+      failure: 'corrupt',
+    })
+  })
+
+  it('refuses a workbook whose local header disagrees with its index', () => {
+    const zip = new Uint8Array(bytesOf(book({ Invoice: invoiceSheet() })))
+    const lying = declareSize(zip, 'xl/worksheets/sheet1.xml', 1_000_000, 'local')
+    expect(parseSheets(lying.buffer as ArrayBuffer, 'workbook')).toEqual({
+      ok: false,
+      failure: 'corrupt',
+    })
+  })
+
+  it('reads a workbook whose sizes sit in data descriptors', () => {
+    const zip = new Uint8Array(bytesOf(book({ Invoice: invoiceSheet() })))
+    const streamed = deferSizes(zip, 'xl/worksheets/sheet1.xml')
+    const [s] = ok(parseSheets(streamed.buffer as ArrayBuffer, 'workbook'))
+    expect(s!.rows[0]).toEqual(['Item', 'Amount', 'Share'])
   })
 
   it('reports damaged packages as corrupt', () => {

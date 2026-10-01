@@ -86,7 +86,9 @@ export function inertElementFactory(doc: Document): (elem: HElement | Node | str
   return h
 }
 
-export async function renderDocumentHtml(bytes: ArrayBuffer): Promise<RenderedDocument> {
+export async function renderDocumentHtml(
+  bytes: ArrayBuffer | Uint8Array
+): Promise<RenderedDocument> {
   const inert = document.implementation.createHTMLDocument('')
   const options = { ...DOCUMENT_RENDER_OPTIONS, h: inertElementFactory(inert) }
   const parsed = await parseAsync(bytes, options)

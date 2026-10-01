@@ -1,12 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
-import { strToU8, zipSync, type Zippable } from 'fflate'
+import { strToU8, unzipSync, zipSync, type Zippable } from 'fflate'
+import { readZipIndex } from '@/lib/shared/files/zip-budget'
 import {
   MAX_ZIP_ENTRIES,
   MAX_ZIP_UNCOMPRESSED_BYTES,
-  checkZipBudget,
+  rebuildZipPackage,
   withTimeout,
   BudgetTimeoutError,
 } from '../budgets'
+import { declareSize, deferSizes, renameInIndex } from './zip-fixtures'
+
+const MB = 1024 * 1024
 
 function zipOf(files: Zippable): Uint8Array {
   return zipSync(files, { level: 1 })
@@ -22,7 +26,12 @@ function withDeclaredSize(zip: Uint8Array, size: number): Uint8Array {
   return out
 }
 
-describe('checkZipBudget', () => {
+function rebuilt(result: ReturnType<typeof rebuildZipPackage>): Uint8Array {
+  if (!result.ok) throw new Error(`expected a package, got ${result.failure}`)
+  return result.bytes
+}
+
+describe('rebuildZipPackage: the index budget', () => {
   it('refuses a zip that claims millions of entries without walking them', () => {
     const b = new Uint8Array(188)
     const v = new DataView(b.buffer)
@@ -39,63 +48,137 @@ describe('checkZipBudget', () => {
     v.setUint32(eocd + 16, 0xffffffff, true)
     b.set([0x50, 0x4b, 0x03, 0x04])
     const started = performance.now()
-    expect(checkZipBudget(b)).toEqual({ ok: false, failure: 'too_large' })
+    expect(rebuildZipPackage(b)).toEqual({ ok: false, failure: 'too_large' })
     expect(performance.now() - started).toBeLessThan(50)
-  })
-
-  it('passes a small package and reports what its index declares', () => {
-    const zip = zipOf({
-      '[Content_Types].xml': strToU8('<Types/>'),
-      'word/document.xml': strToU8('<w:document>hello</w:document>'),
-    })
-    const result = checkZipBudget(zip)
-    expect(result).toEqual({ ok: true, entries: 2, uncompressedBytes: 38 })
   })
 
   it('refuses more entries than the budget allows', () => {
     const files: Zippable = {}
     for (let i = 0; i <= MAX_ZIP_ENTRIES; i++) files[`f/${i}.xml`] = strToU8('x')
-    expect(checkZipBudget(zipOf(files))).toEqual({ ok: false, failure: 'too_large' })
+    expect(rebuildZipPackage(zipOf(files))).toEqual({ ok: false, failure: 'too_large' })
   })
 
   it('passes exactly the entry budget', () => {
     const files: Zippable = {}
     for (let i = 0; i < MAX_ZIP_ENTRIES; i++) files[`f/${i}.xml`] = strToU8('x')
-    expect(checkZipBudget(zipOf(files))).toMatchObject({ ok: true, entries: MAX_ZIP_ENTRIES })
+    expect(rebuildZipPackage(zipOf(files))).toMatchObject({ ok: true, entries: MAX_ZIP_ENTRIES })
   })
 
   it('refuses a package that unpacks past the size budget, without inflating it', () => {
     // Sixteen 10 MB entries of zeros: about 160 MB declared, a few hundred KB packed.
-    const chunk = new Uint8Array(10 * 1024 * 1024)
+    const chunk = new Uint8Array(10 * MB)
     const files: Zippable = {}
     for (let i = 0; i < 16; i++) files[`xl/worksheets/sheet${i}.xml`] = chunk
     const zip = zipOf(files)
-    expect(zip.length).toBeLessThan(1024 * 1024)
+    expect(zip.length).toBeLessThan(MB)
     expect(16 * chunk.length).toBeGreaterThan(MAX_ZIP_UNCOMPRESSED_BYTES)
-    expect(checkZipBudget(zip)).toEqual({ ok: false, failure: 'too_large' })
+    const started = performance.now()
+    expect(rebuildZipPackage(zip)).toEqual({ ok: false, failure: 'too_large' })
+    expect(performance.now() - started).toBeLessThan(50)
   })
 
   it('honours a smaller budget passed by the caller', () => {
     const zip = zipOf({ 'a.xml': new Uint8Array(4096) })
-    expect(checkZipBudget(zip, { maxUncompressedBytes: 4095 })).toEqual({
+    expect(rebuildZipPackage(zip, { maxUncompressedBytes: 4095 })).toEqual({
       ok: false,
       failure: 'too_large',
     })
-    expect(checkZipBudget(zip, { maxUncompressedBytes: 4096 })).toMatchObject({ ok: true })
+    expect(rebuildZipPackage(zip, { maxUncompressedBytes: 4096 })).toMatchObject({ ok: true })
   })
 
   it('refuses an entry claiming a ratio no deflate stream can reach', () => {
     const zip = zipOf({ 'word/document.xml': strToU8('<w:document>tiny</w:document>') })
-    const lying = withDeclaredSize(zip, 50 * 1024 * 1024)
-    expect(checkZipBudget(lying)).toEqual({ ok: false, failure: 'too_large' })
+    const lying = withDeclaredSize(zip, 50 * MB)
+    expect(rebuildZipPackage(lying)).toEqual({ ok: false, failure: 'too_large' })
   })
 
   it('reports bytes that are not a zip as corrupt', () => {
-    expect(checkZipBudget(strToU8('just some text, not a package'))).toEqual({
+    expect(rebuildZipPackage(strToU8('just some text, not a package'))).toEqual({
       ok: false,
       failure: 'corrupt',
     })
-    expect(checkZipBudget(new Uint8Array(0))).toEqual({ ok: false, failure: 'corrupt' })
+    expect(rebuildZipPackage(new Uint8Array(0))).toEqual({ ok: false, failure: 'corrupt' })
+  })
+})
+
+describe('rebuildZipPackage: the rebuilt package', () => {
+  it('holds every entry with the same bytes, stored so no library inflates anything', () => {
+    const zip = zipOf({
+      '[Content_Types].xml': strToU8('<Types/>'),
+      'word/document.xml': strToU8('<w:document>hello</w:document>'),
+      'word/media/': new Uint8Array(0),
+    })
+    const result = rebuildZipPackage(zip)
+    expect(result).toMatchObject({ ok: true, uncompressedBytes: 38 })
+    const bytes = rebuilt(result)
+    const out = unzipSync(bytes)
+    expect(Object.keys(out).sort()).toEqual(['[Content_Types].xml', 'word/document.xml'])
+    expect(new TextDecoder().decode(out['word/document.xml'])).toBe(
+      '<w:document>hello</w:document>'
+    )
+    for (const entry of readZipIndex(bytes)) {
+      expect(entry.compression).toBe(0)
+      expect(entry.compressedSize).toBe(entry.originalSize)
+    }
+  })
+
+  it('stops an entry at its declared size instead of inflating what it really holds', () => {
+    // 64 MB of zeros packs into about 64 KB; the headers claim 1 KB.
+    const zip = zipOf({
+      '[Content_Types].xml': strToU8('<Types/>'),
+      'xl/worksheets/sheet1.xml': new Uint8Array(64 * MB),
+    })
+    const bomb = declareSize(zip, 'xl/worksheets/sheet1.xml', 1024)
+    expect(bomb.length).toBeLessThan(MB)
+    expect(rebuildZipPackage(bomb)).toEqual({ ok: false, failure: 'corrupt' })
+    // Refused at the step that crosses 1 KB, long before the rest inflates.
+    // The fastest of a few runs keeps a stray pause from deciding the result.
+    const fastest = (work: () => void, runs: number) =>
+      Math.min(
+        ...Array.from({ length: runs }, () => {
+          const started = performance.now()
+          work()
+          return performance.now() - started
+        })
+      )
+    const refusing = fastest(() => rebuildZipPackage(bomb), 3)
+    const inflatingAll = fastest(() => unzipSync(zip), 2)
+    expect(refusing).toBeLessThan(inflatingAll / 2)
+  })
+
+  it('refuses a package whose local header disagrees with its index', () => {
+    const zip = zipOf({
+      '[Content_Types].xml': strToU8('<Types/>'),
+      'word/document.xml': strToU8('<w:document>hello</w:document>'),
+    })
+    expect(rebuildZipPackage(declareSize(zip, 'word/document.xml', 5000, 'local'))).toEqual({
+      ok: false,
+      failure: 'corrupt',
+    })
+    expect(rebuildZipPackage(declareSize(zip, 'word/document.xml', 5, 'central'))).toEqual({
+      ok: false,
+      failure: 'corrupt',
+    })
+  })
+
+  it('accepts sizes deferred to a data descriptor, as streaming writers leave them', () => {
+    const zip = zipOf({
+      '[Content_Types].xml': strToU8('<Types/>'),
+      'word/document.xml': strToU8('<w:document>hello</w:document>'),
+    })
+    const out = unzipSync(rebuilt(rebuildZipPackage(deferSizes(zip, 'word/document.xml'))))
+    expect(new TextDecoder().decode(out['word/document.xml'])).toBe(
+      '<w:document>hello</w:document>'
+    )
+  })
+
+  it('refuses an index that names the same part twice', () => {
+    const zip = zipOf({
+      'word/document.xml': strToU8('<w:document>real</w:document>'),
+      'word/documenx.xml': strToU8('<w:document>shadow</w:document>'),
+    })
+    const twice = renameInIndex(zip, 'word/documenx.xml', 'word/document.xml')
+    expect(rebuildZipPackage(twice)).toEqual({ ok: false, failure: 'corrupt' })
   })
 })
 

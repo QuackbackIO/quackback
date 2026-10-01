@@ -9,6 +9,7 @@ import type { EngineToolbar, ViewerEngineProps, ViewerFile } from '../../types'
 import DocumentEngine from '../document-engine'
 import { DOCUMENT_CSP } from '../document-render'
 import { docxFixture, toArrayBuffer } from './docx-fixture'
+import { declareSize } from './zip-fixtures'
 import { withLayoutSize } from './layout-size'
 
 function render(node: React.ReactNode) {
@@ -228,6 +229,21 @@ describe('DocumentEngine', () => {
     const { container } = render(<DocumentEngine {...p} />)
     await waitFor(() => expect(p.onError).toHaveBeenCalledWith('too_large'))
     expect(container.querySelector('iframe')).toBeNull()
+  })
+
+  it('refuses a package whose part inflates past the size its headers declare', async () => {
+    const lying = declareSize(docxFixture(), 'word/document.xml', 64)
+    const p = props(file('bomb.docx'), toArrayBuffer(lying))
+    const { container } = render(<DocumentEngine {...p} />)
+    await waitFor(() => expect(p.onError).toHaveBeenCalledWith('corrupt'))
+    expect(container.querySelector('iframe')).toBeNull()
+  })
+
+  it('refuses a package whose local header disagrees with its index', async () => {
+    const lying = declareSize(docxFixture(), 'word/document.xml', 9_999_999, 'local')
+    const p = props(file('odd.docx'), toArrayBuffer(lying))
+    render(<DocumentEngine {...p} />)
+    await waitFor(() => expect(p.onError).toHaveBeenCalledWith('corrupt'))
   })
 
   it('reports bytes that are not a Word document as corrupt', async () => {

@@ -8,7 +8,7 @@
  */
 import * as XLSX from 'xlsx'
 import Papa from 'papaparse'
-import { checkZipBudget, isZip } from './budgets'
+import { isZip, rebuildZipPackage } from './budgets'
 import {
   MAX_SHEET_COLUMNS,
   MAX_SHEET_ROWS,
@@ -33,10 +33,14 @@ export function parseSheets(buffer: ArrayBuffer, source: SheetSource): SheetPars
 // ---------------------------------------------------------------------------
 // Workbooks
 
-function parseWorkbook(bytes: Uint8Array): SheetParseResult {
+function parseWorkbook(file: Uint8Array): SheetParseResult {
+  let bytes = file
   if (isZip(bytes)) {
-    const budget = checkZipBudget(bytes)
-    if (!budget.ok) return budget
+    // SheetJS inflates a package's parts past their declared sizes, so it
+    // only ever reads the package rebuilt from verified parts.
+    const rebuilt = rebuildZipPackage(bytes)
+    if (!rebuilt.ok) return rebuilt
+    bytes = rebuilt.bytes
   }
   const wb = XLSX.read(bytes, {
     type: 'array',
