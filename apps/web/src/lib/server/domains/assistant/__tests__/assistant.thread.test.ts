@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mapRowsToThreadMessages } from '../assistant.thread'
+import { wrapUntrustedText } from '../injection-guard'
 import type {
   ConversationMessageDTO,
   ConversationAttachment,
@@ -148,7 +149,7 @@ describe('mapRowsToThreadMessages: attached documents', () => {
     ])
   })
 
-  it('appends the bracket line plus the excerpt when one is loaded', () => {
+  it('appends the bracket line plus the fenced excerpt when one is loaded', () => {
     const rows = [
       msg({ senderType: 'visitor', content: 'see attached', attachments: [docAttachment()] }),
     ]
@@ -156,8 +157,12 @@ describe('mapRowsToThreadMessages: attached documents', () => {
     expect(mapRowsToThreadMessages(rows, ASSISTANT, fileExcerpts)).toEqual([
       {
         sender: 'customer',
-        content:
-          'see attached\n\n[Attached file: invoice.pdf (PDF)]\nInvoice #42 for Acme Corp, total $500.',
+        content: [
+          'see attached',
+          '',
+          '[Attached file: invoice.pdf (PDF)]',
+          wrapUntrustedText('Excerpt of invoice.pdf', 'Invoice #42 for Acme Corp, total $500.'),
+        ].join('\n'),
       },
     ])
   })
@@ -172,18 +177,22 @@ describe('mapRowsToThreadMessages: attached documents', () => {
     ])
   })
 
-  it('truncates a single excerpt to 4000 chars', () => {
+  it('truncates a single excerpt to 4000 chars before fencing it', () => {
     const longExcerpt = 'x'.repeat(5000)
+    const capped = 'x'.repeat(4000)
     const rows = [msg({ senderType: 'visitor', content: '', attachments: [docAttachment()] })]
     const fileExcerpts = new Map([['file_1', excerptRow({ textExcerpt: longExcerpt })]])
     const out = mapRowsToThreadMessages(rows, ASSISTANT, fileExcerpts)
-    const excerptInOutput = out[0].content.split('\n').slice(1).join('\n')
-    expect(excerptInOutput.length).toBe(4000)
-    expect(longExcerpt.startsWith(excerptInOutput)).toBe(true)
+    expect(out[0].content).toBe(
+      [
+        '[Attached file: invoice.pdf (PDF)]',
+        wrapUntrustedText('Excerpt of invoice.pdf', capped),
+      ].join('\n')
+    )
   })
 
-  it('caps the combined document text at 12000 chars across every file on the turn', () => {
-    const attachments = Array.from({ length: 4 }, (_, i) =>
+  it('keeps every bracket line even once the thread-wide excerpt budget runs out within one turn', () => {
+    const attachments = Array.from({ length: 7 }, (_, i) =>
       docAttachment({ fileId: `file_${i}`, name: `doc${i}.pdf` })
     )
     const fileExcerpts = new Map(
@@ -194,12 +203,45 @@ describe('mapRowsToThreadMessages: attached documents', () => {
     )
     const rows = [msg({ senderType: 'visitor', content: '', attachments })]
     const out = mapRowsToThreadMessages(rows, ASSISTANT, fileExcerpts)
-    expect(out[0].content.length).toBeLessThanOrEqual(12000)
-    // Every file's bracket line still appears, even once the budget for
-    // excerpt text runs out — so Quinn always knows how many files there are.
+    // Every file's bracket line still appears, even once the thread-wide
+    // 24,000-char excerpt budget runs out — so Quinn always knows how many
+    // files there are.
     for (const a of attachments) {
       expect(out[0].content).toContain(`[Attached file: ${a.name} (PDF)]`)
     }
+    // 6 files x 4000 chars exhausts the budget; the 7th file's excerpt is
+    // dropped even though its bracket line survives.
+    const excerptOccurrences = out[0].content.match(/y{4000}/g) ?? []
+    expect(excerptOccurrences).toHaveLength(6)
+  })
+
+  it('spends one excerpt budget across the whole thread, newest turns first', () => {
+    const rows = Array.from({ length: 7 }, (_, i) =>
+      msg({
+        senderType: 'visitor',
+        content: '',
+        attachments: [docAttachment({ fileId: `file_${i}`, name: `doc${i}.pdf` })],
+      })
+    )
+    const fileExcerpts = new Map(
+      rows.map((_, i) => [
+        `file_${i}`,
+        excerptRow({ id: `file_${i}`, name: `doc${i}.pdf`, textExcerpt: 'y'.repeat(4000) }),
+      ])
+    )
+    const out = mapRowsToThreadMessages(rows, ASSISTANT, fileExcerpts)
+    expect(out).toHaveLength(7)
+    // Every bracket line survives on every turn, whatever the budget did.
+    for (let i = 0; i < 7; i++) {
+      expect(out[i].content).toContain(`[Attached file: doc${i}.pdf (PDF)]`)
+    }
+    // The 6 newest turns (indices 1..6, oldest-first) keep their full
+    // excerpt; the oldest turn (index 0) is the one pushed out once the
+    // thread-wide 24,000-char budget (6 x 4000) is spent.
+    for (let i = 1; i < 7; i++) {
+      expect(out[i].content).toContain('y'.repeat(4000))
+    }
+    expect(out[0].content).not.toContain('y')
   })
 
   it('never surfaces a document block for a human_agent or assistant turn', () => {

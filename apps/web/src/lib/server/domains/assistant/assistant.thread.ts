@@ -21,14 +21,21 @@
  * turn's `content`, immediately followed by the file's extracted excerpt when
  * one has been loaded (loadThreadFileExcerpts, one query per turn-building
  * read). A file with no excerpt yet (or ever) still gets its bracket line, so
- * Quinn knows the file exists even when it cannot read it. This rides the
- * exact same `content` field a customer's own typed text already does — no
- * separate prompt-injection framing is layered on, because none is needed:
- * the assistant's platform policy already treats every customer message as
- * content to help with, never instructions to follow, and an excerpt folded
- * into that same turn is customer-authored content in exactly the same sense.
+ * Quinn knows the file exists even when it cannot read it. The bracket line
+ * rides the same `content` field a customer's own typed text already does —
+ * a customer message is already content to help with, never instructions to
+ * follow — but the excerpt itself is text pulled from inside an uploaded
+ * file, a notch further removed than the customer's own typed words, so it
+ * gets its own fence: the same `wrapUntrustedText` guard every other surface
+ * uses for text an end user or external system controls (injection-guard.ts).
  * Only customer (visitor) turns get this treatment; a human teammate's or
  * Quinn's own attachments are never expanded this way.
+ *
+ * Excerpt text is budgeted once across the WHOLE thread
+ * (`THREAD_EXCERPT_BUDGET_CHARS`), spent newest-turn-first, so a long history
+ * can never balloon the prompt the way an unbounded or per-turn-only cap
+ * once could. Bracket lines are free and always included, whatever the
+ * budget has left by the time a turn is reached.
  */
 import type { PrincipalId, ConversationId, TicketId, FileId } from '@quackback/ids'
 import {
@@ -54,16 +61,22 @@ import type {
 } from '@/lib/shared/conversation/types'
 import { FAMILY_NAME, type FileFamily } from '@/lib/shared/files/file-types'
 import type { FileExcerptRow } from '@/lib/server/domains/files/files.excerpts'
+import { wrapUntrustedText } from './injection-guard'
 import type { AssistantThreadMessage } from './assistant.runtime'
 
 /** Newest recent turns to hand the model — enough context without unbounded prompt growth. */
 export const ASSISTANT_THREAD_WINDOW = 40
 
-/** Per-file excerpt cap folded into a customer turn's content. */
+/** Per-file excerpt cap, applied before the thread-wide budget below. */
 const DOCUMENT_EXCERPT_CHAR_LIMIT = 4000
 
-/** Total cap across every document on one turn (brackets + excerpts combined). */
-const DOCUMENT_TURN_CHAR_CAP = 12000
+/**
+ * Total excerpt TEXT across the whole thread (bracket lines are exempt and
+ * always included). 40 turns of unbounded per-turn excerpts could reach
+ * hundreds of thousands of characters; this caps the thread's documents at a
+ * fixed, model-sized budget instead, spent on the newest turns first.
+ */
+const THREAD_EXCERPT_BUDGET_CHARS = 24000
 
 const EMPTY_FILE_EXCERPTS: ReadonlyMap<string, FileExcerptRow> = new Map()
 
@@ -82,13 +95,14 @@ function isDocumentAttachment(a: ConversationAttachment): boolean {
 function documentNote(
   attachment: ConversationAttachment,
   row: FileExcerptRow | undefined
-): { bracket: string; excerpt: string } {
+): { bracket: string; name: string; excerpt: string } {
   const family = (row?.family ?? attachment.family ?? 'other') as FileFamily
   const name = row?.name ?? attachment.name
   const bracket = `[Attached file: ${name} (${FAMILY_NAME[family] ?? 'File'})]`
   const excerpt = row?.textExcerpt?.trim() ?? ''
   return {
     bracket,
+    name,
     excerpt:
       excerpt.length > DOCUMENT_EXCERPT_CHAR_LIMIT
         ? excerpt.slice(0, DOCUMENT_EXCERPT_CHAR_LIMIT)
@@ -97,44 +111,36 @@ function documentNote(
 }
 
 /**
- * Render every document attachment on one customer turn as bracket-plus-
- * excerpt text, within the combined `DOCUMENT_TURN_CHAR_CAP`. Every file's
- * bracket line is always included (they are short and few — attachments are
- * capped well under this budget); excerpts are then filled in, in order,
- * until the remaining budget runs out, so files early in the list keep their
- * excerpt over ones later on rather than the whole turn silently losing its
- * last file's existence.
+ * Render every document attachment on one customer turn as bracket lines,
+ * each immediately followed by its fenced excerpt (`wrapUntrustedText`) when
+ * `budget` still has room for it. Every bracket line is always included;
+ * excerpts are filled in, in order, until `budget` (this turn's share of the
+ * thread-wide total, decided by the caller) runs out, so files early in the
+ * list keep their excerpt over ones later on. Returns the rendered block
+ * plus the excerpt characters it actually spent, for the caller to deduct
+ * from the running thread-wide total.
  */
 function documentsBlock(
-  attachments: ConversationAttachment[],
-  fileExcerpts: ReadonlyMap<string, FileExcerptRow>
-): string {
-  const docs = attachments.filter(isDocumentAttachment)
-  if (docs.length === 0) return ''
-
+  docs: ConversationAttachment[],
+  fileExcerpts: ReadonlyMap<string, FileExcerptRow>,
+  budget: number
+): { block: string; used: number } {
   const notes = docs.map((a) => documentNote(a, fileExcerpts.get(a.fileId!)))
   const blocks = notes.map((n) => n.bracket)
 
-  // Every bracket line, and the "\n\n" that will separate it from the next
-  // block, is owed up front — only an excerpt's own text (plus the "\n" in
-  // front of it) is what the remaining budget pays for, so every bracket
-  // line survives whatever excerpts the budget cannot afford. `used` always
-  // equals the exact length `blocks.join('\n\n')` will have once the loop
-  // below is done, so the final string never exceeds the cap.
-  let used = blocks.reduce((sum, b) => sum + b.length, 0) + (docs.length - 1) * 2
-
+  let used = 0
+  let remaining = budget
   for (let i = 0; i < notes.length; i++) {
-    const { excerpt } = notes[i]
-    if (!excerpt) continue
-    const remaining = DOCUMENT_TURN_CHAR_CAP - used - 1 // reserve the '\n' before the excerpt
-    if (remaining <= 0) continue
+    const { excerpt, name } = notes[i]
+    if (!excerpt || remaining <= 0) continue
     const kept = excerpt.length <= remaining ? excerpt : excerpt.slice(0, remaining)
     if (kept.length === 0) continue
-    blocks[i] = `${blocks[i]}\n${kept}`
-    used += 1 + kept.length
+    blocks[i] = `${blocks[i]}\n${wrapUntrustedText(`Excerpt of ${name}`, kept)}`
+    used += kept.length
+    remaining -= kept.length
   }
 
-  return blocks.join('\n\n')
+  return { block: blocks.join('\n\n'), used }
 }
 
 /**
@@ -146,40 +152,75 @@ function documentsBlock(
  * contract. Omit it for a cheap eligibility check that does not need excerpt
  * text: every document-bearing turn still counts and still carries its
  * bracket line, just without the extracted text.
+ *
+ * Excerpt text is allocated from `THREAD_EXCERPT_BUDGET_CHARS` in a second
+ * pass over the turns already built, newest first, so the budget favors the
+ * most recent attachments on a long thread rather than being exhausted by
+ * whichever happened to come first.
  */
 export function mapRowsToThreadMessages(
   messages: ConversationMessageDTO[],
   assistantPrincipalId: PrincipalId,
   fileExcerpts: ReadonlyMap<string, FileExcerptRow> = EMPTY_FILE_EXCERPTS
 ): AssistantThreadMessage[] {
-  const out: AssistantThreadMessage[] = []
+  interface Draft {
+    sender: 'customer' | 'assistant' | 'human_agent'
+    trimmed: string
+    images: ConversationAttachment[]
+    documents: ConversationAttachment[]
+    documentsText: string
+  }
+
+  const drafts: Draft[] = []
   for (const m of messages) {
     // System notices are status records, not turns.
     if (m.senderType === 'system') continue
-    const trimmed = m.content?.trim()
+    const trimmed = m.content?.trim() ?? ''
     // Image attachments make a text-less message a turn (Quinn vision) on any
     // sender, matching the pre-existing rule exactly. Document attachments
     // only ever do this for a customer turn (the only sender this expansion
     // ever applies to at all).
     const images = (m.attachments ?? []).filter(isImageAttachment)
     const documents =
-      m.senderType === 'visitor' ? documentsBlock(m.attachments ?? [], fileExcerpts) : ''
-    if (!trimmed && images.length === 0 && !documents) continue
-    const content = [trimmed, documents].filter(Boolean).join('\n\n')
-    if (m.senderType === 'visitor') {
-      out.push({
-        sender: 'customer',
-        content,
-        ...(images.length > 0 ? { attachments: images } : {}),
-      })
-    } else {
-      out.push({
-        sender: m.author?.principalId === assistantPrincipalId ? 'assistant' : 'human_agent',
-        content,
-      })
-    }
+      m.senderType === 'visitor' ? (m.attachments ?? []).filter(isDocumentAttachment) : []
+    if (!trimmed && images.length === 0 && documents.length === 0) continue
+    drafts.push({
+      sender:
+        m.senderType === 'visitor'
+          ? 'customer'
+          : m.author?.principalId === assistantPrincipalId
+            ? 'assistant'
+            : 'human_agent',
+      trimmed,
+      images,
+      documents,
+      documentsText: '',
+    })
   }
-  return out
+
+  // Newest turn first: the most recent attachments keep their excerpt over
+  // ones many turns back once the thread-wide budget runs out. A turn whose
+  // share is zero still renders (documentsBlock always keeps its brackets).
+  let remaining = THREAD_EXCERPT_BUDGET_CHARS
+  for (let i = drafts.length - 1; i >= 0; i--) {
+    const draft = drafts[i]
+    if (draft.documents.length === 0) continue
+    const { block, used } = documentsBlock(draft.documents, fileExcerpts, Math.max(0, remaining))
+    draft.documentsText = block
+    remaining -= used
+  }
+
+  return drafts.map((draft) => {
+    const content = [draft.trimmed, draft.documentsText].filter(Boolean).join('\n\n')
+    if (draft.sender === 'customer') {
+      return {
+        sender: 'customer' as const,
+        content,
+        ...(draft.images.length > 0 ? { attachments: draft.images } : {}),
+      }
+    }
+    return { sender: draft.sender, content }
+  })
 }
 
 /**
