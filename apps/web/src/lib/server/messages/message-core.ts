@@ -7,7 +7,8 @@
  */
 import type { ConversationMessage, ConversationAttachment } from '@/lib/server/db'
 import { ValidationError } from '@/lib/shared/errors'
-import { isTrustedAttachmentUrl } from '@/lib/server/storage/trusted-url'
+import { resignStoredAssetUrl, getPublicUrlOrNull } from '@/lib/server/storage/s3'
+import type { FileFamily } from '@/lib/shared/files/file-types'
 import { truncate } from '@/lib/shared/utils/string'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { contentJsonForClient } from '@/lib/server/content/storage-read-urls'
@@ -15,7 +16,7 @@ import { tiptapJsonToText, hasTextLeaf } from '@/lib/server/markdown-tiptap'
 import type { PrincipalId } from '@quackback/ids'
 import {
   MAX_CONVERSATION_MESSAGE_LENGTH,
-  MAX_CONVERSATION_ATTACHMENTS,
+  type ConversationAttachment as ClientAttachment,
   type ConversationAuthorDTO,
   type ConversationMessageDTO,
   type MessageSenderType,
@@ -23,34 +24,30 @@ import {
 import { liftInlineImagesToAttachments } from '@/lib/shared/conversation/lift-inline-images'
 
 export const PREVIEW_LENGTH = 120
-const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
-
-/** Validate + normalize client-supplied attachments (count, trusted url, size). */
-export function validateAttachments(
-  attachments?: ConversationAttachment[]
-): ConversationAttachment[] {
-  if (!attachments || attachments.length === 0) return []
-  if (attachments.length > MAX_CONVERSATION_ATTACHMENTS) {
-    throw new ValidationError(
-      'VALIDATION_ERROR',
-      `Too many attachments (max ${MAX_CONVERSATION_ATTACHMENTS})`
-    )
+/**
+ * The client form of a stored attachment. The URL gets a current read
+ * capability (the stored one may have been minted under an older secret), and
+ * the preview's storage keys become URLs the browser can load.
+ */
+export function attachmentForClient(a: ConversationAttachment): ClientAttachment {
+  const { preview, family, ...base } = a
+  const out: ClientAttachment = {
+    ...base,
+    url: resignStoredAssetUrl(a.url),
+    ...(family ? { family: family as FileFamily } : {}),
   }
-  return attachments.map((a) => {
-    if (!isTrustedAttachmentUrl(a?.url)) {
-      throw new ValidationError('VALIDATION_ERROR', 'Invalid attachment')
-    }
-    const size = Number(a.size)
-    if (!Number.isFinite(size) || size < 0 || size > MAX_ATTACHMENT_BYTES) {
-      throw new ValidationError('VALIDATION_ERROR', 'Attachment too large')
-    }
-    return {
-      url: a.url,
-      name: String(a.name ?? '').slice(0, 255),
-      contentType: String(a.contentType ?? '').slice(0, 128),
-      size,
-    }
-  })
+  if (!preview) return out
+  const { thumbKey, renditionKey, ...rest } = preview
+  const thumbUrl = getPublicUrlOrNull(thumbKey)
+  const renditionUrl = getPublicUrlOrNull(renditionKey)
+  return {
+    ...out,
+    preview: {
+      ...rest,
+      ...(thumbUrl ? { thumbUrl } : {}),
+      ...(renditionUrl ? { renditionUrl } : {}),
+    },
+  }
 }
 
 /**
@@ -128,7 +125,7 @@ export function toMessageDTO(
 ): ConversationMessageDTO {
   const { contentJson, attachments } = liftInlineImagesToAttachments(
     contentJsonForClient(message.contentJson ?? null),
-    message.attachments ?? []
+    (message.attachments ?? []).map(attachmentForClient)
   )
   return {
     id: message.id,

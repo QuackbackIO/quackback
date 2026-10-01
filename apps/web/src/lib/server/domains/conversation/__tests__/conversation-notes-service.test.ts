@@ -303,7 +303,7 @@ describe('addAgentNote', () => {
           url: '/api/storage/chat-images/shot.png',
           name: 'shot.png',
           contentType: 'image/png',
-          size: 6 * 1024 * 1024,
+          size: 26 * 1024 * 1024,
         },
       ])
     ).rejects.toBeInstanceOf(ValidationError)

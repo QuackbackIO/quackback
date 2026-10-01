@@ -394,6 +394,18 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       import('@/lib/server/events/segment-scheduler').then((m) => m.runSegmentEvaluation),
   },
   {
+    // Thumbnails, counts and text excerpts for uploaded files. Bounded so a burst
+    // of uploads cannot starve the other queues of CPU.
+    name: 'file-preview',
+    concurrency: 2,
+    maxAttempts: 2,
+    leaseMs: 120_000,
+    retryBackoffMs: 5_000,
+    retentionMs: DAY_MS,
+    failedRetentionMs: 7 * DAY_MS,
+    handler: () => import('@/lib/server/domains/files/files.preview').then((m) => m.runFilePreview),
+  },
+  {
     // Was `{help-center-translate}`. The 120s lease is the case §7.2 was built
     // for, and the reason this tier runs a bounded pool instead of one serial
     // drain — see runner.ts.

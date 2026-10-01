@@ -13,8 +13,9 @@ import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'conversation-email-inbound' })
 
-// Resend inbound events can embed base64 attachment payloads, so allow up to 10 MB.
-export const MAX_EMAIL_WEBHOOK_BODY_BYTES = 10 * 1024 * 1024
+// Inbound events embed attachments as base64 (a third larger than the file), so
+// a 25 MB attachment, the per-file cap, needs about 34 MB of body.
+export const MAX_EMAIL_WEBHOOK_BODY_BYTES = 40 * 1024 * 1024
 
 /** Svix sends both `webhook-*` and `svix-*` aliases; accept either. */
 function header(request: Request, base: string): string | null {

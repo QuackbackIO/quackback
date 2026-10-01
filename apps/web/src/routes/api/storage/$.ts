@@ -68,9 +68,12 @@ export function createProxyCache(opts: ProxyCacheOptions) {
   }
 }
 
+/** Logos are typically < 50 KB; anything past this is streamed, never cached. */
+const PROXY_CACHE_MAX_ENTRY_BYTES = 1 * 1024 * 1024
+
 const proxyCache = createProxyCache({
   ttlMs: 60 * 60 * 1000, // 1 hour
-  maxEntryBytes: 1 * 1024 * 1024, // logos are typically < 50 KB; skip outliers
+  maxEntryBytes: PROXY_CACHE_MAX_ENTRY_BYTES,
   maxTotalBytes: 32 * 1024 * 1024,
 })
 
@@ -235,8 +238,10 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
     return Response.json({ error: 'Invalid storage read token' }, { status: 403 })
   }
 
-  // Force proxy for email embeds (?email=1) since email clients don't follow redirects
-  const forceProxy = url.searchParams.has('email')
+  // Force proxy for email embeds (?email=1), since email clients don't follow
+  // redirects, and for the file viewer's fetch (?proxy=1), since a script
+  // cannot read a cross-origin redirect target the bucket has no CORS grant for.
+  const forceProxy = url.searchParams.has('email') || url.searchParams.has('proxy')
   const requestedRange = request.headers.get('range')
   if (requestedRange && !isSingleByteRange(requestedRange)) {
     return new Response(null, { status: 416, headers: { 'Accept-Ranges': 'bytes' } })
@@ -282,8 +287,12 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
 
       // Video must stay streaming and byte-range aware. Buffering the whole
       // object before answering makes playback wait for the complete upload and
-      // prevents seeking on self-hosted deployments that enable S3_PROXY.
-      if (contentType.startsWith('video/') || requestedRange) {
+      // prevents seeking on self-hosted deployments that enable S3_PROXY. A file
+      // too large to cache streams too: buffering a 25 MB attachment only to
+      // send it on holds the whole file in memory for no benefit.
+      const tooLargeToCache =
+        contentLength !== undefined && contentLength > PROXY_CACHE_MAX_ENTRY_BYTES
+      if (contentType.startsWith('video/') || requestedRange || tooLargeToCache) {
         const headers = new Headers({
           'Content-Type': contentType,
           'Cache-Control': cacheControl,
