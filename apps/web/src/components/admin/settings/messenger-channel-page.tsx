@@ -220,7 +220,7 @@ export function MessengerChannelPage() {
             }
             control={
               <Button variant="outline" size="sm" asChild>
-                <Link to="/admin/automation/assistant">Configure</Link>
+                <Link to="/admin/settings/agent">Configure</Link>
               </Button>
             }
           />

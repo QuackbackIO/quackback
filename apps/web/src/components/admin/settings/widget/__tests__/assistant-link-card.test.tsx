@@ -19,7 +19,7 @@ vi.mock('@tanstack/react-router', async () => {
 
 const { AssistantLinkCard } = await import('../widget-settings-page')
 
-function renderCard(assistant?: { enabled?: boolean; name?: string }) {
+function renderCard(assistant?: { enabled?: boolean; respond?: boolean; name?: string }) {
   return render(
     <IntlProvider locale="en" defaultLocale="en">
       <AssistantLinkCard assistant={assistant} />
@@ -33,7 +33,7 @@ describe('AssistantLinkCard', () => {
   it('is a row named Quinn that links to AI & Automation', () => {
     renderCard({ enabled: true })
     const row = document.querySelector('[data-slot="settings-list-row"]') as HTMLElement
-    expect(row.getAttribute('href')).toBe('/admin/automation/agent')
+    expect(row.getAttribute('href')).toBe('/admin/settings/agent')
     expect(row).toHaveTextContent('Quinn')
     expect(screen.queryByText('Assistant')).toBeNull()
     expect(screen.queryByText(/assistant off/i)).toBeNull()
@@ -45,6 +45,28 @@ describe('AssistantLinkCard', () => {
     expect(row).toHaveTextContent('Quinn')
     expect(row).toHaveTextContent('Off')
     expect(row).toHaveTextContent('Turn it on in AI & Automation')
+  })
+
+  it('marks it Paused when it is on but not replying', () => {
+    renderCard({ enabled: true, respond: false })
+    const row = document.querySelector('[data-slot="settings-list-row"]') as HTMLElement
+    expect(row).toHaveTextContent('Paused')
+    expect(row).not.toHaveTextContent('Off')
+    expect(row).toHaveTextContent('Resume it in AI & Automation')
+  })
+
+  it('shows Off, not Paused, when it is off', () => {
+    renderCard({ enabled: false, respond: false })
+    const row = document.querySelector('[data-slot="settings-list-row"]') as HTMLElement
+    expect(row).toHaveTextContent('Off')
+    expect(row).not.toHaveTextContent('Paused')
+  })
+
+  it('shows no badge while it is replying', () => {
+    renderCard({ enabled: true, respond: true })
+    const row = document.querySelector('[data-slot="settings-list-row"]') as HTMLElement
+    expect(row).not.toHaveTextContent('Paused')
+    expect(row).not.toHaveTextContent('Off')
   })
 
   it('describes the live state when it is on', () => {

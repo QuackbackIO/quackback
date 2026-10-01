@@ -151,7 +151,7 @@ describe('Quinn row', () => {
     renderPage()
     expect(screen.getByText('Quinn answers first')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Configure' }).getAttribute('href')).toBe(
-      '/admin/automation/assistant'
+      '/admin/settings/agent'
     )
     expect(screen.queryByText(/Fronting conversations/)).toBeNull()
   })

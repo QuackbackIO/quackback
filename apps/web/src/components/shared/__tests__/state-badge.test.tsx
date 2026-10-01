@@ -9,6 +9,7 @@ afterEach(cleanup)
 const cases = [
   ['on', 'On', 'bg-muted'],
   ['off', 'Off', 'bg-muted'],
+  ['paused', 'Paused', 'bg-muted'],
   ['connected', 'Connected', 'bg-success'],
   ['attention', 'Needs attention', 'bg-warning'],
   ['error', 'Error', 'bg-destructive'],

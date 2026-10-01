@@ -109,6 +109,7 @@ describe('buildLaunchTasks', () => {
       'create-board',
       'publish-changelog',
       'connect-messenger',
+      'set-up-quinn',
       'help-article',
       'add-status-service',
     ])
@@ -124,7 +125,7 @@ describe('buildLaunchTasks', () => {
     expect(configured.find((task) => task.id === 'connect-messenger')?.isCompleted).toBe(false)
     expect(
       configured.filter((task) => task.classification === 'prerequisite').map((t) => t.id)
-    ).toEqual(['create-board', 'connect-messenger'])
+    ).toEqual(['create-board', 'connect-messenger', 'set-up-quinn'])
   })
 
   it('completes Connect Messenger when the SDK is observed and the widget is on', () => {
@@ -135,6 +136,48 @@ describe('buildLaunchTasks', () => {
       features: { ...noExtraModules, supportInbox: true },
     }).find((row) => row.id === 'connect-messenger')
     expect(task?.isCompleted).toBe(true)
+  })
+
+  describe('Set up Quinn', () => {
+    const withSupport = { ...base, features: { ...noExtraModules, supportInbox: true } }
+    const quinn = (status: LaunchStatus) =>
+      buildLaunchTasks(status).find((task) => task.id === 'set-up-quinn')
+
+    it('is offered only while the Support inbox is on', () => {
+      expect(quinn(base)).toBeUndefined()
+      expect(quinn(withSupport)).toBeDefined()
+    })
+
+    it('is done when the Agent is on and answering, and open otherwise', () => {
+      expect(quinn({ ...withSupport, hasAgentAnswering: true })?.isCompleted).toBe(true)
+      expect(quinn({ ...withSupport, hasAgentAnswering: false })?.isCompleted).toBe(false)
+      expect(quinn(withSupport)?.isCompleted).toBe(false)
+    })
+
+    it('opens the Agent settings for an assistant manager', () => {
+      const task = quinn({ ...withSupport, hasAgentAnswering: false })
+      expect(task?.href).toBe('/admin/settings/agent')
+      expect(task?.actionLabel).toBe('Set up Quinn')
+      expect(task?.availability).toBe('available')
+    })
+
+    it('is blocked without a link for someone who cannot manage the assistant', () => {
+      const task = quinn({
+        ...withSupport,
+        hasAgentAnswering: false,
+        permissions: {
+          settingsManage: true,
+          boardManage: true,
+          memberManage: true,
+          brandingManage: true,
+          integrationManage: true,
+          helpCenterManage: true,
+          assistantManage: false,
+        },
+      })
+      expect(task?.availability).toBe('blocked')
+      expect(task?.href).toBeUndefined()
+    })
   })
 
   it('counts a blocked board step in the readiness denominator', () => {
@@ -169,6 +212,7 @@ describe('buildLaunchTasks', () => {
         brandingManage: false,
         integrationManage: false,
         helpCenterManage: false,
+        assistantManage: false,
       },
     })
     expect(tasks.filter((task) => task.href)).toHaveLength(0)

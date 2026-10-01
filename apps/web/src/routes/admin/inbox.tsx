@@ -123,56 +123,7 @@ import {
   type FeatureFlags,
 } from '@/lib/shared/types/settings'
 import { useFeatureFlag, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
-
-/** Quinn-view outcome sub-filter. */
-const QUINN_BUCKETS: {
-  value: 'resolved' | 'escalated' | 'pending' | undefined
-  label: string
-}[] = [
-  { value: undefined, label: 'All' },
-  { value: 'pending', label: 'Pending' },
-  { value: 'escalated', label: 'Escalated' },
-  { value: 'resolved', label: 'Resolved' },
-]
-
-function QuinnBucketChips({
-  value,
-  counts,
-  onChange,
-}: {
-  value?: 'resolved' | 'escalated' | 'pending'
-  counts?: { resolved: number; escalated: number; pending: number }
-  onChange: (value?: 'resolved' | 'escalated' | 'pending') => void
-}) {
-  const countFor = (v?: 'resolved' | 'escalated' | 'pending'): number | undefined => {
-    if (!counts) return undefined
-    return v ? counts[v] : counts.resolved + counts.escalated + counts.pending
-  }
-  return (
-    <div className="flex flex-wrap gap-1.5 px-3 pb-2 pt-1">
-      {QUINN_BUCKETS.map((b) => {
-        const active = value === b.value
-        const n = countFor(b.value)
-        return (
-          <button
-            key={b.label}
-            type="button"
-            onClick={() => onChange(b.value)}
-            className={cn(
-              'flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[13px] font-medium transition-colors',
-              active
-                ? 'bg-primary/15 text-primary'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-            )}
-          >
-            {b.label}
-            {n != null && <span className="tabular-nums opacity-70">{n}</span>}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
+import { QuinnViewHeader } from '@/components/admin/conversation/quinn-view-header'
 
 // URL is the source of truth for open item + filters (refresh-safe, shareable).
 // `?c=` is the legacy alias for `?i=`, accepted forever.
@@ -1501,7 +1452,7 @@ function InboxPage() {
   const listHeaderSlot = useMemo(
     () =>
       isQuinnView ? (
-        <QuinnBucketChips
+        <QuinnViewHeader
           value={urlAi}
           counts={assistantCounts}
           onChange={(ai) => updateSearch({ ai, i: undefined, m: undefined })}

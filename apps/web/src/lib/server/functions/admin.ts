@@ -401,6 +401,10 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
   // Messenger is "live" when the widget is on and the Messages tab is shown.
   const hasMessengerEnabled = hasWidgetEnabled && (widgetConfig.tabs?.messenger ?? true)
   const hasIntegration = Boolean(connectedIntegration)
+  // The Agent answers unless it is switched off or paused; both default to on.
+  const assistantDeployment = widgetConfig.messenger?.assistant
+  const hasAgentAnswering =
+    (assistantDeployment?.enabled ?? true) && (assistantDeployment?.respond ?? true)
   const hasInternalBoard = orgBoards.some((board) => board.access.view === 'team')
   const publicBoard = orgBoards.find((board) => board.access.view === 'anonymous')
   const hasPublicBoard = Boolean(publicBoard)
@@ -441,6 +445,7 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
       widgetSdkNeedsUpdate(orgSettings?.widgetInstalledSdkVersion, CURRENT_WIDGET_SDK_VERSION),
     hasWidgetEnabled,
     hasMessengerEnabled,
+    hasAgentAnswering,
     hasHelpArticle: Boolean(helpArticle),
     hasPublishedChangelog: Boolean(publishedChangelog),
     hasStatusComponent: Boolean(statusComponent),
@@ -464,6 +469,7 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
       brandingManage: permissions.has(PERMISSIONS.SETTINGS_BRANDING),
       integrationManage: permissions.has(PERMISSIONS.INTEGRATION_MANAGE),
       helpCenterManage: permissions.has(PERMISSIONS.HELP_CENTER_MANAGE),
+      assistantManage: permissions.has(PERMISSIONS.ASSISTANT_MANAGE),
     },
     features: {
       supportInbox: flags.supportInbox,
