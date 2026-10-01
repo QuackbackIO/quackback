@@ -8,7 +8,7 @@
  * under lib/client/queries can consume it too — lib must not import from
  * components. The feature module re-exports it from query-keys.ts.
  */
-import type { ConversationId, PrincipalId } from '@quackback/ids'
+import type { ConversationId, PrincipalId, TicketId } from '@quackback/ids'
 
 export const conversationKeys = {
   /** Prefix of every admin conversation-list query (invalidations target it). */
@@ -45,6 +45,11 @@ export const conversationKeys = {
   /** The detail panel's Quinn AI activity summary for one conversation. */
   agentAssistantActivity: (conversationId: ConversationId | undefined) =>
     ['admin', 'inbox', 'assistant-activity', conversationId] as const,
+
+  /** The detail panel's Files section: every attachment across a
+   *  conversation or ticket's whole thread. */
+  agentConversationFiles: (id: ConversationId | TicketId | undefined) =>
+    ['admin', 'inbox', 'files', id] as const,
 
   /** The per-agent "Saved for later" (flagged messages) feed. */
   agentFlagged: () => ['admin', 'inbox', 'flagged'] as const,
