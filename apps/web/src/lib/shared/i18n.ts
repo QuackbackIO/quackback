@@ -151,10 +151,10 @@ export function loadMessages(locale: SupportedLocale): Promise<Record<string, st
 
 /**
  * Key prefixes the widget surface renders (widget views plus the shared
- * Ask-AI / ui / common strings they embed). Everything else in the catalog is
- * portal/admin copy the iframe never shows.
+ * Ask-AI / ui / common / files strings they embed). Everything else in the
+ * catalog is portal/admin copy the iframe never shows.
  */
-const WIDGET_MESSAGE_PREFIXES = ['widget.', 'helpAskAi.', 'ui.', 'common.']
+const WIDGET_MESSAGE_PREFIXES = ['widget.', 'helpAskAi.', 'ui.', 'common.', 'files.']
 
 /**
  * The widget's slice of the message catalog. Loaded in the widget layout
@@ -219,14 +219,23 @@ export async function loadOnboardingMessages(
  *   assistant strings) reused on the portal support & ticket pages;
  * - `helpAskAi.` — the help-center Ask-AI search surface under `_portal/hc`;
  * - `ui.` — shared UI primitives (e.g. combobox) embedded in portal forms;
- * - `common.` — cross-surface strings (e.g. common.cancel) used on auth pages.
+ * - `common.` — cross-surface strings (e.g. common.cancel) used on auth pages;
+ * - `files.` — the shared file viewer/card/composer-tray components (gallery
+ *   viewer, attachment cards) reused on the portal support & ticket pages.
  *
  * Everything else in the catalog is admin/inbox copy the portal never renders.
  * A unit test (portal-message-coverage.test.ts) statically re-derives the ids
  * referenced by the portal source and fails CI if any fall outside this list,
  * so a future key can't silently render its English fallback in production.
  */
-const PORTAL_MESSAGE_PREFIXES = ['portal.', 'widget.', 'helpAskAi.', 'ui.', 'common.'] as const
+const PORTAL_MESSAGE_PREFIXES = [
+  'portal.',
+  'widget.',
+  'helpAskAi.',
+  'ui.',
+  'common.',
+  'files.',
+] as const
 
 /** The prefix allowlist as a plain string[], for tests and iteration. */
 export const PORTAL_MESSAGE_PREFIX_LIST: readonly string[] = PORTAL_MESSAGE_PREFIXES
