@@ -3,7 +3,8 @@
  * storage route redirects, and media elements need no CORS), never from the
  * proxy. Images zoom from 25% to 500% of their fitted size, pan by dragging
  * once zoomed, toggle 200% on double-click and zoom with Ctrl and the wheel.
- * SVG is only ever an <img>, where its scripts cannot run.
+ * TIFF and HEIC show the copy the preview job derives, since most browsers
+ * cannot draw them. SVG is only ever an <img>, where its scripts cannot run.
  */
 import {
   useCallback,
@@ -16,7 +17,12 @@ import {
 import { fileExtension } from '@/lib/shared/files/file-types'
 import { cn } from '@/lib/shared/utils'
 import { FileBadge } from '../file-badge'
-import { VIEWER_ARROWS_ATTR, type EngineFailure, type ViewerEngineProps } from '../types'
+import {
+  VIEWER_ARROWS_ATTR,
+  type EngineFailure,
+  type ViewerEngineProps,
+  type ViewerFile,
+} from '../types'
 
 const MIN_ZOOM = 0.25
 const MAX_ZOOM = 5
@@ -35,13 +41,43 @@ function mediaFailure(event: SyntheticEvent<HTMLMediaElement>): EngineFailure | 
   return 'corrupt'
 }
 
+/** Image formats most browsers cannot draw; the server derives a copy that they can. */
+const UNDRAWABLE_TYPES = new Set(['image/tiff', 'image/heic', 'image/heif'])
+const UNDRAWABLE_EXTENSIONS = new Set(['tif', 'tiff', 'heic', 'heif'])
+
+/**
+ * The URL to draw an image from: the stored file, or for a format browsers
+ * cannot draw, the server's converted copy (HEIC) or rendered thumbnail
+ * (TIFF). Null when there is nothing a browser can draw.
+ */
+export function drawableImageUrl(file: ViewerFile): string | null {
+  const undrawable =
+    UNDRAWABLE_TYPES.has(file.contentType.toLowerCase()) ||
+    UNDRAWABLE_EXTENSIONS.has(fileExtension(file.name))
+  if (!undrawable) return file.url
+  return file.preview?.renditionUrl ?? file.preview?.thumbUrl ?? null
+}
+
 export default function MediaEngine(props: ViewerEngineProps) {
   if (props.file.family === 'video') return <VideoView {...props} />
   if (props.file.family === 'audio') return <AudioView {...props} />
-  return <ImageView {...props} />
+  const src = drawableImageUrl(props.file)
+  if (!src) return <Undrawable onError={props.onError} />
+  return <ImageView {...props} imageSrc={src} />
 }
 
-function ImageView({ file, onToolbar, onError }: ViewerEngineProps) {
+/** Reports the shell's unsupported fallback instead of drawing a broken image. */
+function Undrawable({ onError }: Pick<ViewerEngineProps, 'onError'>) {
+  useEffect(() => onError('unsupported'), [onError])
+  return null
+}
+
+function ImageView({
+  file,
+  imageSrc,
+  onToolbar,
+  onError,
+}: ViewerEngineProps & { imageSrc: string }) {
   const [zoom, setZoom] = useState(1)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const [dragging, setDragging] = useState(false)
@@ -49,9 +85,12 @@ function ImageView({ file, onToolbar, onError }: ViewerEngineProps) {
   const dragStart = useRef({ x: 0, y: 0, ox: 0, oy: 0 })
   const stageRef = useRef<HTMLDivElement>(null)
 
-  const rendition = file.preview?.renditionUrl
-  const ext = fileExtension(file.name)
-  const needsRendition = ext === 'heic' || ext === 'heif'
+  // A rendered thumbnail is smaller than the original: name the original's size.
+  const thumbnail = imageSrc !== file.url && imageSrc === file.preview?.thumbUrl
+  const knownSize =
+    file.preview?.width && file.preview.height
+      ? `${file.preview.width} × ${file.preview.height}`
+      : null
 
   const applyZoom = useCallback((next: number) => {
     const value = clampZoom(next)
@@ -116,14 +155,15 @@ function ImageView({ file, onToolbar, onError }: ViewerEngineProps) {
       onPointerCancel={endDrag}
     >
       <img
-        src={rendition ?? file.url}
+        src={imageSrc}
         alt={file.name}
         draggable={false}
         onLoad={(e) => {
           const { naturalWidth, naturalHeight } = e.currentTarget
-          if (naturalWidth && naturalHeight) setPixels(`${naturalWidth} × ${naturalHeight}`)
+          if (thumbnail) setPixels(knownSize)
+          else if (naturalWidth && naturalHeight) setPixels(`${naturalWidth} × ${naturalHeight}`)
         }}
-        onError={() => onError(needsRendition && !rendition ? 'unsupported' : 'corrupt')}
+        onError={() => onError('corrupt')}
         className={cn(
           'absolute inset-0 m-auto max-h-[calc(100%-3rem)] max-w-[calc(100%-2rem)] rounded-[3px] object-contain shadow-[0_2px_14px_rgb(0_0_0/0.2)] sm:max-w-[calc(100%-8rem)]',
           !dragging && 'transition-transform duration-150 motion-reduce:transition-none'

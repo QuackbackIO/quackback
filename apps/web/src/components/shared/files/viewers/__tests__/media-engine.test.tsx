@@ -113,16 +113,66 @@ describe('MediaEngine images', () => {
     )
   })
 
+  it('shows a TIFF scan through the PNG the server renders', () => {
+    renderMedia({
+      name: 'scan.tiff',
+      contentType: 'image/tiff',
+      preview: { thumbUrl: '/api/storage/previews/scan.png?read=t' },
+    })
+    expect(screen.getByRole('img')).toHaveAttribute('src', '/api/storage/previews/scan.png?read=t')
+  })
+
+  it('notes the scan’s own size, not the thumbnail’s', () => {
+    const { toolbar } = renderMedia({
+      name: 'scan.tiff',
+      contentType: 'image/tiff',
+      preview: { thumbUrl: '/api/storage/previews/scan.png?read=t', width: 2480, height: 3508 },
+    })
+    const img = screen.getByRole('img') as HTMLImageElement
+    Object.defineProperty(img, 'naturalWidth', { value: 400 })
+    Object.defineProperty(img, 'naturalHeight', { value: 566 })
+    fireEvent.load(img)
+    expect(toolbar().note).toBe('2480 × 3508')
+  })
+
+  it('knows a TIFF by its extension when the type is generic', () => {
+    renderMedia({
+      name: 'SCAN_01.TIF',
+      contentType: 'application/octet-stream',
+      preview: { thumbUrl: '/api/storage/previews/scan.png?read=t' },
+    })
+    expect(screen.getByRole('img')).toHaveAttribute('src', '/api/storage/previews/scan.png?read=t')
+  })
+
+  it('falls back to the thumbnail for a HEIC photo without a converted copy', () => {
+    renderMedia({
+      name: 'IMG_0412.heif',
+      contentType: 'image/heif',
+      preview: { thumbUrl: '/api/storage/previews/IMG_0412-thumb.png?read=t' },
+    })
+    expect(screen.getByRole('img')).toHaveAttribute(
+      'src',
+      '/api/storage/previews/IMG_0412-thumb.png?read=t'
+    )
+  })
+
+  it.each([
+    ['scan.tiff', 'image/tiff'],
+    ['IMG_0412.heic', 'image/heic'],
+    ['photo', 'image/heif'],
+  ])(
+    'reports %s with nothing a browser can show as unsupported, never a broken image',
+    (name, contentType) => {
+      const { onError } = renderMedia({ name, contentType })
+      expect(onError).toHaveBeenCalledWith('unsupported')
+      expect(screen.queryByRole('img')).toBeNull()
+    }
+  )
+
   it('reports an image the browser cannot decode', () => {
     const { onError } = renderMedia({ name: 'shot.png', contentType: 'image/png' })
     fireEvent.error(screen.getByRole('img'))
     expect(onError).toHaveBeenCalledWith('corrupt')
-  })
-
-  it('reports a HEIC photo with no converted copy as unsupported when it fails', () => {
-    const { onError } = renderMedia({ name: 'IMG_0412.heic', contentType: 'image/heic' })
-    fireEvent.error(screen.getByRole('img'))
-    expect(onError).toHaveBeenCalledWith('unsupported')
   })
 
   it('notes the pixel size once the image loads', () => {
