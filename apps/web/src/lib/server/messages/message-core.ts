@@ -30,6 +30,7 @@ function clientFileUrl(key: string | undefined): string | null {
   const url = getPublicUrlOrNull(key)
   return url ? toUserContentUrl(url) : null
 }
+
 /**
  * The client form of a stored attachment. The URL gets a current read
  * capability (the stored one may have been minted under an older secret), and

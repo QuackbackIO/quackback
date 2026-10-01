@@ -74,7 +74,10 @@ export function cleanFileName(raw: string | null | undefined): string {
   return cleaned.slice(0, 255 - ext.length) + ext
 }
 
-/** The upload response. Its URL is for the uploader's browser, so it loads from the user-content origin. */
+/**
+ * The upload response. Its URL is for the uploader's browser, so it loads from
+ * the user-content origin when one is configured.
+ */
 export function toUploadedFile(row: FileRecord): UploadedFile {
   const url = getPublicUrlOrNull(row.storageKey)
   return {

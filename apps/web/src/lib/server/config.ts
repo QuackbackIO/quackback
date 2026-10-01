@@ -32,13 +32,12 @@ const WILDCARD_HOST_RE = /[*?]/
  * http(s) origin. A path would be dropped from every file link built on it, so
  * it is refused rather than ignored.
  */
-function userContentOrigin(value: string): string | null {
-  if (WILDCARD_HOST_RE.test(value)) return null
+function parseUserContentOrigin(value: string): string | null {
+  if (WILDCARD_HOST_RE.test(value) || /[?#]/.test(value)) return null
   try {
     const url = new URL(value)
     if (url.protocol !== 'https:' && url.protocol !== 'http:') return null
-    if (url.username || url.password || url.search || url.hash) return null
-    if (url.pathname !== '/' || value.includes('#') || value.includes('?')) return null
+    if (url.username || url.password || url.pathname !== '/') return null
     return url.origin
   } catch {
     return null
@@ -255,7 +254,7 @@ const configSchema = z
       })
     }
 
-    if (cfg.userContentUrl !== undefined && !userContentOrigin(cfg.userContentUrl)) {
+    if (cfg.userContentUrl !== undefined && !parseUserContentOrigin(cfg.userContentUrl)) {
       ctx.addIssue({
         code: 'custom',
         path: ['userContentUrl'],
@@ -599,7 +598,7 @@ export const config = {
   get userContentUrl(): string | undefined {
     const cfg = loadConfig()
     if (cfg.tenancyMode === 'pooled' || !cfg.userContentUrl) return undefined
-    return userContentOrigin(cfg.userContentUrl) ?? undefined
+    return parseUserContentOrigin(cfg.userContentUrl) ?? undefined
   },
 
   // AI
