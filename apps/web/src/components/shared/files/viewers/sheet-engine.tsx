@@ -59,10 +59,5 @@ export default function SheetEngine({ file, data, onToolbar, onError }: ViewerEn
   }, [data, file.name, file.contentType])
 
   if (!sheets) return <ViewerSkeleton />
-  return (
-    <SheetView
-      sheets={sheets}
-      onNote={(note) => onToolbar({ note: macros ? `${note} · ${macros}` : note })}
-    />
-  )
+  return <SheetView sheets={sheets} note={macros} onToolbar={onToolbar} />
 }

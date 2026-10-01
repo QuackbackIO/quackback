@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { createIntl } from 'react-intl'
+import { MAX_FIND_MATCHES } from '../find-limit'
 import {
   cellRef,
   columnLabel,
   columnWidths,
+  findCells,
   looksLikeHeader,
   rowsNote,
   type SheetData,
@@ -148,5 +150,25 @@ describe('columnWidths', () => {
   it('caps a column of very long text', () => {
     const s = sheet([['x'.repeat(5000)]])
     expect(columnWidths(s)).toEqual([320])
+  })
+})
+
+describe('findCells', () => {
+  it('finds display text in any case, row by row, ignoring a blank query', () => {
+    const s = sheet([
+      ['Name', 'Plan'],
+      ['acme', 'Pro'],
+      ['', 'ACME Pro'],
+    ])
+    expect(findCells(s, 'Acme')).toEqual([
+      { r: 1, c: 0 },
+      { r: 2, c: 1 },
+    ])
+    expect(findCells(s, '  ')).toEqual([])
+  })
+
+  it('stops counting where every other find does', () => {
+    const s = sheet(Array.from({ length: 200 }, () => Array.from({ length: 60 }, () => 'x')))
+    expect(findCells(s, 'x')).toHaveLength(MAX_FIND_MATCHES)
   })
 })

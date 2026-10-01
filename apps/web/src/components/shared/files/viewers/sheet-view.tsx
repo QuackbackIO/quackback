@@ -2,17 +2,31 @@
  * A read-only spreadsheet: a cell bar, a grid virtualized in both directions
  * (only the rows and columns on screen exist in the DOM), and sheet tabs when
  * the workbook has more than one sheet. Every cell is a text node; formulas
- * show as text in the cell bar and are never evaluated.
+ * show as text in the cell bar and are never evaluated. Find uses the shared
+ * bar: it searches the sheet on screen and moves the selection to each match.
  */
-import { useEffect, useEffectEvent, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type RefObject,
+} from 'react'
 import { useIntl } from 'react-intl'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { cn } from '@/lib/shared/utils'
+import type { EngineToolbar } from '../types'
+import { FindBar } from './find-bar'
+import { MAX_FIND_MATCHES } from './find-limit'
 import {
   cellAlign,
   cellRef,
   columnLabel,
   columnWidths,
+  findCells,
   looksLikeHeader,
   rowsNote,
   type CellAddress,
@@ -33,21 +47,60 @@ const ARROWS: Record<string, [number, number]> = {
 
 export function SheetView({
   sheets,
-  onNote,
+  note,
+  onToolbar,
 }: {
   sheets: SheetData[]
-  /** The quiet line for the viewer's toolbar: "1,248 rows". */
-  onNote: (note: string) => void
+  /** Said after the row count: "Contains macros". */
+  note?: string
+  /** Reports the quiet line ("1,248 rows") and find, as an engine does. */
+  onToolbar: (toolbar: EngineToolbar) => void
 }) {
   const intl = useIntl()
   const [active, setActive] = useState(0)
   const [selected, setSelected] = useState<CellAddress>({ r: 0, c: 0 })
   const sheet = sheets[active] ?? sheets[0]!
+  const gridRef = useRef<HTMLDivElement>(null)
 
-  const reportNote = useEffectEvent(onNote)
+  const [findOpen, setFindOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [current, setCurrent] = useState(0)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const matches = useMemo(() => (findOpen ? findCells(sheet, query) : []), [findOpen, sheet, query])
+  const matched = useMemo(() => new Set(matches.map((m) => `${m.r}:${m.c}`)), [matches])
+
+  // A new query, or another sheet, starts at the first match.
   useEffect(() => {
-    reportNote(rowsNote(sheet, intl))
-  }, [sheet, intl])
+    setCurrent(0)
+    if (matches[0]) setSelected(matches[0])
+  }, [matches])
+
+  const openFind = useCallback(() => {
+    setFindOpen(true)
+    // Focus after the bar mounts; select so typing replaces the last query.
+    requestAnimationFrame(() => {
+      inputRef.current?.focus()
+      inputRef.current?.select()
+    })
+  }, [])
+
+  function stepMatch(delta: 1 | -1) {
+    if (matches.length === 0) return
+    const next = (current + delta + matches.length) % matches.length
+    setCurrent(next)
+    setSelected(matches[next]!)
+  }
+
+  function closeFind() {
+    setFindOpen(false)
+    gridRef.current?.focus()
+  }
+
+  const report = useEffectEvent(onToolbar)
+  useEffect(() => {
+    const rows = rowsNote(sheet, intl)
+    report({ note: note ? `${rows} · ${note}` : rows, find: { open: openFind } })
+  }, [sheet, intl, note, openFind])
 
   function showSheet(index: number) {
     setActive(index)
@@ -55,9 +108,28 @@ export function SheetView({
   }
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+      {findOpen && (
+        <FindBar
+          inputRef={inputRef}
+          query={query}
+          onQueryChange={setQuery}
+          current={matches.length > 0 ? current : -1}
+          total={matches.length}
+          capped={matches.length >= MAX_FIND_MATCHES}
+          onStep={stepMatch}
+          onClose={closeFind}
+        />
+      )}
       <CellBar sheet={sheet} selected={selected} />
-      <SheetGrid key={active} sheet={sheet} selected={selected} onSelect={setSelected} />
+      <SheetGrid
+        key={active}
+        gridRef={gridRef}
+        sheet={sheet}
+        selected={selected}
+        matched={matched}
+        onSelect={setSelected}
+      />
       {sheets.length > 1 && <SheetTabs sheets={sheets} active={active} onChange={showSheet} />}
     </div>
   )
@@ -90,15 +162,19 @@ function CellBar({ sheet, selected }: { sheet: SheetData; selected: CellAddress 
 }
 
 function SheetGrid({
+  gridRef: scrollRef,
   sheet,
   selected,
+  matched,
   onSelect,
 }: {
+  gridRef: RefObject<HTMLDivElement | null>
   sheet: SheetData
   selected: CellAddress
+  /** Find's matches, as "row:column". */
+  matched: ReadonlySet<string>
   onSelect: (cell: CellAddress) => void
 }) {
-  const scrollRef = useRef<HTMLDivElement>(null)
   const rowCount = sheet.rows.length
   const colCount = sheet.colCount
   const widths = useMemo(() => columnWidths(sheet), [sheet])
@@ -132,6 +208,12 @@ function SheetGrid({
   const lastRow = visibleRows[visibleRows.length - 1]?.index ?? -1
   const mergesInView = merges.filter((m) => m.e.r >= firstRow && m.s.r <= lastRow)
 
+  // The selected cell stays in view, whether the arrows or find moved it.
+  useEffect(() => {
+    if (selected.r < rowCount) rows.scrollToIndex(selected.r)
+    if (selected.c < colCount) cols.scrollToIndex(selected.c)
+  }, [selected, rowCount, colCount, rows, cols])
+
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const step = ARROWS[event.key]
     if (!step || rowCount === 0 || colCount === 0) return
@@ -141,8 +223,6 @@ function SheetGrid({
     const r = Math.min(rowCount - 1, Math.max(0, selected.r + step[0]))
     const c = Math.min(colCount - 1, Math.max(0, selected.c + step[1]))
     onSelect({ r, c })
-    rows.scrollToIndex(r)
-    cols.scrollToIndex(c)
   }
 
   return (
@@ -207,6 +287,7 @@ function SheetGrid({
                 if (merge && (merge.s.r !== row.index || merge.s.c !== col.index)) return null
                 const span = merge
                 const isSelected = selected.r === row.index && selected.c === col.index
+                const isMatch = matched.has(`${row.index}:${col.index}`)
                 const align = cellAlign(kinds[col.index])
                 return (
                   <div
@@ -215,6 +296,7 @@ function SheetGrid({
                     aria-colindex={col.index + 2}
                     aria-selected={isSelected}
                     data-cell={cellRef(row.index, col.index)}
+                    data-match={isMatch ? '' : undefined}
                     onClick={() => onSelect({ r: row.index, c: col.index })}
                     className={cn(
                       'absolute top-0 cursor-cell truncate border-b border-r border-border/60 px-2 leading-[25px]',
@@ -222,6 +304,7 @@ function SheetGrid({
                       align === 'center' && 'text-center',
                       isHeader && 'bg-muted/50 font-semibold',
                       span && 'z-[1] bg-background',
+                      isMatch && 'bg-amber-200/60 dark:bg-amber-400/25',
                       isSelected &&
                         'z-[2] outline outline-2 -outline-offset-2 outline-green-700 dark:outline-green-500'
                     )}

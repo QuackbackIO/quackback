@@ -5,6 +5,7 @@
  */
 import type { IntlShape } from 'react-intl'
 import { fileExtension } from '@/lib/shared/files/file-types'
+import { MAX_FIND_MATCHES } from './find-limit'
 
 /**
  * Rows and columns read per sheet; one more row is read to learn whether the
@@ -68,6 +69,24 @@ export type SheetParseResult =
 /** True when no cell of the sheet holds any text. */
 export function isEmptySheet(sheet: Pick<SheetData, 'rows'>): boolean {
   return sheet.rows.every((row) => row.every((value) => value === ''))
+}
+
+/**
+ * Cells whose display text holds `query` in any case, in reading order (row
+ * by row, left to right), up to `MAX_FIND_MATCHES`.
+ */
+export function findCells(sheet: Pick<SheetData, 'rows'>, query: string): CellAddress[] {
+  const needle = query.trim().toLocaleLowerCase()
+  if (needle === '') return []
+  const found: CellAddress[] = []
+  for (const [r, row] of sheet.rows.entries()) {
+    for (const [c, value] of row.entries()) {
+      if (value === '' || !value.toLocaleLowerCase().includes(needle)) continue
+      found.push({ r, c })
+      if (found.length >= MAX_FIND_MATCHES) return found
+    }
+  }
+  return found
 }
 
 /** "A", "Z", "AA", "ZZ", "AAA" for 0-based column indexes. */

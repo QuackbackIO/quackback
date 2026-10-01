@@ -112,7 +112,10 @@ describe('SheetEngine', () => {
     await waitFor(() =>
       expect(container.querySelector('[data-cell="A2"]')).toHaveTextContent('Acme')
     )
-    expect(p.onToolbar).toHaveBeenLastCalledWith({ note: '3 rows' })
+    expect(p.onToolbar).toHaveBeenLastCalledWith({
+      note: '3 rows',
+      find: { open: expect.any(Function) },
+    })
     expect(p.onError).not.toHaveBeenCalled()
     const [worker] = InProcessWorker.instances
     expect(worker!.received[0]!.source).toBe('workbook')
@@ -139,7 +142,9 @@ describe('SheetEngine', () => {
     const p = { ...props(f.name, workbook()), file: f }
     const { container } = render(<SheetEngine {...p} />)
     await waitFor(() => expect(container.querySelector('[data-cell="A2"]')).not.toBeNull())
-    expect(p.onToolbar).toHaveBeenLastCalledWith({ note: '3 rows · Contains macros' })
+    expect(p.onToolbar).toHaveBeenLastCalledWith(
+      expect.objectContaining({ note: '3 rows · Contains macros' })
+    )
   })
 
   it('reads CSV through the delimited-text parser', async () => {
@@ -149,7 +154,7 @@ describe('SheetEngine', () => {
       expect(container.querySelector('[data-cell="B2"]')).toHaveTextContent('Acme')
     )
     expect(InProcessWorker.instances[0]!.received[0]!.source).toBe('csv')
-    expect(p.onToolbar).toHaveBeenLastCalledWith({ note: '2 rows' })
+    expect(p.onToolbar).toHaveBeenLastCalledWith(expect.objectContaining({ note: '2 rows' }))
   })
 
   it('shows the viewer’s loading state while the worker parses', async () => {
