@@ -187,7 +187,8 @@
 
 @media (min-width: 640px) {
   [data-visual-theme='refined'] [data-admin-shell] {
-    padding: 8px 8px 8px 0;
+    padding-block: 8px;
+    padding-inline: 0 8px;
   }
 
   [data-visual-theme='refined'] [data-admin-canvas] {
@@ -211,11 +212,10 @@
 }
 
 [data-visual-theme='refined'] [data-admin-rail] {
-  border-right: 0;
+  border-inline-end: 0;
 }
 
 [data-visual-theme='refined'] [data-side-pane] {
-  border-right-width: 1px;
   border-inline-end-width: 1px;
 }
 
@@ -594,8 +594,7 @@
   background: transparent;
   box-shadow: none;
   border-radius: 0;
-  border-left-width: 0;
-  border-right-width: 0;
+  border-inline-width: 0;
   border-top-color: transparent;
 }
 

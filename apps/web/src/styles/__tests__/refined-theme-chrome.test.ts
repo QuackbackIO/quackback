@@ -106,12 +106,23 @@ describe('refined theme chrome rules', () => {
     expect(block(`${R} [data-admin-shell] {`)).toContain('background: var(--chrome-background)')
     const media = css.slice(css.indexOf('@media (min-width: 640px)'))
     const shell = media.slice(media.indexOf('[data-admin-shell]'))
-    expect(shell.slice(0, shell.indexOf('}'))).toContain('padding: 8px 8px 8px 0')
+    expect(shell.slice(0, shell.indexOf('}'))).toContain('padding-inline: 0 8px')
     const canvas = media.slice(media.indexOf('[data-admin-canvas]'))
     const canvasBlock = canvas.slice(0, canvas.indexOf('}'))
     expect(canvasBlock).toContain('border: 1px solid var(--chrome-hairline)')
     expect(canvasBlock).toContain('border-radius: 14px')
-    expect(block(`${R} [data-admin-rail] {\n  border-right`)).toContain('border-right: 0')
+    expect(block(`${R} [data-admin-rail] {\n  border-inline-end`)).toContain('border-inline-end: 0')
+  })
+
+  it('uses logical sides in the admin chrome rules so RTL mirrors the sheet', () => {
+    const chrome = [
+      block(`${R} [data-admin-rail] {\n  border-inline-end`),
+      block(`${R} [data-side-pane] {\n  border-inline-end`),
+      css.slice(css.indexOf('@media (min-width: 640px)')).split('}')[0],
+    ].join('\n')
+    expect(chrome).toContain('padding-block: 8px')
+    expect(chrome).toContain('border-inline-end-width: 1px')
+    expect(chrome).not.toMatch(/\b(left|right)\b|-(left|right)\b|padding: 8px 8px 8px 0/)
   })
 })
 

@@ -37,7 +37,7 @@ export function AdminFilterLayout({
       {/* Filters - Desktop */}
       <aside
         data-side-pane=""
-        className="hidden lg:flex w-64 xl:w-72 shrink-0 flex-col border-r border-border/50 bg-card/30 overflow-hidden"
+        className="hidden lg:flex w-64 xl:w-72 shrink-0 flex-col border-e border-border/50 bg-card/30 overflow-hidden"
       >
         {headerTitle ? (
           <>
