@@ -8,6 +8,7 @@ import { execSync } from 'child_process'
 import { readFileSync } from 'fs'
 import { CLIENT_PROTECTED_SPECIFIERS } from './src/lib/server/policy/client-import-protection'
 import { routeChunksImportTheirParent } from './src/lib/build/route-chunk-parents'
+import { serverWorkers } from './src/lib/build/server-workers'
 
 /**
  * Replace the server-only structured logger with a no-op stub in the CLIENT
@@ -210,6 +211,8 @@ export default defineConfig(({ mode }) => {
       tsconfigPaths: true,
     },
     plugins: [
+      // `?server-worker` imports: worker-thread scripts for server code.
+      serverWorkers(),
       letNitroServeStorageAssets(),
       keepSsrOnlyDepsOutOfClientOptimizer(),
       stubServerLoggerInClient(),

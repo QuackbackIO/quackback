@@ -104,6 +104,28 @@ function pdfBytes(): Uint8Array {
   return doc.saveToBuffer('').asUint8Array().slice()
 }
 
+/**
+ * A PDF of a few hundred bytes whose first page takes seconds to render:
+ * forms that draw forms, `fanout` times at each of three levels.
+ */
+function slowPdfBytes(fanout: number): Uint8Array {
+  const doc = new mupdf.PDFDocument()
+  let lines = ''
+  for (let i = 0; i < fanout; i++) lines += `${i % 50} 0 m ${50 - (i % 50)} 50 l S `
+  let form = doc.addStream(lines, { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 50, 50] })
+  for (let level = 0; level < 2; level++) {
+    form = doc.addStream('/F Do '.repeat(fanout), {
+      Type: 'XObject',
+      Subtype: 'Form',
+      BBox: [0, 0, 50, 50],
+      Resources: { XObject: { F: form } },
+    })
+  }
+  const resources = doc.addObject({ XObject: { F: form } })
+  doc.insertPage(-1, doc.addPage([0, 0, 612, 792], 0, resources, '/F Do'))
+  return doc.saveToBuffer('compress').asUint8Array().slice()
+}
+
 function docxBytes(): Uint8Array {
   return zipSync({
     '[Content_Types].xml': strToU8('<Types/>'),
@@ -310,6 +332,30 @@ describe.skipIf(!fixture.available)('file-preview job (real DB, rolled back)', (
     })
     // A budget already spent: the first check between phases refuses.
     expect(await generateFilePreview(row.id, { budgetMs: -1 })).toBe('failed')
+    expect((await reload(row.id)).previewStatus).toBe('failed')
+    expect(uploads).toHaveLength(0)
+  })
+
+  it('stops a parser mid-render at the time budget, and the server keeps answering', async () => {
+    // About 420,000 strokes: several seconds of one uninterruptible render.
+    const row = await storedFile({
+      name: 'slow.pdf',
+      contentType: 'application/pdf',
+      family: 'pdf',
+      bytes: slowPdfBytes(75),
+    })
+    let ticks = 0
+    const ticker = setInterval(() => ticks++, 50)
+    const started = Date.now()
+    try {
+      expect(await generateFilePreview(row.id, { budgetMs: 1_500 })).toBe('failed')
+    } finally {
+      clearInterval(ticker)
+    }
+    const took = Date.now() - started
+    expect(took).toBeLessThan(4_000)
+    // The render ran off this thread: timers here kept firing throughout.
+    expect(ticks).toBeGreaterThan((took / 50) * 0.5)
     expect((await reload(row.id)).previewStatus).toBe('failed')
     expect(uploads).toHaveLength(0)
   })

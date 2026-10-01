@@ -34,7 +34,10 @@ export const NOTHING_TO_DERIVE: PreviewResult = Object.freeze({
 
 /** A parser module could not be loaded: a fault in the deployment, not the file. */
 export class PreviewDependencyError extends Error {
-  constructor(dependency: string, options?: { cause?: unknown }) {
+  constructor(
+    readonly dependency: string,
+    options?: { cause?: unknown }
+  ) {
     super(`Preview dependency unavailable: ${dependency}`, options)
     this.name = 'PreviewDependencyError'
   }
@@ -71,10 +74,12 @@ export async function loadDependency<T>(name: string, load: () => Promise<T>): P
 /**
  * A point in time the job must finish by. Parsers run synchronously, so the
  * check sits between phases (pages, entries): a phase that has started runs
- * to its end, and each phase is kept small by the deriver's own caps.
+ * to its end, and each phase is kept small by the deriver's own caps. The
+ * preview worker checks the same point, and is terminated when it passes.
  */
 export class Deadline {
-  private readonly at: number
+  /** Epoch milliseconds. */
+  readonly at: number
 
   constructor(ms: number) {
     this.at = Date.now() + ms

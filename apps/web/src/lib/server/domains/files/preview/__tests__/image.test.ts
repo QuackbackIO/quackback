@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest'
 import * as mupdf from 'mupdf'
 import { deriveImagePreview, webpSize, heifSize } from '../image'
 import { PreviewRefusedError } from '../result'
+import { HEIC_64x48 } from './image-fixtures'
 
 function pixmap(width: number, height: number): mupdf.Pixmap {
   const pix = new mupdf.Pixmap(mupdf.ColorSpace.DeviceRGB, [0, 0, width, height], false)
@@ -97,20 +98,6 @@ function riff(chunk: string, data: number[]): Uint8Array {
   ]
   return new Uint8Array(out)
 }
-
-// A 64x48 HEIC written by libheif's encoder.
-const HEIC_64x48 = Uint8Array.from(
-  atob(
-    'AAAAHGZ0eXBoZWl4AAAAAG1pZjFoZWl4bWlhZgAAAXxtZXRhAAAAAAAAACFoZGxyAAAAAAAAAABwaWN0AAAAAAAAAAAAAAAA' +
-      'AAAAACJpbG9jAAAAAERAAAEAAQAAAAABoAABAAAAAAAAAEYAAAAjaWluZgAAAAAAAQAAABVpbmZlAgAAAAABAABodmMxAAAA' +
-      'AA5waXRtAAAAAAABAAAA/GlwcnAAAADcaXBjbwAAAHVodmNDAQQIAAAAAAAAAAAAHvAA/P36+gAADwNgAAEAF0ABDAH//wQI' +
-      'AAADAJ24AAADAAAeugJAYQABACpCAQEECAAAAwCduAAAAwAAHqAggQTZbq5Ka5uAhoMCAAADADIAAAMAAhBiAAEABkQBwXPA' +
-      'iQAAABNjb2xybmNseAABAA0ABoAAAAAUaXNwZQAAAAAAAABAAAAAQAAAAChjbGFwAAAAQAAAAAEAAAAwAAAAAQAAAAAAAAAC' +
-      '////8AAAAAIAAAAQcGl4aQAAAAADCgoKAAAAGGlwbWEAAAAAAAAAAQABBYECAwWEAAAATm1kYXQAAABCKAGvE4D1Zsp2s9Z7' +
-      'f+0xWG5viMvluSSssyQFFCs9tLdxauTN9qCeyZKIdyG4sdX3xSpJ0sjWTk6RsMDhqKHTbwxO'
-  ),
-  (c) => c.charCodeAt(0)
-)
 
 describe('deriveImagePreview', () => {
   it('records the size of a small image without a thumbnail', async () => {

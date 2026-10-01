@@ -10,3 +10,10 @@ declare module '*.sql?raw' {
   const content: string
   export default content
 }
+
+// A server module run on a worker thread: the URL to hand `new Worker()`
+// (src/lib/build/server-workers.ts).
+declare module '*?server-worker' {
+  const url: URL
+  export default url
+}

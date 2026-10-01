@@ -6,9 +6,13 @@
  *
  * Every file it reads came from a stranger. The bytes are read with the
  * file's own size cap, each deriver holds its own budgets, and the whole run
- * has a time budget checked between phases. A file that cannot be read is
- * recorded as 'failed' and the job succeeds; only a fault in storage, the
- * database or a missing parser throws, so the queue retries.
+ * has a time budget. The derivers that parse bytes run on a worker thread
+ * (`preview/sandbox.ts`) that is terminated when the budget runs out, so no
+ * parser call holds the thread serving requests or outlives the budget; only
+ * the media walk, a few bounded ranged reads of box headers, runs here. A
+ * file that cannot be read is recorded as 'failed' and the job succeeds;
+ * only a fault in storage, the database or a missing parser throws, so the
+ * queue retries.
  */
 import type { FileId } from '@quackback/ids'
 import {
@@ -30,18 +34,18 @@ import {
   NOTHING_TO_DERIVE,
   PreviewDependencyError,
   PreviewRefusedError,
-  deriveFromBytes,
-  deriveMediaPreview,
-  previewKind,
   type PreviewResult,
-} from './preview'
+} from './preview/result'
+import { previewKind } from './preview/kind'
+import { deriveMediaPreview } from './preview/media'
+import { deriveInWorker } from './preview/sandbox'
 import { withFilePreview } from './files.service'
 
 export const FILE_PREVIEW_QUEUE = 'file-preview'
 
 const log = logger.child({ component: 'file-preview' })
 
-/** Wall-clock budget for one file, checked between phases. */
+/** Wall-clock budget for one file: reading it, then the worker that parses it. */
 const PREVIEW_BUDGET_MS = 60_000
 
 export type PreviewOutcome = 'skipped' | 'ready' | 'none' | 'failed'
@@ -132,7 +136,7 @@ async function derive(file: FileRecord, deadline: Deadline): Promise<PreviewResu
   }
   const bytes = await readObject(file.storageKey, cap)
   deadline.check()
-  return deriveFromBytes(kind, bytes, file.contentType, deadline)
+  return deriveInWorker({ kind, bytes, contentType: file.contentType, deadlineAt: deadline.at })
 }
 
 function isInfrastructureFault(err: unknown): boolean {
