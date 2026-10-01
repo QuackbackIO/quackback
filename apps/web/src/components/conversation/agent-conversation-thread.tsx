@@ -197,7 +197,7 @@ import type { JSONContent } from '@tiptap/core'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import { useConversationTyping } from '@/lib/client/hooks/use-conversation-typing'
-import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { useAgentFileUpload } from '@/lib/client/hooks/use-file-upload'
 import { useConversationComposerAttachments } from '@/lib/client/hooks/use-conversation-composer-attachments'
 import { useCopilotInsert } from '@/lib/client/hooks/use-copilot-insert'
 import { useComposerFocus } from '@/lib/client/hooks/use-composer-focus'
@@ -286,10 +286,6 @@ export interface ThreadComposerHandle {
    * thread currently in note mode is switched back to reply first.
    */
   openMacros: () => void
-}
-
-function toastImageUploadError(error: Error) {
-  toast.error(error.message)
 }
 
 /** The thread's scroll seam into its message list, which owns the virtualizer. */
@@ -556,40 +552,36 @@ export function AgentConversationThread({
   const sendTyping = useTypingSender(isTicket ? null : conversationId)
   const { onLocalInput } = useConversationTyping(sendTyping)
 
-  const { upload } = useImageUpload({
-    endpoint: '/api/upload/image',
-    prefix: 'chat-images',
-    onError: toastImageUploadError,
-  })
+  const { upload } = useAgentFileUpload()
   const {
-    pending: pendingAttachments,
+    items: attachmentItems,
+    attachments: pendingAttachments,
     addFiles,
     remove: removeAttachment,
+    retry: retryAttachment,
     clear: clearAttachments,
     uploading,
   } = useConversationComposerAttachments(upload)
   const fileInputRef = useRef<HTMLInputElement>(null)
   // Same as the visitor messenger: paste/drop stages the tray. The editor has
   // no onImageUpload, so it never inlines a resizableImage into the draft.
+  // Paste still works for an image from the clipboard; drop/paste now accept
+  // any file, same as the paperclip picker.
   const handleComposerPaste = useCallback(
     (e: ClipboardEvent<HTMLDivElement>) => {
-      const images = Array.from(e.clipboardData?.files ?? []).filter((f) =>
-        f.type.startsWith('image/')
-      )
-      if (images.length === 0) return
+      const files = Array.from(e.clipboardData?.files ?? [])
+      if (files.length === 0) return
       e.preventDefault()
-      void addFiles(images)
+      void addFiles(files)
     },
     [addFiles]
   )
   const handleComposerDrop = useCallback(
     (e: DragEvent<HTMLDivElement>) => {
-      const images = Array.from(e.dataTransfer?.files ?? []).filter((f) =>
-        f.type.startsWith('image/')
-      )
-      if (images.length === 0) return
+      const files = Array.from(e.dataTransfer?.files ?? [])
+      if (files.length === 0) return
       e.preventDefault()
-      void addFiles(images)
+      void addFiles(files)
     },
     [addFiles]
   )
@@ -2259,7 +2251,6 @@ export function AgentConversationThread({
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
               multiple
               className="hidden"
               onChange={(e) => {
@@ -2273,7 +2264,7 @@ export function AgentConversationThread({
             {/* Reply and Note share the unified RichTextEditor; reply keeps
                 @-mentions on (agent surface), note is the team-internal preset.
                 Enter sends, Shift+Enter breaks; formatting comes from the editor's
-                own bubble/slash/`:` surfaces. Images stay tray-only (paste/drop
+                own bubble/slash/`:` surfaces. Files stay tray-only (paste/drop
                 and the paperclip stage files below) — the editor has no
                 onImageUpload, so it never inlines a resizableImage. A mounted
                 editor owns its text; `value` seeds each (re)mount, so it reads
@@ -2310,7 +2301,11 @@ export function AgentConversationThread({
                 onSubmit={onSend}
               />
             )}
-            <ComposerAttachmentTray attachments={pendingAttachments} onRemove={removeAttachment} />
+            <ComposerAttachmentTray
+              items={attachmentItems}
+              onRemove={removeAttachment}
+              onRetry={retryAttachment}
+            />
             {/* Live link unfurl while composing (Slack-style) — part of the
                 preview tray, gated by the flag + capability. */}
             {linkPreviewsEnabled && (
@@ -2321,9 +2316,8 @@ export function AgentConversationThread({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
                 className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-40 transition-colors"
-                aria-label="Attach image"
+                aria-label="Attach files"
               >
                 <PaperClipIcon className="h-4 w-4" />
               </button>

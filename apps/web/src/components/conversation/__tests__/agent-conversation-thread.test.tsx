@@ -273,17 +273,21 @@ vi.mock('@/lib/client/hooks/use-inbox-translation', () => ({
   },
 }))
 vi.mock('@/lib/client/hooks/use-copilot-insert', () => ({ useCopilotInsert: () => vi.fn() }))
-vi.mock('@/lib/client/hooks/use-image-upload', () => ({
-  useImageUpload: () => ({ upload: vi.fn() }),
+vi.mock('@/lib/client/hooks/use-file-upload', () => ({
+  useAgentFileUpload: () => ({ upload: vi.fn() }),
 }))
 const addFiles = vi.fn()
 vi.mock('@/lib/client/hooks/use-conversation-composer-attachments', () => ({
   useConversationComposerAttachments: () => ({
-    pending: [],
+    items: [],
+    attachments: [],
     addFiles,
     remove: vi.fn(),
+    retry: vi.fn(),
     clear: vi.fn(),
+    restore: vi.fn(),
     uploading: false,
+    hasErrors: false,
   }),
 }))
 

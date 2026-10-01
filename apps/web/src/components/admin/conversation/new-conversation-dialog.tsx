@@ -23,7 +23,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { CONVERSATION_EDITOR_FEATURES } from '@/components/conversation/conversation-editor-features'
 import { ComposerAttachmentTray } from '@/components/shared/composer-attachment-tray'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
-import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { useAgentFileUpload } from '@/lib/client/hooks/use-file-upload'
 import { useConversationComposerAttachments } from '@/lib/client/hooks/use-conversation-composer-attachments'
 import {
   Dialog,
@@ -34,10 +34,6 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
-
-function toastImageUploadError(error: Error) {
-  toast.error(error.message)
-}
 
 export interface NewConversationTarget {
   principalId: string
@@ -86,38 +82,35 @@ export function NewConversationDialog({
     }
   }, [open, initialTarget])
 
-  const { upload: uploadImage } = useImageUpload({
-    prefix: 'chat-images',
-    onError: toastImageUploadError,
-  })
+  const { upload } = useAgentFileUpload()
   const {
-    pending: pendingAttachments,
+    items,
+    attachments,
     addFiles,
     remove: removeAttachment,
+    retry: retryAttachment,
     clear: clearAttachments,
     uploading,
-  } = useConversationComposerAttachments(uploadImage)
+  } = useConversationComposerAttachments(upload)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Paste still works for an image from the clipboard; drop/paste now accept
+  // any file, same as the paperclip picker.
   const handleComposerPaste = useCallback(
     (e: ClipboardEvent<HTMLDivElement>) => {
-      const images = Array.from(e.clipboardData?.files ?? []).filter((f) =>
-        f.type.startsWith('image/')
-      )
-      if (images.length === 0) return
+      const files = Array.from(e.clipboardData?.files ?? [])
+      if (files.length === 0) return
       e.preventDefault()
-      void addFiles(images)
+      void addFiles(files)
     },
     [addFiles]
   )
   const handleComposerDrop = useCallback(
     (e: DragEvent<HTMLDivElement>) => {
-      const images = Array.from(e.dataTransfer?.files ?? []).filter((f) =>
-        f.type.startsWith('image/')
-      )
-      if (images.length === 0) return
+      const files = Array.from(e.dataTransfer?.files ?? [])
+      if (files.length === 0) return
       e.preventDefault()
-      void addFiles(images)
+      void addFiles(files)
     },
     [addFiles]
   )
@@ -127,7 +120,7 @@ export function NewConversationDialog({
       targetPrincipalId: PrincipalId
       content: string
       contentJson?: TiptapContent | null
-      attachments?: typeof pendingAttachments
+      attachments?: typeof attachments
     }) => startAgentConversationFn({ data: vars }),
     onSuccess: (result) => {
       toast.success('Message sent')
@@ -141,7 +134,7 @@ export function NewConversationDialog({
 
   const isEmpty = isEmptyTiptapDoc(messageJson as TiptapContent | undefined)
   const canSend =
-    !!target && (!isEmpty || pendingAttachments.length > 0) && !send.isPending && !uploading
+    !!target && (!isEmpty || attachments.length > 0) && !send.isPending && !uploading
 
   const submit = () => {
     if (!canSend || !target) return
@@ -159,7 +152,7 @@ export function NewConversationDialog({
       targetPrincipalId: target.principalId as PrincipalId,
       content,
       contentJson: isEmpty ? null : (messageJson as TiptapContent),
-      attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined,
+      attachments: attachments.length > 0 ? attachments : undefined,
     })
   }
 
@@ -225,14 +218,14 @@ export function NewConversationDialog({
                 />
               </Suspense>
               <ComposerAttachmentTray
-                attachments={pendingAttachments}
+                items={items}
                 onRemove={removeAttachment}
+                onRetry={retryAttachment}
               />
             </div>
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
               multiple
               className="hidden"
               onChange={(e) => {
@@ -245,9 +238,8 @@ export function NewConversationDialog({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
                 className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-40 transition-colors"
-                aria-label="Attach image"
+                aria-label="Attach files"
               >
                 <PaperClipIcon className="h-4 w-4" />
               </button>

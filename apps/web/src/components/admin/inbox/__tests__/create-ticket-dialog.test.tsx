@@ -52,19 +52,23 @@ vi.mock('sonner', () => ({
     error: vi.fn(),
   },
 }))
-// Heavy/irrelevant children stubbed: the rich editor (tiptap), image upload,
+// Heavy/irrelevant children stubbed: the rich editor (tiptap), file upload,
 // and the requester picker (covered by its own surface).
 vi.mock('@/components/ui/rich-text-editor', () => ({ RichTextEditor: () => null }))
-vi.mock('@/lib/client/hooks/use-image-upload', () => ({
-  useImageUpload: () => ({ upload: vi.fn() }),
+vi.mock('@/lib/client/hooks/use-file-upload', () => ({
+  useAgentFileUpload: () => ({ upload: vi.fn() }),
 }))
 vi.mock('@/lib/client/hooks/use-conversation-composer-attachments', () => ({
   useConversationComposerAttachments: () => ({
-    pending: [],
+    items: [],
+    attachments: [],
     addFiles: vi.fn(),
     remove: vi.fn(),
+    retry: vi.fn(),
     clear: vi.fn(),
+    restore: vi.fn(),
     uploading: mocks.uploading,
+    hasErrors: false,
   }),
 }))
 vi.mock('@/components/shared/portal-user-picker', () => ({ PortalUserPicker: () => null }))
@@ -421,7 +425,7 @@ describe('CreateTicketDialog — Phase 5 copilot auto-fill', () => {
 describe('CreateTicketDialog — attachment tray', () => {
   it('offers a file picker next to the description composer', async () => {
     renderDialog()
-    expect(await screen.findByRole('button', { name: 'Attach image' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Attach files' })).toBeInTheDocument()
   })
 
   it('blocks create while an image is still uploading', async () => {
