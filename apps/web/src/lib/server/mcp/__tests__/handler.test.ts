@@ -680,8 +680,9 @@ describe('MCP HTTP Handler', () => {
       expect(toolNames).toContain('add_ticket_note')
       expect(toolNames).toContain('link_ticket')
       expect(toolNames).toContain('unlink_ticket')
+      expect(toolNames).toContain('upload_file')
       expect(toolNames).toContain('widget_install_status')
-      expect(toolNames).toHaveLength(39)
+      expect(toolNames).toHaveLength(40)
     })
 
     it('should handle resources/list request', async () => {
@@ -2420,7 +2421,8 @@ describe('MCP HTTP Handler', () => {
         'conversation_1',
         'On it!',
         expect.objectContaining({ principalId: expect.any(String) }),
-        expect.objectContaining({ role: 'admin' })
+        expect.objectContaining({ role: 'admin' }),
+        undefined
       )
     })
 

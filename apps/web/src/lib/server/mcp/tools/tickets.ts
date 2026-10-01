@@ -22,6 +22,7 @@ import { markdownToTiptapJson, contentJsonToMarkdown } from '@/lib/server/markdo
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import {
   registerTool,
+  attachmentsFromFileIds,
   mcpAgentActor,
   jsonResult,
   compactJsonResult,
@@ -295,9 +296,11 @@ Example: create_ticket({ type: "customer", title: "Refund not received", descrip
     },
   })
 
-  registerTool<{ ticketId: string; content: string }>(server, auth, {
+  registerTool<{ ticketId: string; content: string; fileIds?: string[] }>(server, auth, {
     name: 'reply_to_ticket',
     description: `Post a reply on a ticket thread (visible to the requester). On a conversation-linked customer ticket the reply lands on the pair's shared thread — the linked conversation — whose first-response machinery owns response timing; on an unlinked ticket the first reply stamps the ticket's first-response time.
+
+Attach files already uploaded with upload_file by passing their ids in fileIds (max 10).
 
 Example: reply_to_ticket({ ticketId: "ticket_01abc...", content: "We've issued your refund; it should arrive in 3-5 days." })`,
     schema: {
@@ -307,6 +310,11 @@ Example: reply_to_ticket({ ticketId: "ticket_01abc...", content: "We've issued y
         .min(1)
         .max(10000)
         .describe(`Reply text, visible to the requester. ${TICKET_MARKDOWN_DESCRIBE}`),
+      fileIds: z
+        .array(z.string())
+        .max(10)
+        .optional()
+        .describe('File ids from upload_file to attach to this reply (max 10)'),
     },
     annotations: WRITE,
     scope: 'write:chat',
@@ -318,6 +326,7 @@ Example: reply_to_ticket({ ticketId: "ticket_01abc...", content: "We've issued y
         ticketId: args.ticketId as TicketId,
         content: args.content,
         contentJson: markdownToSanitizedJson(args.content),
+        attachments: attachmentsFromFileIds(args.fileIds),
       })
       return jsonResult({
         id: message.id,
@@ -327,9 +336,11 @@ Example: reply_to_ticket({ ticketId: "ticket_01abc...", content: "We've issued y
     },
   })
 
-  registerTool<{ ticketId: string; content: string }>(server, auth, {
+  registerTool<{ ticketId: string; content: string; fileIds?: string[] }>(server, auth, {
     name: 'add_ticket_note',
     description: `Add an internal note to a ticket thread. Never visible to the requester — only the support team sees it.
+
+Attach files already uploaded with upload_file by passing their ids in fileIds (max 10).
 
 Example: add_ticket_note({ ticketId: "ticket_01abc...", content: "Confirmed the refund with billing; awaiting bank processing." })`,
     schema: {
@@ -339,6 +350,11 @@ Example: add_ticket_note({ ticketId: "ticket_01abc...", content: "Confirmed the 
         .min(1)
         .max(10000)
         .describe(`Internal note text (team-only). ${TICKET_MARKDOWN_DESCRIBE}`),
+      fileIds: z
+        .array(z.string())
+        .max(10)
+        .optional()
+        .describe('File ids from upload_file to attach to this note (max 10)'),
     },
     annotations: WRITE,
     scope: 'write:chat',
@@ -349,6 +365,7 @@ Example: add_ticket_note({ ticketId: "ticket_01abc...", content: "Confirmed the 
         ticketId: args.ticketId as TicketId,
         content: args.content,
         contentJson: markdownToSanitizedJson(args.content),
+        attachments: attachmentsFromFileIds(args.fileIds),
       })
       return jsonResult({
         id: message.id,
