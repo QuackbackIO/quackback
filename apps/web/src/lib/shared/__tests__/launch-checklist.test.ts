@@ -148,6 +148,28 @@ describe('buildLaunchTasks', () => {
       expect(quinn(withSupport)).toBeDefined()
     })
 
+    it('is left out when the plan lacks the assistant or no AI model is configured', () => {
+      expect(
+        quinn({ ...withSupport, features: { ...withSupport.features, assistant: false } })
+      ).toBe(undefined)
+      expect(
+        quinn({ ...withSupport, features: { ...withSupport.features, assistant: true } })
+      ).toBeDefined()
+    })
+
+    it('stays out while the Support inbox is off even when Quinn can answer', () => {
+      expect(quinn({ ...base, features: { ...noExtraModules, assistant: true } })).toBeUndefined()
+    })
+
+    it('does not count toward progress when left out', () => {
+      const without = launchChecklistSummary({
+        ...withSupport,
+        features: { ...withSupport.features, assistant: false },
+      })
+      const withQuinn = launchChecklistSummary(withSupport)
+      expect(without.denominator).toBe(withQuinn.denominator - 1)
+    })
+
     it('is done when the Agent is on and answering, and open otherwise', () => {
       expect(quinn({ ...withSupport, hasAgentAnswering: true })?.isCompleted).toBe(true)
       expect(quinn({ ...withSupport, hasAgentAnswering: false })?.isCompleted).toBe(false)

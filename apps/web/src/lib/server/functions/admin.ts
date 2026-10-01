@@ -350,6 +350,8 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
   const { permissionsForLegacyRole } = await import('@/lib/server/policy/permissions')
   const { resolveFeatureFlags } = await import('@/lib/server/domains/settings/settings.types')
   const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
+  const { hasEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
+  const { isAssistantConfigured } = await import('@/lib/server/domains/assistant')
 
   const [
     orgBoards,
@@ -361,6 +363,7 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
     publishedChangelog,
     statusComponent,
     tierLimits,
+    assistantEntitled,
   ] = await Promise.all([
     db.query.boards.findMany({
       columns: { id: true, slug: true, access: true },
@@ -390,6 +393,7 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
       where: isNull(statusComponents.deletedAt),
     }),
     getTierLimits(),
+    hasEntitlement('aiAssistant'),
   ])
 
   const setupState = getSetupState(orgSettings?.setupState ?? null)
@@ -477,6 +481,8 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
       statusPage: flags.statusPage,
       changelog: flags.changelog,
       integrations: tierLimits.features.integrations,
+      // Quinn can answer only on a plan that includes it and with a model configured.
+      assistant: assistantEntitled && isAssistantConfigured(),
     },
   }
 })

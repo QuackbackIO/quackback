@@ -53,6 +53,8 @@ export interface LaunchStatus {
     statusPage: boolean
     integrations: boolean
     changelog?: boolean
+    /** Quinn can answer: the plan includes the AI assistant and an AI model is configured. */
+    assistant?: boolean
   }
 }
 
@@ -161,6 +163,7 @@ function resolvedFeatures(features?: LaunchStatus['features']) {
     statusPage: features?.statusPage ?? false,
     integrations: features?.integrations ?? true,
     changelog: features?.changelog ?? true,
+    assistant: features?.assistant ?? true,
   }
 }
 
@@ -358,7 +361,8 @@ export function buildLaunchTasks(
   const inputs: LaunchTaskInput[] = [board]
   if (status.hasPublicBoard) inputs.push(distributeFeedback)
   if (features.changelog) inputs.push(publishChangelog)
-  if (features.supportInbox) inputs.push(connectMessenger, setUpQuinn)
+  if (features.supportInbox) inputs.push(connectMessenger)
+  if (features.supportInbox && features.assistant) inputs.push(setUpQuinn)
   if (features.helpCenter) inputs.push(helpDraft)
   if (features.statusPage) inputs.push(addStatusService)
   inputs.push(invite, branding, integration, firstWin)
