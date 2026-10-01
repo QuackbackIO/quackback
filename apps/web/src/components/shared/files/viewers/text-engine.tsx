@@ -4,20 +4,12 @@
  * levels are coloured, and a whole JSON file is shown formatted. Find and
  * wrap are reported to the shell; the find bar lives in the content area.
  */
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type ReactNode,
-} from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { ChevronDownIcon, ChevronUpIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { formatBytes } from '@/lib/shared/files/file-types'
 import { cn } from '@/lib/shared/utils'
 import type { ViewerEngineProps } from '../types'
+import { FindBar } from './find-bar'
 import { TEXT_HEAD_BYTES } from './index'
 import {
   decodeText,
@@ -126,17 +118,6 @@ export default function TextEngine({
     setActive((current + delta + matches.length) % matches.length)
   }
 
-  function onFindKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      step(e.shiftKey ? -1 : 1)
-    } else if (e.key === 'Escape') {
-      // Escape closes the find bar before it closes the viewer.
-      e.preventDefault()
-      closeFind()
-    }
-  }
-
   function closeFind() {
     setFindOpen(false)
     scrollRef.current?.focus()
@@ -147,37 +128,19 @@ export default function TextEngine({
   return (
     <div className="relative flex min-w-0 flex-1 flex-col bg-[#16161a] text-[#d4d4d8]">
       {findOpen && (
-        <div className="absolute top-2 right-4 z-10 flex items-center gap-1 rounded-lg border border-white/10 bg-[#232329] py-1 pr-1 pl-2.5 text-xs text-zinc-300 shadow-lg">
-          <input
-            ref={inputRef}
-            type="search"
-            aria-label="Find in file"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value)
-              setActive(0)
-            }}
-            onKeyDown={onFindKeyDown}
-            className="w-40 bg-transparent text-[13px] text-zinc-100 outline-none placeholder:text-zinc-500 [&::-webkit-search-cancel-button]:hidden"
-            placeholder="Find"
-          />
-          <span className="min-w-16 px-1 text-right tabular-nums text-zinc-400" aria-live="polite">
-            {query
-              ? matches.length === 0
-                ? 'No matches'
-                : `${count.format(current + 1)} of ${count.format(matches.length)}${matches.length >= MAX_MATCHES ? '+' : ''}`
-              : ''}
-          </span>
-          <FindButton label="Previous match" onClick={() => step(-1)} disabled={!matches.length}>
-            <ChevronUpIcon className="size-4" />
-          </FindButton>
-          <FindButton label="Next match" onClick={() => step(1)} disabled={!matches.length}>
-            <ChevronDownIcon className="size-4" />
-          </FindButton>
-          <FindButton label="Close find" onClick={closeFind}>
-            <XMarkIcon className="size-4" />
-          </FindButton>
-        </div>
+        <FindBar
+          inputRef={inputRef}
+          query={query}
+          onQueryChange={(next) => {
+            setQuery(next)
+            setActive(0)
+          }}
+          current={current}
+          total={matches.length}
+          capped={matches.length >= MAX_MATCHES}
+          onStep={step}
+          onClose={closeFind}
+        />
       )}
 
       <div
@@ -266,30 +229,5 @@ export default function TextEngine({
         )}
       </div>
     </div>
-  )
-}
-
-function FindButton({
-  label,
-  onClick,
-  disabled,
-  children,
-}: {
-  label: string
-  onClick: () => void
-  disabled?: boolean
-  children: ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      disabled={disabled}
-      onClick={onClick}
-      className="grid size-6 place-items-center rounded-md text-zinc-400 hover:bg-white/10 hover:text-zinc-100 disabled:opacity-40"
-    >
-      {children}
-    </button>
   )
 }
