@@ -7,8 +7,8 @@ export function withLayoutSize(width: number, height: number): () => void {
   const targets: [object, string, number][] = [
     [window.HTMLElement.prototype, 'offsetWidth', width],
     [window.HTMLElement.prototype, 'offsetHeight', height],
-    [window.Element.prototype, 'clientWidth', width],
-    [window.Element.prototype, 'clientHeight', height],
+    [window.HTMLElement.prototype, 'clientWidth', width],
+    [window.HTMLElement.prototype, 'clientHeight', height],
   ]
   const saved = targets.map(([proto, prop]) => Object.getOwnPropertyDescriptor(proto, prop))
   for (const [proto, prop, value] of targets) {
