@@ -12,11 +12,29 @@
  * thumbnail, a head grid or a text excerpt exists, then the caller
  * (`AttachmentList`) upgrades it to the preview card in place.
  */
+import { useIntl, type IntlShape } from 'react-intl'
 import { ArrowDownTrayIcon, PlayIcon } from '@heroicons/react/24/outline'
 import { FileBadge } from './file-badge'
 import { FAMILY_NAME, familyFor, formatBytes, type FileFamily } from '@/lib/shared/files/file-types'
 import type { AttachmentPreview, ConversationAttachment } from '@/lib/shared/conversation/types'
 import { cn } from '@/lib/shared/utils/cn'
+
+/** `FAMILY_NAME`'s message id per family, for the card's localized fallback
+ *  line. `csv` shares `spreadsheet`'s id: both read "Spreadsheet". */
+const FAMILY_NAME_ID: Record<FileFamily, string> = {
+  image: 'files.family.image',
+  video: 'files.family.video',
+  audio: 'files.family.audio',
+  pdf: 'files.family.pdf',
+  document: 'files.family.document',
+  spreadsheet: 'files.family.spreadsheet',
+  presentation: 'files.family.presentation',
+  csv: 'files.family.spreadsheet',
+  text: 'files.family.text',
+  code: 'files.family.code',
+  archive: 'files.family.archive',
+  other: 'files.family.other',
+}
 
 /** The family driving a card's thumb/meta choice — stored on the attachment
  *  for files that went through the pipeline, derived from the name/type for
@@ -44,30 +62,46 @@ export function attachmentMetaLine(
   name: string,
   family: FileFamily,
   size: number,
-  preview?: AttachmentPreview
+  preview: AttachmentPreview | undefined,
+  intl: IntlShape
 ): string {
   const bytes = formatBytes(size)
-  const fallback = `${FAMILY_NAME[family]} · ${bytes}`
+  const familyLabel = intl.formatMessage({
+    id: FAMILY_NAME_ID[family],
+    defaultMessage: FAMILY_NAME[family],
+  })
+  const fallback = `${familyLabel} · ${bytes}`
+  const plural = (id: string, defaultMessage: string, count: number) =>
+    intl.formatMessage({ id, defaultMessage }, { count })
   switch (family) {
     case 'pdf':
     case 'document':
       return preview?.pages != null
-        ? `${preview.pages} page${preview.pages === 1 ? '' : 's'} · ${bytes}`
+        ? `${plural('files.count.pages', '{count, plural, one {# page} other {# pages}}', preview.pages)} · ${bytes}`
         : fallback
     case 'spreadsheet':
     case 'csv': {
       const sheetCount = preview?.sheets?.length ?? 0
       const rows = preview?.rows
-      if (sheetCount > 1 && rows != null)
-        return `${sheetCount} sheets · ${rows.toLocaleString()} rows`
-      if (sheetCount > 1) return `${sheetCount} sheets`
-      if (rows != null) return `${rows.toLocaleString()} rows`
+      if (sheetCount > 1 && rows != null) {
+        return `${plural('files.count.sheets', '{count, plural, one {# sheet} other {# sheets}}', sheetCount)} · ${plural('files.count.rows', '{count, plural, one {# row} other {# rows}}', rows)}`
+      }
+      if (sheetCount > 1) {
+        return plural(
+          'files.count.sheets',
+          '{count, plural, one {# sheet} other {# sheets}}',
+          sheetCount
+        )
+      }
+      if (rows != null) {
+        return plural('files.count.rows', '{count, plural, one {# row} other {# rows}}', rows)
+      }
       return fallback
     }
     case 'text':
     case 'code':
       return preview?.lines != null
-        ? `${preview.lines.toLocaleString()} lines · ${bytes}`
+        ? `${plural('files.count.lines', '{count, plural, one {# line} other {# lines}}', preview.lines)} · ${bytes}`
         : fallback
     case 'video':
       return preview?.durationMs != null
@@ -79,7 +113,7 @@ export function attachmentMetaLine(
         : fallback
     case 'archive':
       return preview?.entries != null
-        ? `${preview.entries.toLocaleString()} file${preview.entries === 1 ? '' : 's'} · ${bytes}`
+        ? `${plural('files.count.files', '{count, plural, one {# file} other {# files}}', preview.entries)} · ${bytes}`
         : fallback
     default:
       return fallback
@@ -98,9 +132,10 @@ export function hasPreviewWorthShowing(attachment: ConversationAttachment): bool
 
 /** A small warning-coloured note, never replacing the meta line. */
 function MacroWarning() {
+  const intl = useIntl()
   return (
     <span className="text-[11px] font-medium text-amber-700 dark:text-amber-300">
-      Contains macros
+      {intl.formatMessage({ id: 'files.viewer.macros', defaultMessage: 'Contains macros' })}
     </span>
   )
 }
@@ -116,10 +151,11 @@ function MetaLine({
   size: number
   preview?: AttachmentPreview
 }) {
+  const intl = useIntl()
   return (
     <span className="flex min-w-0 flex-col">
       <span className="truncate text-[11.5px] text-muted-foreground">
-        {attachmentMetaLine(name, family, size, preview)}
+        {attachmentMetaLine(name, family, size, preview, intl)}
       </span>
       {preview?.macro && <MacroWarning />}
     </span>
@@ -127,13 +163,18 @@ function MetaLine({
 }
 
 function DownloadLink({ url, name, className }: { url: string; name: string; className?: string }) {
+  const intl = useIntl()
+  const label = intl.formatMessage(
+    { id: 'files.card.download', defaultMessage: 'Download {name}' },
+    { name: name || 'file' }
+  )
   return (
     <a
       href={url}
       download={name || undefined}
       onClick={(e) => e.stopPropagation()}
-      aria-label={`Download ${name || 'file'}`}
-      title="Download"
+      aria-label={label}
+      title={intl.formatMessage({ id: 'files.viewer.download', defaultMessage: 'Download' })}
       className={cn(
         'flex shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover/card:opacity-100 group-focus-within/card:opacity-100',
         className
@@ -264,6 +305,7 @@ export function FilePreviewCard({
   wide = false,
   className,
 }: FileCardProps & { wide?: boolean }) {
+  const intl = useIntl()
   const family = resolveFamily(attachment)
   const name = attachment.name || 'File'
   return (
@@ -282,7 +324,10 @@ export function FilePreviewCard({
       <button
         type="button"
         onClick={onOpen}
-        aria-label={`Open ${name}`}
+        aria-label={intl.formatMessage(
+          { id: 'files.card.open', defaultMessage: 'Open {name}' },
+          { name }
+        )}
         className="flex w-full flex-col text-left"
       >
         <span
@@ -319,13 +364,17 @@ export function FilePreviewCard({
  *  line — the default card, and the fallback for any format with no preview
  *  data at all (or none the browser can derive, like a legacy .ppt). */
 export function FileIconCard({ attachment, onOpen, className }: FileCardProps) {
+  const intl = useIntl()
   const family = resolveFamily(attachment)
   const name = attachment.name || 'File'
   return (
     <button
       type="button"
       onClick={onOpen}
-      aria-label={`Open ${name}`}
+      aria-label={intl.formatMessage(
+        { id: 'files.card.open', defaultMessage: 'Open {name}' },
+        { name }
+      )}
       className={cn(
         'flex w-full max-w-[248px] items-center gap-2.5 rounded-[10px] border border-border bg-card px-2.5 py-2.5 text-left transition-colors hover:border-foreground/30',
         className
@@ -344,6 +393,7 @@ export function FileIconCard({ attachment, onOpen, className }: FileCardProps) {
  *  meta, download. Used in the widget, narrow sidebars/columns and the
  *  conversation's file list. */
 export function FileRow({ attachment, onOpen, className }: FileCardProps) {
+  const intl = useIntl()
   const family = resolveFamily(attachment)
   const name = attachment.name || 'File'
   const thumbUrl = attachment.preview?.thumbUrl
@@ -357,7 +407,10 @@ export function FileRow({ attachment, onOpen, className }: FileCardProps) {
       <button
         type="button"
         onClick={onOpen}
-        aria-label={`Open ${name}`}
+        aria-label={intl.formatMessage(
+          { id: 'files.card.open', defaultMessage: 'Open {name}' },
+          { name }
+        )}
         className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
       >
         {thumbUrl ? (

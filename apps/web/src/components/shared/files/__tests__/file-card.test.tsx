@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi } from 'vitest'
-import { render, fireEvent } from '@testing-library/react'
+import { render as rtlRender, fireEvent } from '@testing-library/react'
+import { createIntl, IntlProvider } from 'react-intl'
 import {
   attachmentMetaLine,
   hasPreviewWorthShowing,
@@ -10,6 +11,16 @@ import {
   FileRow,
 } from '../file-card'
 import type { ConversationAttachment } from '@/lib/shared/conversation/types'
+
+const intl = createIntl({ locale: 'en-US', messages: {} })
+
+function render(node: React.ReactNode) {
+  return rtlRender(
+    <IntlProvider locale="en-US" messages={{}}>
+      {node}
+    </IntlProvider>
+  )
+}
 
 function attachment(overrides: Partial<ConversationAttachment> = {}): ConversationAttachment {
   return {
@@ -24,60 +35,87 @@ function attachment(overrides: Partial<ConversationAttachment> = {}): Conversati
 
 describe('attachmentMetaLine', () => {
   it('shows PDF page count with size', () => {
-    expect(attachmentMetaLine('a.pdf', 'pdf', 184 * 1024, { pages: 2 })).toBe('2 pages · 184 KB')
+    expect(attachmentMetaLine('a.pdf', 'pdf', 184 * 1024, { pages: 2 }, intl)).toBe(
+      '2 pages · 184 KB'
+    )
   })
 
   it('falls back to the family name and size when a PDF has no page count yet', () => {
-    expect(attachmentMetaLine('a.pdf', 'pdf', 1024, {})).toBe('PDF · 1 KB')
+    expect(attachmentMetaLine('a.pdf', 'pdf', 1024, {}, intl)).toBe('PDF · 1 KB')
   })
 
   it('shows a single page without the plural s', () => {
-    expect(attachmentMetaLine('a.pdf', 'pdf', 1024, { pages: 1 })).toBe('1 page · 1 KB')
+    expect(attachmentMetaLine('a.pdf', 'pdf', 1024, { pages: 1 }, intl)).toBe('1 page · 1 KB')
   })
 
   it('shows sheet count and row count together for a multi-sheet workbook', () => {
     expect(
-      attachmentMetaLine('b.xlsx', 'spreadsheet', 312 * 1024, {
-        sheets: ['Articles', 'Tags', 'Summary'],
-        rows: 1248,
-      })
+      attachmentMetaLine(
+        'b.xlsx',
+        'spreadsheet',
+        312 * 1024,
+        { sheets: ['Articles', 'Tags', 'Summary'], rows: 1248 },
+        intl
+      )
     ).toBe('3 sheets · 1,248 rows')
   })
 
   it('shows rows alone for a single-sheet spreadsheet or a CSV', () => {
-    expect(attachmentMetaLine('c.csv', 'csv', 1024, { rows: 1248 })).toBe('1,248 rows')
+    expect(attachmentMetaLine('c.csv', 'csv', 1024, { rows: 1248 }, intl)).toBe('1,248 rows')
   })
 
   it('falls back to the family name and size when a spreadsheet has no counts', () => {
-    expect(attachmentMetaLine('b.xlsx', 'spreadsheet', 1024, {})).toBe('Spreadsheet · 1 KB')
+    expect(attachmentMetaLine('b.xlsx', 'spreadsheet', 1024, {}, intl)).toBe('Spreadsheet · 1 KB')
   })
 
   it('shows line count with size for text and code', () => {
-    expect(attachmentMetaLine('log.txt', 'text', 22 * 1024, { lines: 418 })).toBe(
+    expect(attachmentMetaLine('log.txt', 'text', 22 * 1024, { lines: 418 }, intl)).toBe(
       '418 lines · 22 KB'
     )
   })
 
   it('shows duration with size for video', () => {
     expect(
-      attachmentMetaLine('rec.mp4', 'video', Math.round(18.4 * 1024 * 1024), {
-        durationMs: 134_000,
-      })
+      attachmentMetaLine(
+        'rec.mp4',
+        'video',
+        Math.round(18.4 * 1024 * 1024),
+        { durationMs: 134_000 },
+        intl
+      )
     ).toBe('2:14 · 18.4 MB')
   })
 
   it('shows dimensions with size for images', () => {
-    expect(attachmentMetaLine('shot.png', 'image', 241 * 1024, { width: 1440, height: 900 })).toBe(
-      '1440 × 900 · 241 KB'
-    )
+    expect(
+      attachmentMetaLine('shot.png', 'image', 241 * 1024, { width: 1440, height: 900 }, intl)
+    ).toBe('1440 × 900 · 241 KB')
   })
 
   it('shows entry count with size for an archive', () => {
-    expect(attachmentMetaLine('z.zip', 'archive', 1024, { entries: 16 })).toBe('16 files · 1 KB')
+    expect(attachmentMetaLine('z.zip', 'archive', 1024, { entries: 16 }, intl)).toBe(
+      '16 files · 1 KB'
+    )
   })
 
   it('falls back to the family name and size for a family with no rich rule', () => {
-    expect(attachmentMetaLine('q.pptx', 'presentation', 1024)).toBe('Presentation · 1 KB')
+    expect(attachmentMetaLine('q.pptx', 'presentation', 1024, undefined, intl)).toBe(
+      'Presentation · 1 KB'
+    )
+  })
+
+  it('renders the meta line and family fallback in German when the locale is German', () => {
+    const de = createIntl({
+      locale: 'de',
+      messages: {
+        'files.count.pages': '{count, plural, one {# Seite} other {# Seiten}}',
+        'files.family.spreadsheet': 'Tabelle',
+      },
+    })
+    expect(attachmentMetaLine('a.pdf', 'pdf', 184 * 1024, { pages: 2 }, de)).toBe(
+      '2 Seiten · 184 KB'
+    )
+    expect(attachmentMetaLine('b.xlsx', 'spreadsheet', 1024, {}, de)).toBe('Tabelle · 1 KB')
   })
 })
 

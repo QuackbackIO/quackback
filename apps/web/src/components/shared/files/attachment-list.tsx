@@ -12,6 +12,7 @@
  * thread. Outside a `ConversationGalleryProvider` (an isolated render, e.g. a
  * unit test) it falls back to a gallery of just this message's attachments.
  */
+import { useIntl } from 'react-intl'
 import { cn } from '@/lib/shared/utils/cn'
 import { useFileViewer } from './file-viewer-context'
 import { useConversationGallery } from './conversation-gallery'
@@ -156,6 +157,10 @@ function ImageRow({
   onOpen: (localIndex: number) => void
   compact: boolean
 }) {
+  const intl = useIntl()
+  const openLabel = (name: string) =>
+    intl.formatMessage({ id: 'files.card.open', defaultMessage: 'Open {name}' }, { name })
+
   if (images.length === 1) {
     const a = images[0]!
     const localIndex = localIndexOf.get(a)!
@@ -163,7 +168,7 @@ function ImageRow({
       <button
         type="button"
         onClick={() => onOpen(localIndex)}
-        aria-label={`Open ${a.name || 'image'}`}
+        aria-label={openLabel(a.name || 'image')}
         className={cn(
           'block w-fit cursor-zoom-in overflow-hidden rounded-[10px] border border-border bg-muted',
           compact ? 'max-w-[200px]' : 'max-w-[248px]'
@@ -186,7 +191,7 @@ function ImageRow({
             key={localIndex}
             type="button"
             onClick={() => onOpen(localIndex)}
-            aria-label={`Open ${a.name || 'image'}`}
+            aria-label={openLabel(a.name || 'image')}
             className="aspect-square cursor-zoom-in overflow-hidden rounded-lg border border-border bg-muted"
           >
             <img src={a.url} alt="" className="h-full w-full object-cover" />

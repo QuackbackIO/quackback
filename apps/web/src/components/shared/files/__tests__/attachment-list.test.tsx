@@ -1,9 +1,18 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi } from 'vitest'
-import { render, fireEvent } from '@testing-library/react'
+import { render as rtlRender, fireEvent } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import { AttachmentList } from '../attachment-list'
 import { ConversationGalleryProvider, type GalleryMessage } from '../conversation-gallery'
 import type { ConversationAttachment } from '@/lib/shared/conversation/types'
+
+function render(node: React.ReactNode) {
+  return rtlRender(
+    <IntlProvider locale="en-US" messages={{}}>
+      {node}
+    </IntlProvider>
+  )
+}
 
 const open = vi.fn()
 vi.mock('../file-viewer-context', () => ({

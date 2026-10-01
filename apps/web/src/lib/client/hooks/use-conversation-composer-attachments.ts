@@ -14,7 +14,14 @@ export interface ComposerAttachmentItem {
   status: 'uploading' | 'ready' | 'error'
   /** 0..1. Meaningless once the item leaves 'uploading'. */
   progress: number
+  /** The server's (or the pre-check's) English message — the tray only shows
+   *  it verbatim when `errorReason` is absent or not one it recognizes. */
   error?: string
+  /** `UploadError.reason` (empty | too_large | blocked) when the rejection is
+   *  definitive, so the tray can show a localized message instead of
+   *  `error`. Undefined for a transient failure (network, abort-adjacent,
+   *  a 500) or a reason the tray doesn't have a translation for. */
+  errorReason?: string
   /** False for a definitive rejection (too large, blocked type, empty) — the
    *  tray only offers Retry when a failure might succeed on a second try. */
   retryable?: boolean
@@ -110,7 +117,12 @@ export function useConversationComposerAttachments(
     (localId: string, file: File, generation: number): Promise<void> => {
       const failure = checkFileBeforeUpload(file) ?? precheck?.(file) ?? null
       if (failure) {
-        patchItem(localId, { status: 'error', error: failure.message, retryable: !failure.reason })
+        patchItem(localId, {
+          status: 'error',
+          error: failure.message,
+          errorReason: failure.reason,
+          retryable: !failure.reason,
+        })
         return Promise.resolve()
       }
       const controller = new AbortController()
@@ -130,6 +142,7 @@ export function useConversationComposerAttachments(
             progress: 1,
             file: uploaded,
             error: undefined,
+            errorReason: undefined,
             retryable: undefined,
           })
         },
@@ -138,8 +151,9 @@ export function useConversationComposerAttachments(
           if (generationRef.current !== generation) return
           if (err instanceof DOMException && err.name === 'AbortError') return
           const message = err instanceof Error ? err.message : 'Upload failed'
+          const errorReason = err instanceof UploadError ? err.reason : undefined
           const retryable = !(err instanceof UploadError && !!err.reason)
-          patchItem(localId, { status: 'error', error: message, retryable })
+          patchItem(localId, { status: 'error', error: message, errorReason, retryable })
         }
       )
     },
@@ -183,6 +197,7 @@ export function useConversationComposerAttachments(
         status: 'uploading',
         progress: 0,
         error: undefined,
+        errorReason: undefined,
         retryable: undefined,
       })
       return runUpload(localId, file, generation)

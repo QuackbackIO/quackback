@@ -171,8 +171,18 @@ describe('useConversationComposerAttachments', () => {
     expect(upload).not.toHaveBeenCalled()
     const huge = result.current.items.find((i) => i.name === 'huge.csv')
     const empty = result.current.items.find((i) => i.name === 'empty.txt')
-    expect(huge).toMatchObject({ status: 'error', error: 'Over 25 MB', retryable: false })
-    expect(empty).toMatchObject({ status: 'error', error: 'The file is empty', retryable: false })
+    expect(huge).toMatchObject({
+      status: 'error',
+      error: 'Over 25 MB',
+      errorReason: 'too_large',
+      retryable: false,
+    })
+    expect(empty).toMatchObject({
+      status: 'error',
+      error: 'The file is empty',
+      errorReason: 'empty',
+      retryable: false,
+    })
   })
 
   it('marks a definitive server rejection as not retryable and a network failure as retryable', async () => {
@@ -189,9 +199,11 @@ describe('useConversationComposerAttachments', () => {
 
     expect(result.current.items.find((i) => i.name === 'blocked.exe')).toMatchObject({
       retryable: false,
+      errorReason: 'blocked',
     })
     expect(result.current.items.find((i) => i.name === 'flaky.txt')).toMatchObject({
       retryable: true,
+      errorReason: undefined,
     })
   })
 

@@ -1,8 +1,17 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render as rtlRender, screen } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import { ComposerAttachmentTray } from '../composer-attachment-tray'
 import type { ComposerAttachmentItem } from '@/lib/client/hooks/use-conversation-composer-attachments'
+
+function render(node: React.ReactNode, messages: Record<string, string> = {}, locale = 'en-US') {
+  return rtlRender(
+    <IntlProvider locale={locale} messages={messages}>
+      {node}
+    </IntlProvider>
+  )
+}
 
 function item(overrides: Partial<ComposerAttachmentItem> = {}): ComposerAttachmentItem {
   return {
@@ -150,5 +159,104 @@ describe('ComposerAttachmentTray', () => {
     render(<ComposerAttachmentTray items={[item()]} onRemove={onRemove} onRetry={vi.fn()} />)
     screen.getByRole('button', { name: /remove report\.pdf/i }).click()
     expect(onRemove).toHaveBeenCalledWith('att_1')
+  })
+
+  describe('error reason mapping', () => {
+    it('maps a too_large reason to a localized message instead of the raw server text', () => {
+      render(
+        <ComposerAttachmentTray
+          items={[
+            item({
+              name: 'huge.csv',
+              family: 'csv',
+              status: 'error',
+              file: undefined,
+              error: 'Over 25.0 MB', // the raw server text, deliberately different
+              errorReason: 'too_large',
+              retryable: false,
+            }),
+          ]}
+          onRemove={vi.fn()}
+          onRetry={vi.fn()}
+        />
+      )
+      expect(screen.getByText('Over 25 MB')).toBeInTheDocument()
+      expect(screen.queryByText('Over 25.0 MB')).not.toBeInTheDocument()
+    })
+
+    it('maps empty and blocked reasons to their localized messages', () => {
+      render(
+        <ComposerAttachmentTray
+          items={[
+            item({
+              localId: 'a',
+              name: 'empty.txt',
+              status: 'error',
+              file: undefined,
+              error: 'server said something else',
+              errorReason: 'empty',
+              retryable: false,
+            }),
+            item({
+              localId: 'b',
+              name: 'blocked.exe',
+              status: 'error',
+              file: undefined,
+              error: 'server said something else',
+              errorReason: 'blocked',
+              retryable: false,
+            }),
+          ]}
+          onRemove={vi.fn()}
+          onRetry={vi.fn()}
+        />
+      )
+      expect(screen.getByText('The file is empty')).toBeInTheDocument()
+      expect(screen.getByText("This file type can't be sent")).toBeInTheDocument()
+    })
+
+    it('falls back to the raw message for an unrecognized or missing reason', () => {
+      render(
+        <ComposerAttachmentTray
+          items={[
+            item({
+              name: 'flaky.txt',
+              family: 'text',
+              status: 'error',
+              file: undefined,
+              error: 'connection reset',
+              errorReason: undefined,
+              retryable: true,
+            }),
+          ]}
+          onRemove={vi.fn()}
+          onRetry={vi.fn()}
+        />
+      )
+      expect(screen.getByText('connection reset')).toBeInTheDocument()
+    })
+
+    it('renders the too_large message in German when the viewer locale is German', () => {
+      render(
+        <ComposerAttachmentTray
+          items={[
+            item({
+              name: 'huge.csv',
+              family: 'csv',
+              status: 'error',
+              file: undefined,
+              error: 'Over 25.0 MB',
+              errorReason: 'too_large',
+              retryable: false,
+            }),
+          ]}
+          onRemove={vi.fn()}
+          onRetry={vi.fn()}
+        />,
+        { 'files.upload.error.tooLarge': 'Über {size} MB' },
+        'de'
+      )
+      expect(screen.getByText('Über 25 MB')).toBeInTheDocument()
+    })
   })
 })
