@@ -1,7 +1,11 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { mapRowsToThreadMessages } from '../assistant.thread'
-import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
+import type {
+  ConversationMessageDTO,
+  ConversationAttachment,
+} from '@/lib/shared/conversation/types'
 import type { PrincipalId } from '@quackback/ids'
+import type { FileExcerptRow } from '@/lib/server/domains/files/files.excerpts'
 
 const ASSISTANT = 'principal_assistant' as PrincipalId
 const VISITOR = 'principal_visitor' as PrincipalId
@@ -95,5 +99,215 @@ describe('mapRowsToThreadMessages', () => {
       { sender: 'assistant', content: 'a1' },
       { sender: 'customer', content: 'q2' },
     ])
+  })
+})
+
+/**
+ * Non-image attachments with a fileId (documents) make Quinn's thread mapper
+ * surface a bracketed note plus the extracted excerpt, when one is loaded —
+ * exactly like message text (same `content` field, same customer turn), so
+ * no weaker or separate framing is invented for it. Files without an excerpt
+ * still get their bracket line, so Quinn knows one exists but cannot read it.
+ */
+describe('mapRowsToThreadMessages: attached documents', () => {
+  function docAttachment(overrides: Partial<ConversationAttachment> = {}): ConversationAttachment {
+    return {
+      url: '/api/storage/files/a.pdf?read=sig',
+      name: 'invoice.pdf',
+      contentType: 'application/pdf',
+      size: 100,
+      fileId: 'file_1',
+      family: 'pdf',
+      ...overrides,
+    }
+  }
+
+  const excerptRow = (overrides: Partial<FileExcerptRow> = {}): FileExcerptRow => ({
+    id: 'file_1',
+    name: 'invoice.pdf',
+    family: 'pdf',
+    previewStatus: 'ready',
+    textExcerpt: 'Invoice #42 for Acme Corp, total $500.',
+    ...overrides,
+  })
+
+  it('no longer drops a text-less visitor message that only carries a document', () => {
+    const rows = [msg({ senderType: 'visitor', content: '', attachments: [docAttachment()] })]
+    const out = mapRowsToThreadMessages(rows, ASSISTANT)
+    expect(out).toHaveLength(1)
+    expect(out[0].sender).toBe('customer')
+    expect(out[0].content).toContain('[Attached file: invoice.pdf (PDF)]')
+  })
+
+  it('appends the bracket line only when no excerpt is loaded for the file', () => {
+    const rows = [
+      msg({ senderType: 'visitor', content: 'see attached', attachments: [docAttachment()] }),
+    ]
+    expect(mapRowsToThreadMessages(rows, ASSISTANT)).toEqual([
+      { sender: 'customer', content: 'see attached\n\n[Attached file: invoice.pdf (PDF)]' },
+    ])
+  })
+
+  it('appends the bracket line plus the excerpt when one is loaded', () => {
+    const rows = [
+      msg({ senderType: 'visitor', content: 'see attached', attachments: [docAttachment()] }),
+    ]
+    const fileExcerpts = new Map([['file_1', excerptRow()]])
+    expect(mapRowsToThreadMessages(rows, ASSISTANT, fileExcerpts)).toEqual([
+      {
+        sender: 'customer',
+        content:
+          'see attached\n\n[Attached file: invoice.pdf (PDF)]\nInvoice #42 for Acme Corp, total $500.',
+      },
+    ])
+  })
+
+  it('a file with an excerpt-less row still gets just the bracket line', () => {
+    const rows = [msg({ senderType: 'visitor', content: '', attachments: [docAttachment()] })]
+    const fileExcerpts = new Map([
+      ['file_1', excerptRow({ textExcerpt: null, previewStatus: 'pending' })],
+    ])
+    expect(mapRowsToThreadMessages(rows, ASSISTANT, fileExcerpts)).toEqual([
+      { sender: 'customer', content: '[Attached file: invoice.pdf (PDF)]' },
+    ])
+  })
+
+  it('truncates a single excerpt to 4000 chars', () => {
+    const longExcerpt = 'x'.repeat(5000)
+    const rows = [msg({ senderType: 'visitor', content: '', attachments: [docAttachment()] })]
+    const fileExcerpts = new Map([['file_1', excerptRow({ textExcerpt: longExcerpt })]])
+    const out = mapRowsToThreadMessages(rows, ASSISTANT, fileExcerpts)
+    const excerptInOutput = out[0].content.split('\n').slice(1).join('\n')
+    expect(excerptInOutput.length).toBe(4000)
+    expect(longExcerpt.startsWith(excerptInOutput)).toBe(true)
+  })
+
+  it('caps the combined document text at 12000 chars across every file on the turn', () => {
+    const attachments = Array.from({ length: 4 }, (_, i) =>
+      docAttachment({ fileId: `file_${i}`, name: `doc${i}.pdf` })
+    )
+    const fileExcerpts = new Map(
+      attachments.map((a) => [
+        a.fileId!,
+        excerptRow({ id: a.fileId!, name: a.name, textExcerpt: 'y'.repeat(4000) }),
+      ])
+    )
+    const rows = [msg({ senderType: 'visitor', content: '', attachments })]
+    const out = mapRowsToThreadMessages(rows, ASSISTANT, fileExcerpts)
+    expect(out[0].content.length).toBeLessThanOrEqual(12000)
+    // Every file's bracket line still appears, even once the budget for
+    // excerpt text runs out — so Quinn always knows how many files there are.
+    for (const a of attachments) {
+      expect(out[0].content).toContain(`[Attached file: ${a.name} (PDF)]`)
+    }
+  })
+
+  it('never surfaces a document block for a human_agent or assistant turn', () => {
+    const rows = [
+      msg({
+        senderType: 'agent',
+        authorId: AGENT,
+        content: 'forwarding this',
+        attachments: [docAttachment()],
+      }),
+    ]
+    const fileExcerpts = new Map([['file_1', excerptRow()]])
+    expect(mapRowsToThreadMessages(rows, ASSISTANT, fileExcerpts)).toEqual([
+      { sender: 'human_agent', content: 'forwarding this' },
+    ])
+  })
+
+  // Internal notes are agent-only (isInternal is only ever true on a
+  // senderType: 'agent' row — addAgentNote never writes a visitor-authored
+  // note), and loadConversationThread's default excludes them from the rows
+  // this mapper ever sees. Both guards hold independently: even an internal
+  // note that somehow reached the mapper (includeInternal: true, the copilot
+  // grounding path) would still be excluded here on sender type alone, never
+  // on isInternal — so a customer-facing turn never surfaces a teammate's
+  // note attachment regardless of which guard is doing the work.
+  it("never surfaces an internal note's attached file on a customer-facing turn", () => {
+    const rows = [
+      msg({
+        senderType: 'agent',
+        authorId: AGENT,
+        isInternal: true,
+        content: 'internal doc for the team',
+        attachments: [docAttachment()],
+      }),
+    ]
+    const fileExcerpts = new Map([['file_1', excerptRow()]])
+    const out = mapRowsToThreadMessages(rows, ASSISTANT, fileExcerpts)
+    expect(out).toEqual([{ sender: 'human_agent', content: 'internal doc for the team' }])
+    expect(out[0].content).not.toContain('Attached file')
+  })
+
+  it('leaves image attachments on the existing vision path, untouched by document handling', () => {
+    const rows = [
+      msg({
+        senderType: 'visitor',
+        content: 'see this',
+        attachments: [
+          { url: '/x.png', name: 'shot.png', contentType: 'image/png', size: 10 },
+          docAttachment(),
+        ],
+      }),
+    ]
+    const fileExcerpts = new Map([['file_1', excerptRow()]])
+    const out = mapRowsToThreadMessages(rows, ASSISTANT, fileExcerpts)
+    expect(out[0].attachments).toEqual([
+      { url: '/x.png', name: 'shot.png', contentType: 'image/png', size: 10 },
+    ])
+    expect(out[0].content).toContain('[Attached file: invoice.pdf (PDF)]')
+  })
+})
+
+describe('loadThreadFileExcerpts', () => {
+  it('collects only non-image fileIds from visitor messages, deduped', async () => {
+    const mockLoad = vi.fn().mockResolvedValue(new Map())
+    vi.doMock('@/lib/server/domains/files/files.excerpts', () => ({
+      loadFileExcerpts: mockLoad,
+    }))
+    vi.resetModules()
+    const { loadThreadFileExcerpts } = await import('../assistant.thread')
+
+    const rows = [
+      msg({
+        senderType: 'visitor',
+        content: 'two docs, one image, one dup',
+        attachments: [
+          { url: '/a', name: 'a.pdf', contentType: 'application/pdf', size: 1, fileId: 'file_1' },
+          { url: '/b', name: 'b.pdf', contentType: 'application/pdf', size: 1, fileId: 'file_1' },
+          {
+            url: '/c',
+            name: 'c.docx',
+            contentType: 'application/msword',
+            size: 1,
+            fileId: 'file_2',
+          },
+          { url: '/d', name: 'd.png', contentType: 'image/png', size: 1, fileId: 'file_3' },
+        ],
+      }),
+      msg({
+        senderType: 'agent',
+        authorId: AGENT,
+        content: 'agent note',
+        attachments: [
+          { url: '/e', name: 'e.pdf', contentType: 'application/pdf', size: 1, fileId: 'file_9' },
+        ],
+      }),
+    ]
+    await loadThreadFileExcerpts(rows)
+
+    expect(mockLoad).toHaveBeenCalledTimes(1)
+    const [ids] = mockLoad.mock.calls[0]
+    expect([...ids].sort()).toEqual(['file_1', 'file_2'])
+    vi.doUnmock('@/lib/server/domains/files/files.excerpts')
+    vi.resetModules()
+  })
+
+  it('returns an empty map without importing files.excerpts when there is nothing to load', async () => {
+    const { loadThreadFileExcerpts } = await import('../assistant.thread')
+    const rows = [msg({ senderType: 'visitor', content: 'just text' })]
+    expect(await loadThreadFileExcerpts(rows)).toEqual(new Map())
   })
 })
