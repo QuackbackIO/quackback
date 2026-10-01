@@ -179,6 +179,18 @@ describe('AttachmentList', () => {
     expect(getByLabelText('Open photo.heic, Image, 10 B')).toBeTruthy()
   })
 
+  it("gives an internal note's attachments the note's amber border treatment", () => {
+    const { getByLabelText } = render(<AttachmentList attachments={[pdf('note.pdf')]} note />)
+    const card = getByLabelText('Open note.pdf, PDF, 10 B')
+    expect(card.className).toContain('border-amber-400/30')
+  })
+
+  it("leaves a normal message's attachments without the amber treatment", () => {
+    const { getByLabelText } = render(<AttachmentList attachments={[pdf('note.pdf')]} />)
+    const card = getByLabelText('Open note.pdf, PDF, 10 B')
+    expect(card.className).not.toContain('amber')
+  })
+
   it('still renders a BMP inline, since every browser can decode it', () => {
     const bmp: ConversationAttachment = {
       url: '/f/scan.bmp',

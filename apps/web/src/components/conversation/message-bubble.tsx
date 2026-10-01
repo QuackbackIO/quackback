@@ -771,6 +771,7 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
             attachments={message.attachments}
             context={{ senderName: authorName, sentAt: message.createdAt, messageId: message.id }}
             align={self ? 'end' : 'start'}
+            note={isNote}
           />
         )}
 

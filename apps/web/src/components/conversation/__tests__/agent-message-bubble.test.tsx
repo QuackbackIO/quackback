@@ -8,6 +8,7 @@
  */
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import { AgentMessageBubble, VisitorMessageBubble } from '../message-bubble'
 import { canDeleteAgentMessage, canEditAgentMessage } from '../message-edit'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
@@ -411,5 +412,47 @@ describe('AgentMessageBubble — pair-thread provenance (convergence Phase 2)', 
     )
     expect(screen.getByText('Internal note')).toBeInTheDocument()
     expect(screen.queryByText(/via ticket thread/)).not.toBeInTheDocument()
+  })
+})
+
+describe('AgentMessageBubble — note attachments', () => {
+  const pdfAttachment = {
+    url: '/f/plan.pdf',
+    name: 'plan.pdf',
+    contentType: 'application/pdf',
+    size: 10,
+    family: 'pdf' as const,
+  }
+
+  it("gives an internal note's attachments the note's amber border treatment", () => {
+    render(
+      <IntlProvider locale="en-US" messages={{}}>
+        <AgentMessageBubble
+          message={baseMessage({
+            senderType: 'agent',
+            isInternal: true,
+            attachments: [pdfAttachment],
+          })}
+        />
+      </IntlProvider>
+    )
+    const card = screen.getByLabelText('Open plan.pdf, PDF, 10 B')
+    expect(card.className).toContain('border-amber-400/30')
+  })
+
+  it("leaves a regular reply's attachments without the amber treatment", () => {
+    render(
+      <IntlProvider locale="en-US" messages={{}}>
+        <AgentMessageBubble
+          message={baseMessage({
+            senderType: 'agent',
+            isInternal: false,
+            attachments: [pdfAttachment],
+          })}
+        />
+      </IntlProvider>
+    )
+    const card = screen.getByLabelText('Open plan.pdf, PDF, 10 B')
+    expect(card.className).not.toContain('amber')
   })
 })

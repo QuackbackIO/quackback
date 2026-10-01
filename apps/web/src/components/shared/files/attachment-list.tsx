@@ -60,6 +60,10 @@ export interface AttachmentListProps {
   compact?: boolean
   /** The side of the thread the message sits on; attachments line up with it. */
   align?: 'start' | 'end'
+  /** This message is an internal note (admin thread only — notes never reach
+   *  a visitor-facing DTO): attachments get the note's amber border so they
+   *  read as not customer-visible, matching the note bubble's tint. */
+  note?: boolean
 }
 
 export function AttachmentList({
@@ -67,6 +71,7 @@ export function AttachmentList({
   context = {},
   compact = false,
   align = 'start',
+  note = false,
 }: AttachmentListProps) {
   const { open } = useFileViewer()
   const gallery = useConversationGallery()
@@ -76,6 +81,7 @@ export function AttachmentList({
 
   const images = safe.filter((a) => resolveFamily(a) === 'image' && !isUndisplayableImage(a))
   const files = safe.filter((a) => resolveFamily(a) !== 'image' || isUndisplayableImage(a))
+  const noteTint = note ? 'border-amber-400/30 dark:border-amber-400/25' : undefined
 
   const openAt = (localIndex: number) => {
     const globalIndex = context.messageId ? gallery.indexOf(context.messageId, localIndex) : -1
@@ -108,7 +114,13 @@ export function AttachmentList({
       )}
     >
       {images.length > 0 && (
-        <ImageRow images={images} localIndexOf={localIndexOf} onOpen={openAt} compact={compact} />
+        <ImageRow
+          images={images}
+          localIndexOf={localIndexOf}
+          onOpen={openAt}
+          compact={compact}
+          note={note}
+        />
       )}
       {files.length > 0 && (
         <div
@@ -129,17 +141,34 @@ export function AttachmentList({
                   attachment={a}
                   onOpen={() => openAt(localIndex)}
                   wide
-                  className={compact ? undefined : 'col-span-2'}
+                  className={cn(compact ? undefined : 'col-span-2', noteTint)}
                 />
               )
             }
             if (compact) {
-              return <FileRow key={localIndex} attachment={a} onOpen={() => openAt(localIndex)} />
+              return (
+                <FileRow
+                  key={localIndex}
+                  attachment={a}
+                  onOpen={() => openAt(localIndex)}
+                  className={noteTint}
+                />
+              )
             }
             return hasPreviewWorthShowing(a) ? (
-              <FilePreviewCard key={localIndex} attachment={a} onOpen={() => openAt(localIndex)} />
+              <FilePreviewCard
+                key={localIndex}
+                attachment={a}
+                onOpen={() => openAt(localIndex)}
+                className={noteTint}
+              />
             ) : (
-              <FileIconCard key={localIndex} attachment={a} onOpen={() => openAt(localIndex)} />
+              <FileIconCard
+                key={localIndex}
+                attachment={a}
+                onOpen={() => openAt(localIndex)}
+                className={noteTint}
+              />
             )
           })}
         </div>
@@ -153,15 +182,18 @@ function ImageRow({
   localIndexOf,
   onOpen,
   compact,
+  note,
 }: {
   images: ConversationAttachment[]
   localIndexOf: Map<ConversationAttachment, number>
   onOpen: (localIndex: number) => void
   compact: boolean
+  note: boolean
 }) {
   const intl = useIntl()
   const openLabel = (name: string) =>
     intl.formatMessage({ id: 'files.card.open', defaultMessage: 'Open {name}' }, { name })
+  const noteTint = note ? 'border-amber-400/30 dark:border-amber-400/25' : undefined
 
   if (images.length === 1) {
     const a = images[0]!
@@ -173,7 +205,8 @@ function ImageRow({
         aria-label={openLabel(a.name || 'image')}
         className={cn(
           'block w-fit cursor-zoom-in overflow-hidden rounded-[10px] border border-border bg-muted',
-          compact ? 'max-w-[200px]' : 'max-w-[248px]'
+          compact ? 'max-w-[200px]' : 'max-w-[248px]',
+          noteTint
         )}
       >
         <img
@@ -194,7 +227,10 @@ function ImageRow({
             type="button"
             onClick={() => onOpen(localIndex)}
             aria-label={openLabel(a.name || 'image')}
-            className="aspect-square cursor-zoom-in overflow-hidden rounded-lg border border-border bg-muted"
+            className={cn(
+              'aspect-square cursor-zoom-in overflow-hidden rounded-lg border border-border bg-muted',
+              noteTint
+            )}
           >
             <img src={imageSrc(a)} alt="" className="h-full w-full object-cover" />
           </button>
