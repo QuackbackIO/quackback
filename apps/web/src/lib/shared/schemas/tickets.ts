@@ -9,6 +9,8 @@ export const ticketAttachmentSchema = z.object({
   name: z.string().optional(),
   contentType: z.string().optional(),
   size: z.number(),
+  /** A file from the upload pipeline; the server rebuilds the rest from its row. */
+  fileId: z.string().max(64).optional(),
 })
 
 export const createMyTicketSchema = z.object({
