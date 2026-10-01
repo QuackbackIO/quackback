@@ -35,6 +35,7 @@ vi.mock('@/lib/server/storage/s3', () => ({
   isS3Usable: vi.fn(() => true),
   getStorageSigningSecret: vi.fn(() => 'test-secret'),
   isPublicStorageKey: vi.fn((key: string) => key.startsWith('logos/')),
+  hasExpiringReadToken: vi.fn((key: string) => key.startsWith('files/')),
   verifyStorageReadToken: vi.fn(
     (_secret: string, _key: string, sig: string | null) => sig === 'ok'
   ),

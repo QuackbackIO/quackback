@@ -132,6 +132,9 @@ function extractKey(url: URL): string | null {
   return key && !key.includes('..') ? key : null
 }
 
+/** How long a browser may keep a proxied private file. */
+const PRIVATE_MAX_AGE_SECONDS = 3600
+
 function isSingleByteRange(value: string): boolean {
   const match = /^bytes=(\d*)-(\d*)$/.exec(value)
   return !!match && (match[1] !== '' || match[2] !== '')
@@ -207,6 +210,7 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
     getS3Object,
     getStorageSigningSecret,
     isPublicStorageKey,
+    hasExpiringReadToken,
     StorageUnavailableError,
     verifyStorageReadToken,
   } = await import('@/lib/server/storage/s3')
@@ -231,12 +235,23 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
     return Response.json({ error: 'Invalid storage key' }, { status: 400 })
   }
 
+  const exp = url.searchParams.get('exp')
   if (
     !isPublicStorageKey(key) &&
-    !verifyStorageReadToken(getStorageSigningSecret(), key, url.searchParams.get('read'))
+    !verifyStorageReadToken(getStorageSigningSecret(), key, url.searchParams.get('read'), exp)
   ) {
     return Response.json({ error: 'Invalid storage read token' }, { status: 403 })
   }
+
+  // A private response is cached for an hour, and never past the moment an
+  // expiring link stops granting access: the cache must not outlive the
+  // capability that fetched it. The verifier above has already checked `exp`.
+  const privateMaxAge = hasExpiringReadToken(key)
+    ? Math.max(0, Math.min(PRIVATE_MAX_AGE_SECONDS, Math.floor((Number(exp) - Date.now()) / 1000)))
+    : PRIVATE_MAX_AGE_SECONDS
+  const cacheControl = isPublicStorageKey(key)
+    ? 'public, max-age=31536000, immutable'
+    : `private, max-age=${privateMaxAge}, immutable`
 
   // Force proxy for email embeds (?email=1), since email clients don't follow
   // redirects, and for the file viewer's fetch (?proxy=1), since a script
@@ -262,9 +277,7 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
                   'Content-Length': String(cached.data.byteLength),
                 }
               : {}),
-            'Cache-Control': isPublicStorageKey(key)
-              ? 'public, max-age=31536000, immutable'
-              : 'private, max-age=3600, immutable',
+            'Cache-Control': cacheControl,
             // The key namespace is per-bucket and the bucket is the workspace
             // boundary, so the same path can name a different object per host.
             Vary: 'Host',
@@ -281,9 +294,6 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
         ? await getS3Object(key, requestedRange)
         : await getS3Object(key)
       const { body, contentType, contentLength, contentRange, acceptRanges } = object
-      const cacheControl = isPublicStorageKey(key)
-        ? 'public, max-age=31536000, immutable'
-        : 'private, max-age=3600, immutable'
 
       // Video must stay streaming and byte-range aware. Buffering the whole
       // object before answering makes playback wait for the complete upload and
