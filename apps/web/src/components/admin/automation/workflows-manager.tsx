@@ -297,7 +297,7 @@ export function WorkflowsManager({
 
   const goToBuilder = (workflowId: string) => {
     void navigate({
-      to: '/admin/automation/workflows/$workflowId',
+      to: '/admin/settings/workflows/$workflowId',
       params: { workflowId },
     })
   }
@@ -409,8 +409,7 @@ export function WorkflowsManager({
 
   return (
     <SettingsPage
-      page="/admin/automation/workflows"
-      area="automation"
+      page="/admin/settings/workflows"
       description={intl.formatMessage({
         id: 'automation.workflows.description',
         defaultMessage: 'Automate routing, replies, and housekeeping on top of your conversations.',

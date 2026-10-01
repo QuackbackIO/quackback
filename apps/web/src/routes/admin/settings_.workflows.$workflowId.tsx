@@ -5,6 +5,8 @@ import { workflowDetailQuery } from '@/lib/client/queries/workflows'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import { assertRoutePermission } from '@/lib/shared/route-permission'
 
 const WorkflowBuilder = lazy(() =>
   import('@/components/admin/automation/workflow-builder/workflow-builder').then((m) => ({
@@ -12,11 +14,12 @@ const WorkflowBuilder = lazy(() =>
   }))
 )
 
-// The trailing underscore on "automation_" escapes nesting under
-// /admin/automation's sidebar layout (routes/admin/automation.tsx): this
-// route renders fullscreen in the admin shell instead, like the help center
-// article editor.
-export const Route = createFileRoute('/admin/automation_/workflows/$workflowId')({
+// The trailing underscore on "settings_" escapes nesting under the settings
+// layout (routes/admin/settings.tsx): this route renders fullscreen in the
+// admin shell instead, like the help center article editor.
+export const Route = createFileRoute('/admin/settings_/workflows/$workflowId')({
+  beforeLoad: ({ context }) =>
+    assertRoutePermission(context.permissions, PERMISSIONS.WORKFLOW_MANAGE),
   loader: async ({ context, params }) => {
     await Promise.all([
       context.queryClient.ensureQueryData(workflowDetailQuery(params.workflowId)),
@@ -33,7 +36,7 @@ function WorkflowBuilderPage() {
   const settings = useWorkspaceSettings()
   const flags = settings?.featureFlags as FeatureFlags | undefined
   if (!flags?.supportInbox) {
-    return <Navigate to="/admin/automation/agent" />
+    return <Navigate to="/admin/settings/agent" />
   }
   return (
     <Suspense

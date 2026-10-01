@@ -24,7 +24,7 @@ vi.mock('@/lib/server/functions/assistant-skills', () => ({
   },
 }))
 
-const { Route } = await import('../automation.skills')
+const { Route } = await import('../settings.skills')
 const SkillsPage = (Route as unknown as { options: { component: () => ReactNode } }).options
   .component
 

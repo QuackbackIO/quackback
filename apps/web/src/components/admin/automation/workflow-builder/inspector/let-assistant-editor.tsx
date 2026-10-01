@@ -29,7 +29,7 @@ export function LetAssistantAnswerEditor({
       <p className="text-xs text-muted-foreground">
         Hands the turn to Quinn using its{' '}
         {canAgent ? (
-          <Link to="/admin/automation/agent" className={INLINE_LINK}>
+          <Link to="/admin/settings/agent" className={INLINE_LINK}>
             Agent settings
           </Link>
         ) : (

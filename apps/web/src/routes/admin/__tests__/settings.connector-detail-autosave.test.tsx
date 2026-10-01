@@ -31,7 +31,7 @@ vi.mock('@/lib/server/functions/assistant-connectors', () => ({
 }))
 
 const { createAutosaveMutationCache } = await import('@/lib/client/autosave')
-const { Route } = await import('../automation.connectors_.$connectorId')
+const { Route } = await import('../settings.connectors_.$connectorId')
 const ConnectorPage = (Route as unknown as { options: { component: () => ReactNode } }).options
   .component
 

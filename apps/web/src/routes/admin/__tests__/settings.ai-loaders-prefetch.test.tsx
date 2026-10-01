@@ -101,9 +101,9 @@ function useAgentSettingsReads() {
 }
 
 describe('AI & Automation loaders', () => {
-  it('/admin/automation warms the agent settings page a desktop moves on to', async () => {
+  it('/admin/settings/agent warms the settings and the hidden Guidance tab reads', async () => {
     const { warmed, afterMount } = await fetchesAfterLoader(
-      '@/routes/admin/automation.index',
+      '@/routes/admin/settings.agent',
       useAgentSettingsReads,
       { permissions: ['assistant.manage'] }
     )
@@ -111,15 +111,9 @@ describe('AI & Automation loaders', () => {
     expect(warmed).toEqual(['guidanceRules', 'guidanceStats', 'settings'])
   })
 
-  it('/admin/automation warms nothing for a viewer who cannot manage the agent', async () => {
-    const loader = await loaderOf('@/routes/admin/automation.index')
-    await loader({ context: { queryClient: client, permissions: ['analytics.view'] } })
-    expect(calls).toEqual([])
-  })
-
-  it('/admin/automation/connectors warms the built-in tools card', async () => {
+  it('/admin/settings/connectors warms the built-in tools card', async () => {
     const { warmed, afterMount } = await fetchesAfterLoader(
-      '@/routes/admin/automation.connectors',
+      '@/routes/admin/settings.connectors',
       () => {
         useQuery(connectorQueries.list())
         useQuery(assistantQueries.settings())
@@ -130,9 +124,9 @@ describe('AI & Automation loaders', () => {
     expect(warmed).toEqual(['connectors', 'settings', 'tools'])
   })
 
-  it('/admin/automation/workflows warms the list and both toggles', async () => {
+  it('/admin/settings/workflows warms the list and both toggles', async () => {
     const { warmed, afterMount } = await fetchesAfterLoader(
-      '@/routes/admin/automation.workflows',
+      '@/routes/admin/settings.workflows',
       () => {
         useQuery(workflowsQuery())
         useQuery(settingsQueries.widgetConfig())
@@ -144,8 +138,8 @@ describe('AI & Automation loaders', () => {
     expect(warmed).toEqual(['abandonedAutoClose', 'closeSpam', 'widgetConfig', 'workflows'])
   })
 
-  it('/admin/automation/workflows skips the page reads when the page redirects away', async () => {
-    const loader = await loaderOf('@/routes/admin/automation.workflows')
+  it('/admin/settings/workflows skips the page reads when the page redirects away', async () => {
+    const loader = await loaderOf('@/routes/admin/settings.workflows')
     await loader({
       context: { queryClient: client, billingEnabled: false, settings: { featureFlags: {} } },
     })

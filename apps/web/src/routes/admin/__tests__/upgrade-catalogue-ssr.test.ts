@@ -10,10 +10,9 @@ vi.mock('@/lib/client/queries/billing', async (importOriginal) => {
 
 const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
 const { Route: settingsRoute } = await import('../settings')
-const { Route: automationRoute } = await import('../automation')
 
 describe('upgrade catalogue SSR prefetch', () => {
-  it('settings and automation layouts warm the catalogue when billing is on', async () => {
+  it('the settings layout, which holds the AI & Automation pages, warms the catalogue when billing is on', async () => {
     const queryClient = { ensureQueryData: vi.fn() }
     const context = {
       queryClient,
@@ -25,8 +24,7 @@ describe('upgrade catalogue SSR prefetch', () => {
       await loader({ context })
     }
     await runLoader(settingsRoute.options.loader)
-    await runLoader(automationRoute.options.loader)
     expect(ensureBillingCatalogue).toHaveBeenCalledWith(queryClient, true)
-    expect(ensureBillingCatalogue).toHaveBeenCalledTimes(2)
+    expect(ensureBillingCatalogue).toHaveBeenCalledTimes(1)
   })
 })

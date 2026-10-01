@@ -22,10 +22,9 @@ export function WhoRepliesFirstCard() {
   const canOfficeHours = usePermission(PERMISSIONS.OFFICE_HOURS_MANAGE)
   const settings = useWorkspaceSettings()
   const flags = settings?.featureFlags as FeatureFlags | undefined
-  const onAgentPage = pathname === '/admin/automation/agent'
+  const onAgentPage = pathname === '/admin/settings/agent'
   const onWorkflowsPage =
-    pathname === '/admin/automation/workflows' ||
-    pathname.startsWith('/admin/automation/workflows/')
+    pathname === '/admin/settings/workflows' || pathname.startsWith('/admin/settings/workflows/')
   const showManageQuinn = canAgent && !onAgentPage
   const showManageWorkflows = canWorkflows && Boolean(flags?.supportInbox) && !onWorkflowsPage
   const showOfficeHours = canOfficeHours && Boolean(flags?.supportInbox)
@@ -62,7 +61,7 @@ export function WhoRepliesFirstCard() {
         <div className="mt-2 flex flex-wrap gap-3.5 text-xs">
           {showManageQuinn && (
             <Link
-              to="/admin/automation/agent"
+              to="/admin/settings/agent"
               className={`${INLINE_LINK} focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50`}
             >
               {intl.formatMessage({
@@ -73,7 +72,7 @@ export function WhoRepliesFirstCard() {
           )}
           {showManageWorkflows && (
             <Link
-              to="/admin/automation/workflows"
+              to="/admin/settings/workflows"
               className={`${INLINE_LINK} focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50`}
             >
               {intl.formatMessage({

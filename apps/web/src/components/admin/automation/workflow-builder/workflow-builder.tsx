@@ -39,7 +39,7 @@ export function WorkflowBuilder({ workflowId }: { workflowId: string }) {
       <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
         <p className="text-sm text-muted-foreground">This workflow doesn&apos;t exist anymore.</p>
         <Button variant="outline" size="sm" asChild>
-          <Link to="/admin/automation/workflows">Back to workflows</Link>
+          <Link to="/admin/settings/workflows">Back to workflows</Link>
         </Button>
       </div>
     )

@@ -69,7 +69,7 @@ vi.mock('@tanstack/react-router', () => ({
   useRouteContext: (opts?: { select?: (context: never) => unknown }) =>
     opts?.select ? opts.select(routerState as never) : routerState,
   useLocation: (opts: { select: (loc: { pathname: string; searchStr: string }) => string }) =>
-    opts.select({ pathname: '/admin/automation/workflows', searchStr: '' }),
+    opts.select({ pathname: '/admin/settings/workflows', searchStr: '' }),
 }))
 vi.mock('@/lib/client/hooks/use-permission', () => ({
   usePermission: () => permission.canCheckout,
@@ -163,7 +163,7 @@ describe('UpgradeOffer', () => {
       'business'
     )
     expect((document.querySelector('input[name="returnTo"]') as HTMLInputElement)?.value).toBe(
-      '/admin/automation/workflows'
+      '/admin/settings/workflows'
     )
   })
 

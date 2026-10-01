@@ -23,18 +23,16 @@ import {
   useRefreshConnector,
   useUpdateConnector,
 } from '@/lib/client/mutations/assistant-connectors'
-import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import { assertRoutePermission } from '@/lib/shared/route-permission'
 import type { ConnectorToolDTO, ConnectorToolPolicy } from '@/lib/shared/assistant/connectors'
 import { useState } from 'react'
 
 // Trailing underscore on "connectors_" escapes nesting under the list route,
-// which has no Outlet. URL stays /admin/automation/connectors/:connectorId.
-export const Route = createFileRoute('/admin/automation/connectors_/$connectorId')({
+// which has no Outlet. URL stays /admin/settings/connectors/:connectorId.
+export const Route = createFileRoute('/admin/settings/connectors_/$connectorId')({
   beforeLoad: ({ context }) => {
-    const permissions = (context as { permissions?: PermissionKey[] }).permissions ?? []
-    if (!permissions.includes(PERMISSIONS.ASSISTANT_MANAGE)) {
-      throw new Error('Access denied: requires assistant.manage')
-    }
+    assertRoutePermission(context.permissions, PERMISSIONS.ASSISTANT_MANAGE)
   },
   loader: async ({ context, params }) => {
     await context.queryClient.ensureQueryData(connectorQueries.detail(params.connectorId))
@@ -112,7 +110,7 @@ function ConnectorDetailPage() {
         id: 'automation.connectors.title',
         defaultMessage: 'Connectors',
       }),
-      to: '/admin/automation/connectors',
+      to: '/admin/settings/connectors',
     },
   ]
   const { connectorId } = Route.useParams()
@@ -130,11 +128,11 @@ function ConnectorDetailPage() {
     return <p className="text-sm text-muted-foreground">Loading…</p>
   }
   if (builtin || connectorId === 'quackback') {
-    return <Navigate to="/admin/automation/connectors" />
+    return <Navigate to="/admin/settings/connectors" />
   }
   if (!connector) {
     return (
-      <SettingsPage title="Connector not found" area="automation" crumbs={connectorCrumbs}>
+      <SettingsPage title="Connector not found" crumbs={connectorCrumbs}>
         <p className="text-sm text-muted-foreground">
           This connector does not exist or was disconnected.
         </p>
@@ -167,7 +165,6 @@ function ConnectorDetailPage() {
   return (
     <SettingsPage
       title={connector.name}
-      area="automation"
       crumbs={connectorCrumbs}
       logo={<ConnectorMark name={connector.name} size="lg" />}
       badge={<ConnectorStatusBadge status={connector.status} />}
@@ -248,7 +245,7 @@ function ConnectorDetailPage() {
         onConfirm={() => {
           remove.mutate(connector.id, {
             onSuccess: () => {
-              void navigate({ to: '/admin/automation/connectors' })
+              void navigate({ to: '/admin/settings/connectors' })
             },
             onError: () => toast.error('Could not disconnect'),
           })

@@ -103,7 +103,7 @@ export function WorkflowBuilderTopBar({
   return (
     <header className="flex h-13 shrink-0 items-center gap-2 border-b border-border/50 px-3">
       <Button variant="ghost" size="icon" className="size-8" asChild>
-        <Link to="/admin/automation/workflows" aria-label="Back to workflows">
+        <Link to="/admin/settings/workflows" aria-label="Back to workflows">
           <ArrowLeftIcon className="size-4" />
         </Link>
       </Button>
