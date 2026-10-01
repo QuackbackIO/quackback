@@ -15,7 +15,7 @@
 import { useIntl } from 'react-intl'
 import { cn } from '@/lib/shared/utils/cn'
 import { useFileViewer } from './file-viewer-context'
-import { useConversationGallery } from './conversation-gallery'
+import { useConversationGallery, isSafeAttachment } from './conversation-gallery'
 import { toViewerFile, type ViewerFile } from './types'
 import {
   FilePreviewCard,
@@ -25,24 +25,6 @@ import {
   hasPreviewWorthShowing,
 } from './file-card'
 import type { ConversationAttachment } from '@/lib/shared/conversation/types'
-import { sanitizeImageUrl } from '@/lib/shared/utils/sanitize'
-
-/**
- * Defense-in-depth: never render a javascript: (or other hostile) URL into
- * href/src. Image srcs use the same raster-data-URI policy as lift/sanitize
- * so a stored `data:image/png;...` that we lift onto attachments still shows.
- * Carried over from the component this replaces.
- */
-function isSafeAttachment(a: ConversationAttachment): boolean {
-  if (a.contentType.startsWith('image/')) return sanitizeImageUrl(a.url).length > 0
-  if (a.url.startsWith('/')) return true
-  try {
-    const proto = new URL(a.url).protocol
-    return proto === 'https:' || proto === 'http:'
-  } catch {
-    return false
-  }
-}
 
 export interface AttachmentListContext {
   senderName?: string

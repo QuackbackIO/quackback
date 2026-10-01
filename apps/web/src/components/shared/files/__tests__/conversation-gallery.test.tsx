@@ -100,6 +100,28 @@ describe('ConversationGalleryProvider', () => {
     expect(result.current.indexOf('m1', 0)).toBe(-1)
   })
 
+  it('applies the same safety filter AttachmentList uses, so a card’s local index still lines up', () => {
+    const unsafe: ConversationAttachment = {
+      url: 'javascript:alert(1)',
+      name: 'evil.png',
+      contentType: 'image/png',
+      size: 0,
+    }
+    const messages: GalleryMessage[] = [msg({ id: 'm1', attachments: [unsafe, att('safe.pdf')] })]
+    const { result } = renderHook(() => useConversationGallery(), {
+      wrapper: ({ children }) => (
+        <IntlProvider locale="en-US" messages={{}}>
+          <ConversationGalleryProvider messages={messages}>{children}</ConversationGalleryProvider>
+        </IntlProvider>
+      ),
+    })
+    expect(result.current.files.map((f) => f.name)).toEqual(['safe.pdf'])
+    // AttachmentList's own `safe` filter drops the unsafe attachment before it
+    // ever assigns local indexes, so safe.pdf is local index 0 within the
+    // message, not 1 — indexOf must resolve that to the gallery's only entry.
+    expect(result.current.indexOf('m1', 0)).toBe(0)
+  })
+
   it('falls back to a localized sender label when the author has no display name', () => {
     const messages: GalleryMessage[] = [
       msg({ id: 'm1', senderType: 'agent', attachments: [att('a.pdf')] }),

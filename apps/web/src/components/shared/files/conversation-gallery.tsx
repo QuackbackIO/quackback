@@ -13,6 +13,27 @@ import { createContext, useContext, useMemo, type ReactNode } from 'react'
 import { useIntl, type IntlShape } from 'react-intl'
 import { toViewerFile, type ViewerFile } from './types'
 import type { ConversationAttachment } from '@/lib/shared/conversation/types'
+import { sanitizeImageUrl } from '@/lib/shared/utils/sanitize'
+
+/**
+ * Defense-in-depth: never treat a javascript: (or other hostile) URL as a
+ * file to render. `AttachmentList` filters a message's own attachments
+ * through this before rendering cards; the gallery applies the exact same
+ * filter before flattening attachments across the thread, so a card's local
+ * index (computed over its own already-filtered attachments) always lands on
+ * the same file here — an unsafe attachment ahead of a safe one in the raw
+ * array would otherwise shift every index after it by one.
+ */
+export function isSafeAttachment(a: ConversationAttachment): boolean {
+  if (a.contentType.startsWith('image/')) return sanitizeImageUrl(a.url).length > 0
+  if (a.url.startsWith('/')) return true
+  try {
+    const proto = new URL(a.url).protocol
+    return proto === 'https:' || proto === 'http:'
+  } catch {
+    return false
+  }
+}
 
 /** The minimum a message needs to carry to contribute to the gallery. */
 export interface GalleryMessage {
@@ -74,10 +95,11 @@ export function ConversationGalleryProvider({
     const startIndexByMessage = new Map<string, number>()
     for (const m of messages) {
       if (m.isInternal && !includeInternal) continue
-      if (!m.attachments || m.attachments.length === 0) continue
+      const safe = (m.attachments ?? []).filter(isSafeAttachment)
+      if (safe.length === 0) continue
       startIndexByMessage.set(m.id, files.length)
       const senderName = senderNameOf(m, intl)
-      m.attachments.forEach((a, index) => {
+      safe.forEach((a, index) => {
         files.push(toViewerFile(a, { senderName, sentAt: m.createdAt, messageId: m.id, index }))
       })
     }
