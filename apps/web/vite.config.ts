@@ -216,6 +216,10 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       nitro({
         preset: 'bun',
+        // The file-preview job's PDF engine loads `mupdf-wasm.wasm` from
+        // beside its own module, which a bundled chunk would not have: keep
+        // the whole package in the traced server node_modules instead.
+        traceDeps: ['mupdf*'],
         // The bare Bun preset has no reverse proxy in front of it, so
         // without this every static asset ships uncompressed: gzip and
         // brotli siblings are written next to each build asset over 1 KB
