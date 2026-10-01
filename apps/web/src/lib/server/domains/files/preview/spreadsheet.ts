@@ -6,6 +6,7 @@
  * first rows, with formulas, styles and HTML off.
  */
 import { openZip, verifyZipSizes } from '@/lib/shared/files/zip-budget'
+import { stripInvisible } from '@/lib/shared/files/file-name'
 import {
   NO_DEADLINE,
   cell,
@@ -52,7 +53,7 @@ export async function deriveSpreadsheetPreview(
   deadline.check()
 
   const sheets = workbook.SheetNames.slice(0, MAX_SHEET_NAMES).map((name) =>
-    clip(cleanText(name), SHEET_NAME_CHARS)
+    clip(cleanText(stripInvisible(name)), SHEET_NAME_CHARS)
   )
   const sheet = workbook.Sheets[workbook.SheetNames[0] ?? '']
   if (!sheet?.['!ref']) return { status: 'ready', meta: sheets.length ? { sheets } : {} }

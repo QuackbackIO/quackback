@@ -32,6 +32,7 @@ import {
   formatBytes,
   type FileFamily,
 } from '@/lib/shared/files/file-types'
+import { stripInvisible } from '@/lib/shared/files/file-name'
 import { MAX_CONVERSATION_ATTACHMENTS, type UploadedFile } from '@/lib/shared/conversation/types'
 import { ValidationError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
@@ -69,14 +70,16 @@ export interface StoreFileInput {
   unverifiedSender: boolean
 }
 
-/** Strip any path, control characters and surrounding space; cap the length. */
+/**
+ * Strip any path, control, bidirectional and invisible characters and
+ * surrounding space; cap the length.
+ */
 export function cleanFileName(raw: string | null | undefined): string {
   const base = String(raw ?? '')
     .replace(/[\\/]+$/, '')
     .split(/[\\/]/)
     .pop()!
-  // eslint-disable-next-line no-control-regex
-  const cleaned = base.replace(/[\u0000-\u001f\u007f]/g, '').trim()
+  const cleaned = stripInvisible(base).trim()
   if (!cleaned || cleaned === '.' || cleaned === '..') return 'file'
   if (cleaned.length <= 255) return cleaned
   const dot = cleaned.lastIndexOf('.')
@@ -168,7 +171,7 @@ function legacyAttachment(a: ConversationAttachment): ConversationAttachment {
   if (!isTrustedAttachmentUrl(a?.url)) {
     throw new ValidationError('VALIDATION_ERROR', 'Invalid attachment')
   }
-  const name = String(a.name ?? '').slice(0, 255)
+  const name = stripInvisible(String(a.name ?? '')).slice(0, 255)
   const contentType = String(a.contentType ?? '').slice(0, 128)
   const size = Number(a.size)
   const cap = maxBytesForFamily(familyFor(name, contentType))

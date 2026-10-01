@@ -46,6 +46,15 @@ describe('deriveSpreadsheetPreview', () => {
     expect(result.excerpt).not.toContain('other')
   })
 
+  it('drops bidirectional and invisible characters from sheet names', async () => {
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['a']]), 'Q3‮xslx')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['b']]), 'To​do⁦')
+    const bytes = new Uint8Array(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer)
+    const result = await deriveSpreadsheetPreview(bytes, XLSX_TYPE)
+    expect(result.meta.sheets).toEqual(['Q3xslx', 'Todo'])
+  })
+
   it('reads legacy .xls and OpenDocument sheets too', async () => {
     const xls = await deriveSpreadsheetPreview(write('xls'), 'application/vnd.ms-excel')
     expect(xls.meta).toMatchObject({ sheets: ['Data', 'Summary'], rows: 501 })

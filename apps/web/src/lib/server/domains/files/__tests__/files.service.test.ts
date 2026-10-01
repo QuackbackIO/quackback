@@ -69,6 +69,25 @@ describe('cleanFileName', () => {
     expect(cleanFileName('../../etc/passwd')).toBe('passwd')
     expect(cleanFileName('a\u0000b\u001f.txt')).toBe('ab.txt')
   })
+  it('drops bidirectional and invisible characters, so the name shows what it is', () => {
+    // Shown right to left after the override, this reads "Invoicemcod.docx".
+    expect(cleanFileName('Invoice‮xcod.docm')).toBe('Invoicexcod.docm')
+    const invisible = [
+      ...['‪', '‫', '‬', '‭', '‮'],
+      ...['⁦', '⁧', '⁨', '⁩'],
+      ...['‎', '‏', '؜'],
+      ...['​', '‌', '‍', '⁠', '﻿'],
+      ...['\u0085', '\u009f', '­', ' ', ' '],
+    ]
+    for (const ch of invisible) {
+      expect(cleanFileName(`re${ch}port.pdf`), `U+${ch.codePointAt(0)!.toString(16)}`).toBe(
+        'report.pdf'
+      )
+    }
+    expect(cleanFileName('‮​')).toBe('file')
+    // Letters of right-to-left scripts stay.
+    expect(cleanFileName('דוח.pdf')).toBe('דוח.pdf')
+  })
   it('falls back to a placeholder and caps length, keeping the extension', () => {
     expect(cleanFileName('')).toBe('file')
     expect(cleanFileName('..')).toBe('file')
@@ -261,6 +280,17 @@ describe.skipIf(!fixture.available)('files service (real DB, rolled back)', () =
       await expect(
         resolveAttachments([{ ...ok, size: 26 * 1024 * 1024 }], { canAttachAnyFile: false })
       ).rejects.toThrow('Attachment too large')
+    })
+
+    it('drops bidirectional and invisible characters from a legacy attachment name', async () => {
+      const spoofed = {
+        url: '/api/storage/chat-images/a.png?read=x',
+        name: 'Invoice‮xcod​.docm',
+        contentType: 'image/png',
+        size: 10,
+      }
+      const [att] = await resolveAttachments([spoofed], { canAttachAnyFile: false })
+      expect(att!.name).toBe('Invoicexcod.docm')
     })
 
     it('refuses a malformed file id without querying for it', async () => {
