@@ -35,7 +35,7 @@ registerPath('/files', {
     description:
       'Upload a file so it can be attached to a conversation reply, note, or ticket. ' +
       'Send the raw file bytes as the request body (not multipart/form-data) and the ' +
-      'file name as the `name` query parameter. The response carries a `fileId` — ' +
+      'file name as the `name` query parameter. The response carries a `fileId`: ' +
       'attach it by setting `attachments: [{ fileId }]` on the reply/note/ticket request.',
     parameters: [
       {

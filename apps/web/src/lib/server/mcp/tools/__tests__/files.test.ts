@@ -25,6 +25,17 @@ function collect(auth: McpAuthContext): Map<string, Handler> {
   return handlers
 }
 
+function collectDescriptions(auth: McpAuthContext): Map<string, string> {
+  const descriptions = new Map<string, string>()
+  const fakeServer = {
+    tool: (name: string, description: string) => {
+      descriptions.set(name, description)
+    },
+  }
+  registerFileTools(fakeServer as never, auth)
+  return descriptions
+}
+
 const teamAuth = {
   principalId: 'principal_key',
   userId: 'user_1',
@@ -71,6 +82,11 @@ describe('file MCP tools', () => {
     const [[storeArgs]] = mockStoreFile.mock.calls
     expect(Buffer.from(storeArgs.bytes).toString()).toBe('%PDF-1.4 fake pdf bytes')
     expect(parse(out)).toEqual({ fileId: 'file_1', name: 'invoice.pdf' })
+  })
+
+  it('never uses an em dash in the upload_file description (public MCP docs)', () => {
+    const description = collectDescriptions(teamAuth).get('upload_file')!
+    expect(description).not.toContain('—')
   })
 
   it('rejects more than 5 MB decoded, with a clear message, before calling storeFile', async () => {
