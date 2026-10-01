@@ -1,81 +1,253 @@
 import { useCallback, useRef, useState } from 'react'
-import type { ConversationAttachment } from '@/lib/shared/conversation/types'
+import type { ConversationAttachment, UploadedFile } from '@/lib/shared/conversation/types'
 import { MAX_CONVERSATION_ATTACHMENTS } from '@/lib/shared/conversation/types'
+import { familyFor, type FileFamily } from '@/lib/shared/files/file-types'
+import { checkFileBeforeUpload, UploadError } from '@/lib/client/files/upload-file'
+
+/** A tray tile. `error`/`retryable` only matter while `status === 'error'`;
+ *  `file`/`previewUrl` are populated once there is something to show. */
+export interface ComposerAttachmentItem {
+  localId: string
+  name: string
+  size: number
+  family: FileFamily
+  status: 'uploading' | 'ready' | 'error'
+  /** 0..1. Meaningless once the item leaves 'uploading'. */
+  progress: number
+  error?: string
+  /** False for a definitive rejection (too large, blocked type, empty) — the
+   *  tray only offers Retry when a failure might succeed on a second try. */
+  retryable?: boolean
+  file?: UploadedFile
+  /** Local object URL for an image thumbnail, live until the server's own URL
+   *  takes over (or the item is removed). */
+  previewUrl?: string
+}
+
+export type ComposerUploadFn = (
+  file: File,
+  opts: { onProgress: (progress: number) => void; signal: AbortSignal }
+) => Promise<UploadedFile>
+
+export interface UseConversationComposerAttachmentsOptions {
+  /** An extra rejection run after the universal size/empty checks — e.g. the
+   *  widget's blocked-extension check for an anonymous visitor. Returning an
+   *  UploadError skips the upload entirely, same as the universal checks. */
+  precheck?: (file: File) => UploadError | null
+}
+
+let nextLocalId = 0
+function createLocalId(): string {
+  nextLocalId += 1
+  return `att_${nextLocalId}`
+}
+
+function toAttachment(file: UploadedFile): ConversationAttachment {
+  return {
+    fileId: file.fileId,
+    url: file.url,
+    name: file.name,
+    contentType: file.contentType,
+    size: file.size,
+    family: file.family,
+  }
+}
+
+function makeItem(file: File, previewUrl: string | undefined): ComposerAttachmentItem {
+  return {
+    localId: createLocalId(),
+    name: file.name,
+    size: file.size,
+    family: familyFor(file.name, file.type),
+    status: 'uploading',
+    progress: 0,
+    previewUrl,
+  }
+}
 
 /**
- * Manages pending attachments for a conversation composer: uploads picked files via the
- * provided upload fn (which returns a public URL), tracks them with their
- * name/type/size for the send payload, and exposes add/remove/clear + an
- * uploading flag.
+ * Manages pending attachments for a conversation composer: stages every added
+ * file as a tray tile immediately (so progress/errors render per-file), runs
+ * it through the injected `upload` fn, and tracks the result.
  *
- * `uploading` is an in-flight count (not a boolean flip), so two overlapping
- * paste/drops keep Send disabled until both finish. Slot math also reserves
- * files already uploading so two near-cap pastes cannot both claim the last
- * seat. `clear` bumps a generation so a dialog reset drops in-flight results
- * instead of leaking them onto the next compose. A mixed multi-file pick keeps
- * the files that uploaded; failures stay dropped (the upload fn reports them).
+ * `uploading` is true while any tile is still uploading (not an in-flight
+ * count), so two overlapping paste/drops keep Send disabled until both land.
+ * Slot math also reserves files already uploading so two near-cap pastes
+ * cannot both claim the last seat — a file's reservation is released exactly
+ * once, when ITS OWN upload settles, never on a retry (a retry re-runs an
+ * existing tile, it never claims a new slot). `clear` bumps a generation so a
+ * dialog reset drops in-flight results instead of leaking them onto the next
+ * compose, and aborts every in-flight request. A failed upload stays as an
+ * error tile (never dropped, never sent) until the person removes it or
+ * retries it; `retry` only makes sense for a transient failure, so the hook
+ * marks each failure `retryable` based on whether it carries a definitive
+ * server/pre-check reason.
  */
-export function useConversationComposerAttachments(upload: (file: File) => Promise<string>) {
-  const [pending, setPending] = useState<ConversationAttachment[]>([])
-  const [uploading, setUploading] = useState(false)
-  // Mirror pending in a ref so addFiles reads the live count (for the remaining
-  // slot calculation) without a stale closure or re-creating the callback.
-  const pendingRef = useRef<ConversationAttachment[]>([])
-  pendingRef.current = pending
+export function useConversationComposerAttachments(
+  upload: ComposerUploadFn,
+  options: UseConversationComposerAttachmentsOptions = {}
+) {
+  const { precheck } = options
+  const [items, setItems] = useState<ComposerAttachmentItem[]>([])
+  // Mirrors `items` so addFiles reads the live count (for the slot math)
+  // without a stale closure — see the doc comment above for why a second,
+  // reservation-based count is still needed alongside it.
+  const itemsRef = useRef<ComposerAttachmentItem[]>([])
+  itemsRef.current = items
   const generationRef = useRef(0)
-  const inFlightBatchesRef = useRef(0)
   const reservedSlotsRef = useRef(0)
+  // The original File per tile (kept for the lifetime of the tile, so a
+  // failed upload can be retried) and the controller for whichever attempt is
+  // currently in flight (replaced on retry, so remove() aborts the live one).
+  const filesRef = useRef(new Map<string, File>())
+  const controllersRef = useRef(new Map<string, AbortController>())
 
-  const addFiles = useCallback(
-    async (files: FileList | File[]) => {
-      // Only take as many as still fit, so we don't upload files we'd then have
-      // to silently drop past the cap. Reserved slots are in-flight files from
-      // overlapping addFiles calls that have not landed in `pending` yet.
-      const generation = generationRef.current
-      const slotsLeft =
-        MAX_CONVERSATION_ATTACHMENTS - pendingRef.current.length - reservedSlotsRef.current
-      const list = Array.from(files).slice(0, Math.max(0, slotsLeft))
-      if (list.length === 0) return
-      reservedSlotsRef.current += list.length
-      inFlightBatchesRef.current += 1
-      setUploading(true)
-      try {
-        const results = await Promise.allSettled(
-          list.map(async (f) => ({
-            url: await upload(f),
-            name: f.name,
-            contentType: f.type,
-            size: f.size,
-          }))
-        )
-        if (generation !== generationRef.current) return
-        const uploaded = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []))
-        if (uploaded.length === 0) return
-        setPending((prev) => [...prev, ...uploaded].slice(0, MAX_CONVERSATION_ATTACHMENTS))
-      } finally {
-        if (generation !== generationRef.current) return
-        reservedSlotsRef.current = Math.max(0, reservedSlotsRef.current - list.length)
-        inFlightBatchesRef.current = Math.max(0, inFlightBatchesRef.current - 1)
-        setUploading(inFlightBatchesRef.current > 0)
+  const patchItem = useCallback((localId: string, patch: Partial<ComposerAttachmentItem>) => {
+    setItems((prev) => prev.map((it) => (it.localId === localId ? { ...it, ...patch } : it)))
+  }, [])
+
+  const runUpload = useCallback(
+    (localId: string, file: File, generation: number): Promise<void> => {
+      const failure = checkFileBeforeUpload(file) ?? precheck?.(file) ?? null
+      if (failure) {
+        patchItem(localId, { status: 'error', error: failure.message, retryable: !failure.reason })
+        return Promise.resolve()
       }
+      const controller = new AbortController()
+      controllersRef.current.set(localId, controller)
+      return upload(file, {
+        onProgress: (progress) => {
+          if (generationRef.current !== generation) return
+          patchItem(localId, { progress })
+        },
+        signal: controller.signal,
+      }).then(
+        (uploaded) => {
+          controllersRef.current.delete(localId)
+          if (generationRef.current !== generation) return
+          patchItem(localId, {
+            status: 'ready',
+            progress: 1,
+            file: uploaded,
+            error: undefined,
+            retryable: undefined,
+          })
+        },
+        (err: unknown) => {
+          controllersRef.current.delete(localId)
+          if (generationRef.current !== generation) return
+          if (err instanceof DOMException && err.name === 'AbortError') return
+          const message = err instanceof Error ? err.message : 'Upload failed'
+          const retryable = !(err instanceof UploadError && !!err.reason)
+          patchItem(localId, { status: 'error', error: message, retryable })
+        }
+      )
     },
-    [upload]
+    [upload, precheck, patchItem]
   )
 
-  const remove = useCallback((index: number) => {
-    setPending((prev) => prev.filter((_, i) => i !== index))
+  const addFiles = useCallback(
+    (files: FileList | File[]): Promise<void> => {
+      const generation = generationRef.current
+      const slotsLeft =
+        MAX_CONVERSATION_ATTACHMENTS - itemsRef.current.length - reservedSlotsRef.current
+      const list = Array.from(files).slice(0, Math.max(0, slotsLeft))
+      if (list.length === 0) return Promise.resolve()
+      reservedSlotsRef.current += list.length
+
+      const newItems = list.map((file) => {
+        const previewUrl =
+          familyFor(file.name, file.type) === 'image' ? URL.createObjectURL(file) : undefined
+        const item = makeItem(file, previewUrl)
+        filesRef.current.set(item.localId, file)
+        return item
+      })
+      setItems((prev) => [...prev, ...newItems])
+
+      const settled = newItems.map((item, i) =>
+        runUpload(item.localId, list[i]!, generation).finally(() => {
+          reservedSlotsRef.current = Math.max(0, reservedSlotsRef.current - 1)
+        })
+      )
+      return Promise.all(settled).then(() => undefined)
+    },
+    [runUpload]
+  )
+
+  const retry = useCallback(
+    (localId: string): Promise<void> => {
+      const file = filesRef.current.get(localId)
+      if (!file) return Promise.resolve()
+      const generation = generationRef.current
+      patchItem(localId, { status: 'uploading', progress: 0, error: undefined, retryable: undefined })
+      return runUpload(localId, file, generation)
+    },
+    [runUpload, patchItem]
+  )
+
+  const remove = useCallback((localId: string) => {
+    controllersRef.current.get(localId)?.abort()
+    controllersRef.current.delete(localId)
+    filesRef.current.delete(localId)
+    setItems((prev) => {
+      const found = prev.find((it) => it.localId === localId)
+      if (found?.previewUrl) URL.revokeObjectURL(found.previewUrl)
+      return prev.filter((it) => it.localId !== localId)
+    })
   }, [])
 
   const clear = useCallback(() => {
     generationRef.current += 1
-    inFlightBatchesRef.current = 0
     reservedSlotsRef.current = 0
-    setUploading(false)
-    setPending([])
+    controllersRef.current.forEach((controller) => controller.abort())
+    controllersRef.current.clear()
+    filesRef.current.clear()
+    setItems((prev) => {
+      prev.forEach((it) => {
+        if (it.previewUrl) URL.revokeObjectURL(it.previewUrl)
+      })
+      return []
+    })
   }, [])
-  // Re-populate the composer, e.g. to restore a snapshot after a failed send so
-  // the already-uploaded files aren't lost.
-  const restore = useCallback((items: ConversationAttachment[]) => setPending(items), [])
 
-  return { pending, addFiles, remove, clear, restore, uploading }
+  // Re-populate the composer, e.g. to restore a snapshot after a failed send
+  // so the already-uploaded files aren't lost. Replaces the tray wholesale —
+  // any abandoned tiles release their resources first.
+  const restore = useCallback((attachments: ConversationAttachment[]) => {
+    controllersRef.current.forEach((controller) => controller.abort())
+    controllersRef.current.clear()
+    filesRef.current.clear()
+    setItems((prev) => {
+      prev.forEach((it) => {
+        if (it.previewUrl) URL.revokeObjectURL(it.previewUrl)
+      })
+      return attachments.map((a) => {
+        const family = a.family ?? familyFor(a.name, a.contentType)
+        return {
+          localId: createLocalId(),
+          name: a.name,
+          size: a.size,
+          family,
+          status: 'ready',
+          progress: 1,
+          file: {
+            fileId: a.fileId ?? '',
+            url: a.url,
+            name: a.name,
+            contentType: a.contentType,
+            size: a.size,
+            family,
+          },
+        }
+      })
+    })
+  }, [])
+
+  const uploading = items.some((it) => it.status === 'uploading')
+  const hasErrors = items.some((it) => it.status === 'error')
+  const attachments = items.flatMap((it) =>
+    it.status === 'ready' && it.file ? [toAttachment(it.file)] : []
+  )
+
+  return { items, attachments, addFiles, remove, retry, clear, restore, uploading, hasErrors }
 }
