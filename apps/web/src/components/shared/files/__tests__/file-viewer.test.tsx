@@ -139,11 +139,16 @@ describe('FileViewer header', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
-  it('offers Download as a link to the stored file, named for the file', async () => {
-    renderViewer()
+  it('offers Download as a link the storage route answers as an attachment, named for the file', async () => {
+    renderViewer({ files: [{ ...invoice, name: 'Prüfbericht März.pdf' }] })
     const link = await screen.findByRole('link', { name: 'Download' })
-    expect(link).toHaveAttribute('href', '/api/storage/files/invoice.pdf?read=tok')
-    expect(link).toHaveAttribute('download', 'invoice.pdf')
+    // The `download` attribute is ignored across origins; the route's
+    // Content-Disposition carries the name instead.
+    expect(link).toHaveAttribute(
+      'href',
+      '/api/storage/files/invoice.pdf?read=tok&download=1&filename=Pr%C3%BCfbericht%20M%C3%A4rz.pdf'
+    )
+    expect(link).not.toHaveAttribute('download')
   })
 
   it('closes from the Close button', async () => {
@@ -433,8 +438,11 @@ describe('FileViewer fallback', () => {
     const links = screen.getAllByRole('link', { name: 'Download' })
     expect(links.length).toBeGreaterThanOrEqual(2)
     for (const link of links) {
-      expect(link).toHaveAttribute('href', '/api/storage/files/q4-roadmap.pptx')
-      expect(link).toHaveAttribute('download', 'q4-roadmap.pptx')
+      expect(link).toHaveAttribute(
+        'href',
+        '/api/storage/files/q4-roadmap.pptx?download=1&filename=q4-roadmap.pptx'
+      )
+      expect(link).not.toHaveAttribute('download')
     }
   })
 

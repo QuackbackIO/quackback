@@ -36,6 +36,7 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { buttonVariants } from '@/components/ui/button'
 import { formatBytes, MAX_ATTACHMENT_BYTES } from '@/lib/shared/files/file-types'
 import { cn } from '@/lib/shared/utils'
+import { downloadUrl } from './download-url'
 import { FileBadge } from './file-badge'
 import type { EngineFailure, EngineToolbar, ViewerEngineProps, ViewerFile } from './types'
 import { ENGINES, engineFor, fetchModeFor, TEXT_HEAD_BYTES, type EngineKind } from './viewers'
@@ -367,8 +368,7 @@ export default function FileViewer({
   })
   const download = (
     <a
-      href={file.url}
-      download={file.name}
+      href={downloadUrl(file.url, file.name)}
       aria-label={downloadLabel}
       title={downloadLabel}
       className={TOOL_BUTTON}
@@ -695,8 +695,7 @@ export function ViewerFallback({ file, failure }: { file: ViewerFile; failure: E
       <p className="text-sm font-medium text-foreground">{intl.formatMessage(message)}</p>
       {failure !== 'unavailable' && (
         <a
-          href={file.url}
-          download={file.name}
+          href={downloadUrl(file.url, file.name)}
           className={buttonVariants({ variant: 'outline', size: 'sm' })}
         >
           <ArrowDownTrayIcon />
