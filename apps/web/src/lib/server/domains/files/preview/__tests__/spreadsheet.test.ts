@@ -1,8 +1,12 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import XLSX from 'xlsx'
-import { zipSync } from 'fflate'
+import { unzipSync, zipSync, strToU8 } from 'fflate'
 import { deriveSpreadsheetPreview } from '../spreadsheet'
-import { ZipBudgetError } from '@/lib/shared/files/zip-budget'
+import { readZipIndex, ZipBudgetError, ZipFormatError } from '@/lib/shared/files/zip-budget'
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
 
 const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
@@ -64,6 +68,54 @@ describe('deriveSpreadsheetPreview', () => {
     )
     expect(ods.meta).toMatchObject({ sheets: ['Data', 'Summary'], rows: 501 })
     expect(ods.meta.head![1]![0]).toBe('Row 1')
+  })
+
+  it('hands the sheet parser only the parts it reads, re-zipped from the verified index', async () => {
+    const parts = unzipSync(write('xlsx'))
+    parts['xl/media/image1.png'] = new Uint8Array(4096)
+    const read = vi.spyOn(XLSX, 'read')
+
+    const result = await deriveSpreadsheetPreview(zipSync(parts), XLSX_TYPE)
+
+    expect(result.meta).toMatchObject({ sheets: ['Data', 'Summary'], rows: 501 })
+    expect(read).toHaveBeenCalledTimes(1)
+    const given = read.mock.calls[0]![0] as Uint8Array
+    const entries = readZipIndex(new Uint8Array(given))
+    expect(entries.map((e) => e.name).sort()).toEqual(
+      [
+        '[Content_Types].xml',
+        'xl/workbook.xml',
+        'xl/_rels/workbook.xml.rels',
+        'xl/worksheets/sheet1.xml',
+        'xl/styles.xml',
+      ].sort()
+    )
+    // Stored, so the parser inflates nothing.
+    expect(entries.every((e) => e.compression === 0)).toBe(true)
+  })
+
+  it('refuses a workbook with a second end record after the one the index reads', async () => {
+    const zip = write('xlsx')
+    const tail = new Uint8Array([0x50, 0x4b, 0x05, 0x06, 0, 0, 0, 0, 0, 0])
+    const out = new Uint8Array(zip.length + tail.length)
+    out.set(zip)
+    out.set(tail, zip.length)
+    // The end record's comment length covers the tail.
+    const eocd = zip.length - 22
+    out[eocd + 20] = tail.length
+    await expect(deriveSpreadsheetPreview(out, XLSX_TYPE)).rejects.toBeInstanceOf(ZipFormatError)
+  })
+
+  it('refuses a workbook whose local header disagrees with the index for a part it reads', async () => {
+    const zip = zipSync({
+      '[Content_Types].xml': strToU8('<Types/>'),
+      'xl/workbook.xml': strToU8('<workbook/>'),
+    })
+    // The workbook's local header claims another uncompressed size than its index does.
+    const lying = zip.slice()
+    const workbookEntry = readZipIndex(zip).find((e) => e.name === 'xl/workbook.xml')!
+    new DataView(lying.buffer).setUint32(workbookEntry.localHeaderOffset + 22, 999, true)
+    await expect(deriveSpreadsheetPreview(lying, XLSX_TYPE)).rejects.toBeInstanceOf(ZipFormatError)
   })
 
   it('refuses a zip bomb before the sheet parser sees it', async () => {

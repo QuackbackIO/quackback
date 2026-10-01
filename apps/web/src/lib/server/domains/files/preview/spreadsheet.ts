@@ -1,12 +1,12 @@
 /**
  * Workbooks (.xlsx, .xlsm, .xls, .ods): sheet names, the first sheet's row
- * count and first rows. The sheet parser inflates every part of a zip
- * container itself, so the archive must pass the zip budget and prove its
- * declared sizes first; it then reads only the first sheet, and only its
- * first rows, with formulas, styles and HTML off.
+ * count and first rows. A zip container never reaches the sheet parser as
+ * sent: it gets a new zip of the parts the preview reads, inflated through
+ * the zip budget (see workbook-parts.ts). The parser then reads only the
+ * first sheet, and only its first rows, with formulas, styles and HTML off.
  */
-import { openZip, verifyZipSizes } from '@/lib/shared/files/zip-budget'
 import { stripInvisible } from '@/lib/shared/files/file-name'
+import { rebuildWorkbookZip } from './workbook-parts'
 import {
   NO_DEADLINE,
   cell,
@@ -34,14 +34,14 @@ function isZip(bytes: Uint8Array): boolean {
 
 export async function deriveSpreadsheetPreview(
   bytes: Uint8Array,
-  _contentType: string,
+  contentType: string,
   deadline: Pick<Deadline, 'check'> = NO_DEADLINE
 ): Promise<PreviewResult> {
-  if (isZip(bytes)) verifyZipSizes(bytes, openZip(bytes).entries)
+  const input = isZip(bytes) ? rebuildWorkbookZip(bytes, contentType) : bytes
   deadline.check()
 
   const XLSX = await loadDependency('xlsx', async () => (await import('xlsx')).default)
-  const workbook = XLSX.read(Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength), {
+  const workbook = XLSX.read(Buffer.from(input.buffer, input.byteOffset, input.byteLength), {
     type: 'buffer',
     sheets: 0,
     sheetRows: PARSED_ROWS,

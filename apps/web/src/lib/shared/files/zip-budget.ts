@@ -8,6 +8,11 @@
  * outgrows what its index declared or what the caller asked for. Inflating
  * in steps bounds both memory and CPU: a lying entry costs at most the cap
  * plus one step, never its real size.
+ *
+ * A reader that inflates parts (`openZip`) also holds the archive to one
+ * reading: no second end record after the one the index came from (a parser
+ * that scans from the very end would read another index), and every local
+ * header it inflates agrees with the index about method and sizes.
  */
 import { Inflate } from 'fflate'
 
@@ -112,6 +117,13 @@ function applyZip64Extra(
  * data. `maxEntries` refuses an index before walking it.
  */
 export function readZipIndex(bytes: Uint8Array, options: { maxEntries?: number } = {}): ZipEntry[] {
+  return readIndex(bytes, options).entries
+}
+
+function readIndex(
+  bytes: Uint8Array,
+  options: { maxEntries?: number }
+): { entries: ZipEntry[]; end: number } {
   const eocd = findEndOfCentralDirectory(bytes)
   if (eocd < 0) throw new ZipFormatError('No zip index')
 
@@ -164,7 +176,15 @@ export function readZipIndex(bytes: Uint8Array, options: { maxEntries?: number }
     entries.push(entry)
     p = nameStart + nameLength + extraLength + commentLength
   }
-  return entries
+  return { entries, end: eocd }
+}
+
+/** Whether an end-of-central-directory signature starts anywhere after `end`. */
+function hasLaterEndRecord(b: Uint8Array, end: number): boolean {
+  for (let i = end + 1; i + 4 <= b.length; i++) {
+    if (b[i] === 0x50 && b[i + 1] === 0x4b && b[i + 2] === 0x05 && b[i + 3] === 0x06) return true
+  }
+  return false
 }
 
 /** Refuse an archive whose index promises more than the budget allows. */
@@ -195,13 +215,49 @@ export interface InflateOptions {
   truncate?: boolean
 }
 
+/**
+ * The sizes a local header records: zip64 sizes from its extra field (where
+ * a local header carries both, original first) for a field that overflowed.
+ */
+function localSizes(
+  b: Uint8Array,
+  local: number,
+  extraStart: number,
+  extraEnd: number
+): { compressed: number; original: number } {
+  const sizes = { compressed: u32(b, local + 18), original: u32(b, local + 22) }
+  if (sizes.compressed !== 0xffffffff && sizes.original !== 0xffffffff) return sizes
+  for (let p = extraStart; p + 4 <= extraEnd;) {
+    const id = u16(b, p)
+    const size = u16(b, p + 2)
+    if (id === 0x0001 && size >= 16 && p + 20 <= extraEnd) {
+      return { original: u64(b, p + 4), compressed: u64(b, p + 12) }
+    }
+    p += 4 + size
+  }
+  return sizes
+}
+
 function entryData(bytes: Uint8Array, entry: ZipEntry): Uint8Array {
   const local = entry.localHeaderOffset
   if (!within(bytes, local, 30) || u32(bytes, local) !== 0x04034b50) {
     throw new ZipFormatError('Broken zip entry')
   }
-  const start = local + 30 + u16(bytes, local + 26) + u16(bytes, local + 28)
+  const extraStart = local + 30 + u16(bytes, local + 26)
+  const start = extraStart + u16(bytes, local + 28)
   if (!within(bytes, start, entry.compressedSize)) throw new ZipFormatError('Broken zip entry')
+
+  // The local header must tell the same story as the index. One that defers
+  // its sizes to a data descriptor (flag bit 3) records zeros instead.
+  if (u16(bytes, local + 8) !== entry.compression) {
+    throw new ZipFormatError('Zip entry headers disagree')
+  }
+  if ((u16(bytes, local + 6) & 0x08) === 0) {
+    const sizes = localSizes(bytes, local, extraStart, start)
+    if (sizes.compressed !== entry.compressedSize || sizes.original !== entry.originalSize) {
+      throw new ZipFormatError('Zip entry headers disagree')
+    }
+  }
   return bytes.subarray(start, start + entry.compressedSize)
 }
 
@@ -271,35 +327,20 @@ export function inflateZipEntry(
   return out.subarray(0, filled)
 }
 
-/**
- * Inflate every entry and discard the output, refusing any that outgrows its
- * declared size. Run it before handing an archive to a parser that inflates
- * every entry itself: afterwards the index's sizes are the real ones, so the
- * budget check bounds what that parser can be made to inflate.
- */
-export function verifyZipSizes(bytes: Uint8Array, entries: ZipEntry[]): void {
-  for (const entry of entries) {
-    const data = entryData(bytes, entry)
-    if (entry.compression === 0) {
-      if (data.byteLength > entry.originalSize) {
-        throw new ZipBudgetError('Zip entry outgrows its index')
-      }
-      continue
-    }
-    if (entry.compression !== 8) throw new ZipFormatError('Unsupported zip compression')
-    inflateInSteps(data, entry, () => false)
-  }
-}
-
 export interface ZipReader {
   entries: ZipEntry[]
   /** An entry's bytes, or null when the archive has no such entry. */
   read(name: string, options?: InflateOptions): Uint8Array | null
 }
 
-/** Index the archive, check it against the budget, and read entries by name. */
+/**
+ * Index the archive, check it against the budget, and read entries by name.
+ * An archive with a second end record after the one the index came from is
+ * refused: another reader could take that one and read a different index.
+ */
 export function openZip(bytes: Uint8Array, budget: ZipBudget = ZIP_BUDGET): ZipReader {
-  const entries = readZipIndex(bytes, { maxEntries: budget.maxEntries })
+  const { entries, end } = readIndex(bytes, { maxEntries: budget.maxEntries })
+  if (hasLaterEndRecord(bytes, end)) throw new ZipFormatError('Zip has a second end record')
   checkZipBudget(entries, budget)
   const byName = new Map(entries.map((e) => [e.name, e]))
   return {

@@ -5,7 +5,6 @@ import {
   checkZipBudget,
   openZip,
   inflateZipEntry,
-  verifyZipSizes,
   ZipBudgetError,
   ZipFormatError,
 } from '../zip-budget'
@@ -40,6 +39,29 @@ function claimOriginalSize(zip: Uint8Array, entryIndex: number, size: number): U
   setU32(out, central + 24, size)
   const local = u32(out, central + 42)
   setU32(out, local + 22, size)
+  return out
+}
+
+/** A zip fflate wrote (no comment), with `comment` appended to its end record. */
+function withComment(zip: Uint8Array, comment: Uint8Array): Uint8Array {
+  const eocd = zip.length - 22
+  const out = new Uint8Array(zip.length + comment.length)
+  out.set(zip)
+  out.set(comment, zip.length)
+  out[eocd + 20] = comment.length & 0xff
+  out[eocd + 21] = comment.length >>> 8
+  return out
+}
+
+/** Rewrite a field of one entry's local header, leaving its index record alone. */
+function editLocalHeader(
+  zip: Uint8Array,
+  entryIndex: number,
+  edit: (out: Uint8Array, local: number) => void
+): Uint8Array {
+  const out = zip.slice()
+  const central = centralHeaders(out)[entryIndex]!
+  edit(out, u32(out, central + 42))
   return out
 }
 
@@ -147,11 +169,42 @@ describe('inflateZipEntry', () => {
   })
 })
 
-describe('verifyZipSizes', () => {
-  it('passes an honest archive and refuses one whose entry outgrows its index', () => {
-    const zip = zipSync({ 'a.xml': strToU8('<row/>'.repeat(5000)), 'b.xml': strToU8('<b/>') })
-    expect(() => verifyZipSizes(zip, readZipIndex(zip))).not.toThrow()
-    const lying = claimOriginalSize(zip, 0, 64)
-    expect(() => verifyZipSizes(lying, readZipIndex(lying))).toThrow(ZipBudgetError)
+describe('openZip: one index, read one way', () => {
+  const text = '<row/>'.repeat(5000)
+  const zip = zipSync({ 'a.xml': strToU8(text), 'b.xml': strToU8('<b/>') })
+
+  it('refuses a zip with a second end record after the one it reads', () => {
+    // Too close to the end for the index reader to take, so another reader
+    // scanning from the very end would read a different index.
+    const tail = new Uint8Array([0x50, 0x4b, 0x05, 0x06, 0, 0, 0, 0, 0, 0])
+    expect(() => openZip(withComment(zip, tail))).toThrow(ZipFormatError)
+  })
+
+  it('reads a zip whose comment holds no end record', () => {
+    const reader = openZip(withComment(zip, strToU8('made by a spreadsheet app')))
+    expect(new TextDecoder().decode(reader.read('a.xml')!)).toBe(text)
+  })
+
+  it('refuses an entry whose local header disagrees with its index', () => {
+    const lies = [
+      editLocalHeader(zip, 0, (out, local) => setU32(out, local + 22, 64)),
+      editLocalHeader(zip, 0, (out, local) => setU32(out, local + 18, 10)),
+      editLocalHeader(zip, 0, (out, local) => (out[local + 8] = 0)),
+    ]
+    for (const lying of lies) {
+      expect(() => openZip(lying).read('a.xml')).toThrow(ZipFormatError)
+    }
+    // Another entry, whose headers agree, still reads.
+    expect(new TextDecoder().decode(openZip(lies[0]!).read('b.xml')!)).toBe('<b/>')
+  })
+
+  it('accepts a local header that leaves its sizes to a data descriptor', () => {
+    const deferred = editLocalHeader(zip, 0, (out, local) => {
+      out[local + 6] = out[local + 6]! | 0x08
+      setU32(out, local + 14, 0)
+      setU32(out, local + 18, 0)
+      setU32(out, local + 22, 0)
+    })
+    expect(new TextDecoder().decode(openZip(deferred).read('a.xml')!)).toBe(text)
   })
 })
