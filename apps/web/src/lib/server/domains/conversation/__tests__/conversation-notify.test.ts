@@ -913,6 +913,7 @@ describe('conversation email attachments', () => {
           url: '/api/storage/files/a.pdf?read=sig',
           name: 'a.pdf',
           contentType: 'application/pdf',
+          fileId: 'file_1',
           size: bytes.byteLength,
         },
       ],
@@ -970,6 +971,7 @@ describe('conversation email attachments', () => {
           url: '/api/storage/files/notes.txt?read=sig',
           name: 'notes.txt',
           contentType: 'text/plain',
+          fileId: 'file_1',
           size: bytes.byteLength,
         },
       ],
@@ -981,31 +983,82 @@ describe('conversation email attachments', () => {
     ])
   })
 
-  it('carries the visitor attachment through to the team email', async () => {
-    isAnyAgentOnline.mockResolvedValue(false)
-    teamRows = [{ principalId: 'principal_admin', email: 'a@x.com', name: 'A' }]
-    const bytes = new TextEncoder().encode('screenshot-bytes')
-    getS3Object.mockResolvedValue({ body: streamOf(bytes), contentType: 'image/png' })
+  // The team alert is about the VISITOR's own message, so its attachments get
+  // an extra gate resolveEmailAttachments's agent-reply callers never need:
+  // real MIME only from a sender the alert can vouch for (an identified
+  // session on our own surface). An anonymous visitor or an inbound-email
+  // correspondent always links, whatever the file's type.
+  describe('team alert sender trust', () => {
+    const screenshotAttachment = [
+      {
+        url: '/api/storage/files/screenshot.png?read=sig',
+        name: 'screenshot.png',
+        contentType: 'image/png',
+        fileId: 'file_1',
+        size: 17,
+      },
+    ]
 
-    await notifyVisitorMessage({
-      conversation,
-      content: 'see my screenshot',
-      authorName: 'Visitor',
-      isFirstMessage: true,
-      attachments: [
-        {
-          url: '/api/storage/files/screenshot.png?read=sig',
-          name: 'screenshot.png',
-          contentType: 'image/png',
-          size: bytes.byteLength,
-        },
-      ],
+    it('carries an identified visitor’s own attachment through to the team email', async () => {
+      isAnyAgentOnline.mockResolvedValue(false)
+      teamRows = [{ principalId: 'principal_admin', email: 'a@x.com', name: 'A' }]
+      visitorRows = [{ type: 'user' }]
+      const bytes = new TextEncoder().encode('screenshot-bytes')
+      getS3Object.mockResolvedValue({ body: streamOf(bytes), contentType: 'image/png' })
+
+      await notifyVisitorMessage({
+        conversation: { id: conversationId, channel: 'messenger' } as unknown as Conversation,
+        content: 'see my screenshot',
+        authorName: 'Visitor',
+        isFirstMessage: true,
+        attachments: screenshotAttachment,
+      })
+
+      const call = sendConversationMessageEmail.mock.calls[0][0]
+      expect(call.attachments).toEqual([
+        { filename: 'screenshot.png', contentType: 'image/png', content: bytes },
+      ])
     })
 
-    const call = sendConversationMessageEmail.mock.calls[0][0]
-    expect(call.attachments).toEqual([
-      { filename: 'screenshot.png', contentType: 'image/png', content: bytes },
-    ])
+    it('never attaches an anonymous visitor’s file to the team alert, links instead', async () => {
+      isAnyAgentOnline.mockResolvedValue(false)
+      teamRows = [{ principalId: 'principal_admin', email: 'a@x.com', name: 'A' }]
+      visitorRows = [{ type: 'anonymous' }]
+      getEmailSafeUrl.mockImplementation((key) => (key ? `https://cdn.test/${key}?email=1` : null))
+
+      await notifyVisitorMessage({
+        conversation: { id: conversationId, channel: 'messenger' } as unknown as Conversation,
+        content: 'see my screenshot',
+        authorName: 'Visitor',
+        isFirstMessage: true,
+        attachments: screenshotAttachment,
+      })
+
+      expect(getS3Object).not.toHaveBeenCalled()
+      const call = sendConversationMessageEmail.mock.calls[0][0]
+      expect(call.attachments).toEqual([])
+      expect(call.bodyHtml).toContain('https://cdn.test/files/screenshot.png?email=1')
+    })
+
+    it('never attaches an inbound-email visitor’s file to the team alert, even an identified one', async () => {
+      isAnyAgentOnline.mockResolvedValue(false)
+      teamRows = [{ principalId: 'principal_admin', email: 'a@x.com', name: 'A' }]
+      // Identified ('user'), but arriving over the email correspondence
+      // channel — still unverified for MIME-attachment purposes.
+      visitorRows = [{ type: 'user' }]
+
+      await notifyVisitorMessage({
+        conversation: { id: conversationId, channel: 'email' } as unknown as Conversation,
+        content: 'see my screenshot',
+        authorName: 'Visitor',
+        isFirstMessage: true,
+        attachments: screenshotAttachment,
+      })
+
+      expect(getS3Object).not.toHaveBeenCalled()
+      const call = sendConversationMessageEmail.mock.calls[0][0]
+      expect(call.attachments).toEqual([])
+    })
   })
 })
 

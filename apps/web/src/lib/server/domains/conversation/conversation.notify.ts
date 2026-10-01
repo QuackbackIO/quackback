@@ -63,6 +63,7 @@ import {
 import {
   appendLinkedAttachmentsHtml,
   resolveEmailAttachments,
+  type ResolveEmailAttachmentsOptions,
 } from './conversation.email-attachments'
 import { logger } from '@/lib/server/logger'
 
@@ -104,22 +105,42 @@ function messageBodyHtml(content: string, contentJson?: JSONContent | null): str
 
 /**
  * The message body, plus whatever its attachments resolve to: real MIME parts
- * for the files that fit the per-email budget, and the rest appended to the
- * body as a plain "Attachments" links list (see conversation.email-attachments).
- * Attachment-free messages (the overwhelming majority) pay only the cost of
- * an early-return check.
+ * for the files that are safe to send inline and fit the per-email budget,
+ * and the rest appended to the body as a plain "Attachments" links list (see
+ * conversation.email-attachments). Attachment-free messages (the overwhelming
+ * majority) pay only the cost of an early-return check.
  */
 async function resolvedMessageBody(
   content: string,
   contentJson: JSONContent | null | undefined,
-  attachments: ConversationAttachment[] | null | undefined
+  attachments: ConversationAttachment[] | null | undefined,
+  options?: ResolveEmailAttachmentsOptions
 ): Promise<{ bodyHtml: string; attachments: EmailAttachment[] }> {
   const base = messageBodyHtml(content, contentJson)
-  const resolved = await resolveEmailAttachments(attachments)
+  const resolved = await resolveEmailAttachments(attachments, options)
   return {
     bodyHtml: appendLinkedAttachmentsHtml(base, resolved.linked),
     attachments: resolved.attachments,
   }
+}
+
+/**
+ * Whether the visitor behind THIS conversation's current message is one the
+ * team alert can vouch for: an identified session on our own surface
+ * (messenger covers both the widget and the portal). False for an anonymous
+ * visitor and for any correspondence channel (email, GitHub) — arrival there
+ * says nothing about what the attached bytes actually are, so those files
+ * reach the team alert as links only, never as real MIME (the `trustedSender`
+ * resolveEmailAttachments takes — see conversation.email-attachments).
+ */
+async function isVerifiedVisitorSender(conversation: Conversation): Promise<boolean> {
+  if (getChannelDescriptor(conversation.channel)?.surface === 'theirs') return false
+  const [visitor] = await db
+    .select({ type: principal.type })
+    .from(principal)
+    .where(eq(principal.id, conversation.visitorPrincipalId))
+    .limit(1)
+  return visitor?.type === 'user'
 }
 
 /**
@@ -279,7 +300,8 @@ export async function notifyVisitorMessage(opts: {
       const resolvedBody = await resolvedMessageBody(
         opts.content,
         opts.contentJson,
-        opts.attachments
+        opts.attachments,
+        { trustedSender: await isVerifiedVisitorSender(opts.conversation) }
       )
       await Promise.allSettled(
         team
