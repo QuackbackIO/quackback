@@ -175,6 +175,7 @@
   "files.archive.andMore": "and {hidden} more",
   "files.archive.andMoreCapped": "and {hidden}+ more",
   "files.sheet.truncatedRows": "First {count, plural, one {# row} other {# rows}}",
+  "files.sheet.truncatedColumns": "First {count, plural, one {# column} other {# columns}}",
   "files.sheet.tabsAria": "Sheets",
   "files.pdf.railAria": "Pages",
   "files.pdf.pageAria": "Page {number}",

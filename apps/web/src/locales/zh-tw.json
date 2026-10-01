@@ -175,6 +175,7 @@
   "files.archive.andMore": "還有 {hidden} 個",
   "files.archive.andMoreCapped": "還有 {hidden}+ 個",
   "files.sheet.truncatedRows": "前 {count, plural, other {# 行}}",
+  "files.sheet.truncatedColumns": "前 {count, plural, other {# 欄}}",
   "files.sheet.tabsAria": "工作表",
   "files.pdf.railAria": "頁面",
   "files.pdf.pageAria": "第 {number} 頁",

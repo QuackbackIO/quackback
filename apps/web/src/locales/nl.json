@@ -175,6 +175,7 @@
   "files.archive.andMore": "en {hidden} meer",
   "files.archive.andMoreCapped": "en {hidden}+ meer",
   "files.sheet.truncatedRows": "Eerste {count, plural, one {# rij} other {# rijen}}",
+  "files.sheet.truncatedColumns": "Eerste {count, plural, one {# kolom} other {# kolommen}}",
   "files.sheet.tabsAria": "Bladen",
   "files.pdf.railAria": "Pagina's",
   "files.pdf.pageAria": "Pagina {number}",

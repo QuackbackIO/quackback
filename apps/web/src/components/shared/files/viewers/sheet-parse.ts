@@ -68,7 +68,8 @@ function sheetFromWorksheet(name: string, ws: XLSX.WorkSheet | undefined): Sheet
     merges: [],
     colCount: 0,
     totalRows: 0,
-    truncated: false,
+    rowsTruncated: false,
+    columnsTruncated: false,
   }
   const ref = ws?.['!ref']
   if (!ws || !ref) return empty
@@ -86,21 +87,24 @@ function sheetFromWorksheet(name: string, ws: XLSX.WorkSheet | undefined): Sheet
   const formulas: Record<string, string> = {}
   for (let r = 0; r < rowCount; r++) {
     const source = data[r]
-    const row = new Array<string>(colCount)
+    const row: string[] = []
     let kinds = ''
-    for (let c = 0; c < colCount; c++) {
-      const cell = source?.[c]
+    // A dense row is only as long as its last cell; stop there or at the cap.
+    const width = Math.min(colCount, source?.length ?? 0)
+    for (let c = 0; c < width; c++) {
+      const cell = source![c]
       if (!cell || cell.t === 'z') {
-        row[c] = ''
+        row.push('')
         kinds += ' '
         continue
       }
-      row[c] = displayText(cell)
+      row.push(displayText(cell))
       kinds += KINDS[cell.t] ?? 's'
       if (typeof cell.f === 'string' && cell.f !== '') formulas[cellRef(r, c)] = `=${cell.f}`
     }
+    trimRow(row)
     rows.push(row)
-    types.push(kinds)
+    types.push(kinds.slice(0, row.length))
   }
 
   return {
@@ -111,8 +115,16 @@ function sheetFromWorksheet(name: string, ws: XLSX.WorkSheet | undefined): Sheet
     merges: clipMerges(ws['!merges'] ?? [], rowCount, colCount),
     colCount,
     totalRows: sheetRowCount,
-    truncated: sheetRowCount > MAX_SHEET_ROWS || range.e.c + 1 > MAX_SHEET_COLUMNS,
+    rowsTruncated: sheetRowCount > MAX_SHEET_ROWS,
+    columnsTruncated: range.e.c + 1 > MAX_SHEET_COLUMNS,
   }
+}
+
+/** Drops a row's trailing empty cells, so an empty cell costs nothing. */
+function trimRow(row: string[]): void {
+  let end = row.length
+  while (end > 0 && row[end - 1] === '') end--
+  row.length = end
 }
 
 function displayText(cell: XLSX.CellObject): string {
@@ -160,11 +172,10 @@ function parseDelimited(bytes: Uint8Array, source: 'csv' | 'tsv'): SheetParseRes
   const types: string[] = []
   for (let r = 0; r < read; r++) {
     const record = data[r]!
-    const row = new Array<string>(colCount)
+    const row = record.length > colCount ? record.slice(0, colCount) : record
+    trimRow(row)
     let kinds = ''
-    for (let c = 0; c < colCount; c++) {
-      const value = record[c] ?? ''
-      row[c] = value
+    for (const value of row) {
       kinds += value === '' ? ' ' : /\d/.test(value) && NUMBER.test(value.trim()) ? 'n' : 's'
     }
     rows.push(row)
@@ -182,7 +193,8 @@ function parseDelimited(bytes: Uint8Array, source: 'csv' | 'tsv'): SheetParseRes
         merges: [],
         colCount,
         totalRows: data.length,
-        truncated: data.length > MAX_SHEET_ROWS || widest > MAX_SHEET_COLUMNS,
+        rowsTruncated: data.length > MAX_SHEET_ROWS,
+        columnsTruncated: widest > MAX_SHEET_COLUMNS,
       },
     ],
   }

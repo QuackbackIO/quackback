@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as XLSX from 'xlsx'
 import { strToU8, zipSync } from 'fflate'
-import { MAX_SHEET_COLUMNS, MAX_SHEET_ROWS, sheetSourceFor } from '../sheet-model'
+import { MAX_SHEET_COLUMNS, MAX_SHEET_ROWS, columnLabel, sheetSourceFor } from '../sheet-model'
 import { handleSheetRequest, parseSheets } from '../sheet-parse'
 import { declareSize, deferSizes } from './zip-fixtures'
 
@@ -46,15 +46,19 @@ describe('parseSheets: workbooks', () => {
     expect(s!.name).toBe('Invoice')
     expect(s!.rows[0]).toEqual(['Item', 'Amount', 'Share'])
     expect(s!.rows[1]).toEqual(['Seats', '1,234.50', '25%'])
-    expect(s!.rows[3]).toEqual(['Total', '1,333.50', ''])
-    expect(s!.rows[5]).toEqual(['Paid in full', '', ''])
+    // Each row stops at its last filled cell; empty cells cost nothing.
+    expect(s!.rows[3]).toEqual(['Total', '1,333.50'])
+    expect(s!.rows[4]).toEqual([])
+    expect(s!.rows[5]).toEqual(['Paid in full'])
     expect(s!.formulas).toEqual({ B4: '=SUM(B2:B3)' })
     expect(s!.merges).toEqual([{ s: { r: 5, c: 0 }, e: { r: 5, c: 2 } }])
     expect(s!.types[1]).toBe('snn')
-    expect(s!.types[4]).toBe('   ')
+    expect(s!.types[3]).toBe('sn')
+    expect(s!.types[4]).toBe('')
     expect(s!.totalRows).toBe(6)
     expect(s!.colCount).toBe(3)
-    expect(s!.truncated).toBe(false)
+    expect(s!.rowsTruncated).toBe(false)
+    expect(s!.columnsTruncated).toBe(false)
   })
 
   it('keeps every sheet in order', () => {
@@ -70,12 +74,33 @@ describe('parseSheets: workbooks', () => {
     ])
   })
 
+  it('reads at most 2,000 rows and 100 columns of a sheet', () => {
+    expect(MAX_SHEET_ROWS).toBe(2_000)
+    expect(MAX_SHEET_COLUMNS).toBe(100)
+  })
+
+  it('keeps a sparse sheet proportional to its filled cells', () => {
+    const ws: XLSX.WorkSheet = {
+      A1: { t: 's', v: 'top left' },
+      [`${columnLabel(MAX_SHEET_COLUMNS - 1)}${MAX_SHEET_ROWS}`]: { t: 's', v: 'far corner' },
+      '!ref': `A1:${columnLabel(MAX_SHEET_COLUMNS - 1)}${MAX_SHEET_ROWS}`,
+    }
+    const [s] = ok(parseSheets(bytesOf(book({ Sparse: ws })), 'workbook'))
+    expect(s!.rows).toHaveLength(MAX_SHEET_ROWS)
+    expect(s!.colCount).toBe(MAX_SHEET_COLUMNS)
+    expect(s!.rows[0]).toEqual(['top left'])
+    expect(s!.rows.slice(1, -1).every((row) => row.length === 0)).toBe(true)
+    expect(s!.types.slice(1, -1).every((kinds) => kinds === '')).toBe(true)
+    expect(s!.rows.at(-1)!.at(-1)).toBe('far corner')
+  })
+
   it(`reads the first ${MAX_SHEET_ROWS} rows and marks the sheet truncated`, () => {
     const rows = Array.from({ length: MAX_SHEET_ROWS + 2 }, (_, i) => [`row ${i + 1}`, i + 1])
     const [s] = ok(parseSheets(bytesOf(book({ Big: XLSX.utils.aoa_to_sheet(rows) })), 'workbook'))
     expect(s!.rows).toHaveLength(MAX_SHEET_ROWS)
     expect(s!.rows[MAX_SHEET_ROWS - 1]).toEqual([`row ${MAX_SHEET_ROWS}`, `${MAX_SHEET_ROWS}`])
-    expect(s!.truncated).toBe(true)
+    expect(s!.rowsTruncated).toBe(true)
+    expect(s!.columnsTruncated).toBe(false)
     expect(s!.totalRows).toBe(MAX_SHEET_ROWS + 2)
   })
 
@@ -83,15 +108,16 @@ describe('parseSheets: workbooks', () => {
     const rows = Array.from({ length: MAX_SHEET_ROWS }, (_, i) => [i])
     const [s] = ok(parseSheets(bytesOf(book({ Full: XLSX.utils.aoa_to_sheet(rows) })), 'workbook'))
     expect(s!.rows).toHaveLength(MAX_SHEET_ROWS)
-    expect(s!.truncated).toBe(false)
+    expect(s!.rowsTruncated).toBe(false)
   })
 
-  it(`keeps the first ${MAX_SHEET_COLUMNS} columns and marks the sheet truncated`, () => {
+  it(`keeps the first ${MAX_SHEET_COLUMNS} columns and says columns were left out`, () => {
     const wide = [Array.from({ length: MAX_SHEET_COLUMNS + 5 }, (_, i) => `c${i}`)]
     const [s] = ok(parseSheets(bytesOf(book({ Wide: XLSX.utils.aoa_to_sheet(wide) })), 'workbook'))
     expect(s!.colCount).toBe(MAX_SHEET_COLUMNS)
     expect(s!.rows[0]).toHaveLength(MAX_SHEET_COLUMNS)
-    expect(s!.truncated).toBe(true)
+    expect(s!.columnsTruncated).toBe(true)
+    expect(s!.rowsTruncated).toBe(false)
   })
 
   it('never carries rich-text HTML or link targets, only the display text', () => {
@@ -162,11 +188,12 @@ describe('parseSheets: delimited text', () => {
     expect(s!.rows).toEqual([
       ['name', 'amount', 'note'],
       ['Acme, Inc', '12.5', 'said "hi"'],
-      ['Globex', '-3', ''],
+      ['Globex', '-3'],
     ])
-    expect(s!.types).toEqual(['sss', 'sns', 'sn '])
+    expect(s!.types).toEqual(['sss', 'sns', 'sn'])
+    expect(s!.colCount).toBe(3)
     expect(s!.formulas).toEqual({})
-    expect(s!.truncated).toBe(false)
+    expect(s!.rowsTruncated).toBe(false)
     expect(s!.totalRows).toBe(3)
   })
 
@@ -183,7 +210,7 @@ describe('parseSheets: delimited text', () => {
     const lines = Array.from({ length: MAX_SHEET_ROWS + 10 }, (_, i) => `${i},x`)
     const [s] = ok(parseSheets(strToU8(lines.join('\n')).buffer as ArrayBuffer, 'csv'))
     expect(s!.rows).toHaveLength(MAX_SHEET_ROWS)
-    expect(s!.truncated).toBe(true)
+    expect(s!.rowsTruncated).toBe(true)
   })
 
   it('reads legacy single-byte text when it is not valid UTF-8', () => {

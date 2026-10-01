@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render as rtlRender, screen, within } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import { SheetView } from '../sheet-view'
-import type { SheetData } from '../sheet-model'
+import { columnWidths, type SheetData } from '../sheet-model'
 import { withLayoutSize } from './layout-size'
 
 function render(node: React.ReactNode) {
@@ -35,7 +35,8 @@ function sheet(name: string, rows: string[][], extra: Partial<SheetData> = {}): 
     merges: [],
     colCount,
     totalRows: rows.length,
-    truncated: false,
+    rowsTruncated: false,
+    columnsTruncated: false,
     ...extra,
   }
 }
@@ -137,7 +138,7 @@ describe('SheetView', () => {
 
   it('switches sheets from tabs and reports each sheet’s row count', () => {
     const onNote = vi.fn()
-    const big = sheet('Articles', [['Title'], ['One']], { totalRows: 9000, truncated: true })
+    const big = sheet('Articles', [['Title'], ['One']], { totalRows: 9000, rowsTruncated: true })
     const small = sheet(
       'Redirects',
       [
@@ -157,11 +158,37 @@ describe('SheetView', () => {
     expect(tabs[1]).toHaveAttribute('aria-selected', 'true')
     expect(tabs[0]).toHaveAttribute('aria-selected', 'false')
     expect(cell('A2')).toHaveTextContent('One')
-    expect(onNote).toHaveBeenLastCalledWith('First 5,000 rows')
+    expect(onNote).toHaveBeenLastCalledWith('First 2,000 rows')
 
     fireEvent.click(tabs[2]!)
     expect(cell('B2')).toHaveTextContent('/b')
     expect(onNote).toHaveBeenLastCalledWith('1,248 rows')
+  })
+
+  it('draws a merged range as one cell over the cells it covers', () => {
+    const merged = sheet(
+      'Merged',
+      [
+        ['Quarterly summary', '', ''],
+        ['a', 'b', 'c'],
+      ],
+      { merges: [{ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } }] }
+    )
+    render(<SheetView sheets={[merged]} onNote={() => {}} />)
+    expect(cell('A1')).toHaveTextContent('Quarterly summary')
+    const [a, b, c] = columnWidths(merged)
+    expect(cell('A1').style.width).toBe(`${a! + b! + c!}px`)
+    expect(document.querySelector('[data-cell="B1"]')).toBeNull()
+    expect(document.querySelector('[data-cell="C1"]')).toBeNull()
+    expect(cell('B2')).toHaveTextContent('b')
+  })
+
+  it('draws a row that stops before the last column', () => {
+    const ragged = sheet('Ragged', [['a', 'b', 'c'], ['d']])
+    render(<SheetView sheets={[ragged]} onNote={() => {}} />)
+    expect(cell('C2')).toHaveTextContent('')
+    fireEvent.click(cell('C2'))
+    expect(cellBar()).toHaveTextContent('C2')
   })
 
   it('renders an empty sheet without failing', () => {

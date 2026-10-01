@@ -6,9 +6,13 @@
 import type { IntlShape } from 'react-intl'
 import { fileExtension } from '@/lib/shared/files/file-types'
 
-/** Rows read per sheet; one more is read to learn whether the sheet goes on. */
-export const MAX_SHEET_ROWS = 5_000
-export const MAX_SHEET_COLUMNS = 200
+/**
+ * Rows and columns read per sheet; one more row is read to learn whether the
+ * sheet goes on. Past these a grid stops being something people read in a
+ * preview, and the parse and its copy to the page grow with every cell.
+ */
+export const MAX_SHEET_ROWS = 2_000
+export const MAX_SHEET_COLUMNS = 100
 
 export interface CellAddress {
   r: number
@@ -28,9 +32,13 @@ export type CellKind = 'n' | 'd' | 'b' | 'e' | 's' | ' '
 
 export interface SheetData {
   name: string
-  /** Display text, row-major, every row `colCount` long. Never HTML. */
+  /**
+   * Display text, row-major. Never HTML. Each row stops at its last filled
+   * cell (an empty row is `[]`), so empty cells cost nothing; a cell past the
+   * end of its row is empty.
+   */
   rows: string[][]
-  /** One string per row, one `CellKind` character per column. */
+  /** One string per row, one `CellKind` character per column, as long as the row. */
   types: string[]
   /** Formula text by A1 reference ("B5" -> "=SUM(B2:B4)"), shown, never run. */
   formulas: Record<string, string>
@@ -38,8 +46,10 @@ export interface SheetData {
   colCount: number
   /** Rows in the sheet when known, else the rows read. */
   totalRows: number
-  /** True when rows or columns past the budget were left out. */
-  truncated: boolean
+  /** Rows past `MAX_SHEET_ROWS` were left out. */
+  rowsTruncated: boolean
+  /** Columns past `MAX_SHEET_COLUMNS` were left out. */
+  columnsTruncated: boolean
 }
 
 export type SheetSource = 'csv' | 'tsv' | 'workbook'
@@ -91,31 +101,42 @@ export function looksLikeHeader(sheet: SheetData): boolean {
   return new Set(filled.map((v) => v.trim().toLowerCase())).size === filled.length
 }
 
-/** The viewer's quiet note for a sheet: "1,248 rows" or "First 5,000 rows". */
+/**
+ * The viewer's quiet note for a sheet: "1,248 rows", "First 2,000 rows", and
+ * "First 100 columns" when columns were left out.
+ */
 export function rowsNote(
-  sheet: Pick<SheetData, 'totalRows' | 'truncated'>,
+  sheet: Pick<SheetData, 'totalRows' | 'rowsTruncated' | 'columnsTruncated'>,
   intl: IntlShape
 ): string {
-  if (sheet.truncated) {
-    return intl.formatMessage(
-      {
-        id: 'files.sheet.truncatedRows',
-        defaultMessage: 'First {count, plural, one {# row} other {# rows}}',
-      },
-      { count: MAX_SHEET_ROWS }
-    )
-  }
-  return intl.formatMessage(
-    { id: 'files.count.rows', defaultMessage: '{count, plural, one {# row} other {# rows}}' },
-    { count: sheet.totalRows }
+  const rows = sheet.rowsTruncated
+    ? intl.formatMessage(
+        {
+          id: 'files.sheet.truncatedRows',
+          defaultMessage: 'First {count, plural, one {# row} other {# rows}}',
+        },
+        { count: MAX_SHEET_ROWS }
+      )
+    : intl.formatMessage(
+        { id: 'files.count.rows', defaultMessage: '{count, plural, one {# row} other {# rows}}' },
+        { count: sheet.totalRows }
+      )
+  if (!sheet.columnsTruncated) return rows
+  const columns = intl.formatMessage(
+    {
+      id: 'files.sheet.truncatedColumns',
+      defaultMessage: 'First {count, plural, one {# column} other {# columns}}',
+    },
+    { count: MAX_SHEET_COLUMNS }
   )
+  return `${rows} · ${columns}`
 }
 
 const MIN_COLUMN_PX = 64
 const MAX_COLUMN_PX = 320
 const CHAR_PX = 8
 const CELL_PADDING_PX = 20
-/** Rows sampled to size columns; enough to see the shape without reading 5,000. */
+/** Rows sampled to size columns; enough to see the shape without reading them all. */
 const WIDTH_SAMPLE_ROWS = 200
 
 /** A width per column from its longest text in the first rows. */

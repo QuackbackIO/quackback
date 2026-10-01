@@ -175,6 +175,7 @@
   "files.archive.andMore": "و{hidden} أخرى",
   "files.archive.andMoreCapped": "و{hidden}+ أخرى",
   "files.sheet.truncatedRows": "أول {count, plural, other {# صف}}",
+  "files.sheet.truncatedColumns": "أول {count, plural, other {# عمود}}",
   "files.sheet.tabsAria": "الأوراق",
   "files.pdf.railAria": "الصفحات",
   "files.pdf.pageAria": "صفحة {number}",

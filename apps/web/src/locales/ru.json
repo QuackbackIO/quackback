@@ -175,6 +175,7 @@
   "files.archive.andMore": "и ещё {hidden}",
   "files.archive.andMoreCapped": "и ещё {hidden}+",
   "files.sheet.truncatedRows": "Первые {count, plural, other {# строк}}",
+  "files.sheet.truncatedColumns": "Первые {count, plural, other {# столбцов}}",
   "files.sheet.tabsAria": "Листы",
   "files.pdf.railAria": "Страницы",
   "files.pdf.pageAria": "Страница {number}",

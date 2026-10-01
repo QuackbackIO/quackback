@@ -20,7 +20,8 @@ function sheet(rows: string[][], types?: string[]): SheetData {
     merges: [],
     colCount: Math.max(0, ...rows.map((r) => r.length)),
     totalRows: rows.length,
-    truncated: false,
+    rowsTruncated: false,
+    columnsTruncated: false,
   }
 }
 
@@ -93,15 +94,28 @@ describe('looksLikeHeader', () => {
   })
 })
 
+const whole = { rowsTruncated: false, columnsTruncated: false }
+
 describe('rowsNote', () => {
   it('counts rows with a thousands separator', () => {
-    expect(rowsNote({ totalRows: 1248, truncated: false }, intl)).toBe('1,248 rows')
-    expect(rowsNote({ totalRows: 1, truncated: false }, intl)).toBe('1 row')
-    expect(rowsNote({ totalRows: 0, truncated: false }, intl)).toBe('0 rows')
+    expect(rowsNote({ ...whole, totalRows: 1248 }, intl)).toBe('1,248 rows')
+    expect(rowsNote({ ...whole, totalRows: 1 }, intl)).toBe('1 row')
+    expect(rowsNote({ ...whole, totalRows: 0 }, intl)).toBe('0 rows')
   })
 
   it('says only the first rows show when the sheet was cut', () => {
-    expect(rowsNote({ totalRows: 80_000, truncated: true }, intl)).toBe('First 5,000 rows')
+    expect(rowsNote({ ...whole, totalRows: 80_000, rowsTruncated: true }, intl)).toBe(
+      'First 2,000 rows'
+    )
+  })
+
+  it('says when columns were left out, and only then', () => {
+    expect(rowsNote({ ...whole, totalRows: 40, columnsTruncated: true }, intl)).toBe(
+      '40 rows · First 100 columns'
+    )
+    expect(rowsNote({ totalRows: 80_000, rowsTruncated: true, columnsTruncated: true }, intl)).toBe(
+      'First 2,000 rows · First 100 columns'
+    )
   })
 
   it('renders in German when the viewer locale is German', () => {
@@ -112,8 +126,10 @@ describe('rowsNote', () => {
         'files.sheet.truncatedRows': 'Erste {count, plural, one {# Zeile} other {# Zeilen}}',
       },
     })
-    expect(rowsNote({ totalRows: 1248, truncated: false }, de)).toBe('1.248 Zeilen')
-    expect(rowsNote({ totalRows: 80_000, truncated: true }, de)).toBe('Erste 5.000 Zeilen')
+    expect(rowsNote({ ...whole, totalRows: 1248 }, de)).toBe('1.248 Zeilen')
+    expect(rowsNote({ ...whole, totalRows: 80_000, rowsTruncated: true }, de)).toBe(
+      'Erste 2.000 Zeilen'
+    )
   })
 })
 

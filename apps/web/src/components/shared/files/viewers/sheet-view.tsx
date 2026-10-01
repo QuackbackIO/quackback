@@ -16,6 +16,7 @@ import {
   looksLikeHeader,
   rowsNote,
   type CellAddress,
+  type CellRange,
   type SheetData,
 } from './sheet-model'
 
@@ -102,7 +103,7 @@ function SheetGrid({
   const colCount = sheet.colCount
   const widths = useMemo(() => columnWidths(sheet), [sheet])
   const header = useMemo(() => looksLikeHeader(sheet), [sheet])
-  const merges = useMemo(() => mergeLayout(sheet, widths), [sheet, widths])
+  const merges = useMemo(() => mergeBoxes(sheet, widths), [sheet, widths])
 
   const rows = useVirtualizer({
     count: rowCount,
@@ -125,6 +126,11 @@ function SheetGrid({
   const totalWidth = cols.getTotalSize()
   const totalHeight = rows.getTotalSize()
   const visibleCols = cols.getVirtualItems()
+  const visibleRows = rows.getVirtualItems()
+  // Only merges that reach the rows on screen are consulted while drawing.
+  const firstRow = visibleRows[0]?.index ?? 0
+  const lastRow = visibleRows[visibleRows.length - 1]?.index ?? -1
+  const mergesInView = merges.filter((m) => m.e.r >= firstRow && m.s.r <= lastRow)
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const step = ARROWS[event.key]
@@ -175,7 +181,7 @@ function SheetGrid({
             </div>
           ))}
         </div>
-        {rows.getVirtualItems().map((row) => {
+        {visibleRows.map((row) => {
           const values = sheet.rows[row.index] ?? []
           const kinds = sheet.types[row.index] ?? ''
           const isHeader = header && row.index === 0
@@ -196,9 +202,10 @@ function SheetGrid({
                 {row.index + 1}
               </div>
               {visibleCols.map((col) => {
-                const key = `${row.index}:${col.index}`
-                if (merges.covered.has(key)) return null
-                const span = merges.origins.get(key)
+                const merge = mergeAt(mergesInView, row.index, col.index)
+                // A merged range draws once, from its first cell.
+                if (merge && (merge.s.r !== row.index || merge.s.c !== col.index)) return null
+                const span = merge
                 const isSelected = selected.r === row.index && selected.c === col.index
                 const align = cellAlign(kinds[col.index])
                 return (
@@ -236,21 +243,26 @@ function SheetGrid({
   )
 }
 
-/** Merged ranges as an origin cell that spans, and the cells it covers. */
-function mergeLayout(sheet: SheetData, widths: number[]) {
-  const origins = new Map<string, { width: number; height: number }>()
-  const covered = new Set<string>()
-  for (const m of sheet.merges) {
+interface MergeBox extends CellRange {
+  width: number
+  height: number
+}
+
+/**
+ * Each merged range with the size its first cell spans. One entry per range,
+ * whatever its area, so a merge over a whole sheet costs no more than one
+ * over two cells.
+ */
+function mergeBoxes(sheet: SheetData, widths: number[]): MergeBox[] {
+  return sheet.merges.map((m) => {
     let width = 0
     for (let c = m.s.c; c <= m.e.c; c++) width += widths[c] ?? 0
-    origins.set(`${m.s.r}:${m.s.c}`, { width, height: (m.e.r - m.s.r + 1) * ROW_HEIGHT })
-    for (let r = m.s.r; r <= m.e.r; r++) {
-      for (let c = m.s.c; c <= m.e.c; c++) {
-        if (r !== m.s.r || c !== m.s.c) covered.add(`${r}:${c}`)
-      }
-    }
-  }
-  return { origins, covered }
+    return { ...m, width, height: (m.e.r - m.s.r + 1) * ROW_HEIGHT }
+  })
+}
+
+function mergeAt(merges: readonly MergeBox[], r: number, c: number): MergeBox | undefined {
+  return merges.find((m) => r >= m.s.r && r <= m.e.r && c >= m.s.c && c <= m.e.c)
 }
 
 function SheetTabs({
