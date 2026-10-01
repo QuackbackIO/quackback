@@ -47,6 +47,7 @@ import {
   cleanFileName,
   FileRejectedError,
 } from '../files.service'
+import { ValidationError } from '@/lib/shared/errors'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -246,18 +247,33 @@ describe.skipIf(!fixture.available)('files service (real DB, rolled back)', () =
       ).resolves.toHaveLength(1)
     })
 
-    it('refuses an unknown or deleted file id', async () => {
+    it('says a swept file is no longer available, with a code the client can map', async () => {
+      const owner = await newPrincipal()
       const row = await storeFile({
         bytes: pdf(),
         name: 'a.pdf',
-        source: 'agent',
-        unverifiedSender: false,
+        source: 'visitor',
+        uploadedById: owner,
+        unverifiedSender: true,
       })
       await testDb.update(files).set({ deletedAt: new Date() }).where(eq(files.id, row.id))
       const ref = [{ fileId: row.id, url: '', name: '', contentType: '', size: 0 }]
-      await expect(resolveAttachments(ref, { canAttachAnyFile: true })).rejects.toThrow(
-        'Invalid attachment'
-      )
+      const err = await resolveAttachments(ref, { principalId: owner, canAttachAnyFile: false })
+        .then(() => null)
+        .catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(ValidationError)
+      expect(err).toMatchObject({
+        code: 'FILE_EXPIRED',
+        message: 'This file is no longer available. Attach it again.',
+      })
+      // Someone else's swept file says no more than any other file of theirs.
+      const stranger = await newPrincipal()
+      await expect(
+        resolveAttachments(ref, { principalId: stranger, canAttachAnyFile: false })
+      ).rejects.toMatchObject({ code: 'VALIDATION_ERROR', message: 'Invalid attachment' })
+    })
+
+    it('refuses an unknown file id', async () => {
       const unknown = [
         { fileId: 'file_01h455vb4pex5vsknk084sn02q', url: '', name: '', contentType: '', size: 0 },
       ]
@@ -407,6 +423,41 @@ describe.skipIf(!fixture.available)('files service (real DB, rolled back)', () =
       const [after] = await testDb.select().from(files).where(eq(files.id, row.id))
       expect(after!.messageId).toBe(first.id)
       expect(after!.attachedAt).toBeInstanceOf(Date)
+    })
+
+    it('refuses to link a file swept after the send read it', async () => {
+      const visitor = await newPrincipal()
+      const [conversation] = await testDb
+        .insert(conversations)
+        .values({ visitorPrincipalId: visitor, channel: 'messenger' })
+        .returning()
+      const [message] = await testDb
+        .insert(conversationMessages)
+        .values({
+          conversationId: conversation!.id,
+          principalId: visitor,
+          senderType: 'visitor',
+          content: 'hi',
+        })
+        .returning()
+      const row = await storeFile({
+        bytes: pdf(),
+        name: 'a.pdf',
+        source: 'agent',
+        unverifiedSender: false,
+      })
+      const atts = await resolveAttachments(
+        [{ fileId: row.id, url: '', name: '', contentType: '', size: 0 }],
+        { canAttachAnyFile: true }
+      )
+      // The retention sweep claims it between the read and the link.
+      await testDb.update(files).set({ deletedAt: new Date() }).where(eq(files.id, row.id))
+
+      await expect(linkFilesToMessage(testDb, atts, message!.id)).rejects.toMatchObject({
+        code: 'FILE_EXPIRED',
+      })
+      const [after] = await testDb.select().from(files).where(eq(files.id, row.id))
+      expect(after!.attachedAt).toBeNull()
     })
 
     it('carries a preview the job wrote after the send read the file onto the message', async () => {

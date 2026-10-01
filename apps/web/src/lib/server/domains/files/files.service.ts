@@ -158,6 +158,15 @@ async function queueFilePreview(fileId: FileId): Promise<void> {
   }
 }
 
+/**
+ * A file the retention sweep removed (it was never sent within a day of its
+ * upload) or is removing. The code lets a client say what to do: attach it
+ * again.
+ */
+function fileExpiredError(): ValidationError {
+  return new ValidationError('FILE_EXPIRED', 'This file is no longer available. Attach it again.')
+}
+
 export interface AttachmentSender {
   principalId?: PrincipalId | null
   /**
@@ -238,7 +247,7 @@ export async function resolveAttachments(
     ? await db
         .select()
         .from(files)
-        .where(and(inArray(files.id, ids as FileId[]), isNull(files.deletedAt)))
+        .where(inArray(files.id, ids as FileId[]))
     : []
   const byId = new Map(rows.map((r) => [r.id as string, r]))
 
@@ -249,6 +258,8 @@ export async function resolveAttachments(
     if (!sender.canAttachAnyFile && row.uploadedById !== (sender.principalId ?? null)) {
       throw new ValidationError('VALIDATION_ERROR', 'Invalid attachment')
     }
+    // Only the sender who may attach it learns that it is gone.
+    if (row.deletedAt) throw fileExpiredError()
     return attachmentFromFile(row)
   })
 }
@@ -257,14 +268,27 @@ export async function resolveAttachments(
  * Record the message a set of files was first sent on. Files already attached
  * keep their first message; a later message (a copy into a ticket) only
  * references them.
+ *
+ * Every file is read again under a row lock first, in the sender's
+ * transaction: the retention sweep claims a file with an UPDATE on the same
+ * row, so either the sweep claimed it before this read (and the send fails
+ * with `FILE_EXPIRED`) or it waits for this transaction and finds the file
+ * linked or referenced.
  */
 export async function linkFilesToMessage(
   executor: Transaction | typeof db,
   attachments: ConversationAttachment[],
   messageId: string
 ): Promise<void> {
-  const ids = attachments.map((a) => a.fileId).filter((id): id is string => !!id)
+  const ids = [...new Set(attachments.map((a) => a.fileId).filter((id): id is string => !!id))]
   if (ids.length === 0) return
+  const live = await executor
+    .select({ id: files.id })
+    .from(files)
+    .where(and(inArray(files.id, ids as FileId[]), isNull(files.deletedAt)))
+    .for('no key update')
+  if (live.length < ids.length) throw fileExpiredError()
+
   const linked = await executor
     .update(files)
     .set({ messageId: messageId as never, attachedAt: new Date() })

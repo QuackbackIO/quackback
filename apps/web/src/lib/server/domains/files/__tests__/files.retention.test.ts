@@ -17,10 +17,15 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 const deleted: string[] = []
 const attempted: string[] = []
 const failingKeys = new Set<string>()
+/** Runs once, during the next object delete: what happens while the sweep is mid-batch. */
+let duringNextDelete: (() => Promise<void>) | null = null
 vi.mock('@/lib/server/storage/s3', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/storage/s3')>()),
   deleteObject: vi.fn(async (key: string) => {
     attempted.push(key)
+    const hook = duringNextDelete
+    duringNextDelete = null
+    await hook?.()
     if (failingKeys.has(key)) throw new Error(`storage unavailable for ${key}`)
     deleted.push(key)
   }),
@@ -102,6 +107,7 @@ describe.skipIf(!fixture.available)('file retention sweep (real DB, rolled back)
     deleted.length = 0
     attempted.length = 0
     failingKeys.clear()
+    duringNextDelete = null
   })
   afterEach(fixture.rollback)
   afterAll(fixture.close)
@@ -226,6 +232,7 @@ describe.skipIf(!fixture.available)('file retention sweep (real DB, rolled back)
       const first = await sweepFileRetention({ now: NOW })
 
       expect(first).toMatchObject({ removed: 1, failed: 1 })
+      // The claim is released, so the file is usable and the next run retries it.
       const kept = await fileRow(broken.id)
       expect(kept.deletedAt).toBeNull()
       expect(kept.meta).toEqual({ thumbKey: 'files/2026/09/thumb-broken.webp' })
@@ -266,6 +273,57 @@ describe.skipIf(!fixture.available)('file retention sweep (real DB, rolled back)
       expect(attempted.filter((k) => k === rows[1]!.storageKey)).toHaveLength(1)
       expect(attempted.filter((k) => k === rows[3]!.storageKey)).toHaveLength(1)
       expect(attempted).toHaveLength(5)
+    })
+  })
+
+  describe('races with a send', () => {
+    it('leaves an unsent file alone when a send links it after the sweep listed it', async () => {
+      const first = await insertFile()
+      const second = await insertFile()
+      const message = await insertMessage([attachmentFor(second.id)])
+      // The sweep listed both; while it deletes the first, a send links the second.
+      duringNextDelete = async () => {
+        await testDb
+          .update(files)
+          .set({ messageId: message.id, attachedAt: NOW })
+          .where(eq(files.id, second.id))
+      }
+
+      await sweepFileRetention({ now: NOW })
+
+      expect(deleted).toEqual([first.storageKey])
+      expect((await fileRow(first.id)).deletedAt).toEqual(NOW)
+      const linked = await fileRow(second.id)
+      expect(linked.deletedAt).toBeNull()
+      expect(linked.messageId).toBe(message.id)
+    })
+
+    it('keeps an orphaned file a message starts carrying after the sweep listed it', async () => {
+      const first = await insertFile({ attachedAt: ago(HOUR), messageId: null })
+      const second = await insertFile({ attachedAt: ago(HOUR), messageId: null })
+      // While the sweep deletes the first, a ticket copies the second.
+      duringNextDelete = async () => {
+        await insertMessage([attachmentFor(second.id)])
+      }
+
+      const result = await sweepFileRetention({ now: NOW })
+
+      expect(deleted).toEqual([first.storageKey])
+      expect((await fileRow(second.id)).deletedAt).toBeNull()
+      expect(result).toMatchObject({ removed: 1, kept: 1 })
+    })
+
+    it('holds a file as deleted while its objects are being removed', async () => {
+      const row = await insertFile()
+      let seen: Date | null = null
+      duringNextDelete = async () => {
+        seen = (await fileRow(row.id)).deletedAt
+      }
+
+      await sweepFileRetention({ now: NOW })
+
+      // A send that reads the row mid-delete is told the file is gone.
+      expect(seen).toEqual(NOW)
     })
   })
 
