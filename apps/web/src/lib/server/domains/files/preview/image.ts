@@ -5,11 +5,12 @@
  * WebP and AVIF sizes come from their headers (mupdf reads neither); SVG has
  * no rasterizer here and records nothing.
  */
-import { loadMupdf, destroy } from './mupdf'
+import { loadMupdf, destroy, cappedRenderScale } from './mupdf'
 import { childBoxes, findChild, u32be } from './boxes'
 import {
   NO_DEADLINE,
   NOTHING_TO_DERIVE,
+  PreviewRefusedError,
   loadDependency,
   type Deadline,
   type DerivedObject,
@@ -26,6 +27,12 @@ const THUMB_WIDTH = 640
 const THUMB_MAX_HEIGHT = 1600
 /** Images above this many pixels are sized but never decoded. */
 const MAX_DECODE_PIXELS = 50_000_000
+/**
+ * HEIC photos above this many pixels are sized but never decoded: the decoder
+ * holds the whole image, and its rendition, at once. A phone's largest photo
+ * is under it.
+ */
+const MAX_HEIC_DECODE_PIXELS = 24_000_000
 
 const RASTER_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/bmp', 'image/tiff'])
 /** Formats the browser cannot show, so they always get a thumbnail. */
@@ -128,9 +135,13 @@ async function rasterPreview(
       }
       deadline.check()
 
-      const scale = Math.min(
-        Math.min(THUMB_WIDTH, size.width) / pageWidth,
-        Math.min(THUMB_MAX_HEIGHT, size.height) / pageHeight
+      const scale = cappedRenderScale(
+        pageWidth,
+        pageHeight,
+        Math.min(
+          Math.min(THUMB_WIDTH, size.width) / pageWidth,
+          Math.min(THUMB_MAX_HEIGHT, size.height) / pageHeight
+        )
       )
       const photo = contentType === 'image/jpeg'
       const pixmap = page.toPixmap(
@@ -165,8 +176,10 @@ async function heicPreview(
   bytes: Uint8Array,
   deadline: Pick<Deadline, 'check'>
 ): Promise<PreviewResult> {
+  // The decoder is only ever handed a photo whose size is known and capped.
   const declared = heifSize(bytes)
-  if (declared && declared.width * declared.height > MAX_DECODE_PIXELS) {
+  if (!declared) throw new PreviewRefusedError('heic-size-unknown')
+  if (declared.width * declared.height > MAX_HEIC_DECODE_PIXELS) {
     return { status: 'ready', meta: declared }
   }
   const convert = await loadDependency(

@@ -29,6 +29,7 @@ import {
   Deadline,
   NOTHING_TO_DERIVE,
   PreviewDependencyError,
+  PreviewRefusedError,
   deriveFromBytes,
   deriveMediaPreview,
   previewKind,
@@ -200,8 +201,10 @@ export async function generateFilePreview(
     result = await derive(file, deadline)
   } catch (err) {
     if (isInfrastructureFault(err)) throw err
-    // The name says which check refused the file; messages can quote its bytes.
-    reason = err instanceof Error ? err.name : 'unknown'
+    // The name (or a refusal's code) says which check refused the file;
+    // messages can quote its bytes.
+    reason =
+      err instanceof PreviewRefusedError ? err.reason : err instanceof Error ? err.name : 'unknown'
   }
 
   let meta: FilePreviewMeta = file.meta ?? {}

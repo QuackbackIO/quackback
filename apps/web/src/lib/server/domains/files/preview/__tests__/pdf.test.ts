@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest'
 import * as mupdf from 'mupdf'
 import { derivePdfPreview } from '../pdf'
+import { cappedRenderScale } from '../mupdf'
 
 /** A real PDF from mupdf's own writer: one line of text per page. */
 function buildPdf(
@@ -74,5 +75,17 @@ describe('derivePdfPreview', () => {
     await expect(
       derivePdfPreview(new TextEncoder().encode('%PDF-1.7\nnot really'))
     ).rejects.toThrow()
+  })
+})
+
+describe('cappedRenderScale', () => {
+  it('keeps every render inside 2400 pixels a side, whatever the page claims', () => {
+    expect(cappedRenderScale(14_400, 14_400, 1)).toBeCloseTo(2400 / 14_400)
+    expect(cappedRenderScale(100, 30_000, 0.5)).toBeCloseTo(2400 / 30_000)
+    expect(14_400 * cappedRenderScale(14_400, 200, 3)).toBeLessThanOrEqual(2400)
+  })
+
+  it('leaves a scale that already fits alone', () => {
+    expect(cappedRenderScale(612, 792, 480 / 612)).toBe(480 / 612)
   })
 })

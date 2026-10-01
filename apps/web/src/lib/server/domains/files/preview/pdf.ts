@@ -2,7 +2,7 @@
  * PDF: page count, page one as a PNG thumbnail, and the text of the first
  * pages. An encrypted or unreadable document throws.
  */
-import { loadMupdf, destroy } from './mupdf'
+import { loadMupdf, destroy, cappedRenderScale } from './mupdf'
 import { NO_DEADLINE, normalizeExcerpt, EXCERPT_MAX_CHARS, type PreviewResult } from './result'
 import type { Deadline } from './result'
 
@@ -31,7 +31,11 @@ export async function derivePdfPreview(
       const width = x1 - x0
       const height = y1 - y0
       if (!(width > 0 && height > 0)) throw new Error('PDF page has no area')
-      const scale = Math.min(THUMB_WIDTH / width, THUMB_MAX_SIDE / height)
+      const scale = cappedRenderScale(
+        width,
+        height,
+        Math.min(THUMB_WIDTH / width, THUMB_MAX_SIDE / height)
+      )
       const pixmap = first.toPixmap(
         mupdf.Matrix.scale(scale, scale),
         mupdf.ColorSpace.DeviceRGB,

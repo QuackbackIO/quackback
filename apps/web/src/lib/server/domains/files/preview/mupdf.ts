@@ -41,6 +41,19 @@ export function loadMupdf(): Promise<Mupdf> {
   return loading
 }
 
+/** Most pixels a render produces on either side, whatever a page or image claims. */
+export const MAX_RENDER_SIDE = 2400
+
+/**
+ * `scale`, lowered as far as needed for a render of a `width` x `height` page
+ * (in its own units) to stay within {@link MAX_RENDER_SIDE} on both sides.
+ * Every render goes through this, so its size never rests on the caller's
+ * arithmetic alone.
+ */
+export function cappedRenderScale(width: number, height: number, scale: number): number {
+  return Math.min(scale, MAX_RENDER_SIDE / width, MAX_RENDER_SIDE / height)
+}
+
 /** Free a native object now rather than whenever the collector gets to it. */
 export function destroy(...objects: Array<{ destroy(): void } | null | undefined>): void {
   for (const o of objects) {

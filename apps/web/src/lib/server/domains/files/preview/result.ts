@@ -40,6 +40,17 @@ export class PreviewDependencyError extends Error {
   }
 }
 
+/**
+ * A file the preview declines to read, for a reason worth logging. The reason
+ * is a fixed code, never anything quoted from the file.
+ */
+export class PreviewRefusedError extends Error {
+  constructor(readonly reason: string) {
+    super(`Preview refused: ${reason}`)
+    this.name = 'PreviewRefusedError'
+  }
+}
+
 /** The job's time budget ran out between two phases. */
 export class PreviewTimeoutError extends Error {
   constructor() {

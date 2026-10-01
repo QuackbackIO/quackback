@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest'
 import * as mupdf from 'mupdf'
 import { deriveImagePreview, webpSize, heifSize } from '../image'
+import { PreviewRefusedError } from '../result'
 
 function pixmap(width: number, height: number): mupdf.Pixmap {
   const pix = new mupdf.Pixmap(mupdf.ColorSpace.DeviceRGB, [0, 0, width, height], false)
@@ -193,6 +194,27 @@ describe('deriveImagePreview', () => {
     const rendition = result.derived!.find((d) => d.field === 'renditionKey')!
     expect(rendition).toMatchObject({ suffix: 'rendition.jpg', contentType: 'image/jpeg' })
     expect(decodedSize(rendition.bytes)).toEqual({ width: 64, height: 48 })
+  })
+
+  it('sizes a HEIC over 24 megapixels without decoding it', async () => {
+    // A header alone: decoding it would throw.
+    const header = heifHeader('heic', [[6000, 4500]])
+    expect(await deriveImagePreview(header, 'image/heic')).toEqual({
+      status: 'ready',
+      meta: { width: 6000, height: 4500 },
+    })
+  })
+
+  it('refuses a HEIC whose size cannot be read before decoding', async () => {
+    // The image property renamed: the decoder may still read the stream, but
+    // nothing says how big it will be.
+    const unsized = HEIC_64x48.slice()
+    const at = Buffer.from(unsized).indexOf('ispe')
+    expect(at).toBeGreaterThan(0)
+    unsized.set(new TextEncoder().encode('xspe'), at)
+    const err = await deriveImagePreview(unsized, 'image/heic').catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(PreviewRefusedError)
+    expect(err).toMatchObject({ reason: 'heic-size-unknown' })
   })
 
   it('records nothing for SVG', async () => {
