@@ -26,6 +26,26 @@ import {
 } from './file-card'
 import type { ConversationAttachment } from '@/lib/shared/conversation/types'
 
+/** Image subtypes most browsers cannot decode in an `<img>`. BMP decodes
+ *  natively everywhere, so it stays off this list. */
+const UNDISPLAYABLE_IMAGE_TYPES = new Set(['image/tiff', 'image/heic', 'image/heif'])
+
+/** An image attachment the browser cannot render inline, and for which the
+ *  preview job hasn't produced a thumbnail or a browser-viewable rendition
+ *  yet — it renders as a file card instead of a broken `<img>`. */
+function isUndisplayableImage(a: ConversationAttachment): boolean {
+  const contentType = a.contentType.split(';')[0]?.trim().toLowerCase() ?? ''
+  if (!UNDISPLAYABLE_IMAGE_TYPES.has(contentType)) return false
+  return !a.preview?.thumbUrl && !a.preview?.renditionUrl
+}
+
+/** The small thumbnail when there is one, else a browser-viewable rendition
+ *  (HEIC/TIFF converted server-side), else the original — never the full
+ *  original for a format that already has a lighter preview to show instead. */
+function imageSrc(a: ConversationAttachment): string {
+  return a.preview?.thumbUrl ?? a.preview?.renditionUrl ?? a.url
+}
+
 export interface AttachmentListContext {
   senderName?: string
   sentAt?: string
@@ -54,8 +74,8 @@ export function AttachmentList({
   const safe = (attachments ?? []).filter(isSafeAttachment)
   if (safe.length === 0) return null
 
-  const images = safe.filter((a) => resolveFamily(a) === 'image')
-  const files = safe.filter((a) => resolveFamily(a) !== 'image')
+  const images = safe.filter((a) => resolveFamily(a) === 'image' && !isUndisplayableImage(a))
+  const files = safe.filter((a) => resolveFamily(a) !== 'image' || isUndisplayableImage(a))
 
   const openAt = (localIndex: number) => {
     const globalIndex = context.messageId ? gallery.indexOf(context.messageId, localIndex) : -1
@@ -157,7 +177,7 @@ function ImageRow({
         )}
       >
         <img
-          src={a.url}
+          src={imageSrc(a)}
           alt=""
           className={cn('block w-full object-contain', compact ? 'max-h-60' : 'max-h-80')}
         />
@@ -176,7 +196,7 @@ function ImageRow({
             aria-label={openLabel(a.name || 'image')}
             className="aspect-square cursor-zoom-in overflow-hidden rounded-lg border border-border bg-muted"
           >
-            <img src={a.url} alt="" className="h-full w-full object-cover" />
+            <img src={imageSrc(a)} alt="" className="h-full w-full object-cover" />
           </button>
         )
       })}

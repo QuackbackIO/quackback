@@ -143,4 +143,51 @@ describe('AttachmentList', () => {
     // FileIconCard/FilePreviewCard don't exist here; FileRow has no "col-span-2".
     expect(queryByText('Contains macros')).toBeNull()
   })
+
+  it("uses an image's thumbnail, not the full original, for the inline preview", () => {
+    const shot: ConversationAttachment = {
+      ...image('shot.png'),
+      preview: { thumbUrl: '/f/shot-thumb.png' },
+    }
+    const { container } = render(<AttachmentList attachments={[shot]} />)
+    expect(container.querySelector('img')).toHaveAttribute('src', '/f/shot-thumb.png')
+  })
+
+  it('falls back to the browser-viewable rendition when there is no thumbnail', () => {
+    const heic: ConversationAttachment = {
+      url: '/f/photo.heic',
+      name: 'photo.heic',
+      contentType: 'image/heic',
+      size: 10,
+      family: 'image',
+      preview: { renditionUrl: '/f/photo-rendition.jpg' },
+    }
+    const { container } = render(<AttachmentList attachments={[heic]} />)
+    expect(container.querySelector('img')).toHaveAttribute('src', '/f/photo-rendition.jpg')
+  })
+
+  it("renders a HEIC/TIFF image as a file card instead of a broken <img> when the preview job hasn't run yet", () => {
+    const heic: ConversationAttachment = {
+      url: '/f/photo.heic',
+      name: 'photo.heic',
+      contentType: 'image/heic',
+      size: 10,
+      family: 'image',
+    }
+    const { container, getByLabelText } = render(<AttachmentList attachments={[heic]} />)
+    expect(container.querySelector('img')).toBeNull()
+    expect(getByLabelText('Open photo.heic, Image, 10 B')).toBeTruthy()
+  })
+
+  it('still renders a BMP inline, since every browser can decode it', () => {
+    const bmp: ConversationAttachment = {
+      url: '/f/scan.bmp',
+      name: 'scan.bmp',
+      contentType: 'image/bmp',
+      size: 10,
+      family: 'image',
+    }
+    const { container } = render(<AttachmentList attachments={[bmp]} />)
+    expect(container.querySelector('img')).toHaveAttribute('src', '/f/scan.bmp')
+  })
 })
