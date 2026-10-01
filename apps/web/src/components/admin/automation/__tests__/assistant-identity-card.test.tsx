@@ -203,7 +203,10 @@ describe('AssistantIdentityCard', () => {
   })
 
   it('shows Remove image only with an image, and removing it saves at once', async () => {
-    const withImage = { ...config, identity: { name: 'Quinn', avatarUrl: 'https://cdn.test/q.png' } }
+    const withImage = {
+      ...config,
+      identity: { name: 'Quinn', avatarUrl: 'https://cdn.test/q.png' },
+    }
     vi.mocked(getAssistantSettingsFn).mockResolvedValue({
       config: withImage,
       revision: 3,

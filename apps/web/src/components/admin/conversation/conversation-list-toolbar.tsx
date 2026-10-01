@@ -122,13 +122,7 @@ export function ConversationListToolbar({
 
           <DropdownMenu open={filterOpen} onOpenChange={setFilterOpen}>
             <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-dashed font-normal"
-                />
-              }
+              render={<Button variant="outline" size="sm" className="border-dashed font-normal" />}
             >
               <PlusIcon className="size-3.5" />
               Filter

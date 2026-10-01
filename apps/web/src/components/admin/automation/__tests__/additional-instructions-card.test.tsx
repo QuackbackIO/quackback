@@ -46,10 +46,7 @@ vi.mock('@/lib/server/functions/assistant-settings', () => ({
 
 import { AdditionalInstructionsCard } from '../additional-instructions-card'
 import { assistantKeys } from '@/lib/client/queries/assistant'
-import {
-  AssistantDirtyStateProvider,
-  useAssistantDirtyState,
-} from '../assistant-form'
+import { AssistantDirtyStateProvider, useAssistantDirtyState } from '../assistant-form'
 
 afterEach(() => {
   cleanup()

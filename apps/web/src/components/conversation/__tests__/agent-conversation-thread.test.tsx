@@ -619,10 +619,7 @@ describe('AgentConversationThread: details toggle below the inline panel width',
     expect(screen.queryByRole('dialog')).toBeNull()
     fireEvent.click(toggle)
     const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByTestId('inbox-detail-panel')).toHaveAttribute(
-      'data-visible',
-      'true'
-    )
+    expect(within(dialog).getByTestId('inbox-detail-panel')).toHaveAttribute('data-visible', 'true')
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })

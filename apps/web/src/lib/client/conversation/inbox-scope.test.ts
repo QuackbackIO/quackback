@@ -595,7 +595,10 @@ describe('inboxScopeHasRefinements', () => {
 
   it('is false for custom views and the self-contained feeds', () => {
     expect(
-      inboxScopeHasRefinements({ kind: 'custom', viewId: 'conversation_view_v' as ConversationViewId })
+      inboxScopeHasRefinements({
+        kind: 'custom',
+        viewId: 'conversation_view_v' as ConversationViewId,
+      })
     ).toBe(false)
     for (const view of ['mentions', 'spam', 'created_by_me'] as const) {
       expect(inboxScopeHasRefinements({ kind: 'view', view })).toBe(false)

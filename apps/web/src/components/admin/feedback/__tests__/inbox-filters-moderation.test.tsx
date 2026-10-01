@@ -8,7 +8,9 @@ vi.mock('@/lib/client/hooks/use-permission', () => ({
   usePermission: (key: string) => key === 'post.approve' && canApprove,
 }))
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children, to }: { children: React.ReactNode; to: string }) => <a href={to}>{children}</a>,
+  Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
+    <a href={to}>{children}</a>
+  ),
 }))
 
 const { InboxFiltersPanel } = await import('../inbox-filters')

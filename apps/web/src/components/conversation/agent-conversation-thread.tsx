@@ -2096,9 +2096,7 @@ export function AgentConversationThread({
         </div>
         {/* Narrow-viewport fallback: Properties live in the detail panel at
             1680px+; below that, priority/assignee stay reachable here. */}
-        {!detailPanelShown && (
-          <TicketTriageFallback ticket={ticket} onChanged={onChanged} />
-        )}
+        {!detailPanelShown && <TicketTriageFallback ticket={ticket} onChanged={onChanged} />}
         {headerActions}
       </div>
     ) : (

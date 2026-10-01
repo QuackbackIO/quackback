@@ -36,8 +36,8 @@ describe('PortalPageHeader', () => {
 describe('portal routes', () => {
   it('render their title with PortalPageHeader, not the admin PageHeader', () => {
     const dir = join(__dirname, '../../../routes/_portal')
-    const offenders = readdirSync(dir).filter((f) => f.endsWith('.tsx') &&
-      /shared\/page-header/.test(readFileSync(join(dir, f), 'utf8'))
+    const offenders = readdirSync(dir).filter(
+      (f) => f.endsWith('.tsx') && /shared\/page-header/.test(readFileSync(join(dir, f), 'utf8'))
     )
     expect(offenders).toEqual([])
   })

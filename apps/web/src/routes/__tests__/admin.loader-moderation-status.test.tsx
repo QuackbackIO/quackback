@@ -78,8 +78,6 @@ describe('admin loader: moderation status', () => {
 
   it('still loads the page when the count cannot be read', async () => {
     getModerationStatus.mockRejectedValue(new Error('unavailable'))
-    await expect(
-      loadAdmin({ permissions: ['post.approve'], feedback: true })
-    ).resolves.toBeTruthy()
+    await expect(loadAdmin({ permissions: ['post.approve'], feedback: true })).resolves.toBeTruthy()
   })
 })

@@ -158,11 +158,7 @@ export function CreatePostDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       {(!isControlled || trigger) && (
-        <DialogTrigger asChild>
-          {trigger ?? (
-            <NewButton noun="post" />
-          )}
-        </DialogTrigger>
+        <DialogTrigger asChild>{trigger ?? <NewButton noun="post" />}</DialogTrigger>
       )}
       <DialogContent
         className="w-[95vw] max-w-5xl p-0 gap-0 overflow-hidden"

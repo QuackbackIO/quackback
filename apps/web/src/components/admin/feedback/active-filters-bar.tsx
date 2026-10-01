@@ -671,7 +671,6 @@ export function ActiveFiltersBar({
           <FilterChip key={key} icon={getFilterIcon(type)} {...filterProps} />
         ))}
 
-
         {activeFilters.length > 1 && (
           <button
             type="button"

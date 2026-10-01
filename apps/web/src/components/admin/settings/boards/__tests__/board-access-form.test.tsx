@@ -167,7 +167,9 @@ describe('<BoardAccessForm> matrix visibility', () => {
     expect(screen.getByRole('button', { name: 'View: Everyone' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Vote: Signed-in users' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Comment: Signed-in users' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Submit posts: Signed-in users' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Submit posts: Signed-in users' })
+    ).toBeInTheDocument()
   })
 
   it('exposes all four action rows in the matrix', () => {

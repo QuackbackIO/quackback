@@ -10,8 +10,7 @@ vi.mock('@/lib/server/functions/moderation', () => ({
 const { Route } = await import('../feedback.moderation')
 
 type BeforeLoad = (args: { context: { permissions?: string[] } }) => unknown
-const beforeLoad = (Route as unknown as { options: { beforeLoad?: BeforeLoad } }).options
-  .beforeLoad
+const beforeLoad = (Route as unknown as { options: { beforeLoad?: BeforeLoad } }).options.beforeLoad
 
 function run(permissions?: string[]) {
   try {

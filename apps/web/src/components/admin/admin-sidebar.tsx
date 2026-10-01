@@ -40,7 +40,10 @@ import {
 import { friendlySiblingAddress, WorkspaceSwitcher } from '@/components/admin/workspace-switcher'
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { usePermissions } from '@/lib/client/use-permissions'
-import { buildNavSections, canOpenSettings } from '@/components/admin/settings/settings-nav-sections'
+import {
+  buildNavSections,
+  canOpenSettings,
+} from '@/components/admin/settings/settings-nav-sections'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { isProductEnabled, type FeatureFlags, type ProductId } from '@/lib/shared/types/settings'
 import { adminQueries } from '@/lib/client/queries/admin'

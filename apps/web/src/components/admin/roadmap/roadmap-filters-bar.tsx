@@ -1,10 +1,5 @@
 import { useMemo, useState } from 'react'
-import {
-  Squares2X2Icon,
-  TagIcon,
-  UserGroupIcon,
-  ChevronRightIcon,
-} from '@heroicons/react/24/solid'
+import { Squares2X2Icon, TagIcon, UserGroupIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { AdminListHeader } from '@/components/admin/admin-list-header'

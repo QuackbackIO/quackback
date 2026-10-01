@@ -26,7 +26,8 @@ const STALE_TIME_MEDIUM = 60 * 1000
 export const changelogKeys = {
   all: ['changelogs'] as const,
   lists: () => [...changelogKeys.all, 'list'] as const,
-  list: (filters: { status?: string; sort?: string }) => [...changelogKeys.lists(), filters] as const,
+  list: (filters: { status?: string; sort?: string }) =>
+    [...changelogKeys.lists(), filters] as const,
   details: () => [...changelogKeys.all, 'detail'] as const,
   detail: (id: ChangelogId) => [...changelogKeys.details(), id] as const,
   topViewed: () => [...changelogKeys.all, 'top-viewed'] as const,

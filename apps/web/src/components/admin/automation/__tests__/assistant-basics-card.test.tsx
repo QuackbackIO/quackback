@@ -123,7 +123,9 @@ describe('AssistantVoiceCard', () => {
   })
 
   it('sends the same choice again when it is picked again after a failed save', async () => {
-    updateVoice.mockRejectedValueOnce(new Error('boom')).mockResolvedValue(savedAs('professional', 3))
+    updateVoice
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValue(savedAs('professional', 3))
     renderCard()
     fireEvent.click(await screen.findByRole('radio', { name: /Professional/ }))
     await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1))

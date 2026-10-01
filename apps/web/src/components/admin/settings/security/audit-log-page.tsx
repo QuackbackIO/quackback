@@ -217,9 +217,7 @@ function ActorCell({ row }: { row: AuditEventRow }) {
   return (
     <div className="flex flex-col">
       <span className="truncate">{primary}</span>
-      {subtitle ? (
-        <span className="text-xs text-muted-foreground">{subtitle}</span>
-      ) : null}
+      {subtitle ? <span className="text-xs text-muted-foreground">{subtitle}</span> : null}
     </div>
   )
 }

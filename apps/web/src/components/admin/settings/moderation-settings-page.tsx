@@ -56,11 +56,9 @@ export function ModerationPage() {
 
   function updateModeration(key: keyof ApprovalToggles, checked: boolean) {
     const next = { ...moderationToggles, [key]: checked }
-    return save(
-      (value) => setModerationToggles((cur) => ({ ...cur, [key]: value })),
-      checked,
-      { requireApproval: togglesToRequireApproval(next) }
-    )
+    return save((value) => setModerationToggles((cur) => ({ ...cur, [key]: value })), checked, {
+      requireApproval: togglesToRequireApproval(next),
+    })
   }
 
   function updateContentHold(key: 'holdImages' | 'holdLinks', checked: boolean) {

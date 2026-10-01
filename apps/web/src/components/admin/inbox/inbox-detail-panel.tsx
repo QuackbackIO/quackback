@@ -831,20 +831,14 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
   // the pre-Copilot panel.
   if (!showCopilotTab) {
     return (
-      <aside
-        aria-label="Item details"
-        className={asideClassName}
-      >
+      <aside aria-label="Item details" className={asideClassName}>
         {detailsBody}
       </aside>
     )
   }
 
   return (
-    <aside
-      aria-label="Item details"
-      className={asideClassName}
-    >
+    <aside aria-label="Item details" className={asideClassName}>
       <Tabs
         value={tab}
         onValueChange={setTab}

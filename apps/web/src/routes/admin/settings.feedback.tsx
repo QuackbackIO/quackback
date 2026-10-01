@@ -4,9 +4,8 @@ import { createFileRoute, redirect } from '@tanstack/react-router'
 export const Route = createFileRoute('/admin/settings/feedback')({
   beforeLoad: async ({ context }) => {
     // Loaded here so the settings page registry stays out of the entry chunk.
-    const { settingsModuleRedirectPath } = await import(
-      '@/components/admin/settings/settings-modules'
-    )
+    const { settingsModuleRedirectPath } =
+      await import('@/components/admin/settings/settings-modules')
     const to = settingsModuleRedirectPath(
       'feedback',
       context.settings?.featureFlags,

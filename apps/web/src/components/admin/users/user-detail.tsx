@@ -890,7 +890,11 @@ export function UserDetail({
             <RailCard title="Account">
               <KvRow label="Account created">{formatDate(user.createdAt)}</KvRow>
               <KvRow label="External ID">
-                {externalId ? <span className="font-mono text-[11px]">{externalId}</span> : NO_VALUE}
+                {externalId ? (
+                  <span className="font-mono text-[11px]">{externalId}</span>
+                ) : (
+                  NO_VALUE
+                )}
               </KvRow>
               {canManageUsers && (
                 <ChangelogSubscriptionControl principalId={user.principalId as PrincipalId} />
