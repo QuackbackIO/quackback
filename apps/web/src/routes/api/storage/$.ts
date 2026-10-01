@@ -135,6 +135,13 @@ function extractKey(url: URL): string | null {
 /** How long a browser may keep a proxied private file. */
 const PRIVATE_MAX_AGE_SECONDS = 3600
 
+/**
+ * How long a redirect's presigned URL stays valid. The redirect marks public
+ * keys cacheable for a day, so the URL outlives cached copies with a 2x
+ * margin; an expiring link's URL never outlives the link.
+ */
+const PRESIGN_SECONDS = 172_800
+
 function isSingleByteRange(value: string): boolean {
   const match = /^bytes=(\d*)-(\d*)$/.exec(value)
   return !!match && (match[1] !== '' || match[2] !== '')
@@ -310,9 +317,11 @@ async function serveStorageGet(request: Request): Promise<Response> {
   // A private response is cached for an hour, and never past the moment an
   // expiring link stops granting access: the cache must not outlive the
   // capability that fetched it. The verifier above has already checked `exp`.
-  const privateMaxAge = hasExpiringReadToken(key)
-    ? Math.max(0, Math.min(PRIVATE_MAX_AGE_SECONDS, Math.floor((Number(exp) - Date.now()) / 1000)))
-    : PRIVATE_MAX_AGE_SECONDS
+  const linkSecondsLeft = hasExpiringReadToken(key)
+    ? Math.max(0, Math.floor((Number(exp) - Date.now()) / 1000))
+    : Infinity
+  const privateMaxAge = Math.min(PRIVATE_MAX_AGE_SECONDS, linkSecondsLeft)
+  const presignSeconds = Math.max(1, Math.min(PRESIGN_SECONDS, linkSecondsLeft))
   const cacheControl = isPublicStorageKey(key)
     ? 'public, max-age=31536000, immutable'
     : `private, max-age=${privateMaxAge}, immutable`
@@ -402,8 +411,8 @@ async function serveStorageGet(request: Request): Promise<Response> {
     const policy = redirectPolicy(key)
     const presignedUrl =
       'inlineType' in policy
-        ? await generatePresignedGetUrl(key, undefined, undefined, policy.inlineType)
-        : await generatePresignedGetUrl(key, undefined, policy.downloadName, undefined)
+        ? await generatePresignedGetUrl(key, presignSeconds, undefined, policy.inlineType)
+        : await generatePresignedGetUrl(key, presignSeconds, policy.downloadName, undefined)
 
     return new Response(null, {
       status: 302,

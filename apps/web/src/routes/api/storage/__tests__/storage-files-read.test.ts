@@ -25,10 +25,13 @@ const getS3Object = vi.hoisted(() =>
     contentLength: 4,
   }))
 )
+const generatePresignedGetUrl = vi.hoisted(() =>
+  vi.fn(async (..._args: unknown[]) => 'https://bucket.example.com/presigned')
+)
 vi.mock('@/lib/server/storage/s3', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/storage/s3')>()),
   getS3Object,
-  generatePresignedGetUrl: vi.fn(async () => 'https://bucket.example.com/presigned'),
+  generatePresignedGetUrl,
 }))
 
 const { getPublicUrlOrNull } = await import('@/lib/server/storage/s3')
@@ -46,6 +49,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(NOW)
   getS3Object.mockClear()
+  generatePresignedGetUrl.mockClear()
 })
 
 afterEach(() => {
@@ -98,6 +102,20 @@ describe('GET /api/storage/files/… read links', () => {
     expect(res.headers.get('Cache-Control')).toBe('private, max-age=600, immutable')
   })
 
+  it('presigns the redirect for no longer than the link has left', async () => {
+    const url = getPublicUrlOrNull(FILE_KEY)!
+    const exp = Number(new URL(url, 'https://x.invalid').searchParams.get('exp'))
+    vi.setSystemTime(exp - 3_600_500)
+    const res = await get(url)
+    expect(res.status).toBe(302)
+    expect(generatePresignedGetUrl.mock.calls[0]![1]).toBe(3600)
+  })
+
+  it('presigns for 48 hours while the link has longer left', async () => {
+    await get(getPublicUrlOrNull(FILE_KEY)!)
+    expect(generatePresignedGetUrl.mock.calls[0]![1]).toBe(172_800)
+  })
+
   it('keeps the redirect uncached', async () => {
     const res = await get(getPublicUrlOrNull(FILE_KEY)!)
     expect(res.status).toBe(302)
@@ -113,5 +131,10 @@ describe('GET /api/storage for other private prefixes', () => {
     const res = await get(`${url}&proxy=1`)
     expect(res.status).toBe(200)
     expect(res.headers.get('Cache-Control')).toBe('private, max-age=3600, immutable')
+  })
+
+  it('keeps the 48-hour presign on the redirect', async () => {
+    await get(getPublicUrlOrNull(LEGACY_KEY)!)
+    expect(generatePresignedGetUrl.mock.calls[0]![1]).toBe(172_800)
   })
 })

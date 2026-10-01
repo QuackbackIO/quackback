@@ -253,7 +253,7 @@ describe('handleStorageGet: what a stored file may do when opened', () => {
     expect(res.status).toBe(302)
     expect(generatePresignedGetUrl).toHaveBeenCalledWith(
       HTML_KEY,
-      undefined,
+      172_800,
       'invoice.html',
       undefined
     )
@@ -262,12 +262,7 @@ describe('handleStorageGet: what a stored file may do when opened', () => {
   it('redirects a media file with its type forced from the extension', async () => {
     const key = 'chat-files/2026/09/3f2b8c1e-1a2b-4c3d-9e8f-0123456789ab-report.pdf'
     await get(`/api/storage/${key}?read=ok`)
-    expect(generatePresignedGetUrl).toHaveBeenCalledWith(
-      key,
-      undefined,
-      undefined,
-      'application/pdf'
-    )
+    expect(generatePresignedGetUrl).toHaveBeenCalledWith(key, 172_800, undefined, 'application/pdf')
   })
 })
 
