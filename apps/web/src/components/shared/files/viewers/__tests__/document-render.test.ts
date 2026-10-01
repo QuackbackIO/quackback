@@ -92,6 +92,20 @@ describe('sanitizeDocumentHtml', () => {
   })
 })
 
+describe('legacy font bullets', () => {
+  it('maps Symbol and Wingdings private-use bullets to Unicode glyphs every system has', () => {
+    const css = '<style>p.n:before{content:"\uf0b7\\9";font-family:Symbol}</style>'
+    const out = sanitizeDocumentHtml(css + '<p class="n">\uf0a7 item \uf0d8 next</p>')
+    expect(out).toContain('\u2022')
+    expect(out).toContain('\u25aa item \u27a2 next')
+    expect(out).not.toMatch(/[\uf000-\uf0ff]/)
+  })
+
+  it('leaves other private-use characters alone (Symbol-font Greek letters, say)', () => {
+    expect(sanitizeDocumentHtml('<p>\uf061</p>')).toContain('\uf061')
+  })
+})
+
 describe('sanitizerWorks', () => {
   it('accepts a sanitizer that strips the canary', () => {
     expect(sanitizerWorks(DOMPurify(window))).toBe(true)

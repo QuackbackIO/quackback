@@ -189,11 +189,34 @@ function documentPurifier(): ReturnType<typeof DOMPurify> {
  * mail addresses and open outside the frame; images keep only embedded data.
  */
 export function sanitizeDocumentHtml(html: string): string {
-  return documentPurifier().sanitize(html, {
-    FORCE_BODY: true,
-    FORBID_TAGS,
-    FORBID_ATTR,
-  })
+  return withUnicodeBullets(
+    documentPurifier().sanitize(html, {
+      FORCE_BODY: true,
+      FORBID_TAGS,
+      FORBID_ATTR,
+    })
+  )
+}
+
+/**
+ * Word writes list bullets as private-use characters of the Symbol and
+ * Wingdings fonts, which most systems outside Windows do not have, so the
+ * bullet renders as nothing. Each common one maps to the Unicode glyph it
+ * draws. The replacement is character for character and cannot form markup.
+ */
+const LEGACY_FONT_BULLETS: Record<string, string> = {
+  '\uf0b7': '\u2022', // Symbol bullet
+  '\uf0a7': '\u25aa', // Wingdings small square
+  '\uf0d8': '\u27a2', // Wingdings arrowhead
+  '\uf076': '\u2756', // Wingdings diamond of diamonds
+  '\uf0fc': '\u2713', // Wingdings check mark
+  '\uf06c': '\u25cf', // Wingdings filled circle
+  '\uf06e': '\u25a0', // Wingdings filled square
+  '\uf071': '\u2751', // Wingdings shadowed square
+}
+
+function withUnicodeBullets(html: string): string {
+  return html.replace(/[\uf000-\uf0ff]/g, (c) => LEGACY_FONT_BULLETS[c] ?? c)
 }
 
 /** The desk behind the pages, matching the app's light and dark themes. */
