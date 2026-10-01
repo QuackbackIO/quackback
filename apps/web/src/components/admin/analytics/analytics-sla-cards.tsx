@@ -13,6 +13,7 @@ import type { DateRange } from '@/lib/client/queries/analytics'
 import { formatSlaCountdown } from '@/lib/shared/conversation/sla'
 import type { SlaAttainment, SlaBreachHeatmapCell } from '@/lib/server/domains/sla/sla-reporting'
 import { AnalyticsEmpty } from './analytics-empty'
+import { LoadError } from './analytics-load-error'
 import { ChartSkeleton } from './analytics-skeletons'
 
 const CLOCKS: { key: keyof SlaAttainment; label: string }[] = [
@@ -75,9 +76,19 @@ function BreachHeatmap({ cells }: { cells: SlaBreachHeatmapCell[] }) {
 /** The Support section's SLA and workflow cards: attainment per clock and per
  *  policy, breaches by hour, time after a miss, and workflow run outcomes. */
 export function AnalyticsSlaCards({ range }: { range: DateRange }) {
-  const { data, isLoading } = useQuery(supportReportingQuery(range.from, range.to))
+  const { data, isError, refetch } = useQuery(supportReportingQuery(range.from, range.to))
 
-  if (isLoading || !data) return <ChartSkeleton className="h-64 rounded-xl" />
+  if (isError && !data) {
+    return (
+      <Card className="overflow-hidden py-0">
+        <LoadError
+          message="SLA and workflow results could not be loaded."
+          onRetry={() => void refetch()}
+        />
+      </Card>
+    )
+  }
+  if (!data) return <ChartSkeleton className="h-64 rounded-xl" />
 
   const runs = data.workflows.reduce(
     (acc, w) => ({

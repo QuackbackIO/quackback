@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   Table,
@@ -16,6 +15,7 @@ import { copilotUsageMetricsQuery } from '@/lib/client/queries/assistant-copilot
 import type { DateRange } from '@/lib/client/queries/analytics'
 import { cn } from '@/lib/shared/utils'
 import { AnalyticsEmpty } from './analytics-empty'
+import { LoadError } from './analytics-load-error'
 import { AnalyticsStatRow } from './analytics-stat-row'
 import { SectionSkeleton } from './analytics-skeletons'
 
@@ -88,19 +88,6 @@ function OutcomeBar({
           </div>
         ))}
       </div>
-    </div>
-  )
-}
-
-function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return (
-    <div className="flex items-center justify-between gap-3 px-6 py-4">
-      <p role="alert" className="text-sm text-destructive">
-        {message}
-      </p>
-      <Button variant="outline" size="sm" onClick={onRetry}>
-        Try again
-      </Button>
     </div>
   )
 }

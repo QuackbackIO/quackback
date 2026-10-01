@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 const hoisted = vi.hoisted(() => ({ support: vi.fn() }))
@@ -122,5 +122,15 @@ describe('AnalyticsSlaCards', () => {
     hoisted.support.mockResolvedValue({ ...REPORT, slaHeatmap: [] })
     renderCards()
     expect(await screen.findByText('No breaches in this period')).toBeInTheDocument()
+  })
+
+  it('shows an error with a retry when the report fails to load', async () => {
+    hoisted.support.mockRejectedValueOnce(new Error('boom'))
+    renderCards()
+    expect(await screen.findByRole('alert')).toHaveTextContent(/could not be loaded/)
+    hoisted.support.mockResolvedValue(REPORT)
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(await screen.findByText('SLA attainment')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
   })
 })
