@@ -11,7 +11,7 @@
  *   - Tier hierarchy: raising View auto-clamps Vote/Comment/Submit
  *   - Workspace anonymous-* feature flags block the Everyone cell + banner
  *   - Auto-bump when workspace flips off while a cell sits on Anonymous
- *   - Changes autosave; the payload preserves `moderation` round-trip (passthrough only —
+ *   - Changes autosave; the payload preserves `moderation` round-trip (passthrough only;
  *     editing moderation lives in `<BoardModerationForm>`)
  *
  * The mutation, segments, and portalConfig queries are mocked. The
@@ -358,7 +358,7 @@ describe('<BoardAccessForm> workspace ceiling', () => {
     const submitAnon = screen.getByRole('button', { name: 'Submit posts: Everyone' })
     expect(submitAnon).toBeDisabled()
     expect(submitAnon.getAttribute('data-disabled-reason')).toBe('workspace')
-    // View row's Everyone cell is unaffected — view has no workspace ceiling.
+    // View row's Everyone cell is unaffected: view has no workspace ceiling.
     expect(screen.getByRole('button', { name: 'View: Everyone' })).not.toBeDisabled()
   })
 

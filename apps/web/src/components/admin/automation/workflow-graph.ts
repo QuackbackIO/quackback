@@ -365,7 +365,7 @@ export const CONDITION_FIELD_LIST = Object.keys(CONDITION_FIELD_META) as StaticC
  * The static field picker organized by entity group (RuleGroupBuilder,
  * consumed by condition-editor.tsx / branch-editor.tsx's paths / the
  * trigger's Audience section): Conversation / Message / User / Ticket /
- * Availability — the dynamic attribute groups (Conversation attribute / User attribute /
+ * Availability. The dynamic attribute groups (Conversation attribute / User attribute /
  * Company attribute) render as their own SelectGroups alongside these, keyed
  * off the live registries instead of this static catalogue. A Record (not a
  * loop over CONDITION_FIELD_LIST) so a newly added static field fails

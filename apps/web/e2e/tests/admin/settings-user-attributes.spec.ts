@@ -347,7 +347,7 @@ test.describe('Admin User Attributes Settings', () => {
     const confirmDialog = page.getByRole('alertdialog').or(page.getByRole('dialog'))
     await expect(confirmDialog).toBeVisible({ timeout: 5000 })
 
-    // Cancel — attribute should still be there
+    // Cancel: the attribute should still be there
     await confirmDialog.getByRole('button', { name: /cancel/i }).click()
     await expect(confirmDialog).toBeHidden({ timeout: 5000 })
     await expect(page.getByText(attrLabel)).toBeVisible()

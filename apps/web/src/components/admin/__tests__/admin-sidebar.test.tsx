@@ -106,7 +106,7 @@ function renderSidebar(
   )
 }
 
-describe('AdminSidebar — workspace switcher', () => {
+describe('AdminSidebar: workspace switcher', () => {
   afterEach(() => {
     mockSiblings.current = []
     mockBillingEnabled.current = false
@@ -190,7 +190,7 @@ describe('buildRailItems', () => {
   })
 })
 
-describe('AdminSidebar — Home logo', () => {
+describe('AdminSidebar: Home logo', () => {
   afterEach(() => cleanup())
 
   it('sends the org logo to Overview', () => {
@@ -208,7 +208,7 @@ describe('AdminSidebar — Home logo', () => {
   })
 })
 
-describe('AdminSidebar — settings entry', () => {
+describe('AdminSidebar: settings entry', () => {
   afterEach(() => cleanup())
 
   it('shows Settings to admins', () => {
@@ -249,7 +249,7 @@ describe('AdminSidebar — settings entry', () => {
   })
 })
 
-describe('AdminSidebar — labeled rail', () => {
+describe('AdminSidebar: labeled rail', () => {
   afterEach(() => cleanup())
 
   it('always shows full menu labels, whatever the stored appearance says', () => {
@@ -284,7 +284,7 @@ describe('AdminSidebar — labeled rail', () => {
   })
 })
 
-describe('AdminSidebar — AI & Automation', () => {
+describe('AdminSidebar: AI & Automation', () => {
   afterEach(() => cleanup())
 
   it('has no rail item: the pages live under Settings', () => {
