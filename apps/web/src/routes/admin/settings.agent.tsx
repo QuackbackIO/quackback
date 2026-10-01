@@ -27,7 +27,7 @@ import { assistantQueries } from '@/lib/client/queries/assistant'
 import { warmQuery } from '@/lib/client/queries/warm-query'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
-import { isProductEnabled, type FeatureFlags } from '@/lib/shared/types'
+import type { FeatureFlags } from '@/lib/shared/types'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 const AGENT_TABS = ['basics', 'knowledge', 'guidance'] as const
@@ -84,9 +84,9 @@ function AssistantAgentSettings() {
     enabled: initialDeployment?.enabled ?? true,
     respond: initialDeployment?.respond ?? true,
   })
-  // The Support product is the inbox or tickets; either one makes the Agent available.
-  const supportOn = isProductEnabled(flags, 'support')
-  const statusLine = useAgentStatusLine(deployment, supportOn)
+  // The Agent answers in Messenger, which needs the Support inbox; tickets alone do not give it one.
+  const inboxOn = Boolean(flags?.supportInbox)
+  const statusLine = useAgentStatusLine(deployment, inboxOn, Boolean(flags?.supportTickets))
   const unsavedLabel = intl.formatMessage({
     id: 'automation.agent.tabs.unsaved',
     defaultMessage: 'Unsaved changes',
@@ -111,11 +111,7 @@ function AssistantAgentSettings() {
         page="/admin/settings/agent"
         description={statusLine}
         actions={
-          <AgentPauseControl
-            deployment={deployment}
-            available={supportOn}
-            onChange={setDeployment}
-          />
+          <AgentPauseControl deployment={deployment} available={inboxOn} onChange={setDeployment} />
         }
       >
         {settingsQuery.isPending ? (

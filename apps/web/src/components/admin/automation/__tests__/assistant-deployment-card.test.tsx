@@ -8,6 +8,7 @@ import { createAutosaveMutationCache } from '@/lib/client/autosave'
 const toastError = vi.hoisted(() => vi.fn())
 vi.mock('sonner', () => ({ toast: { error: toastError } }))
 
+vi.mock('@/lib/client/use-permissions', () => ({ useHasPermission: () => true }))
 vi.mock('@/lib/server/functions/assistant-settings', () => ({
   getAssistantSettingsFn: vi.fn(),
   updateAssistantIdentityFn: vi.fn(),
@@ -84,6 +85,23 @@ describe('Agent pause control', () => {
       </IntlProvider>
     )
     expect(screen.getByTestId('line')).toHaveTextContent(/Turn on Support/)
+  })
+
+  it('names the Support inbox for a tickets-only workspace', () => {
+    function LineOnly() {
+      return (
+        <p data-testid="line">
+          {useAgentStatusLine({ enabled: true, respond: true }, false, true)}
+        </p>
+      )
+    }
+    render(
+      <IntlProvider locale="en" messages={{}} onError={() => {}}>
+        <LineOnly />
+      </IntlProvider>
+    )
+    expect(screen.getByTestId('line')).toHaveTextContent(/need the Support inbox/)
+    expect(screen.getByTestId('line')).not.toHaveTextContent('Replying in Messenger')
   })
 
   it('pauses after confirming, sending only respond: false', async () => {

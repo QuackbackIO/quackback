@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 
-const hoisted = vi.hoisted(() => ({ flags: {} as Record<string, boolean> }))
+const hoisted = vi.hoisted(() => ({ flags: {} as Record<string, boolean>, canManage: true }))
 
 vi.mock('@tanstack/react-router', () => ({
   createFileRoute: () => (options: Record<string, unknown>) => ({
@@ -22,6 +22,9 @@ vi.mock('@tanstack/react-query', () => ({
   useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useQueryClient: () => ({}),
   queryOptions: (options: unknown) => options,
+}))
+vi.mock('@/lib/client/use-permissions', () => ({
+  useHasPermission: () => hoisted.canManage,
 }))
 vi.mock('@/lib/client/hooks/use-root-context', () => ({
   useWorkspaceSettings: () => ({
@@ -73,8 +76,9 @@ const { Route } = await import('../settings.agent')
 const AgentPage = (Route as unknown as { options: { component: () => ReactNode } }).options
   .component
 
-function renderPage(flags: Record<string, boolean>) {
+function renderPage(flags: Record<string, boolean>, canManage = true) {
   hoisted.flags = flags
+  hoisted.canManage = canManage
   return render(
     <IntlProvider locale="en" defaultLocale="en">
       <AgentPage />
@@ -84,21 +88,31 @@ function renderPage(flags: Record<string, boolean>) {
 
 afterEach(cleanup)
 
-describe('Agent page without the Support product', () => {
+describe('Agent page without the Support inbox', () => {
   it('asks to turn on Support when neither the inbox nor tickets is on', () => {
     renderPage({ supportInbox: false, supportTickets: false })
     expect(screen.getByTestId('description')).toHaveTextContent(/Turn on Support/)
     expect(screen.getByRole('link', { name: 'Open product settings' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Pause Agent' })).toBeNull()
   })
 
-  it('does not ask a tickets-only workspace to turn on Support', () => {
+  it('tells a tickets-only workspace that Messenger replies need the Support inbox', () => {
     renderPage({ supportInbox: false, supportTickets: true })
-    expect(screen.getByTestId('description')).not.toHaveTextContent(/Turn on Support/)
+    expect(screen.getByTestId('description')).toHaveTextContent(/need the Support inbox/)
+    expect(screen.getByTestId('description')).not.toHaveTextContent('Replying in Messenger')
+    expect(screen.queryByRole('button', { name: 'Pause Agent' })).toBeNull()
+    expect(screen.getByRole('link', { name: 'Open product settings' })).toBeInTheDocument()
+  })
+
+  it('shows the live line and the pause control once the inbox is on', () => {
+    renderPage({ supportInbox: true, supportTickets: false })
+    expect(screen.getByTestId('description')).toHaveTextContent('Replying in Messenger')
     expect(screen.getByRole('button', { name: 'Pause Agent' })).toBeInTheDocument()
   })
 
-  it('treats the inbox alone as the Support product', () => {
-    renderPage({ supportInbox: true, supportTickets: false })
-    expect(screen.getByTestId('description')).toHaveTextContent('Replying in Messenger')
+  it('offers the General link only to someone who can open General', () => {
+    renderPage({ supportInbox: false, supportTickets: false }, false)
+    expect(screen.queryByRole('link', { name: 'Open product settings' })).toBeNull()
+    expect(screen.getByTestId('description')).toHaveTextContent(/Turn on Support/)
   })
 })
