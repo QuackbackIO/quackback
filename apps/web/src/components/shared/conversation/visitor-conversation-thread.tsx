@@ -38,6 +38,7 @@ import {
   type ComposerUploadFn,
 } from '@/lib/client/hooks/use-conversation-composer-attachments'
 import { ComposerAttachmentTray } from '@/components/shared/composer-attachment-tray'
+import { ConversationGalleryProvider } from '@/components/shared/files/conversation-gallery'
 import { VISITOR_CONVERSATION_FEATURES } from '@/components/conversation/conversation-editor-features'
 import { VisitorMessageBubble } from '@/components/conversation/message-bubble'
 import {
@@ -167,6 +168,10 @@ export interface VisitorConversationThreadProps {
    * would cover the thread) does not.
    */
   autofocusComposer?: boolean
+  /** The widget's messenger is narrow — attachment cards render as compact
+   *  rows there. The portal Support tab is wide and leaves this at its
+   *  default. */
+  compact?: boolean
 }
 
 /**
@@ -195,6 +200,7 @@ export function VisitorConversationThread({
   showHeader = true,
   onConversationStarted,
   autofocusComposer = false,
+  compact = false,
 }: VisitorConversationThreadProps) {
   const intl = useIntl()
   const queryClient = useQueryClient()
@@ -964,6 +970,9 @@ export function VisitorConversationThread({
             content={m.content}
             contentJson={m.contentJson}
             attachments={m.attachments}
+            messageId={m.id}
+            sentAt={m.createdAt}
+            compact={compact}
             citations={m.citations}
             time={formatTime(m.createdAt)}
             editedLabel={
@@ -1182,15 +1191,22 @@ export function VisitorConversationThread({
       {linkedTicket && <TicketHeaderCard ticket={linkedTicket} getAuthHeaders={getAuthHeaders} />}
 
       <div className="relative flex-1 min-h-0">
-        <ThreadViewport
-          virtualizer={virtualizer}
-          rows={rows}
-          renderRow={renderRow}
-          viewportRef={scrollViewportRef}
-          scrollBarClassName="w-1.5"
-          className="h-full"
-          rowClassName="px-3 py-1.5"
-        />
+        {/* Every attachment in the loaded thread, in message order — lets a
+            card's click open the viewer on the whole conversation, not just
+            its own message. Visitor-facing, so internal notes are never
+            included (they should never reach this DTO in the first place;
+            this is belt-and-suspenders). */}
+        <ConversationGalleryProvider messages={messages}>
+          <ThreadViewport
+            virtualizer={virtualizer}
+            rows={rows}
+            renderRow={renderRow}
+            viewportRef={scrollViewportRef}
+            scrollBarClassName="w-1.5"
+            className="h-full"
+            rowClassName="px-3 py-1.5"
+          />
+        </ConversationGalleryProvider>
 
         {/* First load: the viewport has no rows yet (the greeting/empty row
             is withheld until we know which thread this is), so bubble-shaped

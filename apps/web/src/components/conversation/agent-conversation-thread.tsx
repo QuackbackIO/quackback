@@ -117,6 +117,7 @@ import {
   resolveResolvedStatusId,
 } from '@/lib/shared/tickets'
 import { AgentMessageBubble, UnreadDivider } from '@/components/conversation/message-bubble'
+import { ConversationGalleryProvider } from '@/components/shared/files/conversation-gallery'
 import { computeBlockStates } from '@/components/shared/conversation/conversation-rows'
 import {
   ThreadViewport,
@@ -2153,13 +2154,18 @@ export function AgentConversationThread({
           <ThreadTagsFallback conversationId={conversationId} tags={conversation.tags} />
         )}
 
-        <ThreadMessages
-          rows={rows}
-          renderRow={renderRow}
-          lastMessageId={lastMessageId}
-          skipInitialScroll={skipInitialScroll}
-          handleRef={messagesRef}
-        />
+        {/* Every attachment in the loaded thread, in message order, so a
+            card's click opens the viewer on the whole conversation. Agents
+            see internal notes' attachments too — includeInternal. */}
+        <ConversationGalleryProvider messages={messages} includeInternal>
+          <ThreadMessages
+            rows={rows}
+            renderRow={renderRow}
+            lastMessageId={lastMessageId}
+            skipInitialScroll={skipInitialScroll}
+            handleRef={messagesRef}
+          />
+        </ConversationGalleryProvider>
 
         {/* P2-D.1 inbox translation: dismissible auto-suggest banner, shown
             above the composer when the customer's detected language differs

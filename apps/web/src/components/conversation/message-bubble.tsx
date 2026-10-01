@@ -33,7 +33,7 @@ import {
 } from '@heroicons/react/24/solid'
 import { BookmarkIcon, PencilIcon, SparklesIcon } from '@heroicons/react/24/outline'
 import { Avatar } from '@/components/ui/avatar'
-import { ConversationAttachmentList } from '@/components/shared/conversation-attachments'
+import { AttachmentList } from '@/components/shared/files/attachment-list'
 import { ReactionChip } from '@/components/shared/reaction-chip'
 import { NoteContent } from '@/components/admin/conversation/note-content'
 import { isJumboEmojiMessage, JUMBO_EMOJI_CLASS } from '@/lib/shared/conversation/jumbo-emoji'
@@ -355,6 +355,12 @@ interface VisitorMessageBubbleProps {
   /** Marks the author as the AI assistant in the attribution line. */
   isAssistant?: boolean
   attachments?: ConversationAttachment[]
+  /** The message's id and raw ISO send time — only read when `attachments`
+   *  is non-empty, to build the file viewer's whole-conversation gallery
+   *  context (`sentAt` is distinct from the already-localized `time` label
+   *  below, which the attribution line renders). */
+  messageId?: string
+  sentAt?: string
   /** KB sources for an AI reply. When present, a collapsed sources trace renders
    *  above the bubble and inline [n] markers in `content` become citation dots. */
   citations?: ConversationMessageCitation[]
@@ -365,6 +371,9 @@ interface VisitorMessageBubbleProps {
   linkPreviews?: boolean
   getAuthHeaders?: () => Record<string, string>
   embedOpenMode?: EmbedOpenMode
+  /** Narrow surfaces (the widget): attachment cards render as compact rows.
+   *  The wide portal support page leaves this at its default. */
+  compact?: boolean
 }
 
 function MessageEditForm({
@@ -638,9 +647,6 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
                     </>
                   )
                 )}
-                {message.attachments.length > 0 && (
-                  <ConversationAttachmentList attachments={message.attachments} />
-                )}
                 {linkPreviews && !isNote && (
                   <LinkPreviews content={message.content} contentJson={message.contentJson} />
                 )}
@@ -758,6 +764,15 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
           )}
         </div>
 
+        {/* Attachments render BELOW the bubble fill, not inside it, so a card
+            reads the same on a gold visitor bubble as on a grey agent one. */}
+        {message.attachments.length > 0 && (
+          <AttachmentList
+            attachments={message.attachments}
+            context={{ senderName: authorName, sentAt: message.createdAt, messageId: message.id }}
+          />
+        )}
+
         {/* Note-only follow-ups render as their own cards below the bubble
             (they already carry their own border/fill) rather than nested
             inside the note's amber surface. */}
@@ -874,12 +889,15 @@ export function VisitorMessageBubble({
   selfLabel,
   isAssistant = false,
   attachments,
+  messageId,
+  sentAt,
   citations,
   time,
   editedLabel,
   linkPreviews = false,
   getAuthHeaders,
   embedOpenMode = 'newTab',
+  compact = false,
 }: VisitorMessageBubbleProps) {
   const self = side === 'self'
   const jumbo = isJumboEmojiMessage(content, contentJson)
@@ -913,9 +931,6 @@ export function VisitorMessageBubble({
             <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">{content}</div>
           ))
         )}
-        {attachments && attachments.length > 0 && (
-          <ConversationAttachmentList attachments={attachments} />
-        )}
         {linkPreviews && (
           <LinkPreviews
             content={content}
@@ -924,6 +939,18 @@ export function VisitorMessageBubble({
           />
         )}
       </div>
+
+      {/* Attachments render BELOW the bubble fill, not inside it — same rule
+          as the admin thread's AgentMessageBubble, so a file card reads the
+          same on the visitor's own gold bubble as on a peer's grey one. */}
+      {attachments && attachments.length > 0 && (
+        <AttachmentList
+          attachments={attachments}
+          context={{ senderName: authorName, sentAt, messageId }}
+          compact={compact}
+        />
+      )}
+
       {/* Attribution below the bubble. Peer (team/assistant) shows name · time;
           the assistant's name gets a subtle sparkle + "AI" suffix as one
           cohesive label. Self (the visitor) shows "You · time" only when a

@@ -79,6 +79,7 @@ export function WidgetMessenger({
         embedOpenMode="newTab"
         showHeader={false}
         autofocusComposer={autofocusComposer}
+        compact
       />
     </VisitorSurfaceRpcProvider>
   )
