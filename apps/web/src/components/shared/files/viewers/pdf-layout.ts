@@ -92,13 +92,6 @@ export function findMatches(pageTexts: readonly string[], query: string): TextMa
   return matches
 }
 
-/** The next (or previous, `direction` -1) match index, wrapping; -1 when none. */
-export function stepMatch(index: number, count: number, direction: 1 | -1): number {
-  if (count === 0) return -1
-  if (index < 0) return direction === 1 ? 0 : count - 1
-  return (index + direction + count) % count
-}
-
 /** Each page's offset down the desk: padding above, then pages and gaps. */
 export function pageTops(heights: readonly number[], padding: number, gap: number): number[] {
   const tops: number[] = []

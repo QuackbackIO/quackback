@@ -5,9 +5,43 @@
  * viewer stays open. The engine owns the matching, the highlighting and
  * focusing the field when find opens.
  */
-import type { KeyboardEvent, ReactNode, RefObject } from 'react'
+import {
+  useCallback,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+  type RefObject,
+} from 'react'
 import { useIntl } from 'react-intl'
 import { ChevronDownIcon, ChevronUpIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { Button } from '@/components/ui/button'
+
+/**
+ * The find bar's open/close wiring, shared by every engine that embeds it:
+ * opening focuses and selects the field (so typing replaces the last query);
+ * closing returns focus to the engine's own content area, named by
+ * `returnFocusRef` (the desk, the grid, the scrollable text).
+ */
+export function useFindToggle(returnFocusRef: RefObject<HTMLElement | null>) {
+  const [findOpen, setFindOpen] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const openFind = useCallback(() => {
+    setFindOpen(true)
+    requestAnimationFrame(() => {
+      inputRef.current?.focus()
+      inputRef.current?.select()
+    })
+  }, [])
+
+  const closeFind = useCallback(() => {
+    setFindOpen(false)
+    returnFocusRef.current?.focus()
+  }, [returnFocusRef])
+
+  return { findOpen, inputRef, openFind, closeFind }
+}
 
 export function FindBar({
   inputRef,
@@ -112,15 +146,17 @@ function FindButton({
   children: ReactNode
 }) {
   return (
-    <button
+    <Button
       type="button"
+      variant="ghost"
+      size="icon-sm"
       aria-label={label}
       title={label}
       disabled={disabled}
       onClick={onClick}
-      className="grid size-6 place-items-center rounded-md hover:bg-muted hover:text-foreground disabled:opacity-40"
+      className="size-6"
     >
       {children}
-    </button>
+    </Button>
   )
 }

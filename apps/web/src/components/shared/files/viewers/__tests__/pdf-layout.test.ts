@@ -14,7 +14,6 @@ import {
   pagesNear,
   pdfFailure,
   safeLinkUrl,
-  stepMatch,
 } from '../pdf-layout'
 
 describe('fitWidthZoom', () => {
@@ -111,19 +110,6 @@ describe('findMatches', () => {
     const found = findMatches(['ab '.repeat(MAX_FIND_MATCHES), 'ab ab'], 'ab')
     expect(found).toHaveLength(MAX_FIND_MATCHES)
     expect(found.at(-1)!.page).toBe(1)
-  })
-})
-
-describe('stepMatch', () => {
-  it('wraps around in both directions', () => {
-    expect(stepMatch(0, 3, 1)).toBe(1)
-    expect(stepMatch(2, 3, 1)).toBe(0)
-    expect(stepMatch(0, 3, -1)).toBe(2)
-    expect(stepMatch(-1, 3, 1)).toBe(0)
-  })
-
-  it('is -1 with nothing to step through', () => {
-    expect(stepMatch(0, 0, 1)).toBe(-1)
   })
 })
 

@@ -30,8 +30,8 @@ import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import type { ViewerEngineProps } from '../types'
 import { ViewerSkeleton } from '../viewer-skeleton'
 import { withTimeout } from './budgets'
-import { FindBar } from './find-bar'
-import { MAX_FIND_MATCHES } from './find-limit'
+import { FindBar, useFindToggle } from './find-bar'
+import { MAX_FIND_MATCHES, stepMatch } from './find-limit'
 import {
   currentPage,
   findMatches,
@@ -42,7 +42,6 @@ import {
   pageTops,
   pagesNear,
   pdfFailure,
-  stepMatch,
   type TextMatch,
 } from './pdf-layout'
 import { PdfPage, PdfThumb, thumbSlotHeight, type PageText } from './pdf-page'
@@ -247,8 +246,7 @@ export default function PdfEngine({ data, onToolbar, onError, compact }: ViewerE
 
   // ---- Find ---------------------------------------------------------------
 
-  const [findOpen, setFindOpen] = useState(false)
-  const findInputRef = useRef<HTMLInputElement>(null)
+  const { findOpen, inputRef: findInputRef, openFind, closeFind } = useFindToggle(deskRef)
   const [query, setQuery] = useState('')
   const [matches, setMatches] = useState<readonly TextMatch[]>(NO_MATCHES)
   const [activeMatch, setActiveMatch] = useState(-1)
@@ -306,20 +304,6 @@ export default function PdfEngine({ data, onToolbar, onError, compact }: ViewerE
     },
     [activeMatch, matches, reveal]
   )
-
-  const openFind = useCallback(() => {
-    setFindOpen(true)
-    // Focus after the bar mounts; select so typing replaces the last query.
-    requestAnimationFrame(() => {
-      findInputRef.current?.focus()
-      findInputRef.current?.select()
-    })
-  }, [])
-
-  const closeFind = useCallback(() => {
-    setFindOpen(false)
-    deskRef.current?.focus()
-  }, [])
 
   const matchesByPage = useMemo(() => {
     const byPage = new Map<number, { list: TextMatch[]; first: number }>()

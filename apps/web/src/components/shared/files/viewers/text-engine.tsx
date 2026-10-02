@@ -10,8 +10,8 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { formatBytes } from '@/lib/shared/files/file-types'
 import { cn } from '@/lib/shared/utils'
 import type { ViewerEngineProps } from '../types'
-import { FindBar } from './find-bar'
-import { MAX_FIND_MATCHES } from './find-limit'
+import { FindBar, useFindToggle } from './find-bar'
+import { MAX_FIND_MATCHES, stepMatch } from './find-limit'
 import { TEXT_HEAD_BYTES } from './index'
 import {
   decodeText,
@@ -60,20 +60,11 @@ export default function TextEngine({
   }
 
   const [wrap, setWrap] = useState(compact)
-  const [findOpen, setFindOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
-  const inputRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const { findOpen, inputRef, openFind, closeFind } = useFindToggle(scrollRef)
 
-  const openFind = useCallback(() => {
-    setFindOpen(true)
-    // Focus after the bar mounts; select so typing replaces the last query.
-    requestAnimationFrame(() => {
-      inputRef.current?.focus()
-      inputRef.current?.select()
-    })
-  }, [])
   const toggleWrap = useCallback(() => setWrap((on) => !on), [])
 
   useEffect(() => {
@@ -128,14 +119,9 @@ export default function TextEngine({
     if (current >= 0) virtualizer.scrollToIndex(matches[current]!.line, { align: 'center' })
   }, [current, matches, virtualizer])
 
-  function step(delta: number) {
-    if (matches.length === 0) return
-    setActive((current + delta + matches.length) % matches.length)
-  }
-
-  function closeFind() {
-    setFindOpen(false)
-    scrollRef.current?.focus()
+  function step(delta: 1 | -1) {
+    const next = stepMatch(current, matches.length, delta)
+    if (next >= 0) setActive(next)
   }
 
   if (empty) return null

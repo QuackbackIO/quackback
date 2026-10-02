@@ -6,7 +6,6 @@
  * bar: it searches the sheet on screen and moves the selection to each match.
  */
 import {
-  useCallback,
   useEffect,
   useEffectEvent,
   useMemo,
@@ -19,8 +18,8 @@ import { useIntl } from 'react-intl'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { cn } from '@/lib/shared/utils'
 import type { EngineToolbar } from '../types'
-import { FindBar } from './find-bar'
-import { MAX_FIND_MATCHES } from './find-limit'
+import { FindBar, useFindToggle } from './find-bar'
+import { MAX_FIND_MATCHES, stepMatch } from './find-limit'
 import {
   cellAlign,
   cellRef,
@@ -62,10 +61,9 @@ export function SheetView({
   const sheet = sheets[active] ?? sheets[0]!
   const gridRef = useRef<HTMLDivElement>(null)
 
-  const [findOpen, setFindOpen] = useState(false)
+  const { findOpen, inputRef, openFind, closeFind } = useFindToggle(gridRef)
   const [query, setQuery] = useState('')
   const [current, setCurrent] = useState(0)
-  const inputRef = useRef<HTMLInputElement>(null)
   const matches = useMemo(() => (findOpen ? findCells(sheet, query) : []), [findOpen, sheet, query])
   const matched = useMemo(() => new Set(matches.map((m) => `${m.r}:${m.c}`)), [matches])
 
@@ -75,25 +73,11 @@ export function SheetView({
     if (matches[0]) setSelected(matches[0])
   }, [matches])
 
-  const openFind = useCallback(() => {
-    setFindOpen(true)
-    // Focus after the bar mounts; select so typing replaces the last query.
-    requestAnimationFrame(() => {
-      inputRef.current?.focus()
-      inputRef.current?.select()
-    })
-  }, [])
-
-  function stepMatch(delta: 1 | -1) {
-    if (matches.length === 0) return
-    const next = (current + delta + matches.length) % matches.length
+  function onFindStep(delta: 1 | -1) {
+    const next = stepMatch(current, matches.length, delta)
+    if (next < 0) return
     setCurrent(next)
     setSelected(matches[next]!)
-  }
-
-  function closeFind() {
-    setFindOpen(false)
-    gridRef.current?.focus()
   }
 
   const report = useEffectEvent(onToolbar)
@@ -117,7 +101,7 @@ export function SheetView({
           current={matches.length > 0 ? current : -1}
           total={matches.length}
           capped={matches.length >= MAX_FIND_MATCHES}
-          onStep={stepMatch}
+          onStep={onFindStep}
           onClose={closeFind}
         />
       )}
