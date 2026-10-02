@@ -1,9 +1,14 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi } from 'vitest'
-import { render as rtlRender, screen } from '@testing-library/react'
+import { render as rtlRender, screen, fireEvent } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import { ComposerAttachmentTray } from '../composer-attachment-tray'
 import type { ComposerAttachmentItem } from '@/lib/client/hooks/use-conversation-composer-attachments'
+
+const open = vi.fn()
+vi.mock('@/components/shared/files/file-viewer-context', () => ({
+  useFileViewer: () => ({ open }),
+}))
 
 function render(node: React.ReactNode, messages: Record<string, string> = {}, locale = 'en-US') {
   return rtlRender(
@@ -47,6 +52,57 @@ describe('ComposerAttachmentTray', () => {
     expect(screen.getByText('1 KB')).toBeInTheDocument()
   })
 
+  it('opens the viewer on a ready file tile, with every ready tile as the gallery', () => {
+    open.mockClear()
+    const image = item({
+      localId: 'att_img',
+      name: 'shot.png',
+      family: 'image',
+      file: {
+        fileId: 'file_img',
+        url: '/api/storage/files/shot.png',
+        name: 'shot.png',
+        contentType: 'image/png',
+        size: 10,
+        family: 'image',
+      },
+    })
+    const uploading = item({
+      localId: 'att_up',
+      name: 'still-going.pdf',
+      status: 'uploading',
+      progress: 0.5,
+      file: undefined,
+    })
+    render(
+      <ComposerAttachmentTray
+        items={[image, item(), uploading]}
+        onRemove={vi.fn()}
+        onRetry={vi.fn()}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Open report.pdf' }))
+    expect(open).toHaveBeenCalledTimes(1)
+    const [files, index] = open.mock.calls[0]!
+    // Only the two ready tiles form the gallery; the still-uploading one
+    // carries no file yet and is left out.
+    expect(files.map((f: { name: string }) => f.name)).toEqual(['shot.png', 'report.pdf'])
+    expect(index).toBe(1)
+  })
+
+  it('does not open the viewer from an uploading or failed tile', () => {
+    open.mockClear()
+    render(
+      <ComposerAttachmentTray
+        items={[item({ status: 'uploading', progress: 0.2, file: undefined })]}
+        onRemove={vi.fn()}
+        onRetry={vi.fn()}
+      />
+    )
+    expect(screen.queryByRole('button', { name: 'Open report.pdf' })).not.toBeInTheDocument()
+    expect(open).not.toHaveBeenCalled()
+  })
+
   it('renders an uploading tile with a progress bar instead of a size', () => {
     render(
       <ComposerAttachmentTray
@@ -82,7 +138,7 @@ describe('ComposerAttachmentTray', () => {
   })
 
   it('switches an image tile to the server URL once ready', () => {
-    render(
+    const { container } = render(
       <ComposerAttachmentTray
         items={[
           item({
@@ -103,10 +159,10 @@ describe('ComposerAttachmentTray', () => {
         onRetry={vi.fn()}
       />
     )
-    expect(screen.getByRole('img', { name: 'shot.png' })).toHaveAttribute(
-      'src',
-      '/api/storage/files/shot.png'
-    )
+    // Ready, so the image sits inside the "Open shot.png" button, which
+    // already carries the accessible name; the <img> itself goes decorative.
+    expect(screen.getByRole('button', { name: 'Open shot.png' })).toBeInTheDocument()
+    expect(container.querySelector('img')).toHaveAttribute('src', '/api/storage/files/shot.png')
   })
 
   it('shows the error text on a failed tile and offers Retry only when retryable', () => {

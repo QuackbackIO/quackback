@@ -1,6 +1,8 @@
 import { useIntl, type IntlShape } from 'react-intl'
 import { XMarkIcon } from '@heroicons/react/24/solid'
 import { FileBadge } from '@/components/shared/files/file-badge'
+import { useFileViewer } from '@/components/shared/files/file-viewer-context'
+import { toViewerFile } from '@/components/shared/files/types'
 import { formatBytes, maxBytesForFamily } from '@/lib/shared/files/file-types'
 import { MAX_CONVERSATION_ATTACHMENTS } from '@/lib/shared/conversation/types'
 import { cn } from '@/lib/shared/utils/cn'
@@ -10,6 +12,9 @@ interface TileProps {
   item: ComposerAttachmentItem
   onRemove: (localId: string) => void
   onRetry: (localId: string) => void
+  /** Opens the shared file viewer on this tile, once it's ready — absent for
+   *  the uploading/failed states, which have nothing to view yet. */
+  onOpen?: (item: ComposerAttachmentItem) => void
 }
 
 /**
@@ -94,10 +99,11 @@ function RetryButton({
   )
 }
 
-function ImageTile({ item, onRemove, onRetry }: TileProps) {
+function ImageTile({ item, onRemove, onRetry, onOpen }: TileProps) {
   const intl = useIntl()
   const src = item.file?.url ?? item.previewUrl
   const failed = item.status === 'error'
+  const ready = item.status === 'ready'
   const errorText = failed ? localizedError(item, intl) : undefined
   return (
     <div
@@ -106,7 +112,22 @@ function ImageTile({ item, onRemove, onRetry }: TileProps) {
         failed ? 'border-destructive/40' : 'border-border/60'
       )}
     >
-      {src && <img src={src} alt={item.name || 'Image'} className="size-full object-cover" />}
+      {src &&
+        (ready && onOpen ? (
+          <button
+            type="button"
+            onClick={() => onOpen(item)}
+            aria-label={intl.formatMessage(
+              { id: 'files.card.open', defaultMessage: 'Open {name}' },
+              { name: item.name || 'file' }
+            )}
+            className="block size-full"
+          >
+            <img src={src} alt="" className="size-full object-cover" />
+          </button>
+        ) : (
+          <img src={src} alt={item.name || 'Image'} className="size-full object-cover" />
+        ))}
       {item.status === 'uploading' && (
         <div className="absolute inset-x-0 bottom-0 h-1 bg-black/20">
           <div
@@ -131,23 +152,17 @@ function ImageTile({ item, onRemove, onRetry }: TileProps) {
   )
 }
 
-function FileTile({ item, onRemove, onRetry }: TileProps) {
+function FileTile({ item, onRemove, onRetry, onOpen }: TileProps) {
   const intl = useIntl()
   const failed = item.status === 'error'
+  const ready = item.status === 'ready'
   const errorText = failed ? localizedError(item, intl) : undefined
-  return (
-    <div
-      className={cn(
-        'group relative flex h-14 w-52 shrink-0 items-center gap-2 rounded-md border px-2.5',
-        failed ? 'border-destructive/40 bg-destructive/5' : 'border-border/60 bg-muted/30'
-      )}
-    >
+  const body = (
+    <>
       <FileBadge name={item.name} family={item.family} size="sm" />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-xs font-medium text-foreground">{item.name || 'File'}</span>
-        {item.status === 'ready' && (
-          <span className="text-[11px] text-muted-foreground">{formatBytes(item.size)}</span>
-        )}
+        {ready && <span className="text-[11px] text-muted-foreground">{formatBytes(item.size)}</span>}
         {item.status === 'uploading' && (
           <div className="h-1 overflow-hidden rounded-full bg-muted">
             <div
@@ -170,6 +185,30 @@ function FileTile({ item, onRemove, onRetry }: TileProps) {
           </span>
         )}
       </div>
+    </>
+  )
+  return (
+    <div
+      className={cn(
+        'group relative flex h-14 w-52 shrink-0 items-center gap-2 rounded-md border px-2.5',
+        failed ? 'border-destructive/40 bg-destructive/5' : 'border-border/60 bg-muted/30'
+      )}
+    >
+      {ready && onOpen ? (
+        <button
+          type="button"
+          onClick={() => onOpen(item)}
+          aria-label={intl.formatMessage(
+            { id: 'files.card.open', defaultMessage: 'Open {name}' },
+            { name: item.name || 'file' }
+          )}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        >
+          {body}
+        </button>
+      ) : (
+        body
+      )}
       <RemoveButton item={item} onRemove={onRemove} />
     </div>
   )
@@ -207,7 +246,10 @@ function CapNoticeLine({ item, onRemove }: Omit<TileProps, 'onRetry'>) {
  * are never sent. Image tiles are a plain thumbnail (local object URL while
  * uploading, the stored file's URL once ready); every other file is a badge +
  * name + one meta line. Rendered INSIDE the composer input, below the editor,
- * so it reads as part of the message being drafted.
+ * so it reads as part of the message being drafted. Clicking a ready tile
+ * opens the shared viewer, with every other ready tile in the tray as its
+ * gallery — the still-uploading/failed ones have nothing to show yet and are
+ * left out.
  */
 export function ComposerAttachmentTray({
   items,
@@ -218,7 +260,15 @@ export function ComposerAttachmentTray({
   onRemove: (localId: string) => void
   onRetry: (localId: string) => void
 }) {
+  const { open } = useFileViewer()
   if (items.length === 0) return null
+
+  const readyItems = items.filter((it) => it.status === 'ready' && it.file)
+  const readyFiles = readyItems.map((it) => toViewerFile(it.file!))
+  const onOpen = (item: ComposerAttachmentItem) => {
+    const index = readyItems.findIndex((it) => it.localId === item.localId)
+    if (index >= 0) open(readyFiles, index)
+  }
 
   return (
     <div className="flex flex-wrap gap-2 pt-2">
@@ -226,9 +276,9 @@ export function ComposerAttachmentTray({
         item.errorReason === 'cap' ? (
           <CapNoticeLine key={item.localId} item={item} onRemove={onRemove} />
         ) : item.family === 'image' ? (
-          <ImageTile key={item.localId} item={item} onRemove={onRemove} onRetry={onRetry} />
+          <ImageTile key={item.localId} item={item} onRemove={onRemove} onRetry={onRetry} onOpen={onOpen} />
         ) : (
-          <FileTile key={item.localId} item={item} onRemove={onRemove} onRetry={onRetry} />
+          <FileTile key={item.localId} item={item} onRemove={onRemove} onRetry={onRetry} onOpen={onOpen} />
         )
       )}
     </div>
