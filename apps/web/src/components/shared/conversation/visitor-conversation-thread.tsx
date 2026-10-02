@@ -38,7 +38,10 @@ import {
   type ComposerUploadFn,
 } from '@/lib/client/hooks/use-conversation-composer-attachments'
 import { ComposerAttachmentTray } from '@/components/shared/composer-attachment-tray'
-import { ConversationGalleryProvider } from '@/components/shared/files/conversation-gallery'
+import {
+  ConversationGalleryContext,
+  useGalleryValue,
+} from '@/components/shared/files/conversation-gallery'
 import { VISITOR_CONVERSATION_FEATURES } from '@/components/conversation/conversation-editor-features'
 import { VisitorMessageBubble } from '@/components/conversation/message-bubble'
 import {
@@ -265,6 +268,7 @@ export function VisitorConversationThread({
     staleTime: Infinity,
   })
   const messages = thread?.messages ?? EMPTY_MESSAGES
+  const gallery = useGalleryValue(messages)
   const hasMoreOlder = thread?.hasMore ?? false
   const agentReadAt = thread?.agentLastReadAt ?? null
   const conversationStatus = thread?.status ?? null
@@ -1185,7 +1189,7 @@ export function VisitorConversationThread({
             its own message. Visitor-facing, so internal notes are never
             included (they should never reach this DTO in the first place;
             this is belt-and-suspenders). */}
-        <ConversationGalleryProvider messages={messages}>
+        <ConversationGalleryContext.Provider value={gallery}>
           <ThreadViewport
             virtualizer={virtualizer}
             rows={rows}
@@ -1195,7 +1199,7 @@ export function VisitorConversationThread({
             className="h-full"
             rowClassName="px-3 py-1.5"
           />
-        </ConversationGalleryProvider>
+        </ConversationGalleryContext.Provider>
 
         {/* First load: the viewport has no rows yet (the greeting/empty row
             is withheld until we know which thread this is), so bubble-shaped

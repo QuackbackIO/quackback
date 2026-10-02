@@ -56,7 +56,7 @@ export interface ConversationGalleryApi {
 
 const EMPTY: ConversationGalleryApi = { files: [], indexOf: () => -1 }
 
-const ConversationGalleryContext = createContext<ConversationGalleryApi>(EMPTY)
+export const ConversationGalleryContext = createContext<ConversationGalleryApi>(EMPTY)
 
 export function useConversationGallery(): ConversationGalleryApi {
   return useContext(ConversationGalleryContext)
@@ -85,13 +85,7 @@ function senderNameOf(
   return undefined
 }
 
-export function ConversationGalleryProvider({
-  messages,
-  includeInternal = false,
-  visitorIsSelf = !includeInternal,
-  children,
-}: {
-  messages: GalleryMessage[]
+export interface GalleryOptions {
   /** Agent threads pass true — internal notes are agent-only; the visitor
    *  widget/portal leave this at its default so a note's attachments (which
    *  should never reach a visitor DTO in the first place) can never surface
@@ -105,10 +99,18 @@ export function ConversationGalleryProvider({
    *  since today's two mounts line up exactly that way; pass it explicitly
    *  if that ever stops holding. */
   visitorIsSelf?: boolean
-  children: ReactNode
-}) {
+}
+
+/**
+ * A thread's gallery. Threads call this and render `ConversationGalleryContext`
+ * themselves, so the gallery costs no component of its own on every render.
+ */
+export function useGalleryValue(
+  messages: GalleryMessage[],
+  { includeInternal = false, visitorIsSelf = !includeInternal }: GalleryOptions = {}
+): ConversationGalleryApi {
   const intl = useIntl()
-  const value = useMemo<ConversationGalleryApi>(() => {
+  return useMemo<ConversationGalleryApi>(() => {
     const files: ViewerFile[] = []
     const startIndexByMessage = new Map<string, number>()
     for (const m of messages) {
@@ -129,7 +131,14 @@ export function ConversationGalleryProvider({
       },
     }
   }, [messages, includeInternal, visitorIsSelf, intl])
+}
 
+export function ConversationGalleryProvider({
+  messages,
+  children,
+  ...options
+}: GalleryOptions & { messages: GalleryMessage[]; children: ReactNode }) {
+  const value = useGalleryValue(messages, options)
   return (
     <ConversationGalleryContext.Provider value={value}>
       {children}

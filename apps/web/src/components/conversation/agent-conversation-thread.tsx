@@ -117,7 +117,10 @@ import {
   resolveResolvedStatusId,
 } from '@/lib/shared/tickets'
 import { AgentMessageBubble, UnreadDivider } from '@/components/conversation/message-bubble'
-import { ConversationGalleryProvider } from '@/components/shared/files/conversation-gallery'
+import {
+  ConversationGalleryContext,
+  useGalleryValue,
+} from '@/components/shared/files/conversation-gallery'
 import { computeBlockStates } from '@/components/shared/conversation/conversation-rows'
 import {
   ThreadViewport,
@@ -652,6 +655,7 @@ export function AgentConversationThread({
   const messages: AgentConversationMessageDTO[] = isTicket
     ? (ticketThread?.messages ?? [])
     : (convThread?.messages ?? [])
+  const gallery = useGalleryValue(messages, { includeInternal: true })
   const issuePeople = useMemo(
     () =>
       conversation?.channel === 'github' ? githubIssuePeopleFromMessages(messages) : undefined,
@@ -2157,7 +2161,7 @@ export function AgentConversationThread({
         {/* Every attachment in the loaded thread, in message order, so a
             card's click opens the viewer on the whole conversation. Agents
             see internal notes' attachments too — includeInternal. */}
-        <ConversationGalleryProvider messages={messages} includeInternal>
+        <ConversationGalleryContext.Provider value={gallery}>
           <ThreadMessages
             rows={rows}
             renderRow={renderRow}
@@ -2165,7 +2169,7 @@ export function AgentConversationThread({
             skipInitialScroll={skipInitialScroll}
             handleRef={messagesRef}
           />
-        </ConversationGalleryProvider>
+        </ConversationGalleryContext.Provider>
 
         {/* P2-D.1 inbox translation: dismissible auto-suggest banner, shown
             above the composer when the customer's detected language differs
