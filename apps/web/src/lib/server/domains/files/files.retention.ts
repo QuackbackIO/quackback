@@ -138,7 +138,7 @@ async function removeFile(
 
   const keys = [file.storageKey, file.meta?.thumbKey, file.meta?.renditionKey].filter(isPipelineKey)
   try {
-    for (const key of keys) await deleteObject(key)
+    await Promise.all(keys.map((key) => deleteObject(key)))
   } catch (err) {
     log.warn({ err, fileId: id }, 'file object delete failed; the next run retries it')
     await releaseClaim(id, now)
