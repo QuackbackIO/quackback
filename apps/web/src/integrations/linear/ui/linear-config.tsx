@@ -41,6 +41,11 @@ const EVENT_CONFIG = [
     label: 'Create issue from new feedback',
     description: 'Automatically create a Linear issue when new feedback is submitted',
   },
+  {
+    id: 'comment.created' as const,
+    label: 'Sync public comments',
+    description: 'Add new public feedback comments to the linked Linear issue',
+  },
 ]
 
 export function LinearConfig({
@@ -190,7 +195,7 @@ export function LinearConfig({
 
       <div className="space-y-3">
         <Label className="text-base font-medium">Events</Label>
-        <p className="text-xs text-muted-foreground">Choose which events trigger issue creation</p>
+        <p className="text-xs text-muted-foreground">Choose what to sync with Linear</p>
         <div className="space-y-3 pt-2">
           {EVENT_CONFIG.map((event) => (
             <div

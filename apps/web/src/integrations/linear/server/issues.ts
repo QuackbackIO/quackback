@@ -28,7 +28,7 @@ const CREATE_ISSUE_MUTATION = `
   }
 `
 
-async function linearGraphql(
+export async function linearGraphql(
   accessToken: string,
   query: string,
   variables?: Record<string, unknown>

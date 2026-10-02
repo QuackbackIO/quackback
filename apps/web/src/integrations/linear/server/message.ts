@@ -2,7 +2,7 @@
  * Linear issue formatting utilities.
  */
 
-import type { EventData } from '@/lib/server/events/types'
+import type { CommentCreatedEvent, EventData } from '@/lib/server/events/types'
 import { buildIntegrationPostContent } from '@/lib/server/integrations/post-content'
 import { buildPostUrl, getAuthorName } from '@/lib/server/integrations/message-utils'
 
@@ -32,4 +32,23 @@ export function buildLinearIssueBody(
   ].join('\n')
 
   return { title: post.title, description }
+}
+
+/** Build the Linear comment body for a newly published public Quackback comment. */
+export function buildLinearCommentBody(event: CommentCreatedEvent, rootUrl: string): string {
+  const { comment, post } = event.data
+  const author = getAuthorName(comment)
+  const content = buildIntegrationPostContent(comment.content, rootUrl, {
+    embedVideos: true,
+    maxLength: 5000,
+  })
+  const commentUrl = `${buildPostUrl(rootUrl, post.boardSlug, post.id)}#comment-${comment.id}`
+
+  return [
+    `**${author} commented:**`,
+    '',
+    content,
+    '',
+    `[View comment in Quackback](${commentUrl})`,
+  ].join('\n')
 }

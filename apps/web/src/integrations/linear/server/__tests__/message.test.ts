@@ -3,8 +3,8 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import type { PostCreatedEvent, EventData } from '@/lib/server/events/types'
-import { buildLinearIssueBody } from '@/integrations/linear/server/message'
+import type { PostCreatedEvent, CommentCreatedEvent, EventData } from '@/lib/server/events/types'
+import { buildLinearIssueBody, buildLinearCommentBody } from '@/integrations/linear/server/message'
 
 function makePostCreatedEvent(overrides: Record<string, unknown> = {}): PostCreatedEvent {
   return {
@@ -131,5 +131,71 @@ describe('buildLinearIssueBody', () => {
 
     expect(result.title).toBe('Feedback')
     expect(result.description).toBe('')
+  })
+})
+
+function makeCommentCreatedEvent(overrides: Record<string, unknown> = {}): CommentCreatedEvent {
+  return {
+    id: 'evt-2',
+    type: 'comment.created',
+    timestamp: '2025-01-01T00:00:00Z',
+    actor: { type: 'user', userId: 'user_2', email: 'sam@example.com' },
+    data: {
+      comment: {
+        id: 'comment_1',
+        content: 'Happens on Safari too',
+        authorName: 'Sam Lee',
+        authorEmail: 'sam@example.com',
+        isPrivate: false,
+        ...overrides,
+      },
+      post: { id: 'post_1', title: 'Feature request', boardId: 'board_1', boardSlug: 'features' },
+    },
+  }
+}
+
+describe('buildLinearCommentBody', () => {
+  it('names the author, keeps the text, and deep-links to the comment', () => {
+    const body = buildLinearCommentBody(makeCommentCreatedEvent(), 'https://feedback.example.com')
+
+    expect(body).toContain('**Sam Lee commented:**')
+    expect(body).toContain('Happens on Safari too')
+    expect(body).toContain(
+      '[View comment in Quackback](https://feedback.example.com/b/features/posts/post_1#comment-comment_1)'
+    )
+  })
+
+  it('turns stored media paths into absolute URLs Linear can import', () => {
+    const body = buildLinearCommentBody(
+      makeCommentCreatedEvent({
+        content: 'See\n\n![Shot](/api/storage/portal-media/shot.png)',
+      }),
+      'https://say.any.org'
+    )
+
+    expect(body).toContain('![Shot](https://say.any.org/api/storage/portal-media/shot.png)')
+    expect(body).not.toContain('](/api/storage/')
+  })
+
+  it('keeps comment text up to 5000 characters before shortening', () => {
+    const text = 'x'.repeat(3000)
+    const body = buildLinearCommentBody(
+      makeCommentCreatedEvent({ content: text }),
+      'https://x.test'
+    )
+
+    expect(body).toContain(text)
+  })
+
+  it('falls back to email, then Anonymous, when the author name is missing', () => {
+    expect(
+      buildLinearCommentBody(makeCommentCreatedEvent({ authorName: undefined }), 'https://x.test')
+    ).toContain('**sam@example.com commented:**')
+    expect(
+      buildLinearCommentBody(
+        makeCommentCreatedEvent({ authorName: undefined, authorEmail: undefined }),
+        'https://x.test'
+      )
+    ).toContain('**Anonymous commented:**')
   })
 })
