@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useFormatNumber } from '@/components/ui/format-number'
 
 export interface BarListRow {
   key: string
@@ -6,7 +7,7 @@ export interface BarListRow {
   label: ReactNode
   /** Drives bar width, relative to the max in the set. */
   value: number
-  /** Formatted value text. Defaults to `value.toLocaleString()`. */
+  /** Formatted value text. Defaults to `value` in the app's locale. */
   display?: string
   /** Optional leading slot rendered before the label (e.g. an avatar). */
   leading?: ReactNode
@@ -21,6 +22,7 @@ interface AnalyticsBarListProps {
  *  and Contributors. The faint bar encodes relative magnitude; the label and
  *  value sit on top. */
 export function AnalyticsBarList({ header, rows }: AnalyticsBarListProps) {
+  const formatNumber = useFormatNumber()
   const max = Math.max(...rows.map((r) => r.value), 1)
   return (
     <div>
@@ -44,7 +46,7 @@ export function AnalyticsBarList({ header, rows }: AnalyticsBarListProps) {
               {row.leading}
               <div className="relative min-w-0 flex-1 truncate px-1 text-sm">{row.label}</div>
               <span className="relative ml-4 shrink-0 tabular-nums text-sm text-muted-foreground">
-                {row.display ?? row.value.toLocaleString()}
+                {row.display ?? formatNumber(row.value)}
               </span>
             </div>
           )

@@ -1,4 +1,5 @@
 import { Avatar } from '@/components/ui/avatar'
+import { useFormatNumber } from '@/components/ui/format-number'
 import {
   Table,
   TableHeader,
@@ -14,6 +15,7 @@ import type { TeammatePerformance } from '@/lib/server/domains/analytics/teammat
 /** Per-teammate support workload: conversations handled with median first
  *  response and median time to close. Rows arrive sorted by handled desc. */
 export function AnalyticsTeammatePerformance({ teammates }: { teammates: TeammatePerformance[] }) {
+  const formatNumber = useFormatNumber()
   if (teammates.length === 0) {
     return <AnalyticsEmpty message="No assigned conversations in this period" />
   }
@@ -41,7 +43,7 @@ export function AnalyticsTeammatePerformance({ teammates }: { teammates: Teammat
                 <span className="truncate font-medium">{t.displayName}</span>
               </div>
             </TableCell>
-            <TableCell className="text-right tabular-nums">{t.handled.toLocaleString()}</TableCell>
+            <TableCell className="text-right tabular-nums">{formatNumber(t.handled)}</TableCell>
             <TableCell className="text-right tabular-nums">
               {formatResponseTime(t.medianFirstResponseMinutes)}
             </TableCell>

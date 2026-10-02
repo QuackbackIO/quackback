@@ -15,6 +15,7 @@ import { PageHeader } from '@/components/shared/page-header'
 import { AnalyticsStatRow } from '@/components/admin/analytics/analytics-stat-row'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useFormatNumber } from '@/components/ui/format-number'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { useLocalDateFormatter, type LocalDateFormatter } from '@/components/ui/local-date'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
@@ -381,6 +382,7 @@ function UpcomingMaintenanceCard({ windows }: { windows: OverviewIncident[] }) {
 }
 
 function StatTiles({ data }: { data: StatusOverview }) {
+  const formatNumber = useFormatNumber()
   return (
     <div className="rounded-xl border border-border/50 bg-card shadow-sm overflow-hidden">
       <AnalyticsStatRow
@@ -391,7 +393,7 @@ function StatTiles({ data }: { data: StatusOverview }) {
           },
           {
             label: 'Subscribers',
-            value: data.subscribers.active.toLocaleString(),
+            value: formatNumber(data.subscribers.active),
             caption:
               data.subscribers.newLast7d > 0
                 ? `+${data.subscribers.newLast7d} this week`

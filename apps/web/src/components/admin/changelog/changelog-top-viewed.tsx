@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { EyeIcon } from '@heroicons/react/24/outline'
 import { changelogQueries } from '@/lib/client/queries/changelog'
+import { useFormatNumber } from '@/components/ui/format-number'
 import type { ChangelogId } from '@quackback/ids'
 
 interface ChangelogTopViewedProps {
@@ -18,6 +19,7 @@ interface ChangelogTopViewedProps {
  */
 export function ChangelogTopViewed({ onSelect }: ChangelogTopViewedProps) {
   const { data, isLoading } = useQuery(changelogQueries.topViewed())
+  const formatNumber = useFormatNumber()
 
   if (isLoading || !data || data.length === 0) {
     return null
@@ -49,7 +51,7 @@ export function ChangelogTopViewed({ onSelect }: ChangelogTopViewedProps) {
             </span>
             <span className="flex shrink-0 items-center gap-1 text-xs tabular-nums text-muted-foreground">
               <EyeIcon className="size-3.5" />
-              {entry.viewCount.toLocaleString()}
+              {formatNumber(entry.viewCount)}
             </span>
           </button>
         ))}

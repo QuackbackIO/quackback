@@ -8,6 +8,7 @@ import {
   UsersIcon,
 } from '@heroicons/react/24/outline'
 import { Badge } from '@/components/ui/badge'
+import { useFormatNumber } from '@/components/ui/format-number'
 import { AnalyticsStatRow } from '@/components/admin/analytics/analytics-stat-row'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -114,6 +115,7 @@ const SOURCE_LABELS: Record<string, string> = {
 }
 
 export function StatusSubscribersView() {
+  const formatNumber = useFormatNumber()
   const [debouncedSearch, setDebouncedSearch] = useState<string | undefined>(undefined)
   const { value: searchValue, setValue: setSearchValue } = useDebouncedSearch({
     externalValue: debouncedSearch,
@@ -173,11 +175,11 @@ export function StatusSubscribersView() {
         <div className="rounded-xl border border-border/50 bg-card shadow-sm overflow-hidden">
           <AnalyticsStatRow
             stats={[
-              { label: 'Total', value: (countsQuery.data?.total ?? 0).toLocaleString() },
-              { label: 'Active', value: (countsQuery.data?.active ?? 0).toLocaleString() },
+              { label: 'Total', value: formatNumber(countsQuery.data?.total ?? 0) },
+              { label: 'Active', value: formatNumber(countsQuery.data?.active ?? 0) },
               {
                 label: 'Unsubscribed',
-                value: (countsQuery.data?.unsubscribed ?? 0).toLocaleString(),
+                value: formatNumber(countsQuery.data?.unsubscribed ?? 0),
               },
             ]}
           />

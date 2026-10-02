@@ -20,6 +20,7 @@ import { realEmail } from '@/lib/shared/anonymous-email'
 import { PortalUserPicker } from '@/components/shared/portal-user-picker'
 import { LazyRichTextEditor } from '@/components/ui/lazy-rich-text-editor'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useFormatNumber } from '@/components/ui/format-number'
 import { CONVERSATION_EDITOR_FEATURES } from '@/components/conversation/conversation-editor-features'
 import { ComposerAttachmentTray } from '@/components/shared/composer-attachment-tray'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
@@ -65,6 +66,7 @@ export function NewConversationDialog({
   initialTarget,
 }: NewConversationDialogProps) {
   const navigate = useNavigate()
+  const formatNumber = useFormatNumber()
   const [target, setTarget] = useState<NewConversationTarget | null>(initialTarget ?? null)
   const [messageJson, setMessageJson] = useState<JSONContent | undefined>(undefined)
   const [messageMarkdown, setMessageMarkdown] = useState('')
@@ -151,7 +153,7 @@ export function NewConversationDialog({
     // enforced pre-submit instead.
     if (content.length > MAX_CONVERSATION_MESSAGE_LENGTH) {
       toast.error(
-        `Message must be ${MAX_CONVERSATION_MESSAGE_LENGTH.toLocaleString()} characters or less`
+        `Message must be ${formatNumber(MAX_CONVERSATION_MESSAGE_LENGTH)} characters or less`
       )
       return
     }

@@ -17,7 +17,6 @@ export function AnalyticsChangelogCard({ topEntries }: ChangelogCardProps) {
         key: entry.id,
         label: entry.title,
         value: entry.viewCount,
-        display: entry.viewCount.toLocaleString(),
       }))}
     />
   )

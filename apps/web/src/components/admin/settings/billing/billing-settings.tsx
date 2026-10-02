@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
+import { useFormatNumber } from '@/components/ui/format-number'
 import { useLocalDateFormatter, type LocalDateFormatter } from '@/components/ui/local-date'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { cn } from '@/lib/shared/utils'
@@ -440,6 +441,7 @@ function UsageCard(props: {
       line.key !== 'emailsPerMonth' &&
       line.key !== 'apiRequestsPerMonth'
   )
+  const formatNumber = useFormatNumber()
   const ai = props.overview.ai
   const canTopUp = props.overview.canManageBilling
   const hasAi = ai != null && (ai.includedCents > 0 || ai.extraCents > 0)
@@ -497,7 +499,7 @@ function UsageCard(props: {
             <UsageMeter
               label="Emails"
               description={usageMeterDescription('emailsPerMonth')}
-              valueText={`${emails.used.toLocaleString()} of ${emails.limit.toLocaleString()}`}
+              valueText={`${formatNumber(emails.used)} of ${formatNumber(emails.limit)}`}
               used={emails.used}
               limit={emails.limit}
               action={
@@ -522,7 +524,7 @@ function UsageCard(props: {
             <UsageMeter
               label="API requests"
               description={usageMeterDescription('apiRequestsPerMonth')}
-              valueText={`${api.used.toLocaleString()} of ${api.limit.toLocaleString()}`}
+              valueText={`${formatNumber(api.used)} of ${formatNumber(api.limit)}`}
               used={api.used}
               limit={api.limit}
             />
@@ -534,7 +536,7 @@ function UsageCard(props: {
               <UsageMeter
                 label={usageMeterLabel(line)}
                 description={usageMeterDescription(line.key)}
-                valueText={`${line.used.toLocaleString()} of ${line.limit.toLocaleString()}`}
+                valueText={`${formatNumber(line.used)} of ${formatNumber(line.limit)}`}
                 used={line.used}
                 limit={line.limit}
               />

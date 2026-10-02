@@ -73,6 +73,7 @@ import { RowActions } from '@/components/admin/settings/settings-list'
 import { WorkflowFilters } from './workflow-filters'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { useFormatNumber } from '@/components/ui/format-number'
 import { Input } from '@/components/ui/input'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
@@ -644,13 +645,14 @@ function WorkflowRow({
   onDelete: (workflow: WorkflowDTO) => void
   onViewRuns: (workflow: WorkflowDTO) => void
 }) {
+  const formatNumber = useFormatNumber()
   const needsSetup = needsSetupBadgeText(rowSetup(workflow))
   const started = metrics?.started ?? 0
   const completed = metrics?.completed ?? 0
   const trigger = triggerLabel(workflow.triggerType)
   const showMetrics = workflow.status === 'live' && started > 0
   const metricsText = showMetrics
-    ? `${started.toLocaleString()} runs · ${Math.round((completed / started) * 100)}% completed (7d)`
+    ? `${formatNumber(started)} runs · ${Math.round((completed / started) * 100)}% completed (7d)`
     : ''
   const stepSummary = showMetrics ? '' : workflowStepSummary(workflow.graph)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
