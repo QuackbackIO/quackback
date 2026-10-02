@@ -1,8 +1,9 @@
 /**
  * Text, logs and code: numbered lines on a dark code surface, virtualized so a
- * 50,000-line log scrolls smoothly. Code is highlighted by extension, log
- * levels are coloured, and a whole JSON file is shown formatted. Find and
- * wrap are reported to the shell; the find bar lives in the content area.
+ * 50,000-line log scrolls smoothly. Code shows plain at once and takes its
+ * colours from a highlight worker when they arrive, log levels are coloured,
+ * and a whole JSON file is shown formatted. Find and wrap are reported to the
+ * shell; the find bar lives in the content area.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useIntl } from 'react-intl'
@@ -10,19 +11,26 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { formatBytes } from '@/lib/shared/files/file-types'
 import { cn } from '@/lib/shared/utils'
 import type { ViewerEngineProps } from '../types'
+import { ENGINE_TIMEOUT_MS } from './budgets'
 import { FindBar, useFindToggle } from './find-bar'
 import { MAX_FIND_MATCHES, stepMatch } from './find-limit'
+import { createCodeHighlighter } from './highlight-worker-client'
 import { TEXT_HEAD_BYTES } from './index'
 import {
   decodeText,
   findMatches,
+  highlightedLineCount,
   isJsonName,
-  lineStyleFor,
+  isLogName,
+  languageFor,
   markTokens,
   prettyJson,
   splitLines,
   tokensFor,
   TOKEN_COLOR,
+  wantsHighlight,
+  type HighlightedLines,
+  type LineStyle,
   type Token,
 } from './text-lines'
 
@@ -44,10 +52,36 @@ export default function TextEngine({
     return splitLines(shown)
   }, [data, truncated, file.name])
 
-  const style = useMemo(
-    () => lineStyleFor(file.name, file.family, lines.join('\n'), lines.length),
-    [file.name, file.family, lines]
-  )
+  // Colours for code come from a worker, for the lines they were made from.
+  const [highlighted, setHighlighted] = useState<{
+    lines: string[]
+    result: HighlightedLines
+  } | null>(null)
+  useEffect(() => {
+    const text = lines.join('\n')
+    if (!wantsHighlight(file.name, file.family, text)) return
+    const highlighter = createCodeHighlighter()
+    let current = true
+    const stop = () => {
+      current = false
+      clearTimeout(timer)
+      highlighter.terminate()
+    }
+    // A file the worker cannot colour within the budget stays plain.
+    const timer = setTimeout(stop, ENGINE_TIMEOUT_MS)
+    highlighter.highlight(text, languageFor(file.name)).then((result) => {
+      if (current && result && highlightedLineCount(result) === lines.length) {
+        setHighlighted({ lines, result })
+      }
+      stop()
+    }, stop)
+    return stop
+  }, [lines, file.name, file.family])
+
+  const style = useMemo<LineStyle>(() => {
+    if (highlighted?.lines === lines) return { kind: 'highlighted', lines: highlighted.result }
+    return isLogName(file.name) ? { kind: 'log' } : { kind: 'plain' }
+  }, [highlighted, lines, file.name])
   // Scrolling re-renders the visible lines; tokenize each line once.
   const tokenCache = useMemo(() => new Map<number, Token[]>(), [style])
   const tokensOf = (index: number) => {

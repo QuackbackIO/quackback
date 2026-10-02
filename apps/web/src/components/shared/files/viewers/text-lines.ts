@@ -1,9 +1,9 @@
 /**
  * Turning a text file's bytes into the lines the text engine draws: decoding,
- * JSON formatting, syntax highlighting split per line, log levels, and find.
- * Pure functions, so the engine stays about rendering.
+ * JSON formatting, log levels, find, and which files go to the highlighter
+ * (`highlight-lines.ts`, run in a worker so its grammars never load on the
+ * page). Pure functions, so the engine stays about rendering.
  */
-import { common, createLowlight } from 'lowlight'
 import { fileExtension } from '@/lib/shared/files/file-types'
 import { MAX_FIND_MATCHES } from './find-limit'
 
@@ -19,16 +19,25 @@ export interface Match {
   end: number
 }
 
-const lowlight = createLowlight(common)
-
-/** Files up to this size are highlighted whole, so multi-line comments and strings colour right. */
-const WHOLE_HIGHLIGHT_BYTES = 100 * 1024
+/**
+ * Text up to this many characters is highlighted whole, off the page, so
+ * multi-line comments and strings colour right. That is four times the most
+ * the viewer reads of a file, room for JSON once formatted; past it, the time
+ * to highlight and the tokens to hand back outgrow what colour adds.
+ */
+export const MAX_HIGHLIGHT_CHARS = 1024 * 1024
 /** Guessing a language costs a pass per grammar, so only small files get a guess. */
-const AUTO_HIGHLIGHT_BYTES = 20 * 1024
-/** Lines longer than this are drawn plain: highlighting them costs more than it shows. */
-const MAX_HIGHLIGHT_LINE = 2000
+export const GUESS_HIGHLIGHT_CHARS = 20 * 1024
+/** Lines longer than this are drawn plain: their tokens cost more to draw than they show. */
+export const MAX_HIGHLIGHT_LINE = 2000
 
-const LANGUAGE_BY_EXTENSION: Record<string, string> = {
+/** The most text the highlighter takes in a known language, or when guessing one (null). */
+export function highlightLimit(language: string | null): number {
+  return language ? MAX_HIGHLIGHT_CHARS : GUESS_HIGHLIGHT_CHARS
+}
+
+/** Highlight languages by file extension; every one is in the highlighter's common set. */
+export const LANGUAGE_BY_EXTENSION: Readonly<Record<string, string>> = {
   json: 'json',
   har: 'json',
   ndjson: 'json',
@@ -187,47 +196,21 @@ export function prettyJson(text: string): string | null {
 }
 
 export function languageFor(name: string): string | null {
-  const language = LANGUAGE_BY_EXTENSION[fileExtension(name)]
-  return language && lowlight.registered(language) ? language : null
+  const ext = fileExtension(name)
+  return Object.hasOwn(LANGUAGE_BY_EXTENSION, ext) ? LANGUAGE_BY_EXTENSION[ext]! : null
 }
 
 export function isLogName(name: string): boolean {
   return fileExtension(name) === 'log' || /\.log\.\d+$/i.test(name)
 }
 
-type HastNode = {
-  type: string
-  value?: string
-  properties?: { className?: unknown }
-  children?: HastNode[]
-}
-
-/** Splits a highlight tree into lines, each a list of tokens with its innermost class. */
-function treeToLines(root: HastNode): Token[][] {
-  const lines: Token[][] = [[]]
-  const walk = (node: HastNode, cls: string | undefined) => {
-    if (node.type === 'text') {
-      const parts = (node.value ?? '').split('\n')
-      parts.forEach((part, i) => {
-        if (i > 0) lines.push([])
-        if (part) lines[lines.length - 1]!.push(cls ? { text: part, cls } : { text: part })
-      })
-      return
-    }
-    const names = node.properties?.className
-    const own = Array.isArray(names)
-      ? (names as string[]).find((n) => n.startsWith('hljs-'))
-      : undefined
-    for (const child of node.children ?? []) walk(child, own ?? cls)
-  }
-  walk(root, undefined)
-  return lines
-}
-
-function highlightTree(language: string | 'auto', text: string): HastNode {
-  return (language === 'auto'
-    ? lowlight.highlightAuto(text)
-    : lowlight.highlight(language, text)) as unknown as HastNode
+/**
+ * Whether a file's text goes to the highlighter: code, not a log, within the
+ * size it may be highlighted at (smaller when its language must be guessed).
+ */
+export function wantsHighlight(name: string, family: string, text: string): boolean {
+  if (family !== 'code' || isLogName(name)) return false
+  return text.length <= highlightLimit(languageFor(name))
 }
 
 const LOG_LEVEL = /\b(TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|ERR|FATAL|CRITICAL|CRIT|PANIC)\b/
@@ -262,50 +245,51 @@ export function logTokens(line: string): Token[] {
   return out
 }
 
+/**
+ * Highlighted lines as the worker hands them over: numbers in arrays it can
+ * transfer, so the page copies nothing and makes tokens only for the lines it
+ * draws.
+ */
+export interface HighlightedLines {
+  /** The highlight classes the runs name. */
+  classes: string[]
+  /** Where each line's runs begin in `runs`, and one more entry where the last line's end. */
+  starts: Uint32Array
+  /** Two numbers per run: its length, and its class's index in `classes` plus one (0 for none). */
+  runs: Uint32Array
+}
+
+export function highlightedLineCount(lines: HighlightedLines): number {
+  return lines.starts.length - 1
+}
+
+function highlightedTokens(lines: HighlightedLines, index: number, line: string): Token[] {
+  if (index + 1 >= lines.starts.length) return line ? [{ text: line }] : []
+  const out: Token[] = []
+  let at = 0
+  for (let run = lines.starts[index]!; run < lines.starts[index + 1]!; run += 2) {
+    const length = lines.runs[run]!
+    const text = line.slice(at, at + length)
+    at += length
+    const cls = lines.classes[lines.runs[run + 1]! - 1]
+    out.push(cls ? { text, cls } : { text })
+  }
+  return out
+}
+
 export type LineStyle =
   | { kind: 'plain' }
   | { kind: 'log' }
-  /** Highlighted up front; `lines[i]` are the tokens of line i. */
-  | { kind: 'whole'; lines: Token[][] }
-  /** Highlighted a line at a time as lines come into view. */
-  | { kind: 'per-line'; language: string }
-
-/** How a file's lines get coloured, doing the up-front work for small files. */
-export function lineStyleFor(
-  name: string,
-  family: string,
-  text: string,
-  lineCount: number
-): LineStyle {
-  if (isLogName(name)) return { kind: 'log' }
-  if (family !== 'code') return { kind: 'plain' }
-  const language = languageFor(name)
-  if (!language && text.length > AUTO_HIGHLIGHT_BYTES) return { kind: 'plain' }
-  if (text.length <= WHOLE_HIGHLIGHT_BYTES) {
-    try {
-      const lines = treeToLines(highlightTree(language ?? 'auto', text))
-      if (lines.length === lineCount) return { kind: 'whole', lines }
-    } catch {
-      return { kind: 'plain' }
-    }
-  }
-  return language ? { kind: 'per-line', language } : { kind: 'plain' }
-}
+  /** Highlighted off the page. */
+  | { kind: 'highlighted'; lines: HighlightedLines }
 
 /** The tokens of one line under a style. Plain lines are one token. */
 export function tokensFor(style: LineStyle, index: number, line: string): Token[] {
   switch (style.kind) {
-    case 'whole':
-      return style.lines[index] ?? [{ text: line }]
+    case 'highlighted':
+      return highlightedTokens(style.lines, index, line)
     case 'log':
       return logTokens(line)
-    case 'per-line':
-      if (!line || line.length > MAX_HIGHLIGHT_LINE) return line ? [{ text: line }] : []
-      try {
-        return treeToLines(highlightTree(style.language, line))[0] ?? []
-      } catch {
-        return [{ text: line }]
-      }
     default:
       return line ? [{ text: line }] : []
   }

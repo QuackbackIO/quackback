@@ -2,10 +2,73 @@
 import { act } from 'react'
 import { fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import TextEngine from '../text-engine'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EngineToolbar, ViewerFile } from '../../types'
 import type { FileFamily } from '@/lib/shared/files/file-types'
+import { ENGINE_TIMEOUT_MS } from '../budgets'
+import { handleHighlightRequest } from '../highlight-lines'
+import { GUESS_HIGHLIGHT_CHARS, MAX_HIGHLIGHT_CHARS, type HighlightedLines } from '../text-lines'
+
+/**
+ * Stands in for the worker client: answers each request with the real
+ * highlighting code on a later task, as the worker would, unless the test
+ * holds the answers back, makes the worker fail, or has it answer for
+ * different text than it was sent.
+ */
+class FakeHighlighter {
+  static instances: FakeHighlighter[] = []
+  static mode: 'answer' | 'hold' | 'fail' | 'extra-line' = 'answer'
+  requests: { text: string; language: string | null }[] = []
+  terminated = false
+  private held: (() => void)[] = []
+
+  constructor() {
+    FakeHighlighter.instances.push(this)
+  }
+
+  highlight(text: string, language: string | null): Promise<HighlightedLines | null> {
+    this.requests.push({ text, language })
+    const mode = FakeHighlighter.mode
+    return new Promise((resolve, reject) => {
+      const answer = () => {
+        const answered = mode === 'extra-line' ? `${text}\nextra` : text
+        resolve(handleHighlightRequest({ id: 0, text: answered, language }).lines)
+      }
+      if (mode === 'hold') {
+        this.held.push(answer)
+        return
+      }
+      setTimeout(() => {
+        if (this.terminated) return
+        if (mode === 'fail') reject(new Error('The highlighter failed'))
+        else answer()
+      }, 0)
+    })
+  }
+
+  /** Lets held answers through, even once stopped: answers already on their way. */
+  release() {
+    for (const answer of this.held.splice(0)) answer()
+  }
+
+  terminate() {
+    this.terminated = true
+  }
+}
+
+vi.mock('../highlight-worker-client', () => ({
+  createCodeHighlighter: () => new FakeHighlighter(),
+}))
+
+const { default: TextEngine } = await import('../text-engine')
+
+beforeEach(() => {
+  FakeHighlighter.instances = []
+  FakeHighlighter.mode = 'answer'
+})
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 // happy-dom does no layout. Give the scroll area a 400px viewport and each
 // line its 20px, so the virtualizer draws what a browser would.
@@ -28,52 +91,64 @@ afterAll(() => {
   if (offsetWidth) Object.defineProperty(HTMLElement.prototype, 'offsetWidth', offsetWidth)
 })
 
-function renderText(
-  text: string,
-  {
-    name = 'notes.txt',
-    family = 'text',
-    truncated = false,
-    compact = false,
-    locale = 'en-US',
-    messages = {},
-  }: {
-    name?: string
-    family?: FileFamily
-    truncated?: boolean
-    compact?: boolean
-    locale?: string
-    messages?: Record<string, string>
-  } = {}
-) {
-  const data = new TextEncoder().encode(text)
-  const file: ViewerFile = {
-    key: name,
-    url: `/api/storage/files/${name}?read=tok`,
-    name,
-    contentType: 'text/plain',
-    size: data.byteLength,
-    family,
-  }
+interface TextOptions {
+  name?: string
+  family?: FileFamily
+  truncated?: boolean
+  compact?: boolean
+  locale?: string
+  messages?: Record<string, string>
+}
+
+function renderText(text: string, options: TextOptions = {}) {
   const toolbars: EngineToolbar[] = []
   const onToolbar = vi.fn((t: EngineToolbar) => {
     toolbars.push(t)
   })
   const onError = vi.fn()
-  const result = rtlRender(
-    <IntlProvider locale={locale} messages={messages}>
-      <TextEngine
-        file={file}
-        data={data.buffer.slice(0) as ArrayBuffer}
-        truncated={truncated}
-        src={`${file.url}&proxy=1`}
-        onToolbar={onToolbar}
-        onError={onError}
-        compact={compact}
-      />
-    </IntlProvider>
-  )
-  return { ...result, toolbar: () => toolbars.at(-1)!, onError }
+  const tree = (
+    text: string,
+    {
+      name = 'notes.txt',
+      family = 'text',
+      truncated = false,
+      compact = false,
+      locale = 'en-US',
+      messages = {},
+    }: TextOptions
+  ) => {
+    const data = new TextEncoder().encode(text)
+    const file: ViewerFile = {
+      key: name,
+      url: `/api/storage/files/${name}?read=tok`,
+      name,
+      contentType: 'text/plain',
+      size: data.byteLength,
+      family,
+    }
+    return (
+      <IntlProvider locale={locale} messages={messages}>
+        <TextEngine
+          file={file}
+          data={data.buffer.slice(0) as ArrayBuffer}
+          truncated={truncated}
+          src={`${file.url}&proxy=1`}
+          onToolbar={onToolbar}
+          onError={onError}
+          compact={compact}
+        />
+      </IntlProvider>
+    )
+  }
+  const result = rtlRender(tree(text, options))
+  return {
+    ...result,
+    /** Shows another file in the same engine, as the shell may. */
+    showText: (next: string, nextOptions: TextOptions = {}) =>
+      result.rerender(tree(next, nextOptions)),
+    toolbar: () => toolbars.at(-1)!,
+    onError,
+  }
 }
 
 /** The text of each rendered line, in order. */
@@ -218,22 +293,132 @@ describe('TextEngine', () => {
     expect(lineTexts(container)).toEqual(['{"a":1,"b":'])
   })
 
-  it('highlights code by its extension, across multi-line comments', () => {
+  it('shows code at once, then colours it when the highlighter answers', async () => {
     const { container } = renderText('/* one\ntwo */\nconst a = 1', {
       name: 'app.js',
       family: 'code',
     })
-    const lines = container.querySelectorAll('[data-line-text]')
-    expect(lines[1]!.querySelector('.hljs-comment')?.textContent).toBe('two */')
-    expect(lines[2]!.querySelector('.hljs-keyword')?.textContent).toBe('const')
+    expect(lineTexts(container)).toEqual(['/* one', 'two */', 'const a = 1'])
+    expect(container.querySelector('[class*="hljs-"]')).toBeNull()
+    expect(FakeHighlighter.instances[0]!.requests).toEqual([
+      { text: '/* one\ntwo */\nconst a = 1', language: 'javascript' },
+    ])
+    const lines = () => container.querySelectorAll('[data-line-text]')
+    await waitFor(() =>
+      expect(lines()[1]!.querySelector('.hljs-comment')?.textContent).toBe('two */')
+    )
+    expect(lines()[2]!.querySelector('.hljs-keyword')?.textContent).toBe('const')
+    expect(lineTexts(container)).toEqual(['/* one', 'two */', 'const a = 1'])
   })
 
-  it('leaves plain text unhighlighted', () => {
-    const { container } = renderText('const a = 1', { name: 'notes.txt' })
+  it('marks find matches inside coloured code', async () => {
+    const { container, toolbar } = renderText('const alpha = 1', { name: 'app.js', family: 'code' })
+    await waitFor(() => expect(container.querySelector('.hljs-keyword')).not.toBeNull())
+    act(() => toolbar().find!.open())
+    fireEvent.change(await screen.findByRole('searchbox', { name: 'Find in file' }), {
+      target: { value: 'nst al' },
+    })
+    expect([...container.querySelectorAll('mark')].map((m) => m.textContent)).toEqual([
+      'nst',
+      ' al',
+    ])
+    expect(container.querySelector('mark.hljs-keyword')?.textContent).toBe('nst')
+  })
+
+  it('sends a whole file up to the cap, and keeps a bigger one plain without a worker', () => {
+    const line = 'const a = 1 // note\n'
+    const atCap = line.repeat(Math.floor(MAX_HIGHLIGHT_CHARS / line.length)).trimEnd()
+    renderText(atCap, { name: 'app.ts', family: 'code' }).unmount()
+    expect(FakeHighlighter.instances).toHaveLength(1)
+    expect(FakeHighlighter.instances[0]!.requests[0]).toEqual({
+      text: atCap,
+      language: 'typescript',
+    })
+
+    const { container } = renderText(atCap + '\n' + line, { name: 'app.ts', family: 'code' })
+    expect(FakeHighlighter.instances).toHaveLength(1)
+    expect(container.querySelector('[data-line-text]')?.textContent).toBe('const a = 1 // note')
+  })
+
+  it('guesses the language only of a small file with no known extension', () => {
+    renderText('FROM node:22\nRUN echo hi', { name: 'Dockerfile', family: 'code' }).unmount()
+    expect(FakeHighlighter.instances[0]!.requests[0]!.language).toBeNull()
+
+    renderText('x = 1\n'.repeat(GUESS_HIGHLIGHT_CHARS / 4), { name: 'Dockerfile', family: 'code' })
+    expect(FakeHighlighter.instances).toHaveLength(1)
+  })
+
+  it('ignores an answer that comes back after the engine moved to another file', async () => {
+    FakeHighlighter.mode = 'hold'
+    const { container, showText } = renderText('const a = 1', { name: 'a.js', family: 'code' })
+    showText('let b = 2', { name: 'b.js', family: 'code' })
+    const [first, second] = FakeHighlighter.instances
+    expect(first!.terminated).toBe(true)
+    expect(second!.requests[0]!.text).toBe('let b = 2')
+
+    await act(async () => second!.release())
+    expect(container.querySelector('.hljs-keyword')?.textContent).toBe('let')
+    await act(async () => first!.release())
+    expect(container.querySelector('.hljs-keyword')?.textContent).toBe('let')
+    expect(lineTexts(container)).toEqual(['let b = 2'])
+  })
+
+  it('shows the next file plain until its own colours arrive', async () => {
+    const { container, showText } = renderText('const a = 1', { name: 'a.js', family: 'code' })
+    await waitFor(() => expect(container.querySelector('.hljs-keyword')).not.toBeNull())
+    FakeHighlighter.mode = 'hold'
+    showText('let b = 2', { name: 'b.js', family: 'code' })
+    expect(lineTexts(container)).toEqual(['let b = 2'])
     expect(container.querySelector('[class*="hljs-"]')).toBeNull()
   })
 
-  it('colours log levels', () => {
+  it('stops the highlighter when the viewer closes', () => {
+    FakeHighlighter.mode = 'hold'
+    const { unmount } = renderText('const a = 1', { name: 'a.js', family: 'code' })
+    expect(FakeHighlighter.instances[0]!.terminated).toBe(false)
+    unmount()
+    expect(FakeHighlighter.instances[0]!.terminated).toBe(true)
+  })
+
+  it('stops a highlighter that takes longer than the budget, leaving the code plain', async () => {
+    vi.useFakeTimers()
+    FakeHighlighter.mode = 'hold'
+    const { container } = renderText('const a = 1', { name: 'a.js', family: 'code' })
+    const [highlighter] = FakeHighlighter.instances
+    act(() => vi.advanceTimersByTime(ENGINE_TIMEOUT_MS - 1))
+    expect(highlighter!.terminated).toBe(false)
+    act(() => vi.advanceTimersByTime(1))
+    expect(highlighter!.terminated).toBe(true)
+    await act(async () => highlighter!.release())
+    expect(container.querySelector('[class*="hljs-"]')).toBeNull()
+  })
+
+  it('keeps the code plain, with no error, when the highlighter fails', async () => {
+    FakeHighlighter.mode = 'fail'
+    const { container, onError } = renderText('const a = 1', { name: 'a.js', family: 'code' })
+    await act(() => new Promise((resolve) => setTimeout(resolve, 10)))
+    expect(FakeHighlighter.instances[0]!.requests).toHaveLength(1)
+    expect(lineTexts(container)).toEqual(['const a = 1'])
+    expect(container.querySelector('[class*="hljs-"]')).toBeNull()
+    expect(onError).not.toHaveBeenCalled()
+  })
+
+  it('keeps the code plain when the answer has a different number of lines', async () => {
+    FakeHighlighter.mode = 'extra-line'
+    const { container } = renderText('const a = 1', { name: 'a.js', family: 'code' })
+    await act(() => new Promise((resolve) => setTimeout(resolve, 10)))
+    expect(FakeHighlighter.instances[0]!.requests).toHaveLength(1)
+    expect(lineTexts(container)).toEqual(['const a = 1'])
+    expect(container.querySelector('[class*="hljs-"]')).toBeNull()
+  })
+
+  it('leaves plain text unhighlighted, without a worker', () => {
+    const { container } = renderText('const a = 1', { name: 'notes.txt' })
+    expect(container.querySelector('[class*="hljs-"]')).toBeNull()
+    expect(FakeHighlighter.instances).toHaveLength(0)
+  })
+
+  it('colours log levels at once, without a worker', () => {
     const { container } = renderText(
       '2026-09-27T14:01:58Z INFO start\n2026-09-27T14:02:01Z WARN slow\n2026-09-27T14:02:02Z ERROR boom',
       { name: 'import.log' }
@@ -241,6 +426,7 @@ describe('TextEngine', () => {
     expect(container.querySelector('.log-info')?.textContent).toBe('INFO')
     expect(container.querySelector('.log-warn')?.textContent).toBe('WARN')
     expect(container.querySelector('.log-error')?.textContent).toBe('ERROR')
+    expect(FakeHighlighter.instances).toHaveLength(0)
   })
 
   it('renders only the lines in view of a long file', () => {
