@@ -226,6 +226,22 @@ describe('FilePreviewCard', () => {
     expect(getByText('10 rows · 184 KB')).toBeTruthy()
     expect(getByText('Contains macros')).toBeTruthy()
   })
+
+  it('warns about macros for a macro-enabled extension even when the preview job never flagged it', () => {
+    // The viewer's mayHaveMacros() also treats the extension itself as
+    // macro-enabled; the card must agree, not only trust preview.macro.
+    const { getByText } = render(
+      <FilePreviewCard
+        attachment={attachment({
+          name: 'workbook.xlsm',
+          family: 'spreadsheet',
+          preview: { rows: 10 },
+        })}
+        onOpen={() => {}}
+      />
+    )
+    expect(getByText('Contains macros')).toBeTruthy()
+  })
 })
 
 describe('FileIconCard', () => {

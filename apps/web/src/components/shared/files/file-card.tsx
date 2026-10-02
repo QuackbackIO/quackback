@@ -16,6 +16,7 @@ import { useIntl, type IntlShape } from 'react-intl'
 import { ArrowDownTrayIcon, PlayIcon } from '@heroicons/react/24/outline'
 import { FileBadge } from './file-badge'
 import { downloadUrl } from './download-url'
+import { mayHaveMacros } from './viewers/macros'
 import { FAMILY_NAME, familyFor, formatBytes, type FileFamily } from '@/lib/shared/files/file-types'
 import type { AttachmentPreview, ConversationAttachment } from '@/lib/shared/conversation/types'
 import { cn } from '@/lib/shared/utils/cn'
@@ -194,6 +195,17 @@ export function hasPreviewWorthShowing(attachment: ConversationAttachment): bool
   return !!preview.thumbUrl || (!!preview.head && preview.head.length > 0) || !!preview.text
 }
 
+/** The name, family and accessible "Open …" label every card button needs,
+ *  resolved once from the attachment instead of each of the three card
+ *  components deriving its own. */
+function useCardLabel(attachment: ConversationAttachment) {
+  const intl = useIntl()
+  const family = resolveFamily(attachment)
+  const name = attachment.name || 'File'
+  const ariaLabel = attachmentAriaLabel(name, family, attachment.size, attachment.preview, intl)
+  return { family, name, ariaLabel }
+}
+
 /** A small warning-coloured note, never replacing the meta line. */
 function MacroWarning() {
   const intl = useIntl()
@@ -205,23 +217,21 @@ function MacroWarning() {
 }
 
 function MetaLine({
+  attachment,
   name,
   family,
-  size,
-  preview,
 }: {
+  attachment: ConversationAttachment
   name: string
   family: FileFamily
-  size: number
-  preview?: AttachmentPreview
 }) {
   const intl = useIntl()
   return (
     <span className="flex min-w-0 flex-col">
       <span className="truncate text-[11.5px] text-muted-foreground">
-        {attachmentMetaLine(name, family, size, preview, intl)}
+        {attachmentMetaLine(name, family, attachment.size, attachment.preview, intl)}
       </span>
-      {preview?.macro && <MacroWarning />}
+      {mayHaveMacros(attachment) && <MacroWarning />}
     </span>
   )
 }
@@ -371,9 +381,7 @@ export function FilePreviewCard({
   wide = false,
   className,
 }: FileCardProps & { wide?: boolean }) {
-  const intl = useIntl()
-  const family = resolveFamily(attachment)
-  const name = attachment.name || 'File'
+  const { family, name, ariaLabel } = useCardLabel(attachment)
   return (
     <div
       className={cn(
@@ -390,7 +398,7 @@ export function FilePreviewCard({
       <button
         type="button"
         onClick={onOpen}
-        aria-label={attachmentAriaLabel(name, family, attachment.size, attachment.preview, intl)}
+        aria-label={ariaLabel}
         className="flex w-full flex-col text-left"
       >
         <span
@@ -405,12 +413,7 @@ export function FilePreviewCard({
           <FileBadge name={attachment.name} family={family} size="sm" />
           <span className="flex min-w-0 flex-col">
             <span className="truncate text-[13px] font-medium text-foreground">{name}</span>
-            <MetaLine
-              name={name}
-              family={family}
-              size={attachment.size}
-              preview={attachment.preview}
-            />
+            <MetaLine attachment={attachment} name={name} family={family} />
           </span>
         </span>
       </button>
@@ -427,14 +430,12 @@ export function FilePreviewCard({
  *  line — the default card, and the fallback for any format with no preview
  *  data at all (or none the browser can derive, like a legacy .ppt). */
 export function FileIconCard({ attachment, onOpen, className }: FileCardProps) {
-  const intl = useIntl()
-  const family = resolveFamily(attachment)
-  const name = attachment.name || 'File'
+  const { family, name, ariaLabel } = useCardLabel(attachment)
   return (
     <button
       type="button"
       onClick={onOpen}
-      aria-label={attachmentAriaLabel(name, family, attachment.size, attachment.preview, intl)}
+      aria-label={ariaLabel}
       className={cn(
         'flex w-full max-w-[248px] items-center gap-2.5 rounded-[10px] border border-border bg-card px-2.5 py-2.5 text-left transition-colors hover:border-foreground/30',
         className
@@ -443,7 +444,7 @@ export function FileIconCard({ attachment, onOpen, className }: FileCardProps) {
       <FileBadge name={attachment.name} family={family} size="lg" />
       <span className="flex min-w-0 flex-col">
         <span className="truncate text-[13px] font-medium text-foreground">{name}</span>
-        <MetaLine name={name} family={family} size={attachment.size} preview={attachment.preview} />
+        <MetaLine attachment={attachment} name={name} family={family} />
       </span>
     </button>
   )
@@ -453,9 +454,7 @@ export function FileIconCard({ attachment, onOpen, className }: FileCardProps) {
  *  meta, download. Used in the widget, narrow sidebars/columns and the
  *  conversation's file list. */
 export function FileRow({ attachment, onOpen, className }: FileCardProps) {
-  const intl = useIntl()
-  const family = resolveFamily(attachment)
-  const name = attachment.name || 'File'
+  const { family, name, ariaLabel } = useCardLabel(attachment)
   const thumbUrl = attachment.preview?.thumbUrl
   return (
     <div
@@ -467,7 +466,7 @@ export function FileRow({ attachment, onOpen, className }: FileCardProps) {
       <button
         type="button"
         onClick={onOpen}
-        aria-label={attachmentAriaLabel(name, family, attachment.size, attachment.preview, intl)}
+        aria-label={ariaLabel}
         className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
       >
         {thumbUrl ? (
@@ -479,12 +478,7 @@ export function FileRow({ attachment, onOpen, className }: FileCardProps) {
         )}
         <span className="flex min-w-0 flex-col">
           <span className="truncate text-[12.5px] font-medium text-foreground">{name}</span>
-          <MetaLine
-            name={name}
-            family={family}
-            size={attachment.size}
-            preview={attachment.preview}
-          />
+          <MetaLine attachment={attachment} name={name} family={family} />
         </span>
       </button>
       <DownloadLink url={attachment.url} name={name} className="size-6" />
