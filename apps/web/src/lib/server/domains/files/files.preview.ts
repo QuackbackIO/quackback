@@ -125,14 +125,10 @@ async function derive(file: FileRecord, deadline: Deadline): Promise<PreviewResu
   const cap = maxBytesForFamily(family)
   if (kind === 'media') {
     const size = Math.min(file.size, cap)
-    return deriveMediaPreview(
-      (offset, length) =>
-        readObject(file.storageKey, length, {
-          offset,
-          length: Math.max(0, Math.min(length, size - offset)),
-        }),
-      size
-    )
+    return deriveMediaPreview((offset, length) => {
+      const clamped = Math.max(0, Math.min(length, size - offset))
+      return readObject(file.storageKey, clamped, { offset, length: clamped })
+    }, size)
   }
   const bytes = await readObject(file.storageKey, cap)
   deadline.check()
