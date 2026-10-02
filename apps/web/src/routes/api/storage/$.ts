@@ -219,10 +219,12 @@ interface UserContentCors {
  * app's origin may read them. No credentials: the read capability is in the
  * URL, and no cookie belongs on this host.
  */
-async function userContentCors(request: Request): Promise<UserContentCors> {
+async function userContentCors(
+  request: Request,
+  config: { baseUrl: string }
+): Promise<UserContentCors> {
   const { userContentOrigin } = await import('@/lib/server/storage/asset-url')
   if (!userContentOrigin()) return { active: false, allowOrigin: null }
-  const { config } = await import('@/lib/server/config')
   const appOrigin = new URL(config.baseUrl).origin
   return {
     active: true,
@@ -251,7 +253,8 @@ function withUserContentCors(response: Response, cors: UserContentCors): Respons
  * separate origin is configured.
  */
 export async function handleStorageOptions({ request }: { request: Request }): Promise<Response> {
-  const cors = await userContentCors(request)
+  const { config } = await import('@/lib/server/config')
+  const cors = await userContentCors(request, config)
   const headers = new Headers()
   if (cors.active) headers.set('Vary', 'Origin')
   if (cors.allowOrigin) {
@@ -282,7 +285,12 @@ export async function handleStorageOptions({ request }: { request: Request }): P
  * in for one, so a public key, which needs none, ignores it.
  */
 export async function handleStorageGet({ request }: { request: Request }): Promise<Response> {
-  return withUserContentCors(await serveStorageGet(request), await userContentCors(request))
+  const { config } = await import('@/lib/server/config')
+  const [response, cors] = await Promise.all([
+    serveStorageGet(request),
+    userContentCors(request, config),
+  ])
+  return withUserContentCors(response, cors)
 }
 
 async function serveStorageGet(request: Request): Promise<Response> {
