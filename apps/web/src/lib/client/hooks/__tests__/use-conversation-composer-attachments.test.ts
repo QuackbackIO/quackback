@@ -278,7 +278,7 @@ describe('useConversationComposerAttachments', () => {
 
   it('accepts a full cap across waves while earlier tiles are still uploading', async () => {
     const deferreds: Array<ReturnType<typeof deferred<ReturnType<typeof uploadedFileFor>>>> = []
-    const upload = vi.fn((file: File) => {
+    const upload = vi.fn(() => {
       const d = deferred<ReturnType<typeof uploadedFileFor>>()
       deferreds.push(d)
       return d.promise

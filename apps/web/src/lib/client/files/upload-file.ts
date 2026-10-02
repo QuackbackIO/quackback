@@ -36,7 +36,11 @@ export interface UploadFileOptions {
  */
 function errorMessageFrom(error: unknown): string | undefined {
   if (typeof error === 'string') return error
-  if (error && typeof error === 'object' && typeof (error as { message?: unknown }).message === 'string') {
+  if (
+    error &&
+    typeof error === 'object' &&
+    typeof (error as { message?: unknown }).message === 'string'
+  ) {
     return (error as { message: string }).message
   }
   return undefined

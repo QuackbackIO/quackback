@@ -153,7 +153,9 @@ describe('uploadFile', () => {
     const promise = uploadFile(f, { endpoint: '/api/widget/files' })
     const xhr = lastXhr()
     xhr.status = 401
-    xhr.responseText = JSON.stringify({ error: { code: 'AUTH_REQUIRED', message: 'Valid widget session required' } })
+    xhr.responseText = JSON.stringify({
+      error: { code: 'AUTH_REQUIRED', message: 'Valid widget session required' },
+    })
     xhr.onload?.()
     await expect(promise).rejects.toMatchObject({ message: 'Valid widget session required' })
   })
@@ -173,7 +175,9 @@ describe('uploadFile', () => {
     const promise = uploadFile(f, { endpoint: '/api/widget/files' })
     const xhr = lastXhr()
     xhr.status = 429
-    xhr.responseText = JSON.stringify({ error: { code: 'RATE_LIMITED', message: 'Too many uploads, slow down' } })
+    xhr.responseText = JSON.stringify({
+      error: { code: 'RATE_LIMITED', message: 'Too many uploads, slow down' },
+    })
     xhr.onload?.()
     await expect(promise).rejects.toMatchObject({ reason: 'rate_limited' })
   })

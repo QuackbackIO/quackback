@@ -72,7 +72,13 @@ function metaParts(
     case 'pdf':
     case 'document':
       return preview?.pages != null
-        ? [plural('files.count.pages', '{count, plural, one {# page} other {# pages}}', preview.pages)]
+        ? [
+            plural(
+              'files.count.pages',
+              '{count, plural, one {# page} other {# pages}}',
+              preview.pages
+            ),
+          ]
         : []
     case 'spreadsheet':
     case 'csv': {
@@ -87,7 +93,11 @@ function metaParts(
       }
       if (sheetCount > 1) {
         return [
-          plural('files.count.sheets', '{count, plural, one {# sheet} other {# sheets}}', sheetCount),
+          plural(
+            'files.count.sheets',
+            '{count, plural, one {# sheet} other {# sheets}}',
+            sheetCount
+          ),
         ]
       }
       return []
@@ -95,7 +105,13 @@ function metaParts(
     case 'text':
     case 'code':
       return preview?.lines != null
-        ? [plural('files.count.lines', '{count, plural, one {# line} other {# lines}}', preview.lines)]
+        ? [
+            plural(
+              'files.count.lines',
+              '{count, plural, one {# line} other {# lines}}',
+              preview.lines
+            ),
+          ]
         : []
     case 'video':
       return preview?.durationMs != null ? [durationLabel(preview.durationMs)] : []
@@ -105,7 +121,13 @@ function metaParts(
         : []
     case 'archive':
       return preview?.entries != null
-        ? [plural('files.count.files', '{count, plural, one {# file} other {# files}}', preview.entries)]
+        ? [
+            plural(
+              'files.count.files',
+              '{count, plural, one {# file} other {# files}}',
+              preview.entries
+            ),
+          ]
         : []
     default:
       return []

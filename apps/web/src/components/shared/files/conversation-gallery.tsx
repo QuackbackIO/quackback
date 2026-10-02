@@ -62,7 +62,11 @@ export function useConversationGallery(): ConversationGalleryApi {
   return useContext(ConversationGalleryContext)
 }
 
-function senderNameOf(m: GalleryMessage, intl: IntlShape, visitorIsSelf: boolean): string | undefined {
+function senderNameOf(
+  m: GalleryMessage,
+  intl: IntlShape,
+  visitorIsSelf: boolean
+): string | undefined {
   if (m.author?.displayName) return m.author.displayName
   if (m.isAssistant) {
     return intl.formatMessage({ id: 'files.sender.assistant', defaultMessage: 'Assistant' })

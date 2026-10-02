@@ -183,7 +183,9 @@ function FileTile({ item, onRemove, onRetry, onOpen }: TileProps) {
       <FileBadge name={item.name} family={item.family} size="sm" />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-xs font-medium text-foreground">{item.name || 'File'}</span>
-        {ready && <span className="text-[11px] text-muted-foreground">{formatBytes(item.size)}</span>}
+        {ready && (
+          <span className="text-[11px] text-muted-foreground">{formatBytes(item.size)}</span>
+        )}
         {item.status === 'uploading' && (
           <>
             <div className="h-1 overflow-hidden rounded-full bg-muted" aria-hidden="true">
@@ -303,9 +305,21 @@ export function ComposerAttachmentTray({
         item.errorReason === 'cap' ? (
           <CapNoticeLine key={item.localId} item={item} onRemove={onRemove} />
         ) : item.family === 'image' ? (
-          <ImageTile key={item.localId} item={item} onRemove={onRemove} onRetry={onRetry} onOpen={onOpen} />
+          <ImageTile
+            key={item.localId}
+            item={item}
+            onRemove={onRemove}
+            onRetry={onRetry}
+            onOpen={onOpen}
+          />
         ) : (
-          <FileTile key={item.localId} item={item} onRemove={onRemove} onRetry={onRetry} onOpen={onOpen} />
+          <FileTile
+            key={item.localId}
+            item={item}
+            onRemove={onRemove}
+            onRetry={onRetry}
+            onOpen={onOpen}
+          />
         )
       )}
     </div>
