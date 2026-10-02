@@ -1,4 +1,3 @@
-import { isSameDay } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { TimeAgo } from '@/components/ui/time-ago'
@@ -18,6 +17,7 @@ import {
 } from '@heroicons/react/24/outline'
 import type { ChangelogId, PrincipalId, PostId } from '@quackback/ids'
 import { stripMarkdownPreview } from '@/lib/shared/utils'
+import { toIsoDateOnly } from '@/lib/shared/utils/date'
 
 interface ChangelogListItemProps {
   id: ChangelogId
@@ -66,7 +66,9 @@ export function ChangelogListItem({
     status === 'published' &&
     displayDate &&
     publishedAt &&
-    !isSameDay(new Date(displayDate), new Date(publishedAt))
+    // The published date is picked as a calendar day (noon UTC on it), so
+    // the days compare in UTC: the same answer on the server and in every zone.
+    toIsoDateOnly(new Date(displayDate)) !== toIsoDateOnly(new Date(publishedAt))
       ? displayDate
       : null
 
@@ -119,11 +121,11 @@ export function ChangelogListItem({
               <span className="text-muted-foreground/40">·</span>
               <span className="text-muted-foreground/70">
                 Showing as{' '}
-                {new Date(portalDisplayDate).toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                })}
+                <LocalDate
+                  date={portalDisplayDate}
+                  options={{ month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }}
+                  locale="en-US"
+                />
               </span>
             </>
           )}

@@ -65,7 +65,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { MENU_LABEL } from '@/components/ui/menu'
 import { DETAIL_DATE, DetailDate, DetailRow as Row } from '@/components/shared/detail-row'
-import { useLocalDateFormatter } from '@/components/ui/local-date'
+import { CalendarDate, useLocalDateFormatter } from '@/components/ui/local-date'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
 import { useFeatureFlags } from '@/lib/client/hooks/use-root-context'
@@ -598,7 +598,17 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
               const raw = ticket.customAttributes[field.key]
               if (raw === undefined || raw === null || raw === '') return null
               const display =
-                field.type === 'checkbox' ? (raw === true ? 'Yes' : 'No') : String(raw)
+                field.type === 'checkbox' ? (
+                  raw === true ? (
+                    'Yes'
+                  ) : (
+                    'No'
+                  )
+                ) : field.type === 'date' && typeof raw === 'string' ? (
+                  <CalendarDate value={raw} options={DETAIL_DATE} />
+                ) : (
+                  String(raw)
+                )
               return (
                 <Row key={field.key} icon={PuzzlePieceIcon} label={field.label}>
                   <span className="text-sm font-medium text-foreground break-words">{display}</span>

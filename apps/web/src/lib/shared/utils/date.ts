@@ -55,6 +55,38 @@ export function formatMonthYear(value: Date | string | null | undefined): string
 }
 
 /**
+ * A date-only value ("2026-10-01", or the date as written at the start of an
+ * ISO timestamp) as the UTC midnight that names it. Formatted with
+ * `timeZone: 'UTC'`, it reads as that day for every viewer, where parsing the
+ * string as a moment would land on the day before for anyone west of UTC.
+ * Null when the value does not start with a real calendar date.
+ */
+export function parseCalendarDate(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value)
+  if (!match) return null
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])]
+  const date = new Date(Date.UTC(year, month - 1, day))
+  const real =
+    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+  return real ? date : null
+}
+
+/**
+ * A calendar date for display, e.g. "Oct 1, 2026": the same day for every
+ * viewer, on the server and in the browser alike. Null when the value is not a
+ * calendar date (see parseCalendarDate).
+ */
+export function formatCalendarDate(
+  value: string,
+  options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' },
+  locale = 'en-US'
+): string | null {
+  const date = parseCalendarDate(value)
+  if (!date) return null
+  return new Intl.DateTimeFormat(locale, { ...options, timeZone: 'UTC' }).format(date)
+}
+
+/**
  * A Date at `hour`:00 (browser-local) on the next calendar day, minutes and
  * below zeroed. Used for default "tomorrow morning" times (snooze wake,
  * scheduled publish).

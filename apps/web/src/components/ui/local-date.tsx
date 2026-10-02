@@ -1,4 +1,5 @@
 import { useMemo, useSyncExternalStore } from 'react'
+import { parseCalendarDate } from '@/lib/shared/utils/date'
 
 /**
  * Absolute dates ("Oct 1, 2026", "3:04 PM") that hydrate cleanly.
@@ -137,5 +138,33 @@ export function LocalDate({ date, options, locale, className }: LocalDateProps) 
     <time dateTime={parsed.toISOString()} className={className}>
       {format(parsed, options)}
     </time>
+  )
+}
+
+/**
+ * A date-only value ("2026-10-01") as the day it names, for every viewer: read
+ * as the UTC midnight that names it and formatted in UTC, so no zone moves it
+ * to a neighbouring day. A value that is not a calendar date shows as given.
+ */
+export function CalendarDate({
+  value,
+  options,
+  locale,
+  className,
+}: {
+  value: string
+  options?: Intl.DateTimeFormatOptions
+  locale?: string
+  className?: string
+}) {
+  const date = parseCalendarDate(value)
+  if (!date) return <>{value}</>
+  return (
+    <LocalDate
+      date={date}
+      options={{ ...options, timeZone: 'UTC' }}
+      locale={locale}
+      className={className}
+    />
   )
 }
