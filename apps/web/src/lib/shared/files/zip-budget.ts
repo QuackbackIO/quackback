@@ -114,6 +114,15 @@ function applyZip64Extra(
 }
 
 /**
+ * Whether an entry is a file a listing shows: not a folder, and named by
+ * something other than slashes and dots. Every count of an archive's files
+ * uses this, so the attachment card and the viewer agree.
+ */
+export function isZipFileEntry(entry: Pick<ZipEntry, 'name'>): boolean {
+  return !entry.name.endsWith('/') && entry.name.split('/').some((part) => part && part !== '.')
+}
+
+/**
  * The entries a zip's central directory lists, without reading any entry's
  * data. `maxEntries` refuses an index before walking it.
  */

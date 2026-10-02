@@ -4,6 +4,7 @@ import {
   readZipIndex,
   checkZipBudget,
   checkZipLocalHeader,
+  isZipFileEntry,
   openZip,
   inflateZipEntry,
   ZipBudgetError,
@@ -99,6 +100,15 @@ describe('readZipIndex', () => {
     for (let i = 0; i < 30; i++) files[`f${i}.txt`] = strToU8('x')
     expect(() => readZipIndex(zipSync(files), { maxEntries: 20 })).toThrow(ZipBudgetError)
     expect(readZipIndex(zipSync(files), { maxEntries: 30 })).toHaveLength(30)
+  })
+})
+
+describe('isZipFileEntry', () => {
+  it('counts named files, not folders or entries named only by slashes and dots', () => {
+    const files = ['a.txt', 'logs/b.log', './c.txt', '//d', 'e/./f']
+    const others = ['logs/', 'logs/old/', './', '/', '.', '', 'a//', './.']
+    for (const name of files) expect(isZipFileEntry({ name }), name).toBe(true)
+    for (const name of others) expect(isZipFileEntry({ name }), name).toBe(false)
   })
 })
 
