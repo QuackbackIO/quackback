@@ -45,7 +45,7 @@ import { NotFoundError, InternalError } from '@/lib/shared/errors'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { logger } from '@/lib/server/logger'
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
-import { notTestPrincipal } from '@/lib/server/test-data'
+import { notTestConversation, notTestPrincipal, notTestRecord } from '@/lib/server/test-data'
 import { EXTERNAL_ID_KEY } from '@/lib/server/domains/users/user.attributes'
 
 const log = logger.child({ component: 'users' })
@@ -107,11 +107,29 @@ async function fetchSegmentsForPrincipals(
 export function leadEngagementWhere() {
   return sql`(
     ${principal.contactEmail} IS NOT NULL
-    OR EXISTS (SELECT 1 FROM ${conversationMessages} WHERE ${conversationMessages.principalId} = ${principal.id})
-    OR EXISTS (SELECT 1 FROM ${posts} WHERE ${posts.principalId} = ${principal.id})
-    OR EXISTS (SELECT 1 FROM ${postVotes} WHERE ${postVotes.principalId} = ${principal.id})
-    OR EXISTS (SELECT 1 FROM ${postComments} WHERE ${postComments.principalId} = ${principal.id})
-    OR EXISTS (SELECT 1 FROM ${postCommentReactions} WHERE ${postCommentReactions.principalId} = ${principal.id})
+    OR EXISTS (SELECT 1 FROM ${conversationMessages}
+      WHERE ${conversationMessages.principalId} = ${principal.id}
+        AND ${notTestConversation(conversationMessages.conversationId)})
+    OR EXISTS (SELECT 1 FROM ${posts}
+      WHERE ${posts.principalId} = ${principal.id}
+        AND ${notTestRecord(posts.widgetMetadata)})
+    OR EXISTS (SELECT 1 FROM ${postVotes}
+      INNER JOIN ${posts} ON ${posts.id} = ${postVotes.postId}
+      WHERE ${postVotes.principalId} = ${principal.id}
+        AND ${notTestRecord(posts.widgetMetadata)}
+        AND ${notTestPrincipal(posts.principalId)})
+    OR EXISTS (SELECT 1 FROM ${postComments}
+      INNER JOIN ${posts} ON ${posts.id} = ${postComments.postId}
+      WHERE ${postComments.principalId} = ${principal.id}
+        AND ${notTestRecord(posts.widgetMetadata)}
+        AND ${notTestPrincipal(posts.principalId)})
+    OR EXISTS (SELECT 1 FROM ${postCommentReactions}
+      INNER JOIN ${postComments} ON ${postComments.id} = ${postCommentReactions.commentId}
+      INNER JOIN ${posts} ON ${posts.id} = ${postComments.postId}
+      WHERE ${postCommentReactions.principalId} = ${principal.id}
+        AND ${notTestRecord(posts.widgetMetadata)}
+        AND ${notTestPrincipal(posts.principalId)}
+        AND ${notTestPrincipal(postComments.principalId)})
   )`
 }
 
@@ -172,15 +190,22 @@ export async function listPortalUsers(
       SELECT count(*)::int FROM ${posts} activity_posts
       WHERE activity_posts.principal_id = ${principal.id}
         AND activity_posts.deleted_at IS NULL
+        AND ${notTestRecord(sql`activity_posts.widget_metadata`)}
     )`
     const commentCountExpr = sql<number>`(
       SELECT count(*)::int FROM ${postComments} activity_comments
+      INNER JOIN ${posts} activity_posts ON activity_posts.id = activity_comments.post_id
       WHERE activity_comments.principal_id = ${principal.id}
         AND activity_comments.deleted_at IS NULL
+        AND ${notTestRecord(sql`activity_posts.widget_metadata`)}
+        AND ${notTestPrincipal(sql`activity_posts.principal_id`)}
     )`
     const voteCountExpr = sql<number>`(
       SELECT count(*)::int FROM ${postVotes} activity_votes
+      INNER JOIN ${posts} activity_posts ON activity_posts.id = activity_votes.post_id
       WHERE activity_votes.principal_id = ${principal.id}
+        AND ${notTestRecord(sql`activity_posts.widget_metadata`)}
+        AND ${notTestPrincipal(sql`activity_posts.principal_id`)}
     )`
     const lastSeenExpr = sql<Date | null>`greatest(
       (SELECT max(activity_sessions.updated_at) FROM ${session} activity_sessions

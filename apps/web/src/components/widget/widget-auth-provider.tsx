@@ -134,6 +134,9 @@ export function WidgetAuthProvider({
   const [identityResolved, setIdentityResolved] = useState(false)
   const [testSession, setTestSession] = useState(false)
   const testExchangeRef = useRef<Promise<boolean> | null>(null)
+  const testDocumentId = useRef(
+    typeof window === 'undefined' ? '' : String(window.performance.timeOrigin)
+  )
   const isIdentified = user !== null
   const sessionReadyRef = useRef(portalSessionAdopted)
   const sessionSourceRef = useRef<SessionSource>(portalSessionAdopted ? 'portal' : null)
@@ -416,6 +419,7 @@ export function WidgetAuthProvider({
     }
 
     async function handleTestToken(token: string) {
+      if (testExchangeRef.current || sessionReadyRef.current) return
       const exchange = (async () => {
         try {
           const res = await fetch('/api/widget/test-session', {
@@ -439,7 +443,11 @@ export function WidgetAuthProvider({
         }
       })()
       testExchangeRef.current = exchange
-      sendToHost({ type: 'quackback:test-session', success: await exchange })
+      sendToHost({
+        type: 'quackback:test-session',
+        success: await exchange,
+        documentId: testDocumentId.current,
+      })
     }
 
     function handleMessage(event: MessageEvent) {
@@ -452,6 +460,7 @@ export function WidgetAuthProvider({
         // Only the teammate's own page may drive a test frame.
         if (event.origin !== window.location.origin) return
         if (msg.type === 'quackback:test-token' && typeof msg.data === 'string') {
+          if (msg.documentId !== undefined && msg.documentId !== testDocumentId.current) return
           if (!sessionReadyRef.current) void handleTestToken(msg.data)
           return
         }
@@ -514,7 +523,10 @@ export function WidgetAuthProvider({
     }
 
     window.addEventListener('message', handleMessage)
-    sendToHost({ type: 'quackback:ready' })
+    sendToHost({
+      type: 'quackback:ready',
+      ...(testMode && { documentId: testDocumentId.current }),
+    })
 
     return () => window.removeEventListener('message', handleMessage)
   }, [storeToken, applyIdentifyResult, testMode])

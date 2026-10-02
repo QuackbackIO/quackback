@@ -1248,6 +1248,7 @@
   "onboarding.workspace.saving": "Zapisywanie…",
   "onboarding.workspace.open": "Otwórz obszar",
   "onboarding.test.customer": "Klient testowy",
+  "onboarding.test.badge": "Test",
   "inbox.row.test": "Test",
   "inbox.test.confirm": "Usuń",
   "inbox.test.confirmBody": "Prawdziwe rozmowy pozostaną bez zmian.",
@@ -1259,6 +1260,8 @@
   "onboarding.test.copied": "Skopiowano",
   "onboarding.test.copy": "Kopiuj",
   "onboarding.test.customerSide": "Twój klient",
+  "inbox.convert.error.failed": "Nie udało się przekształcić rozmowy",
+  "inbox.convert.error.testConversation": "Rozmów testowych nie można rejestrować jako opinii.",
   "onboarding.test.done": "Tak wygląda cała droga wiadomości",
   "onboarding.test.draft": "Cześć! Jest tu ktoś?",
   "onboarding.test.email": "Albo napisz e-mail do swojej skrzynki",
@@ -1276,7 +1279,7 @@
   "onboarding.test.postTest": "Opublikuj testowy pomysł",
   "onboarding.test.restart": "Zacznij od nowa",
   "onboarding.test.sendMessage": "Wyślij wiadomość",
-  "onboarding.test.sendTest": "Wyślij wiadomość testową",
+  "onboarding.test.sendTest": "Wyślij sobie wiadomość testową",
   "onboarding.test.step.reply": "Odpowiedz ze swojej skrzynki.",
   "onboarding.test.step.seen": "Zobacz, jak odpowiedź dociera i zostaje przeczytana.",
   "onboarding.test.step.send": "Wyślij wiadomość jako klient.",
@@ -1285,5 +1288,7 @@
   "onboarding.test.tryTitle": "Wypróbuj sam",
   "onboarding.test.waiting": "Wyślij wiadomość po lewej. Trafi tutaj.",
   "widget.test.frameTitle": "Messenger jako klient testowy",
-  "widget.test.phoneExpired": "Ten link został już użyty. Zeskanuj kod ponownie."
+  "widget.test.phoneExpired": "Ten link został już użyty. Zeskanuj kod ponownie.",
+  "conversationAttributes.reservedKey": "Quackback zarządza tym atrybutem.",
+  "support.ticket.createDialog.testDataLinkConflict": "Rozmowy testowe i rzeczywiste wymagają osobnych zgłoszeń."
 }

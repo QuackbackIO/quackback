@@ -7,10 +7,13 @@ import {
   conversations,
   conversationMessages,
   principal,
+  tickets,
+  and,
+  sql,
   type Database,
   type Transaction,
 } from '@/lib/server/db'
-import { isTestRecord } from '@/lib/server/test-data'
+import { isTestRecord, notTestTicket } from '@/lib/server/test-data'
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
@@ -31,9 +34,12 @@ export async function isTestEvent(
     record(data.conversation).id,
     record(data.message).id,
     record(data.message).conversationId,
+    record(data.ticket).id,
     data.conversationId,
+    data.messageId,
     data.postId,
     data.principalId,
+    data.ticketId,
   ])
   const testIdentity = async (id: string | null) => {
     if (!id || !isTypeId(id, 'principal')) return false
@@ -61,19 +67,31 @@ export async function isTestEvent(
     })
     return !!row && (isTestRecord(row.widgetMetadata) || (await testIdentity(row.principalId)))
   }
+  const testTicket = async (id: string | null) => {
+    if (!id || !isTypeId(id, 'ticket')) return false
+    const [row] = await executor
+      .select({ id: tickets.id })
+      .from(tickets)
+      .where(and(eq(tickets.id, id), sql`not (${notTestTicket(tickets.id)})`))
+      .limit(1)
+    return !!row
+  }
   for (const id of ids) {
     if (typeof id !== 'string') continue
     if (isTypeId(id, 'principal') && (await testIdentity(id))) return true
     if (isTypeId(id, 'conversation') && (await testConversation(id))) return true
     if (isTypeId(id, 'post') && (await testPost(id))) return true
+    if (isTypeId(id, 'ticket') && (await testTicket(id))) return true
     if (isTypeId(id, 'conversation_msg')) {
       const row = await executor.query.conversationMessages.findFirst({
         where: eq(conversationMessages.id, id),
-        columns: { conversationId: true, principalId: true },
+        columns: { conversationId: true, ticketId: true, principalId: true },
       })
       if (
         row &&
-        ((await testConversation(row.conversationId)) || (await testIdentity(row.principalId)))
+        ((await testConversation(row.conversationId)) ||
+          (await testTicket(row.ticketId)) ||
+          (await testIdentity(row.principalId)))
       )
         return true
     }

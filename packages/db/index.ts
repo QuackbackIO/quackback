@@ -61,7 +61,13 @@ export { seedSystemData } from './src/seed-system'
 
 // Types
 export * from './src/types'
-export { isTestRecord, notTestRecord, notTestPrincipal, notTestConversation } from './src/test-data'
+export {
+  isTestRecord,
+  notTestRecord,
+  notTestPrincipal,
+  notTestConversation,
+  notTestTicket,
+} from './src/test-data'
 
 // Re-export common drizzle-orm utilities
 export {

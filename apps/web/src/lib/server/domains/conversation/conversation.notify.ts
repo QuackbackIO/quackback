@@ -66,6 +66,8 @@ import {
   type ResolveEmailAttachmentsOptions,
 } from './conversation.email-attachments'
 import { logger } from '@/lib/server/logger'
+import { isTestRecord } from '@/lib/server/test-data'
+import { conversationTestDelivery } from './conversation.test-delivery'
 
 const log = logger.child({ component: 'conversation-notify' })
 
@@ -252,6 +254,10 @@ export async function notifyVisitorMessage(opts: {
   attachments?: ConversationAttachment[]
 }): Promise<void> {
   try {
+    const test = isTestRecord(opts.conversation.customAttributes)
+    const testOwner = opts.conversation.customAttributes?.testOwnerPrincipalId
+    if (test && typeof testOwner !== 'string') return
+
     const agentsOnline = await isAnyAgentOnline()
     // Avoid email spam: only email the team on the first message of a
     // conversation, or when nobody is around to see it live. This gate is
@@ -275,7 +281,13 @@ export async function notifyVisitorMessage(opts: {
       })
       .from(principal)
       .leftJoin(user, eq(principal.userId, user.id))
-      .where(and(eq(principal.type, 'user'), inArray(principal.role, ['admin', 'member'])))
+      .where(
+        and(
+          eq(principal.type, 'user'),
+          inArray(principal.role, ['admin', 'member']),
+          test ? eq(principal.id, testOwner as PrincipalId) : undefined
+        )
+      )
 
     if (team.length === 0) return
 
@@ -430,6 +442,14 @@ export async function sendVisitorConversationEmail(opts: {
   channel?: Conversation['channel']
   attachments?: ConversationAttachment[]
 }): Promise<void> {
+  const delivery = await conversationTestDelivery(opts.conversationId)
+  if (
+    delivery.test &&
+    (!delivery.recipient ||
+      opts.recipient.toLowerCase() !== delivery.recipient.toLowerCase() ||
+      (opts.channel && opts.channel !== 'email' && opts.channel !== 'messenger'))
+  )
+    return
   // Only advertise a reply address we can actually receive on, so a visitor's
   // email reply threads back into this conversation (inbound email channel).
   // The mail slug is what makes an address routable on a shared inbound domain;
@@ -504,7 +524,9 @@ export async function sendVisitorConversationEmail(opts: {
     outboundMessageId
       ? recordOutboundEmail(outboundMessageId, opts.conversationId)
       : Promise.resolve(),
-    recordEmailIdentity(opts.recipient, opts.visitorPrincipalId),
+    delivery.test
+      ? Promise.resolve()
+      : recordEmailIdentity(opts.recipient, opts.visitorPrincipalId),
   ])
 }
 
@@ -553,7 +575,12 @@ export async function notifyAgentReply(opts: {
       .where(eq(principal.id, opts.visitorPrincipalId))
       .limit(1)
 
-    const recipient = resolveReplyRecipient(visitor, visitor?.contactEmail, opts.capturedEmail)
+    const delivery = await conversationTestDelivery(opts.conversationId)
+    if (delivery.test && opts.channel !== 'email' && opts.channel !== 'messenger') return
+    const recipient = delivery.test
+      ? delivery.recipient
+      : resolveReplyRecipient(visitor, visitor?.contactEmail, opts.capturedEmail)
+    if (delivery.test && !recipient) return
     if (!recipient) {
       // The visitor is unreachable — surface it instead of dropping silently
       // (the inbox can flag conversations with no reply-to address). `channel`
@@ -592,6 +619,8 @@ export async function notifyAgentReply(opts: {
         attachments: opts.attachments,
       })
     }
+
+    if (delivery.test) return
 
     // Group thread (§4.8): every added customer receives the reply too. One
     // participant's failure never eats the primary send (already delivered
@@ -661,9 +690,13 @@ export async function notifyConversationStarted(opts: {
       .where(eq(principal.id, opts.visitorPrincipalId))
       .limit(1)
 
-    const recipient = resolveReplyRecipient(visitor, visitor?.contactEmail, null)
+    const delivery = await conversationTestDelivery(opts.conversationId)
+    const recipient = delivery.test
+      ? delivery.recipient
+      : resolveReplyRecipient(visitor, visitor?.contactEmail, null)
     const mailCtx = await loadConversationMailContext(opts.conversationId)
     const channel = mailCtx.channel ?? 'messenger'
+    if (delivery.test && (!recipient || (channel !== 'email' && channel !== 'messenger'))) return
     const threadAddressed = getChannelDescriptor(channel)?.addressing === 'thread'
     if (!recipient && !threadAddressed) {
       log.warn(

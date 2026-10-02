@@ -513,6 +513,7 @@ export {
   notTestRecord,
   notTestPrincipal,
   notTestConversation,
+  notTestTicket,
 } from '@quackback/db'
 
 // Re-export schema types not covered by @quackback/db/types

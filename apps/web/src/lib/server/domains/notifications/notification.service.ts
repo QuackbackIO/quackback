@@ -24,7 +24,13 @@ import {
 import type { NotificationId, PrincipalId } from '@quackback/ids'
 import { createId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
-import { ANONYMOUS_ACTOR, boardViewFilter, canViewPost, type Actor } from '@/lib/server/policy'
+import {
+  ANONYMOUS_ACTOR,
+  boardViewFilter,
+  canViewPost,
+  postTestViewFilter,
+  type Actor,
+} from '@/lib/server/policy'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'notifications' })
@@ -134,11 +140,19 @@ export async function getNotificationsForMember(
       postTitle: posts.title,
       postModerationState: posts.moderationState,
       postPrincipalId: posts.principalId,
+      postWidgetMetadata: posts.widgetMetadata,
       boardSlug: boards.slug,
       boardAccess: boards.access,
     })
     .from(inAppNotifications)
-    .leftJoin(posts, and(eq(inAppNotifications.postId, posts.id), isNull(posts.deletedAt)))
+    .leftJoin(
+      posts,
+      and(
+        eq(inAppNotifications.postId, posts.id),
+        isNull(posts.deletedAt),
+        postTestViewFilter(actor)
+      )
+    )
     .leftJoin(
       boards,
       and(eq(posts.boardId, boards.id), isNull(boards.deletedAt), boardViewFilter(actor))
@@ -187,6 +201,7 @@ export async function getNotificationsForMember(
           {
             moderationState: row.postModerationState ?? 'published',
             principalId: row.postPrincipalId,
+            widgetMetadata: row.postWidgetMetadata,
           },
           { access: row.boardAccess }
         )

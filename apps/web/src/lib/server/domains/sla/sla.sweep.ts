@@ -21,7 +21,8 @@
  *    claimSlaTimerTriggerMarker's doc for why the order is enqueue-then-claim
  *    and not the reverse).
  */
-import { db, and, isNotNull, sql, conversations } from '@/lib/server/db'
+import { db, and, inArray, isNotNull, sql, conversations } from '@/lib/server/db'
+import { notTestConversation } from '@/lib/server/test-data'
 import type { ConversationId, SlaPolicyId } from '@quackback/ids'
 import type { EventConversationRef } from '@/lib/server/events/types'
 import { commitStamp, insertClockEvent, type SlaApplied, type StampExecutor } from './sla.service'
@@ -134,7 +135,8 @@ async function scanSlaClockCandidates(
   at: Date,
   buildWindowSql: (nowIso: string) => ReturnType<typeof sql>,
   isEligible: (clock: SlaClock, applied: SlaApplied, dueAt: string) => boolean,
-  visit: (row: SlaSweepRow, applied: SlaApplied, clock: SlaClock, dueAt: string) => Promise<void>
+  visit: (row: SlaSweepRow, applied: SlaApplied, clock: SlaClock, dueAt: string) => Promise<void>,
+  conversationIds?: ConversationId[]
 ): Promise<void> {
   const nowIso = at.toISOString() // ISO-8601 compares lexicographically = chronologically
   const rows = await db
@@ -155,6 +157,8 @@ async function scanSlaClockCandidates(
     .where(
       and(
         isNotNull(conversations.slaApplied),
+        notTestConversation(conversations.id),
+        conversationIds ? inArray(conversations.id, conversationIds) : undefined,
         sql`(${conversations.slaApplied} ->> 'pausedAt') IS NULL`,
         // Redundant given buildWindowSql's own OR'd window below (every
         // candidate row already satisfies one arm, since each OR branch
@@ -253,7 +257,8 @@ async function claimSlaClockMarker(
  * deadline. Returns the number recorded.
  */
 export async function sweepOverdueSlaBreaches(
-  at: Date = new Date()
+  at: Date = new Date(),
+  conversationIds?: ConversationId[]
 ): Promise<{ recorded: number }> {
   let recorded = 0
   await scanSlaClockCandidates(
@@ -292,7 +297,8 @@ export async function sweepOverdueSlaBreaches(
         await insertClockEvent(row.id, applied.policyId, clock.reportKind, dueAt, at, tx, cycleAt)
         recorded++
       })
-    }
+    },
+    conversationIds
   )
   return { recorded }
 }

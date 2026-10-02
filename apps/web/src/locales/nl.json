@@ -1248,6 +1248,7 @@
   "onboarding.workspace.saving": "Opslaan…",
   "onboarding.workspace.open": "Werkruimte openen",
   "onboarding.test.customer": "Testklant",
+  "onboarding.test.badge": "Test",
   "inbox.row.test": "Test",
   "inbox.test.confirm": "Verwijderen",
   "inbox.test.confirmBody": "Echte gesprekken worden niet geraakt.",
@@ -1259,6 +1260,8 @@
   "onboarding.test.copied": "Gekopieerd",
   "onboarding.test.copy": "Kopiëren",
   "onboarding.test.customerSide": "Je klant",
+  "inbox.convert.error.failed": "Gesprek kon niet worden omgezet",
+  "inbox.convert.error.testConversation": "Testgesprekken kunnen niet als feedback worden vastgelegd.",
   "onboarding.test.done": "Dat is de hele rondgang",
   "onboarding.test.draft": "Hoi! Is daar iemand?",
   "onboarding.test.email": "Of mail naar je inbox",
@@ -1276,7 +1279,7 @@
   "onboarding.test.postTest": "Testidee plaatsen",
   "onboarding.test.restart": "Opnieuw beginnen",
   "onboarding.test.sendMessage": "Bericht sturen",
-  "onboarding.test.sendTest": "Testbericht sturen",
+  "onboarding.test.sendTest": "Stuur jezelf een testbericht",
   "onboarding.test.step.reply": "Antwoord vanuit je inbox.",
   "onboarding.test.step.seen": "Zie je antwoord aankomen en gelezen worden.",
   "onboarding.test.step.send": "Stuur een bericht als je klant.",
@@ -1285,5 +1288,7 @@
   "onboarding.test.tryTitle": "Probeer het zelf",
   "onboarding.test.waiting": "Stuur het bericht links. Het komt hier binnen.",
   "widget.test.frameTitle": "Messenger als testklant",
-  "widget.test.phoneExpired": "Deze link is al gebruikt. Scan de code opnieuw."
+  "widget.test.phoneExpired": "Deze link is al gebruikt. Scan de code opnieuw.",
+  "conversationAttributes.reservedKey": "Quackback beheert dit kenmerk.",
+  "support.ticket.createDialog.testDataLinkConflict": "Testgesprekken en echte gesprekken hebben aparte tickets nodig."
 }

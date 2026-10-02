@@ -1248,6 +1248,7 @@
   "onboarding.workspace.saving": "正在儲存…",
   "onboarding.workspace.open": "開啟工作區",
   "onboarding.test.customer": "測試客戶",
+  "onboarding.test.badge": "測試",
   "inbox.row.test": "測試",
   "inbox.test.confirm": "刪除",
   "inbox.test.confirmBody": "真實對話不受影響。",
@@ -1259,6 +1260,8 @@
   "onboarding.test.copied": "已複製",
   "onboarding.test.copy": "複製",
   "onboarding.test.customerSide": "你的客戶",
+  "inbox.convert.error.failed": "無法轉換對話",
+  "inbox.convert.error.testConversation": "測試對話不能記錄為回饋。",
   "onboarding.test.done": "這就是完整的往返流程",
   "onboarding.test.draft": "你好！有人在嗎？",
   "onboarding.test.email": "或寄信到你的收件匣",
@@ -1276,7 +1279,7 @@
   "onboarding.test.postTest": "發布測試想法",
   "onboarding.test.restart": "重新開始",
   "onboarding.test.sendMessage": "傳送訊息",
-  "onboarding.test.sendTest": "傳送測試訊息",
+  "onboarding.test.sendTest": "傳送一則測試訊息給自己",
   "onboarding.test.step.reply": "在收件匣中回覆。",
   "onboarding.test.step.seen": "看著你的回覆送達並被閱讀。",
   "onboarding.test.step.send": "以客戶身分傳送一則訊息。",
@@ -1285,5 +1288,7 @@
   "onboarding.test.tryTitle": "親自試試",
   "onboarding.test.waiting": "傳送左側的訊息。它會出現在這裡。",
   "widget.test.frameTitle": "以測試客戶身分使用 Messenger",
-  "widget.test.phoneExpired": "此連結已被使用。請重新掃描 QR 碼。"
+  "widget.test.phoneExpired": "此連結已被使用。請重新掃描 QR 碼。",
+  "conversationAttributes.reservedKey": "此屬性由 Quackback 管理。",
+  "support.ticket.createDialog.testDataLinkConflict": "測試對話和真實對話需要使用不同的工單。"
 }

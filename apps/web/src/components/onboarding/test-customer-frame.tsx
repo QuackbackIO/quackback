@@ -40,8 +40,15 @@ export function TestCustomerFrame({
 
   useEffect(() => {
     const origin = window.location.origin
-    function post(type: string, data: unknown) {
-      frameRef.current?.contentWindow?.postMessage({ type, data }, origin)
+    let activeDocument: string | undefined | null = null
+    let requestVersion = 0
+    let sessionAcknowledged = false
+    let disposed = false
+    function post(type: string, data: unknown, documentId?: string) {
+      frameRef.current?.contentWindow?.postMessage(
+        { type, data, ...(documentId && { documentId }) },
+        origin
+      )
     }
     async function handleMessage(event: MessageEvent) {
       const frame = frameRef.current?.contentWindow
@@ -51,18 +58,29 @@ export function TestCustomerFrame({
         success?: boolean
         name?: string
         payload?: unknown
+        documentId?: string
       } | null
       if (msg?.type === 'quackback:ready') {
+        const documentId = typeof msg.documentId === 'string' ? msg.documentId : undefined
+        // Readiness may repeat during hydration; only a new document spends a token.
+        if (documentId === activeDocument) return
+        activeDocument = documentId
+        const version = ++requestVersion
+        sessionAcknowledged = false
         latest.current.onStatusChange?.('connecting')
         const token = await latest.current.getToken().catch(() => null)
+        if (disposed || version !== requestVersion) return
         if (!token) {
           latest.current.onStatusChange?.('expired')
           return
         }
-        post('quackback:test-token', token)
+        post('quackback:test-token', token, documentId)
         return
       }
       if (msg?.type === 'quackback:test-session') {
+        if (activeDocument === null || msg.documentId !== activeDocument || sessionAcknowledged)
+          return
+        sessionAcknowledged = true
         if (!msg.success) {
           latest.current.onStatusChange?.('expired')
           return
@@ -76,7 +94,10 @@ export function TestCustomerFrame({
       }
     }
     window.addEventListener('message', handleMessage)
-    return () => window.removeEventListener('message', handleMessage)
+    return () => {
+      disposed = true
+      window.removeEventListener('message', handleMessage)
+    }
   }, [])
 
   return (

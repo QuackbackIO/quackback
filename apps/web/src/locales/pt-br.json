@@ -1248,6 +1248,7 @@
   "onboarding.workspace.saving": "Salvando…",
   "onboarding.workspace.open": "Abrir espaço",
   "onboarding.test.customer": "Cliente de teste",
+  "onboarding.test.badge": "Teste",
   "inbox.row.test": "Teste",
   "inbox.test.confirm": "Excluir",
   "inbox.test.confirmBody": "Conversas reais não são afetadas.",
@@ -1259,6 +1260,8 @@
   "onboarding.test.copied": "Copiado",
   "onboarding.test.copy": "Copiar",
   "onboarding.test.customerSide": "Seu cliente",
+  "inbox.convert.error.failed": "Não foi possível converter a conversa",
+  "inbox.convert.error.testConversation": "Conversas de teste não podem ser registradas como feedback.",
   "onboarding.test.done": "Esse é o caminho completo",
   "onboarding.test.draft": "Oi! Tem alguém aí?",
   "onboarding.test.email": "Ou envie um e-mail para sua caixa de entrada",
@@ -1276,7 +1279,7 @@
   "onboarding.test.postTest": "Publicar uma ideia de teste",
   "onboarding.test.restart": "Começar de novo",
   "onboarding.test.sendMessage": "Enviar uma mensagem",
-  "onboarding.test.sendTest": "Enviar uma mensagem de teste",
+  "onboarding.test.sendTest": "Envie uma mensagem de teste para você",
   "onboarding.test.step.reply": "Responda pela sua caixa de entrada.",
   "onboarding.test.step.seen": "Veja sua resposta chegar e ser lida.",
   "onboarding.test.step.send": "Envie uma mensagem como seu cliente.",
@@ -1285,5 +1288,7 @@
   "onboarding.test.tryTitle": "Experimente você mesmo",
   "onboarding.test.waiting": "Envie a mensagem à esquerda. Ela chega aqui.",
   "widget.test.frameTitle": "Messenger como cliente de teste",
-  "widget.test.phoneExpired": "Este link já foi usado. Escaneie o código novamente."
+  "widget.test.phoneExpired": "Este link já foi usado. Escaneie o código novamente.",
+  "conversationAttributes.reservedKey": "O Quackback gerencia este atributo.",
+  "support.ticket.createDialog.testDataLinkConflict": "Conversas de teste e conversas reais precisam de tickets separados."
 }

@@ -35,6 +35,7 @@ import { announcePublishedPost } from '@/lib/server/domains/posts/post.announce'
 import { announcePublishedComment } from '@/lib/server/domains/comments/comment.announce'
 import { logger } from '@/lib/server/logger'
 import { adjustCanonicalCommentCount } from '@/lib/server/domains/posts/post.merge-ids'
+import { notTestPrincipal, notTestRecord } from '@/lib/server/test-data'
 
 const log = logger.child({ component: 'moderation' })
 
@@ -299,15 +300,28 @@ export async function approveComment(
       .returning({
         id: postComments.id,
         postId: postComments.postId,
+        principalId: postComments.principalId,
         isPrivate: postComments.isPrivate,
       })
     if (!row) return null
     if (!row.isPrivate) {
-      await tx
+      const counted = await tx
         .update(posts)
         .set({ commentCount: sql`${posts.commentCount} + 1` })
-        .where(eq(posts.id, row.postId))
-      await adjustCanonicalCommentCount(row.postId, 1, tx)
+        .where(
+          and(
+            eq(posts.id, row.postId),
+            and(
+              notTestRecord(posts.widgetMetadata),
+              notTestPrincipal(posts.principalId),
+              notTestPrincipal(
+                sql`(SELECT ${principal.id} FROM ${principal} WHERE ${eq(principal.id, row.principalId)})`
+              )
+            )!
+          )
+        )
+        .returning({ id: posts.id })
+      if (counted.length > 0) await adjustCanonicalCommentCount(row.postId, 1, tx)
     }
     return row
   })

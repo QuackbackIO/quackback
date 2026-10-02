@@ -6,6 +6,7 @@ import {
   sql,
   postComments,
   posts,
+  principal,
   postStatuses,
   type PostComment,
   type ModerationState,
@@ -36,6 +37,7 @@ import { getPortalConfig } from '@/lib/server/domains/settings/settings.service'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { logger } from '@/lib/server/logger'
 import { adjustCanonicalCommentCount } from '@/lib/server/domains/posts/post.merge-ids'
+import { notTestPrincipal, notTestRecord } from '@/lib/server/test-data'
 
 const log = logger.child({ component: 'comments' })
 
@@ -74,6 +76,7 @@ export async function createComment(
     {
       moderationState: post.moderationState,
       principalId: post.principalId,
+      widgetMetadata: post.widgetMetadata,
       isCommentsLocked: post.isCommentsLocked,
     },
     { access: board.access },
@@ -116,6 +119,13 @@ export async function createComment(
 
   // Determine if user is a team member
   const authorIsTeamMember = isTeamMember(author.role)
+  const countedComment = and(
+    notTestRecord(posts.widgetMetadata),
+    notTestPrincipal(posts.principalId),
+    notTestPrincipal(
+      sql`(SELECT ${principal.id} FROM ${principal} WHERE ${eq(principal.id, author.principalId)})`
+    )
+  )!
 
   // Inherit privacy from parent: replies to private comments are always private
   const isPrivate = parentIsPrivate || (input.isPrivate ?? false)
@@ -187,7 +197,7 @@ export async function createComment(
         })
         .returning()
 
-      await tx
+      const [updatedPost] = await tx
         .update(posts)
         .set({
           statusId: input.statusId as PostStatusId,
@@ -199,11 +209,14 @@ export async function createComment(
           // incremented in the first place.
           ...(isPrivate || initialModerationState === 'pending'
             ? {}
-            : { commentCount: sql`${posts.commentCount} + 1` }),
+            : {
+                commentCount: sql`CASE WHEN ${countedComment} THEN ${posts.commentCount} + 1 ELSE ${posts.commentCount} END`,
+              }),
         })
         .where(eq(posts.id, input.postId))
+        .returning({ countsComment: countedComment })
 
-      if (!isPrivate && initialModerationState !== 'pending') {
+      if (updatedPost?.countsComment && !isPrivate && initialModerationState !== 'pending') {
         await adjustCanonicalCommentCount(input.postId, 1, tx)
       }
 
@@ -254,11 +267,12 @@ export async function createComment(
       // (see post.public.detail.ts) — `approveCommentFn` re-increments
       // the count when the comment becomes visible.
       if (!isPrivate && initialModerationState !== 'pending') {
-        await tx
+        const counted = await tx
           .update(posts)
           .set({ commentCount: sql`${posts.commentCount} + 1` })
-          .where(eq(posts.id, input.postId))
-        await adjustCanonicalCommentCount(input.postId, 1, tx)
+          .where(and(eq(posts.id, input.postId), countedComment))
+          .returning({ id: posts.id })
+        if (counted.length > 0) await adjustCanonicalCommentCount(input.postId, 1, tx)
       }
 
       return insertedComment
@@ -462,15 +476,16 @@ export async function deleteComment(
   await db.transaction(async (tx) => {
     const countedRows = await tx.execute(sql`
       WITH RECURSIVE subtree AS (
-        SELECT id, is_private, moderation_state, deleted_at
-        FROM ${postComments} WHERE id = ${id}
+        SELECT id, principal_id, is_private, moderation_state, deleted_at
+        FROM ${postComments} WHERE ${eq(postComments.id, id)}
         UNION ALL
-        SELECT child.id, child.is_private, child.moderation_state, child.deleted_at
+        SELECT child.id, child.principal_id, child.is_private, child.moderation_state, child.deleted_at
         FROM ${postComments} child
         JOIN subtree parent ON child.parent_id = parent.id
       )
       SELECT count(*)::int AS count FROM subtree
       WHERE deleted_at IS NULL AND is_private = false AND moderation_state <> 'pending'
+        AND ${notTestPrincipal(sql`principal_id`)}
     `)
     const [counted] = Array.from(countedRows as Iterable<{ count: number }>)
     const result = await tx.delete(postComments).where(eq(postComments.id, id)).returning()
@@ -485,11 +500,19 @@ export async function deleteComment(
     // or when the comment was never counted (private / still-pending).
     const decrement = Number(counted?.count ?? 0)
     if (decrement > 0) {
-      await tx
+      const counted = await tx
         .update(posts)
         .set({ commentCount: sql`GREATEST(0, ${posts.commentCount} - ${decrement})` })
-        .where(eq(posts.id, existingComment.postId))
-      await adjustCanonicalCommentCount(existingComment.postId, -decrement, tx)
+        .where(
+          and(
+            eq(posts.id, existingComment.postId),
+            notTestRecord(posts.widgetMetadata),
+            notTestPrincipal(posts.principalId)
+          )
+        )
+        .returning({ id: posts.id })
+      if (counted.length > 0)
+        await adjustCanonicalCommentCount(existingComment.postId, -decrement, tx)
     }
   })
 

@@ -38,9 +38,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
 import { useActivationAction } from '@/lib/client/hooks/use-activation-action'
-import { ActivationActionButton } from '@/components/admin/activation-action-button'
 import { FormattedMessage, useIntl } from 'react-intl'
-import { useUserRole } from '@/lib/client/hooks/use-root-context'
 
 /** Ignore scroll-by hovers; only warm a thread the pointer actually rests on. */
 const PREFETCH_DELAY_MS = 120
@@ -400,7 +398,6 @@ function EmptyList({
   'nav' | 'facet' | 'scopeLabel' | 'searchInput' | 'priorityFilter' | 'channelFilter'
 >) {
   const intl = useIntl()
-  const userRole = useUserRole()
   const activationAction = useActivationAction('conversation_empty')
 
   const isMainConversationQueue =
@@ -416,12 +413,17 @@ function EmptyList({
         id: 'inbox.empty.filtered.title',
         defaultMessage: 'No conversations match these filters',
       })
-    : isAllClear
+    : activationAction && isMainConversationQueue
       ? intl.formatMessage({
-          id: 'inbox.empty.allClear.title',
-          defaultMessage: 'Nothing to review',
+          id: 'widget.messages.empty',
+          defaultMessage: 'No conversations yet',
         })
-      : emptyStateMessage(nav, facet, scopeLabel)
+      : isAllClear
+        ? intl.formatMessage({
+            id: 'inbox.empty.allClear.title',
+            defaultMessage: 'Nothing to review',
+          })
+        : emptyStateMessage(nav, facet, scopeLabel)
   // First-run CTA on the unfiltered main queues (not tickets/labels).
   const showMessengerCta = isMainConversationQueue && !isFiltered && !isAllClear
   return (
@@ -444,28 +446,12 @@ function EmptyList({
         </p>
       )}
       {showMessengerCta && (
-        <>
-          <p className="text-xs text-muted-foreground max-w-[16rem] mx-auto">
-            When customers message you, conversations show up here.
-          </p>
-          {/* Widget settings are admin-only; members get the message
-              without a button they can't use. */}
-          <div className="flex flex-wrap justify-center gap-2">
-            {userRole === 'admin' && activationAction && (
-              <ActivationActionButton
-                action={activationAction}
-                surface="conversation_empty"
-                className="h-11 sm:h-9"
-              />
-            )}
-            <TryMessengerButton variant="outline" className="h-11 sm:h-9">
-              <FormattedMessage
-                id="onboarding.test.sendTest"
-                defaultMessage="Send a test message"
-              />
-            </TryMessengerButton>
-          </div>
-        </>
+        <TryMessengerButton variant="outline" className="h-11 sm:h-9">
+          <FormattedMessage
+            id="onboarding.test.sendTest"
+            defaultMessage="Send yourself a test message"
+          />
+        </TryMessengerButton>
       )}
     </div>
   )

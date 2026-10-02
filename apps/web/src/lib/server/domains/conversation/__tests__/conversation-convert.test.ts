@@ -22,6 +22,8 @@ const postEmbedDoc = vi.fn((...a: unknown[]) => ({
   content: [{ type: 'quackbackEmbed', attrs: { kind: 'post', id: a[0] } }],
 }))
 const createComment = vi.fn()
+const testCustomers = new Set<PrincipalId>()
+const isTestCustomer = vi.fn(async (id: PrincipalId) => testCustomers.has(id))
 const insertedLinks: Record<string, unknown>[] = []
 let onConflictHit = false
 
@@ -33,6 +35,11 @@ vi.mock('../conversation.service', () => ({
   assertConversationViewable: (id: ConversationId, actor: Actor) =>
     assertConversationViewable(id, actor),
   sendAgentMessage: (...args: unknown[]) => sendAgentMessage(...args),
+}))
+
+vi.mock('@/lib/server/test-data', async () => ({
+  isTestRecord: (await import('@/lib/server/db')).isTestRecord,
+  isTestCustomer: (id: PrincipalId) => isTestCustomer(id),
 }))
 
 vi.mock('@/lib/server/config', () => ({
@@ -57,7 +64,7 @@ vi.mock('@/lib/server/domains/comments/comment.service', () => ({
   createComment: (...args: unknown[]) => createComment(...args),
 }))
 
-vi.mock('@/lib/server/db', () => {
+vi.mock('@/lib/server/db', async (importOriginal) => {
   function insertChain() {
     const c: Record<string, unknown> = {}
     c.values = (row: Record<string, unknown>) => {
@@ -71,6 +78,7 @@ vi.mock('@/lib/server/db', () => {
     return c
   }
   return {
+    isTestRecord: (await importOriginal<typeof import('@/lib/server/db')>()).isTestRecord,
     db: { insert: () => insertChain() },
     postExternalLinks: { __name: 'post_external_links' },
   }
@@ -110,6 +118,7 @@ function freshConversation(extra: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  testCustomers.clear()
   insertedLinks.length = 0
   onConflictHit = false
   // Sensible defaults; individual tests override as needed.
@@ -155,6 +164,21 @@ describe('createPostFromConversation conversation resolution', () => {
 
     expect(createPost).not.toHaveBeenCalled()
     expect(insertedLinks).toHaveLength(0)
+  })
+})
+
+describe('createPostFromConversation test containment', () => {
+  it('rejects a stored test identity before creating feedback or recording a vote', async () => {
+    testCustomers.add(visitorPrincipalId)
+    await expect(
+      createPostFromConversation({ conversationId, boardId, title: 'Acme' }, ctx)
+    ).rejects.toMatchObject({ code: 'CANNOT_CONVERT_TEST_CONVERSATION' })
+    expect(isTestCustomer).toHaveBeenCalledWith(visitorPrincipalId)
+    expect(createPost).not.toHaveBeenCalled()
+    expect(addVoteOnBehalf).not.toHaveBeenCalled()
+    expect(createComment).not.toHaveBeenCalled()
+    expect(insertedLinks).toHaveLength(0)
+    expect(sendAgentMessage).not.toHaveBeenCalled()
   })
 })
 

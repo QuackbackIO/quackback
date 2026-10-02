@@ -1,7 +1,14 @@
 import { db, principal, eq, type Database, type Transaction } from '@/lib/server/db'
 import type { PrincipalId } from '@quackback/ids'
 import { isTeamMember } from '@/lib/shared/roles'
-export { isTestRecord, notTestRecord, notTestPrincipal, notTestConversation } from '@/lib/server/db'
+import { stripTestAttributes } from '@/lib/shared/test-attributes'
+export {
+  isTestRecord,
+  notTestRecord,
+  notTestPrincipal,
+  notTestConversation,
+  notTestTicket,
+} from '@/lib/server/db'
 
 export async function isTestCustomer(principalId: PrincipalId): Promise<boolean> {
   const row = await db.query.principal.findFirst({
@@ -18,12 +25,7 @@ export async function deriveTestAttributes(
   visitorIngress: boolean,
   executor: Database | Transaction = db
 ): Promise<Record<string, unknown>> {
-  const {
-    test: _test,
-    onboardingGenerated: _generated,
-    testOwnerPrincipalId: _owner,
-    ...safe
-  } = attributes ?? {}
+  const safe = stripTestAttributes(attributes)
   const identity = await executor.query.principal.findFirst({
     where: eq(principal.id, principalId),
     columns: { testOwnerPrincipalId: true, type: true, role: true },

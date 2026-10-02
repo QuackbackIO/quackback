@@ -172,6 +172,14 @@ import {
 import { generateContentHTML } from '@/lib/shared/content-html'
 
 const conversationId = 'conversation_1' as ConversationId
+vi.mock('../conversation.test-delivery', () => ({
+  conversationTestDelivery: async (id: ConversationId) => {
+    const ordinaryThreads = new Map([[conversationId, { test: false as const }]])
+    const delivery = ordinaryThreads.get(id)
+    if (!delivery) throw new Error('Unknown notification fixture conversation')
+    return delivery
+  },
+}))
 const conversation = { id: conversationId } as unknown as Conversation
 const ctx = {
   workspaceName: 'Acme',

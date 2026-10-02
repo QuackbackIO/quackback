@@ -72,4 +72,79 @@ describe('TestCustomerFrame', () => {
     fromFrame({ type: 'quackback:test-session', success: false })
     expect(onStatusChange).toHaveBeenLastCalledWith('expired')
   })
+
+  it('consumes a phone token once when the same document announces ready twice while minting', async () => {
+    let resolveToken!: (value: string) => void
+    const pending = new Promise<string>((resolve) => {
+      resolveToken = resolve
+    })
+    const getToken = vi.fn().mockReturnValueOnce(pending).mockResolvedValue(null)
+    const { fromFrame, postMessage, onStatusChange } = setup(getToken)
+    fromFrame({ type: 'quackback:ready', documentId: 'document-1' })
+    fromFrame({ type: 'quackback:ready', documentId: 'document-1' })
+    expect(getToken).toHaveBeenCalledTimes(1)
+    await act(async () => resolveToken('customer-phone'))
+    expect(postMessage).toHaveBeenCalledTimes(1)
+    expect(postMessage).toHaveBeenCalledWith(
+      { type: 'quackback:test-token', data: 'customer-phone', documentId: 'document-1' },
+      window.location.origin
+    )
+    expect(onStatusChange).not.toHaveBeenCalledWith('expired')
+  })
+
+  it('keeps an established phone session when its current document repeats ready or session acknowledgements', async () => {
+    const getToken = vi.fn().mockResolvedValueOnce('customer-phone').mockResolvedValue(null)
+    const { fromFrame, postMessage, onStatusChange } = setup(getToken)
+    fromFrame({ type: 'quackback:ready', documentId: 'document-1' })
+    await waitFor(() => expect(postMessage).toHaveBeenCalledTimes(1))
+    fromFrame({ type: 'quackback:test-session', success: true, documentId: 'document-1' })
+    fromFrame({ type: 'quackback:ready', documentId: 'document-1' })
+    fromFrame({ type: 'quackback:test-session', success: true, documentId: 'document-1' })
+    await act(async () => {})
+    expect(getToken).toHaveBeenCalledTimes(1)
+    expect(
+      postMessage.mock.calls.filter(([message]) => message.type === 'quackback:open')
+    ).toHaveLength(1)
+    expect(onStatusChange).toHaveBeenLastCalledWith('ready')
+    expect(onStatusChange).not.toHaveBeenCalledWith('expired')
+  })
+
+  it('mints a fresh token after an actual frame document reload and rejects late replies from the previous document', async () => {
+    let resolveFirst!: (value: string) => void
+    const first = new Promise<string>((resolve) => {
+      resolveFirst = resolve
+    })
+    const getToken = vi
+      .fn()
+      .mockReturnValueOnce(first)
+      .mockResolvedValueOnce('customer-new-document')
+    const { fromFrame, postMessage, onStatusChange } = setup(getToken)
+    fromFrame({ type: 'quackback:ready', documentId: 'document-before-reload' })
+    fromFrame({ type: 'quackback:ready', documentId: 'document-after-reload' })
+    await waitFor(() =>
+      expect(postMessage).toHaveBeenCalledWith(
+        {
+          type: 'quackback:test-token',
+          data: 'customer-new-document',
+          documentId: 'document-after-reload',
+        },
+        window.location.origin
+      )
+    )
+    await act(async () => resolveFirst('customer-old-document'))
+    expect(postMessage).toHaveBeenCalledTimes(1)
+    fromFrame({
+      type: 'quackback:test-session',
+      success: false,
+      documentId: 'document-before-reload',
+    })
+    expect(onStatusChange).not.toHaveBeenCalledWith('expired')
+    fromFrame({
+      type: 'quackback:test-session',
+      success: true,
+      documentId: 'document-after-reload',
+    })
+    expect(onStatusChange).toHaveBeenLastCalledWith('ready')
+    expect(getToken).toHaveBeenCalledTimes(2)
+  })
 })

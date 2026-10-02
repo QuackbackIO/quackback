@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   linkTicketToConversationFn: vi.fn(),
   suggestTicketFieldValuesFn: vi.fn(),
   toastInfo: vi.fn(),
+  toastWarning: vi.fn(),
   uploading: false,
   routeContext: {
     settings: { featureFlags: {} },
@@ -48,7 +49,7 @@ vi.mock('sonner', () => ({
   toast: {
     info: mocks.toastInfo,
     success: vi.fn(),
-    warning: vi.fn(),
+    warning: mocks.toastWarning,
     error: vi.fn(),
   },
 }))
@@ -142,11 +143,11 @@ const outageType: TicketTypeDTO = {
   archived: false,
 }
 
-function wrapper() {
+function wrapper(messages: Record<string, string> = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>
-      <IntlProvider locale="en" messages={{}}>
+      <IntlProvider locale="en" messages={messages}>
         {children}
       </IntlProvider>
     </QueryClientProvider>
@@ -171,6 +172,7 @@ beforeEach(() => {
   mocks.linkTicketToConversationFn.mockReset()
   mocks.suggestTicketFieldValuesFn.mockReset()
   mocks.toastInfo.mockReset()
+  mocks.toastWarning.mockReset()
   mocks.routeContext = { settings: { featureFlags: {} } }
   mocks.listTicketTypesFn.mockReset()
   mocks.listTicketTypesFn.mockResolvedValue([bugType, refundType, taskType, outageType])
@@ -178,6 +180,49 @@ beforeEach(() => {
 })
 
 afterEach(cleanup)
+
+it.each(['code', 'message'] as const)(
+  'localizes the protected test link conflict by %s while keeping the created ticket visible',
+  async (kind) => {
+    const onCreated = vi.fn()
+    const onOpenChange = vi.fn()
+    const onChanged = vi.fn()
+    mocks.linkTicketToConversationFn.mockImplementation(async ({ data }) => {
+      expect(data).toEqual({ ticketId: 'ticket_acme', conversationId: 'conversation_acme' })
+      throw kind === 'code'
+        ? Object.assign(new Error('Server link diagnostic'), { code: 'TEST_DATA_LINK_CONFLICT' })
+        : new Error('Test and real conversations need separate tickets.')
+    })
+    render(
+      <CreateTicketDialog
+        open
+        onOpenChange={onOpenChange}
+        onCreated={onCreated}
+        onChanged={onChanged}
+        conversationId={'conversation_acme' as never}
+        defaultTitle="Acme request"
+      />,
+      {
+        wrapper: wrapper({
+          'support.ticket.createDialog.testDataLinkConflict': 'Acme localized link conflict',
+        }),
+      }
+    )
+    await screen.findByText('Steps to reproduce')
+    fireEvent.click(screen.getByRole('button', { name: 'Create ticket' }))
+    await waitFor(() => expect(mocks.mutate).toHaveBeenCalledOnce())
+    const [input, handlers] = mocks.mutate.mock.calls[0]
+    expect(input).toMatchObject({
+      title: 'Acme request',
+      sourceConversationId: 'conversation_acme',
+    })
+    await handlers.onSuccess({ id: 'ticket_acme' })
+    expect(mocks.toastWarning).toHaveBeenCalledExactlyOnceWith('Acme localized link conflict')
+    expect(onCreated).toHaveBeenCalledExactlyOnceWith('ticket_acme')
+    expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false)
+    expect(onChanged).toHaveBeenCalledOnce()
+  }
+)
 
 describe('CreateTicketDialog — Phase 4 type picker', () => {
   it('preselects the customer-category default type and renders its fields', async () => {

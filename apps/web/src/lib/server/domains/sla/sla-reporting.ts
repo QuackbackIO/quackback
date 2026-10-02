@@ -9,6 +9,7 @@
  * are excluded from the met/breached counts.
  */
 import { db, and, eq, gte, lt, count, inArray, sql, slaEvents, slaPolicies } from '@/lib/server/db'
+import { notTestConversation, notTestTicket } from '@/lib/server/test-data'
 
 export interface ClockAttainment {
   met: number
@@ -71,7 +72,14 @@ export async function slaAttainment(from: Date, to: Date): Promise<SlaAttainment
   const rows = await db
     .select({ kind: slaEvents.kind, n: count() })
     .from(slaEvents)
-    .where(and(gte(slaEvents.at, from), lt(slaEvents.at, to)))
+    .where(
+      and(
+        gte(slaEvents.at, from),
+        lt(slaEvents.at, to),
+        notTestConversation(slaEvents.conversationId),
+        notTestTicket(slaEvents.ticketId)
+      )
+    )
     .groupBy(slaEvents.kind)
 
   return foldAttainment(rows)
@@ -95,7 +103,14 @@ export async function slaAttainmentByPolicy(from: Date, to: Date): Promise<Polic
     })
     .from(slaEvents)
     .innerJoin(slaPolicies, eq(slaEvents.policyId, slaPolicies.id))
-    .where(and(gte(slaEvents.at, from), lt(slaEvents.at, to)))
+    .where(
+      and(
+        gte(slaEvents.at, from),
+        lt(slaEvents.at, to),
+        notTestConversation(slaEvents.conversationId),
+        notTestTicket(slaEvents.ticketId)
+      )
+    )
     .groupBy(slaEvents.policyId, slaPolicies.name, slaEvents.kind)
     .orderBy(slaPolicies.name)
 
@@ -139,7 +154,13 @@ export async function slaBreachHeatmap(from: Date, to: Date): Promise<SlaBreachH
     .select({ dow, hour, kind: slaEvents.kind, n: count() })
     .from(slaEvents)
     .where(
-      and(gte(slaEvents.at, from), lt(slaEvents.at, to), inArray(slaEvents.kind, BREACH_KINDS))
+      and(
+        gte(slaEvents.at, from),
+        lt(slaEvents.at, to),
+        inArray(slaEvents.kind, BREACH_KINDS),
+        notTestConversation(slaEvents.conversationId),
+        notTestTicket(slaEvents.ticketId)
+      )
     )
     .groupBy(dow, hour, slaEvents.kind)
 
@@ -194,7 +215,9 @@ export async function slaTimeAfterMiss(from: Date, to: Date): Promise<SlaTimeAft
       and(
         gte(slaEvents.at, from),
         lt(slaEvents.at, to),
-        inArray(slaEvents.kind, SETTLED_AFTER_BREACH_KINDS)
+        inArray(slaEvents.kind, SETTLED_AFTER_BREACH_KINDS),
+        notTestConversation(slaEvents.conversationId),
+        notTestTicket(slaEvents.ticketId)
       )
     )
     .groupBy(slaEvents.kind)

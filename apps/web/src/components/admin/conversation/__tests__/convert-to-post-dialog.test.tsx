@@ -7,6 +7,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { IntlProvider } from 'react-intl'
 import type { ConversationId } from '@quackback/ids'
 
 afterEach(cleanup)
@@ -32,13 +33,15 @@ const BOARD = {
 function dialog(client: QueryClient, open: boolean) {
   return (
     <QueryClientProvider client={client}>
-      <ConvertToPostDialog
-        conversationId={CONVERSATION}
-        defaultTitle="Dark mode"
-        defaultContent="Please add dark mode"
-        open={open}
-        onOpenChange={vi.fn()}
-      />
+      <IntlProvider locale="en">
+        <ConvertToPostDialog
+          conversationId={CONVERSATION}
+          defaultTitle="Dark mode"
+          defaultContent="Please add dark mode"
+          open={open}
+          onOpenChange={vi.fn()}
+        />
+      </IntlProvider>
     </QueryClientProvider>
   )
 }

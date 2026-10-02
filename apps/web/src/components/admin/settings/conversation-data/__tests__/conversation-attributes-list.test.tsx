@@ -14,6 +14,7 @@
  */
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import type { ReactElement } from 'react'
+import { IntlProvider } from 'react-intl'
 import { render, screen, cleanup, within, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -121,7 +122,11 @@ beforeEach(() => {
 
 function renderWithClient(ui: ReactElement) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
+  return render(
+    <IntlProvider locale="en" messages={{}}>
+      <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
+    </IntlProvider>
+  )
 }
 
 /** The Type <select> is the first native select rendered in the form dialog. */

@@ -12,7 +12,7 @@ const insertedComments: Record<string, unknown>[] = []
 const insertedEditHistory: Record<string, unknown>[] = []
 const updatedComments: Record<string, unknown>[] = []
 
-vi.mock('@/lib/server/db', async () => {
+vi.mock('@/lib/server/db', async (importOriginal) => {
   const { sql: realSql } = await vi.importActual<typeof import('drizzle-orm')>('drizzle-orm')
 
   function chain(label: string) {
@@ -59,6 +59,7 @@ vi.mock('@/lib/server/db', async () => {
   }
 
   return {
+    ...(await importOriginal<typeof import('@/lib/server/db')>()),
     db: {
       query: {
         posts: {

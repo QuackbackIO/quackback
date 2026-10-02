@@ -31,6 +31,12 @@ export interface Actor {
    * function of role) is equivalent.
    */
   permissions?: ReadonlySet<PermissionKey>
+  /** Server-resolved authority for a customer's own test ideas, never team authority. */
+  testFeedback?: {
+    ownerPrincipalId: PrincipalId
+    canView: boolean
+    canSubmit: boolean
+  }
 }
 
 export type Decision = { allowed: true } | { allowed: false; reason: string }

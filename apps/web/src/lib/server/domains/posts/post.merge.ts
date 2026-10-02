@@ -45,6 +45,7 @@ import type {
 } from './post.types'
 import type { CommentTreeNode } from '@/lib/shared'
 import { logger } from '@/lib/server/logger'
+import { notTestPrincipal, notTestRecord } from '@/lib/server/test-data'
 
 const log = logger.child({ component: 'post-merge' })
 
@@ -76,10 +77,20 @@ export async function mergePost(
   // Fetch both posts in parallel
   const [duplicatePost, canonicalPost] = await Promise.all([
     db.query.posts.findFirst({
-      where: and(eq(posts.id, duplicatePostId), isNull(posts.deletedAt)),
+      where: and(
+        eq(posts.id, duplicatePostId),
+        isNull(posts.deletedAt),
+        notTestRecord(posts.widgetMetadata),
+        notTestPrincipal(posts.principalId)
+      ),
     }),
     db.query.posts.findFirst({
-      where: and(eq(posts.id, canonicalPostId), isNull(posts.deletedAt)),
+      where: and(
+        eq(posts.id, canonicalPostId),
+        isNull(posts.deletedAt),
+        notTestRecord(posts.widgetMetadata),
+        notTestPrincipal(posts.principalId)
+      ),
     }),
   ])
 
@@ -134,7 +145,12 @@ export async function mergePost(
       )
     }
     const freshCanonical = await tx.query.posts.findFirst({
-      where: and(eq(posts.id, canonicalPostId), isNull(posts.deletedAt)),
+      where: and(
+        eq(posts.id, canonicalPostId),
+        isNull(posts.deletedAt),
+        notTestRecord(posts.widgetMetadata),
+        notTestPrincipal(posts.principalId)
+      ),
       columns: { canonicalPostId: true },
     })
     if (!freshCanonical || freshCanonical.canonicalPostId) {
@@ -150,7 +166,15 @@ export async function mergePost(
         mergedAt: new Date(),
         mergedByPrincipalId: actorPrincipalId,
       })
-      .where(and(eq(posts.id, duplicatePostId), isNull(posts.canonicalPostId)))
+      .where(
+        and(
+          eq(posts.id, duplicatePostId),
+          isNull(posts.deletedAt),
+          isNull(posts.canonicalPostId),
+          notTestRecord(posts.widgetMetadata),
+          notTestPrincipal(posts.principalId)
+        )
+      )
       .returning({ id: posts.id })
 
     if (claimed.length === 0) {
@@ -368,6 +392,7 @@ export async function getMergedPosts(canonicalPostId: PostId): Promise<MergedPos
       // rows so Merged Feedback does not show a pre-merge snapshot.
       voteCount: sql<number>`(
         SELECT COUNT(*)::int FROM ${postVotes} v WHERE v.post_id = posts.id
+          AND ${notTestPrincipal(sql`v.principal_id`)}
       )`.as('vote_count'),
       createdAt: posts.createdAt,
       mergedAt: posts.mergedAt,
@@ -421,6 +446,7 @@ export async function getPostMergeInfo(
       title: posts.title,
       moderationState: posts.moderationState,
       principalId: posts.principalId,
+      widgetMetadata: posts.widgetMetadata,
       boardSlug: boards.slug,
       boardAccess: boards.access,
     })
@@ -443,6 +469,7 @@ export async function getPostMergeInfo(
     {
       moderationState: canonicalPost[0].moderationState,
       principalId: canonicalPost[0].principalId,
+      widgetMetadata: canonicalPost[0].widgetMetadata,
     },
     { access: canonicalPost[0].boardAccess }
   )
@@ -516,6 +543,7 @@ export async function previewMergedPost(
     SELECT COUNT(DISTINCT v.principal_id)::int AS unique_voters
     FROM ${postVotes} v
     WHERE v.post_id IN (${canonicalUuid}::uuid, ${duplicateUuid}::uuid)
+      AND ${notTestPrincipal(sql`v.principal_id`)}
   `)
   const rows = getExecuteRows<{ unique_voters: number }>(result)
   const mergedVoteCount = rows[0]?.unique_voters ?? 0

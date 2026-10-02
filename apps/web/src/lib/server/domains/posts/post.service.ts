@@ -61,6 +61,7 @@ import { buildPostUrl } from '@/lib/server/integrations/message-utils'
 import { getBaseUrl } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
 import { deriveTestAttributes, isTestRecord, notTestRecord } from '@/lib/server/test-data'
+import { resolveTestFeedbackActor } from '@/lib/server/test-customer-feedback'
 
 const log = logger.child({ component: 'posts' })
 
@@ -173,8 +174,11 @@ export async function createPost(
   // requireApproval category land in 'pending' instead of 'published'.
   // Team always bypasses.
   const portalConfig = await getPortalConfig()
+  const createActor = author.actor?.testFeedback
+    ? await resolveTestFeedbackActor(author.actor)
+    : (author.actor ?? ANONYMOUS_ACTOR)
   const createDecision = canCreatePost(
-    author.actor ?? ANONYMOUS_ACTOR,
+    createActor,
     { access: board.access },
     portalConfig.moderationDefault.requireApproval
   )
@@ -230,8 +234,11 @@ export async function createPost(
     if (!lockedBoard) {
       throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${input.boardId} not found`)
     }
+    const lockedActor = createActor.testFeedback
+      ? await resolveTestFeedbackActor(createActor, tx)
+      : createActor
     const lockedDecision = canCreatePost(
-      author.actor ?? ANONYMOUS_ACTOR,
+      lockedActor,
       { access: lockedBoard.access },
       portalConfig.moderationDefault.requireApproval
     )
@@ -239,7 +246,7 @@ export async function createPost(
       throw new ValidationError('POST_CREATE_DENIED', lockedDecision.reason)
     }
     moderationState = lockedDecision.requiresApproval ? 'pending' : 'published'
-    const actor = author.actor ?? ANONYMOUS_ACTOR
+    const actor = lockedActor
     holdReason = isTeamActor(actor)
       ? null
       : contentHoldReason(portalConfig.moderationDefault, contentJson, `${title}\n${content}`)

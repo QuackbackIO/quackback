@@ -1248,6 +1248,7 @@
   "onboarding.workspace.saving": "جارٍ الحفظ…",
   "onboarding.workspace.open": "فتح مساحة العمل",
   "onboarding.test.customer": "عميل تجريبي",
+  "onboarding.test.badge": "تجربة",
   "inbox.row.test": "تجربة",
   "inbox.test.confirm": "حذف",
   "inbox.test.confirmBody": "لن تتأثر المحادثات الحقيقية.",
@@ -1259,6 +1260,8 @@
   "onboarding.test.copied": "تم النسخ",
   "onboarding.test.copy": "نسخ",
   "onboarding.test.customerSide": "عميلك",
+  "inbox.convert.error.failed": "تعذر تحويل المحادثة",
+  "inbox.convert.error.testConversation": "لا يمكن تتبع المحادثات التجريبية كملاحظات.",
   "onboarding.test.done": "هذه هي الرحلة الكاملة",
   "onboarding.test.draft": "مرحبًا! هل يوجد أحد هنا؟",
   "onboarding.test.email": "أو راسل صندوق الوارد بالبريد",
@@ -1276,7 +1279,7 @@
   "onboarding.test.postTest": "نشر فكرة تجريبية",
   "onboarding.test.restart": "البدء من جديد",
   "onboarding.test.sendMessage": "إرسال رسالة",
-  "onboarding.test.sendTest": "إرسال رسالة تجريبية",
+  "onboarding.test.sendTest": "أرسل لنفسك رسالة تجريبية",
   "onboarding.test.step.reply": "رُدّ من صندوق الوارد.",
   "onboarding.test.step.seen": "شاهد ردك يصل ويُقرأ.",
   "onboarding.test.step.send": "أرسل رسالة بصفتك عميلك.",
@@ -1285,5 +1288,7 @@
   "onboarding.test.tryTitle": "جرّبه بنفسك",
   "onboarding.test.waiting": "أرسل الرسالة على اليسار. ستصل إلى هنا.",
   "widget.test.frameTitle": "Messenger كعميل تجريبي",
-  "widget.test.phoneExpired": "تم استخدام هذا الرابط بالفعل. امسح الرمز مرة أخرى."
+  "widget.test.phoneExpired": "تم استخدام هذا الرابط بالفعل. امسح الرمز مرة أخرى.",
+  "conversationAttributes.reservedKey": "تدير Quackback هذه السمة.",
+  "support.ticket.createDialog.testDataLinkConflict": "تحتاج المحادثات التجريبية والفعلية إلى تذاكر منفصلة."
 }

@@ -1248,6 +1248,7 @@
   "onboarding.workspace.saving": "Enregistrement…",
   "onboarding.workspace.open": "Ouvrir l’espace",
   "onboarding.test.customer": "Client de test",
+  "onboarding.test.badge": "Test",
   "inbox.row.test": "Test",
   "inbox.test.confirm": "Supprimer",
   "inbox.test.confirmBody": "Les vraies conversations ne sont pas concernées.",
@@ -1259,6 +1260,8 @@
   "onboarding.test.copied": "Copié",
   "onboarding.test.copy": "Copier",
   "onboarding.test.customerSide": "Votre client",
+  "inbox.convert.error.failed": "Impossible de convertir la conversation",
+  "inbox.convert.error.testConversation": "Les conversations de test ne peuvent pas être enregistrées comme feedback.",
   "onboarding.test.done": "Voilà l'aller-retour complet",
   "onboarding.test.draft": "Bonjour ! Il y a quelqu'un ?",
   "onboarding.test.email": "Ou écrivez à votre boîte de réception",
@@ -1276,7 +1279,7 @@
   "onboarding.test.postTest": "Publier une idée de test",
   "onboarding.test.restart": "Recommencer",
   "onboarding.test.sendMessage": "Envoyer un message",
-  "onboarding.test.sendTest": "Envoyer un message de test",
+  "onboarding.test.sendTest": "Envoyez-vous un message de test",
   "onboarding.test.step.reply": "Répondez depuis votre boîte de réception.",
   "onboarding.test.step.seen": "Regardez votre réponse arriver et être lue.",
   "onboarding.test.step.send": "Envoyez un message en tant que client.",
@@ -1285,5 +1288,7 @@
   "onboarding.test.tryTitle": "Essayez vous-même",
   "onboarding.test.waiting": "Envoyez le message à gauche. Il arrive ici.",
   "widget.test.frameTitle": "Messenger en tant que client test",
-  "widget.test.phoneExpired": "Ce lien a déjà été utilisé. Scannez à nouveau le code."
+  "widget.test.phoneExpired": "Ce lien a déjà été utilisé. Scannez à nouveau le code.",
+  "conversationAttributes.reservedKey": "Quackback gère cet attribut.",
+  "support.ticket.createDialog.testDataLinkConflict": "Les conversations de test et les conversations réelles nécessitent des tickets distincts."
 }

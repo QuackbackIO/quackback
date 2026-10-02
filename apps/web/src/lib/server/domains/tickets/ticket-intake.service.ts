@@ -16,6 +16,7 @@ import {
   eq,
   and,
   isNull,
+  isTestRecord,
   tickets,
   ticketStatuses,
   conversationMessages,
@@ -37,6 +38,9 @@ import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import type { Actor } from '@/lib/server/policy/types'
 import { ValidationError, InternalError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
+import { deriveTestAttributes } from '@/lib/server/test-data'
+import { isValidTypeId } from '@quackback/ids'
+import { stripTestAttributes } from '@/lib/shared/test-attributes'
 import { publishTicketEvent } from '@/lib/server/realtime/conversation-channels'
 import { emitTicketCreated } from './ticket.webhooks'
 import { ticketRowToDTO } from './ticket.dto'
@@ -198,6 +202,40 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
     wantsBackingConversation && hasOpeningMessage && (filedByRequester || !!actor.principalId)
 
   const created = await db.transaction(async (tx) => {
+    let customAttributes = input.requesterPrincipalId
+      ? await deriveTestAttributes(
+          input.requesterPrincipalId,
+          input.customAttributes,
+          wantsBackingConversation || filedByRequester,
+          tx
+        )
+      : stripTestAttributes(input.customAttributes)
+    if (input.sourceConversationId) {
+      const source = await tx.query.conversations.findFirst({
+        where: eq(conversations.id, input.sourceConversationId),
+        columns: { visitorPrincipalId: true, customAttributes: true },
+      })
+      if (source) {
+        const sourceMarked = isTestRecord(source.customAttributes)
+        const sourceIdentity = await deriveTestAttributes(
+          source.visitorPrincipalId,
+          {},
+          sourceMarked,
+          tx
+        )
+        if (sourceMarked || isTestRecord(sourceIdentity)) {
+          const owner =
+            sourceIdentity.testOwnerPrincipalId ?? source.customAttributes?.testOwnerPrincipalId
+          customAttributes = {
+            ...customAttributes,
+            test: true,
+            ...(typeof owner === 'string' && isValidTypeId(owner, 'principal')
+              ? { testOwnerPrincipalId: owner }
+              : {}),
+          }
+        }
+      }
+    }
     // PHASE 1b (1/3): the backing conversation FIRST, so the pair is
     // identity-consistent by construction — visitorPrincipalId IS the ticket's
     // requester. (Legacy edge, NOT this phase: a pre-1a pair can have
@@ -220,6 +258,7 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
           channel: 'messenger',
           source: 'ticket_form',
           status: 'open',
+          customAttributes,
           subject: hasOpeningMessage
             ? preview(resolvedDescription || fallbackLabel, openingAttachments)
             : preview(title, []),
@@ -240,7 +279,7 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
         requesterPrincipalId: input.requesterPrincipalId ?? null,
         assigneePrincipalId: input.assigneePrincipalId ?? null,
         companyId: input.companyId ?? null,
-        customAttributes: input.customAttributes ?? {},
+        customAttributes,
       })
       .returning()
 

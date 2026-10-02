@@ -1248,6 +1248,7 @@
   "onboarding.workspace.saving": "Wird gespeichert…",
   "onboarding.workspace.open": "Workspace öffnen",
   "onboarding.test.customer": "Testkunde",
+  "onboarding.test.badge": "Test",
   "inbox.row.test": "Test",
   "inbox.test.confirm": "Löschen",
   "inbox.test.confirmBody": "Echte Unterhaltungen sind nicht betroffen.",
@@ -1259,6 +1260,8 @@
   "onboarding.test.copied": "Kopiert",
   "onboarding.test.copy": "Kopieren",
   "onboarding.test.customerSide": "Dein Kunde",
+  "inbox.convert.error.failed": "Unterhaltung konnte nicht umgewandelt werden",
+  "inbox.convert.error.testConversation": "Testunterhaltungen können nicht als Feedback erfasst werden.",
   "onboarding.test.done": "Das war der komplette Ablauf",
   "onboarding.test.draft": "Hallo! Ist da jemand?",
   "onboarding.test.email": "Oder schreib eine E-Mail an dein Postfach",
@@ -1276,7 +1279,7 @@
   "onboarding.test.postTest": "Testidee posten",
   "onboarding.test.restart": "Neu starten",
   "onboarding.test.sendMessage": "Nachricht senden",
-  "onboarding.test.sendTest": "Testnachricht senden",
+  "onboarding.test.sendTest": "Sende dir eine Testnachricht",
   "onboarding.test.step.reply": "Antworte aus deinem Posteingang.",
   "onboarding.test.step.seen": "Sieh zu, wie deine Antwort ankommt und gelesen wird.",
   "onboarding.test.step.send": "Sende eine Nachricht als dein Kunde.",
@@ -1285,5 +1288,7 @@
   "onboarding.test.tryTitle": "Selbst ausprobieren",
   "onboarding.test.waiting": "Sende die Nachricht links. Sie landet hier.",
   "widget.test.frameTitle": "Messenger als Testkunde",
-  "widget.test.phoneExpired": "Dieser Link wurde bereits verwendet. Scanne den Code erneut."
+  "widget.test.phoneExpired": "Dieser Link wurde bereits verwendet. Scanne den Code erneut.",
+  "conversationAttributes.reservedKey": "Quackback verwaltet dieses Attribut.",
+  "support.ticket.createDialog.testDataLinkConflict": "Testunterhaltungen und echte Unterhaltungen benötigen separate Tickets."
 }

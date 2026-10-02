@@ -8,6 +8,7 @@ import { CheckCircleIcon } from '@heroicons/react/24/solid'
 import type { ConversationId } from '@quackback/ids'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { AgentConversationThread } from '@/components/conversation/agent-conversation-thread'
 import {
   applyAgentThreadEvent,
@@ -46,6 +47,20 @@ export function TryMessengerSheet({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-[1200px]">
+        <header className="flex shrink-0 items-center gap-3 border-b px-5 py-4 pr-12">
+          <SheetTitle>
+            <FormattedMessage id="onboarding.test.title" defaultMessage="Try Messenger" />
+          </SheetTitle>
+          <Badge variant="secondary">
+            <FormattedMessage id="onboarding.test.badge" defaultMessage="Test" />
+          </Badge>
+          <SheetDescription className="sr-only">
+            <FormattedMessage
+              id="onboarding.test.subtitle"
+              defaultMessage="See both sides of a conversation."
+            />
+          </SheetDescription>
+        </header>
         {open && <TryMessengerBody start={start} />}
       </SheetContent>
     </Sheet>
@@ -110,7 +125,7 @@ function TryMessengerBody({ start }: { start: TryMessengerStart }) {
         }
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-1 lg:grid-cols-[380px_minmax(0,1fr)_300px]">
+    <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid-cols-[380px_minmax(0,1fr)_300px] lg:overflow-hidden">
       <section className="flex min-h-0 flex-col border-b bg-muted/40 p-4 lg:border-r lg:border-b-0">
         <p className="mb-3 text-xs font-medium text-muted-foreground">
           <FormattedMessage id="onboarding.test.customerSide" defaultMessage="Your customer" />
@@ -203,18 +218,6 @@ function TryMessengerBody({ start }: { start: TryMessengerStart }) {
       </section>
 
       <aside className="flex min-h-0 flex-col gap-6 overflow-y-auto p-5">
-        <div className="space-y-1 pr-6">
-          <SheetTitle>
-            <FormattedMessage id="onboarding.test.title" defaultMessage="Try Messenger" />
-          </SheetTitle>
-          <SheetDescription>
-            <FormattedMessage
-              id="onboarding.test.subtitle"
-              defaultMessage="See both sides of a conversation."
-            />
-          </SheetDescription>
-        </div>
-
         {steps.seen ? (
           <div className="space-y-3 rounded-xl border bg-card p-4">
             <p className="text-sm font-medium">

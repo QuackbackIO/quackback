@@ -49,6 +49,7 @@ import { commentPlainText } from '@/lib/server/markdown-tiptap'
 import { type HookContext } from './hook-context'
 import type { EventData, EventActor, PostMergedPayload, PostUnmergedPayload } from './types'
 import { logger } from '@/lib/server/logger'
+import { isTestEvent } from './test-event'
 
 const log = logger.child({ component: 'targets' })
 
@@ -234,6 +235,10 @@ export async function getSubscriberTargets(
 
   const notifEventType = getNotificationEventType(event.type)
   if (!notifEventType) return []
+  if (
+    await isTestEvent({ entityId: postId, payload: event.data, actorId: event.actor.principalId })
+  )
+    return []
 
   // Fetch subscribers ONCE for both email and notification targets
   const subscribers = await getSubscribersForEvent(postId, notifEventType)
@@ -538,6 +543,14 @@ export async function getMentionTargets(
   context: HookContext
 ): Promise<HookTarget[]> {
   if (event.type !== 'post.mentioned') return []
+  if (
+    await isTestEvent({
+      entityId: event.data.postId,
+      payload: event.data,
+      actorId: event.actor.principalId,
+    })
+  )
+    return []
 
   const { mentionedPrincipalId, postTitle, postUrl } = event.data
   if (!mentionedPrincipalId) return []

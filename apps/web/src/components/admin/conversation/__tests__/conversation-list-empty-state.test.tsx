@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 /**
- * The first-run "Connect Messenger" call to action shows only in an empty
+ * The first-run test-message action shows only in an empty
  * main queue, and deciding it reads the workspace's launch status (a server
  * call). A list with conversations in it shows no call to action, so it does
  * not ask for the status.
@@ -33,7 +33,11 @@ vi.mock('@/components/admin/conversation/new-conversation-dialog', () => ({
 }))
 vi.mock('@tanstack/react-router', () => ({
   useRouteContext: (opts?: { select?: (context: unknown) => unknown }) => {
-    const context = { userRole: 'admin', settings: { featureFlags: {} } }
+    const context = {
+      userRole: 'admin',
+      principal: { id: 'principal_admin', role: 'admin' },
+      settings: { featureFlags: { supportInbox: true } },
+    }
     return opts?.select ? opts.select(context) : context
   },
   Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
@@ -118,7 +122,7 @@ describe('ConversationListColumn launch status', () => {
     fetchOnboardingStatus.mockClear()
     renderColumn([])
 
-    expect(await screen.findByText('Connect Messenger')).toBeTruthy()
+    expect(await screen.findByText('Send yourself a test message')).toBeTruthy()
     expect(fetchOnboardingStatus).toHaveBeenCalledTimes(1)
   })
 })
