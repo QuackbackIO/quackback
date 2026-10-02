@@ -5,7 +5,7 @@
  * so internal notes' attachments are always included — there is no visitor
  * surface for this read.
  */
-import { and, db, conversationMessages, desc, eq, isNull } from '@/lib/server/db'
+import { and, db, conversationMessages, desc, eq, isNotNull, isNull, sql } from '@/lib/server/db'
 import { attachmentForClient } from '@/lib/server/messages/message-core'
 import { loadAuthors, fallbackAuthor } from '@/lib/server/domains/principals/principal-display'
 import type { ConversationAttachment } from '@/lib/shared/conversation/types'
@@ -14,6 +14,13 @@ import type { ConversationId, ConversationMessageId, TicketId } from '@quackback
 /** Cap on how many attachments the sidebar reads — plenty for any real
  *  conversation, and a hard ceiling against a pathological thread. */
 const CONVERSATION_FILES_LIMIT = 200
+
+/**
+ * Cap on how many messages are read to fill the attachment cap above. A
+ * message carries at most a handful of attachments, so this many rows is
+ * far more than any real thread needs to reach {@link CONVERSATION_FILES_LIMIT}.
+ */
+const CONVERSATION_MESSAGE_ROWS_LIMIT = 200
 
 export interface ConversationFileEntry {
   attachment: ConversationAttachment
@@ -34,10 +41,23 @@ export async function listConversationFiles(
       : eq(conversationMessages.ticketId, target.ticketId)
 
   const rows = await db
-    .select()
+    .select({
+      id: conversationMessages.id,
+      principalId: conversationMessages.principalId,
+      createdAt: conversationMessages.createdAt,
+      attachments: conversationMessages.attachments,
+    })
     .from(conversationMessages)
-    .where(and(parentCondition, isNull(conversationMessages.deletedAt)))
+    .where(
+      and(
+        parentCondition,
+        isNull(conversationMessages.deletedAt),
+        isNotNull(conversationMessages.attachments),
+        sql`jsonb_array_length(${conversationMessages.attachments}) > 0`
+      )
+    )
     .orderBy(desc(conversationMessages.createdAt), desc(conversationMessages.id))
+    .limit(CONVERSATION_MESSAGE_ROWS_LIMIT)
 
   const authors = await loadAuthors(
     rows.map((m) => m.principalId),
@@ -46,11 +66,10 @@ export async function listConversationFiles(
 
   const entries: ConversationFileEntry[] = []
   for (const m of rows) {
-    if (!m.attachments || m.attachments.length === 0) continue
     const author = m.principalId
       ? (authors.get(m.principalId) ?? fallbackAuthor(m.principalId))
       : null
-    for (const raw of m.attachments) {
+    for (const raw of m.attachments ?? []) {
       entries.push({
         attachment: attachmentForClient(raw),
         messageId: m.id,
