@@ -198,7 +198,7 @@ export function StatusSubscribersView() {
             className="h-48"
           />
         ) : (
-          <div className="rounded-xl overflow-hidden border border-border/50 bg-card shadow-sm divide-y divide-border/50">
+          <div className="overflow-hidden border-y border-t-transparent border-border/50 divide-y divide-border/50">
             {items.map((sub) => (
               <div key={sub.id} className="flex items-center gap-3 px-4 py-3">
                 <div className="min-w-0 flex-1">

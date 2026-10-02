@@ -50,7 +50,7 @@ function SheetOverlay({ className, ...props }: SheetPrimitive.Backdrop.Props) {
     <SheetPrimitive.Backdrop
       data-slot="sheet-overlay"
       className={cn(
-        'fixed inset-0 z-50 bg-black/50',
+        'fixed inset-0 z-50 bg-black/60',
         'data-open:animate-in data-closed:animate-out',
         'data-closed:fade-out-0 data-open:fade-in-0',
         className
@@ -77,7 +77,7 @@ function SheetContent({
       <SheetPrimitive.Popup
         data-slot="sheet-content"
         className={cn(
-          'fixed z-50 flex flex-col gap-4 bg-background shadow-lg',
+          'fixed z-50 flex flex-col gap-4 rounded-panel border-border bg-background shadow-md',
           'transition-transform ease-out data-closed:duration-200 data-open:duration-300',
           'data-open:animate-in data-closed:animate-out',
           side === 'right' &&
@@ -133,7 +133,7 @@ function SheetTitle({ className, ...props }: SheetPrimitive.Title.Props) {
   return (
     <SheetPrimitive.Title
       data-slot="sheet-title"
-      className={cn('text-foreground font-semibold', className)}
+      className={cn('text-foreground font-semibold tracking-[-0.02em]', className)}
       {...props}
     />
   )

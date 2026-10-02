@@ -56,10 +56,7 @@ const SORT_OPTIONS = [
 
 function HelpCenterListSkeleton() {
   return (
-    <div
-      data-continuous-list=""
-      className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50"
-    >
+    <div className="overflow-hidden divide-y divide-border/50 border-y border-t-transparent border-border/50">
       {Array.from({ length: 5 }).map((_, i) => (
         <div key={i} className="p-4">
           <Skeleton className="h-5 w-16 rounded-full mb-1" />
@@ -347,10 +344,7 @@ function DeletedItemsView() {
             className="h-32"
           />
         ) : (
-          <div
-            data-continuous-list=""
-            className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50"
-          >
+          <div className="overflow-hidden divide-y divide-border/50 border-y border-t-transparent border-border/50">
             {deletedCategories.map((cat) => (
               <div key={cat.id} className="flex items-center gap-3 px-4 py-3">
                 <CategoryIcon icon={cat.icon} className="w-5 h-5 shrink-0" />
@@ -389,10 +383,7 @@ function DeletedItemsView() {
         ) : deletedArticles.length === 0 ? (
           <EmptyState icon={QuestionMarkCircleIcon} title="No deleted articles" className="h-32" />
         ) : (
-          <div
-            data-continuous-list=""
-            className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50"
-          >
+          <div className="overflow-hidden divide-y divide-border/50 border-y border-t-transparent border-border/50">
             {deletedArticles.map((article) => (
               <div key={article.id} className="flex items-center gap-3 px-4 py-3">
                 <div className="flex-1 min-w-0">

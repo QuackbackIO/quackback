@@ -100,7 +100,7 @@ function RunStateBadge({ state }: { state: string }) {
     textClass: 'text-muted-foreground',
   }
   return (
-    <Badge variant="outline" size="sm" shape="pill" className={cn('gap-1', meta.textClass)}>
+    <Badge variant="outline" size="sm" className={cn('gap-1', meta.textClass)}>
       <span className={cn('size-1.5 rounded-full', meta.dotClass)} />
       {meta.label}
     </Badge>

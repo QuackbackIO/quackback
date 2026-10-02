@@ -6,7 +6,7 @@ import { cn } from '@/lib/shared/utils'
 const badgeVariants = cva(
   [
     'inline-flex items-center justify-center gap-1 px-2 py-0.5',
-    'border font-medium whitespace-nowrap',
+    'rounded-item border font-semibold whitespace-nowrap',
     'w-fit shrink-0 overflow-hidden',
     'transition-all duration-200 ease-out',
     '[&>svg]:pointer-events-none',
@@ -28,15 +28,10 @@ const badgeVariants = cva(
         default: 'text-xs [&>svg]:size-3',
         sm: 'text-[11px] [&>svg]:size-2.5',
       },
-      shape: {
-        default: '[border-radius:calc(var(--radius)*0.6)]',
-        pill: 'rounded-full',
-      },
     },
     defaultVariants: {
       variant: 'default',
       size: 'default',
-      shape: 'default',
     },
   }
 )
@@ -45,13 +40,12 @@ function Badge({
   className,
   variant,
   size,
-  shape,
   ...props
 }: React.ComponentProps<'span'> & VariantProps<typeof badgeVariants>) {
   return (
     <span
       data-slot="badge"
-      className={cn(badgeVariants({ variant, size, shape }), className)}
+      className={cn(badgeVariants({ variant, size }), className)}
       {...props}
     />
   )

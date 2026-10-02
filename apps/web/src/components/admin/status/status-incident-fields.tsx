@@ -183,7 +183,7 @@ export function LifecycleBadge({ status }: { status: StatusIncidentLifecycle }) 
     return <span className="text-xs text-muted-foreground">{LIFECYCLE_LABELS[status]}</span>
   }
   return (
-    <Badge variant={LIFECYCLE_VARIANT[status]} size="sm" shape="pill">
+    <Badge variant={LIFECYCLE_VARIANT[status]} size="sm">
       {LIFECYCLE_LABELS[status]}
     </Badge>
   )

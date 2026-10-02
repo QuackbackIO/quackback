@@ -392,7 +392,7 @@ function PortalLayout() {
               untouched (and provides no context) outside preview mode. */}
           <PortalPreviewProvider enabled={preview === true}>
             <PortalBrandingFontLoader customCss={customCss} configFontSans={configFontSans} />
-            <div className="min-h-screen bg-background flex flex-col">
+            <div data-portal="" className="min-h-screen bg-background flex flex-col">
               {themeStyles && (
                 <style dangerouslySetInnerHTML={{ __html: escapeInlineStyle(themeStyles) }} />
               )}

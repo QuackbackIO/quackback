@@ -110,7 +110,7 @@ export function RoadmapBoard({
             onSelect={setSelectedRoadmap}
           />
           {selectedRoadmap?.description && (
-            <Card className="bg-muted/50 border-none shadow-none">
+            <Card className="border-none">
               <CardContent className="py-3 px-4">
                 <p className="text-sm text-muted-foreground">{selectedRoadmap.description}</p>
               </CardContent>

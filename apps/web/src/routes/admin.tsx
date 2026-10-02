@@ -258,12 +258,12 @@ function AdminLayout() {
           <AdminSidebar initialUserData={initialUserData} latestVersion={latestVersion} />
           <main
             data-admin-shell=""
-            className="flex-1 min-w-0 overflow-hidden sm:h-screen sm:py-2 sm:pr-2 sm:pl-1 p-0"
+            className="flex-1 min-w-0 overflow-hidden bg-chrome p-0 sm:h-screen sm:py-2 sm:pe-2"
           >
             {/* Mobile: Add padding for fixed header */}
             <div
               data-admin-canvas=""
-              className="h-full sm:pt-0 pt-14 sm:rounded-lg sm:border sm:border-border overflow-hidden flex flex-col"
+              className="h-full sm:pt-0 pt-14 overflow-hidden flex flex-col bg-background text-foreground sm:rounded-[14px] sm:border sm:border-chrome-hairline sm:shadow-chrome-canvas"
             >
               <PlanNoticeBanner notice={planNotice} />
               <UpdateBanner

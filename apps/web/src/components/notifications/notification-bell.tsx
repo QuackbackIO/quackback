@@ -1,5 +1,6 @@
 'use client'
 
+import { railControlClass } from '@/components/admin/rail-item'
 import { useState, useEffect, useRef } from 'react'
 import { BellIcon } from '@heroicons/react/24/solid'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -47,13 +48,13 @@ export function NotificationBell({
         data-admin-rail-item={labeled ? '' : undefined}
         data-active={active ? 'true' : undefined}
         className={cn(
-          'relative transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           labeled
-            ? 'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm'
-            : 'flex h-10 w-10 items-center justify-center rounded-lg',
-          'text-muted-foreground/70 hover:bg-muted/50 hover:text-foreground',
-          active && 'bg-muted/80 text-foreground',
-          labeled && active && 'font-semibold',
+            ? railControlClass(active)
+            : cn(
+                'relative flex h-10 w-10 items-center justify-center rounded-lg transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                'text-muted-foreground/70 hover:bg-muted/50 hover:text-foreground',
+                active && 'bg-muted/80 text-foreground'
+              ),
           className
         )}
         aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}

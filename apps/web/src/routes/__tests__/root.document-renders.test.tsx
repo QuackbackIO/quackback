@@ -127,26 +127,27 @@ describe('root document renders', () => {
     expect(doc.defaultTheme).toBe('light')
   })
 
-  // Labs rows are ignored: a workspace that stored the legacy look, one that
-  // stored the refined look and one with no row at all render the same document.
+  // Labs rows are ignored: a workspace that stored an old appearance and one
+  // with no row at all render the same document, with no theme marker.
   it.each([
     ['no stored appearance', {}],
     ['a stored legacy appearance', { visualTheme: 'legacy' }],
     ['a stored refined appearance', { visualTheme: 'refined' }],
-  ])('marks the document refined for %s', async (_label, settings) => {
+  ])('renders one theme for %s', async (_label, settings) => {
     bootstrap('dark', settings)
     await mount()
-    expect(document.documentElement.getAttribute('data-visual-theme')).toBe('refined')
+    expect(document.documentElement.hasAttribute('data-visual-theme')).toBe(false)
   })
 })
 
 describe('crash fallback document', () => {
-  it('carries the refined visual theme marker', () => {
+  it('renders without a theme marker, like the app document', () => {
     const html = renderToStaticMarkup(
       <MinimalDocument>
         <p>fallback</p>
       </MinimalDocument>
     )
-    expect(html).toContain('data-visual-theme="refined"')
+    expect(html).toContain('<p>fallback</p>')
+    expect(html).not.toContain('data-visual-theme')
   })
 })

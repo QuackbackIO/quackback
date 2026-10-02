@@ -119,7 +119,7 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
   return (
     <aside
       data-side-pane=""
-      className="w-64 xl:w-72 shrink-0 flex flex-col border-e border-border/50 bg-card/30 overflow-hidden"
+      className="w-64 xl:w-72 shrink-0 flex flex-col border-e border-chrome-hairline bg-background overflow-hidden"
     >
       <div className="shrink-0 px-5 py-3.5">
         <PageHeader as="h2" title="Roadmap" />

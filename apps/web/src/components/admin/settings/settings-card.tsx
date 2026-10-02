@@ -25,8 +25,8 @@ export function SettingsCard({
       data-settings-card=""
       data-variant={variant}
       className={cn(
-        'rounded-xl border bg-card shadow-sm overflow-hidden',
-        variant === 'danger' ? 'border-destructive/40' : 'border-border/50'
+        'overflow-hidden rounded-panel border bg-card',
+        variant === 'danger' ? 'border-destructive/40' : 'border-border'
       )}
     >
       {(title || description || action) && (

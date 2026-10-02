@@ -873,7 +873,7 @@ export function WidgetHomeAnimated({
                     <Select value={selectedBoardId} onValueChange={handleComposeBoardChange}>
                       <SelectTrigger
                         size="xs"
-                        className="border-0 bg-transparent shadow-none font-medium text-foreground hover:text-foreground/80 focus-visible:ring-0"
+                        className="border-0 font-medium text-foreground hover:text-foreground/80 focus-visible:ring-0"
                       >
                         <SelectValue
                           placeholder={intl.formatMessage({
@@ -884,7 +884,7 @@ export function WidgetHomeAnimated({
                       </SelectTrigger>
                       <SelectContent align="start">
                         {boards.map((b) => (
-                          <SelectItem key={b.id} value={b.id} className="py-1">
+                          <SelectItem key={b.id} value={b.id}>
                             {b.name}
                           </SelectItem>
                         ))}

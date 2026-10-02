@@ -88,7 +88,7 @@ function AssistantCopilotSettings() {
         actions={<CopilotPauseControl />}
       >
         {settingsQuery.isPending ? (
-          <div className="rounded-xl border border-border/50 bg-card p-6" role="status">
+          <div className="rounded-xl border bg-card p-6" role="status">
             <p className="text-sm text-muted-foreground">
               {intl.formatMessage({
                 id: 'automation.agent.loading',
@@ -97,7 +97,7 @@ function AssistantCopilotSettings() {
             </p>
           </div>
         ) : settingsQuery.isError ? (
-          <div className="rounded-xl border border-border/50 bg-card p-6">
+          <div className="rounded-xl border bg-card p-6">
             <p role="alert" className="text-sm text-destructive">
               {intl.formatMessage({
                 id: 'automation.agent.loadError',

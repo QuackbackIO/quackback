@@ -438,7 +438,7 @@ export function StatusComponentsView() {
               resetFromServer()
             }}
           >
-            <div className="rounded-xl overflow-hidden border border-border/50 bg-card shadow-sm divide-y divide-border/50">
+            <div className="overflow-hidden border-y border-t-transparent border-border/50 divide-y divide-border/50">
               {activeDrag && ungrouped.length === 0 && <UngroupedDropZone />}
               <SortableContext
                 items={visibleUngrouped.map((c) => c.id)}

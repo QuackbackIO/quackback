@@ -223,7 +223,7 @@ function EngagedPostCard({ post }: { post: EngagedPost }) {
           </div>
           <Badge
             variant="secondary"
-            className="text-[11px] font-normal bg-muted/50 px-1.5 py-0 inline-flex items-center gap-0.5"
+            className="text-[11px] bg-muted/50 px-1.5 py-0 inline-flex items-center gap-0.5"
           >
             <Squares2X2Icon className="h-2.5 w-2.5 text-muted-foreground/40" />
             {post.boardName}
@@ -681,7 +681,6 @@ export function UserDetail({
                       <Button
                         size="sm"
                         variant="outline"
-                        shape="default"
                         onClick={() => setComposeOpen(true)}
                         disabled={!displayEmail}
                       >
@@ -693,7 +692,7 @@ export function UserDetail({
                   {!displayEmail && <TooltipContent>{noEmailTooltip}</TooltipContent>}
                 </Tooltip>
               )}
-              <Button size="sm" variant="outline" shape="default" asChild>
+              <Button size="sm" variant="outline" asChild>
                 <Link to="/u/$principalId" params={{ principalId: user.principalId }}>
                   <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
                   View public profile
@@ -702,12 +701,7 @@ export function UserDetail({
               {canManageUsers && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button
-                      size="icon-sm"
-                      variant="ghost"
-                      shape="default"
-                      aria-label="More actions"
-                    >
+                    <Button size="icon-sm" variant="ghost" aria-label="More actions">
                       <EllipsisHorizontalIcon className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>

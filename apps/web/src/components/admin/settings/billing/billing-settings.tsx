@@ -139,7 +139,7 @@ export function BillingPlansView(props: {
         {catalogue && (
           <div
             data-settings-card=""
-            className="grid grid-cols-1 overflow-hidden rounded-xl border border-border/50 bg-card sm:grid-cols-2 xl:grid-cols-4"
+            className="grid grid-cols-1 overflow-hidden rounded-xl border bg-card sm:grid-cols-2 xl:grid-cols-4"
           >
             {catalogue.plans.map((plan, index) => (
               <PlanCard
@@ -292,16 +292,13 @@ function CurrentPlanCard(props: {
     renewalBits.push(`Renews ${formatDate(format, overview.renewalAt)}`)
   }
   return (
-    <section
-      data-settings-card=""
-      className="overflow-hidden rounded-xl border border-border/50 bg-card"
-    >
+    <section data-settings-card="" className="overflow-hidden rounded-xl border bg-card">
       <div className="flex items-start justify-between gap-3 px-6 py-5">
         <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2">
             <h2 className="text-base font-semibold">{overview.planName}</h2>
             {statusLabel ? (
-              <Badge size="sm" shape="pill" variant="secondary">
+              <Badge size="sm" variant="secondary">
                 {statusLabel}
               </Badge>
             ) : null}
@@ -456,10 +453,7 @@ function UsageCard(props: {
   const hasMonthly = hasAi || hasEmails || hasApi
 
   return (
-    <section
-      data-settings-card=""
-      className="overflow-hidden rounded-xl border border-border/50 bg-card"
-    >
+    <section data-settings-card="" className="overflow-hidden rounded-xl border bg-card">
       <div className="flex items-center justify-between border-b border-border/50 px-6 py-4">
         <h2 className="text-base font-semibold">Usage</h2>
         {hasMonthly ? (
@@ -563,10 +557,7 @@ function AddOnsCard(props: {
   return (
     <section className="space-y-3">
       <h2 className="text-base font-semibold">Add-ons</h2>
-      <div
-        data-settings-card=""
-        className="overflow-hidden rounded-xl border border-border/50 bg-card"
-      >
+      <div data-settings-card="" className="overflow-hidden rounded-xl border bg-card">
         <div className="flex items-center justify-between gap-3 px-4 py-3">
           <div className="min-w-0">
             <div className="text-[13px] font-medium">Remove Quackback branding</div>
@@ -639,7 +630,7 @@ function PlanCard(props: {
           <div className="flex flex-wrap items-center gap-1.5">
             <h3 className="text-sm font-semibold">{plan.name}</h3>
             {props.trialActive ? (
-              <Badge size="sm" shape="pill" variant="secondary">
+              <Badge size="sm" variant="secondary">
                 Trial
               </Badge>
             ) : null}

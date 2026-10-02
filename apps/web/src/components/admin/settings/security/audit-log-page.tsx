@@ -340,9 +340,7 @@ export function AuditLogPage() {
                 new Set(FILTER_EVENT_TYPES.filter((o) => !!o.group).map((o) => o.group!))
               ).map((group) => (
                 <SelectGroup key={group}>
-                  <SelectLabel className="text-xs font-semibold text-muted-foreground px-2 py-1">
-                    {group}
-                  </SelectLabel>
+                  <SelectLabel className="text-muted-foreground px-2 py-1">{group}</SelectLabel>
                   {group === WIDGET_ACTIVITY_GROUP && (
                     <p className="px-2 pb-1 text-xs text-muted-foreground leading-snug">
                       High-volume on active workspaces. Pick a specific event to view it.

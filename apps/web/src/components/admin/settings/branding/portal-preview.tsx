@@ -104,7 +104,7 @@ export function PortalPreview({
   return (
     <div
       className={cn(
-        'overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-[max-width] duration-300',
+        'overflow-hidden rounded-xl border border-border bg-card transition-[max-width] duration-300',
         viewport === 'mobile' ? 'max-w-[404px] mx-auto' : 'max-w-none'
       )}
     >

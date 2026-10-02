@@ -246,11 +246,10 @@ describe('useBrandingState initial cssText', () => {
 })
 
 // What a visitor sees on a workspace that never customised its theme comes
-// from the stylesheets: globals.css, with the refined theme stylesheet on top.
-// The editor has to start from exactly that.
+// from the stylesheet's tokens in globals.css. The editor has to start from
+// exactly that.
 const SRC = join(__dirname, '../../../../..')
 const globalsCss = readFileSync(join(SRC, 'globals.css'), 'utf8')
-const refinedCss = readFileSync(join(SRC, 'styles/refined-theme.css'), 'utf8')
 
 function cssBlock(css: string, selector: string): Record<string, string> {
   const start = css.indexOf(`${selector} {`)
@@ -264,17 +263,12 @@ function cssBlock(css: string, selector: string): Record<string, string> {
 const STYLESHEETS = {
   globalsLight: cssBlock(globalsCss, ':root'),
   globalsDark: cssBlock(globalsCss, '.dark'),
-  refinedLight: cssBlock(refinedCss, ":root:where([data-visual-theme='refined'])"),
-  refinedDark: cssBlock(refinedCss, ".dark:where([data-visual-theme='refined'])"),
 }
 
 /** The value an unbranded page resolves for `cssVar`. */
 function unbranded(mode: 'light' | 'dark', cssVar: string) {
-  const { globalsLight, globalsDark, refinedLight, refinedDark } = STYLESHEETS
-  const layers =
-    mode === 'dark'
-      ? [refinedDark, globalsDark, refinedLight, globalsLight]
-      : [refinedLight, globalsLight]
+  const { globalsLight, globalsDark } = STYLESHEETS
+  const layers = mode === 'dark' ? [globalsDark, globalsLight] : [globalsLight]
   return layers.find((layer) => layer[cssVar])?.[cssVar]
 }
 

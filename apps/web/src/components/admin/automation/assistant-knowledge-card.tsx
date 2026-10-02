@@ -112,7 +112,7 @@ interface KnowledgeRow {
 function LiveLookupBadge() {
   const intl = useIntl()
   return (
-    <Badge size="sm" variant="outline" shape="pill">
+    <Badge size="sm" variant="outline">
       {intl.formatMessage({
         id: 'automation.knowledge.readiness.live',
         defaultMessage: 'Live lookup',

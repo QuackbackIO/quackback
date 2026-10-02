@@ -153,11 +153,7 @@ function ClaimPath({ children }: { children: React.ReactNode }) {
 }
 
 function CustomBadge() {
-  return (
-    <Badge variant="outline" className="font-normal">
-      Custom
-    </Badge>
-  )
+  return <Badge variant="outline">Custom</Badge>
 }
 
 function IconButton({
@@ -300,12 +296,12 @@ function PeopleRowView({
           <span className="font-medium">{row.label}</span>
           {row.typeLabel && <span className="text-muted-foreground">{row.typeLabel}</span>}
           {row.orphaned && (
-            <Badge variant="outline" className="border-warning/40 font-normal text-warning">
+            <Badge variant="outline" className="border-warning/40 text-warning">
               Attribute no longer exists
             </Badge>
           )}
           {row.duplicate && (
-            <Badge variant="outline" className="border-warning/40 font-normal text-warning">
+            <Badge variant="outline" className="border-warning/40 text-warning">
               Duplicate
             </Badge>
           )}

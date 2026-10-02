@@ -626,7 +626,7 @@ export const ConversationRow = memo(function ConversationRow({
                     filed the thread, so an agent scanning the list can spot a
                     false positive's source without opening it. */}
                 {c.endReason === 'spam' && c.spamReason && (
-                  <Badge size="sm" shape="pill" variant="outline">
+                  <Badge size="sm" variant="outline">
                     {CONVERSATION_SPAM_FILED_BY_LABELS[c.spamReason]}
                   </Badge>
                 )}

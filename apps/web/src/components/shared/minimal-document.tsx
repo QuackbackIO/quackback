@@ -9,7 +9,7 @@ export function MinimalDocument({ children }: Readonly<{ children: ReactNode }>)
   // white-flash either.
   const { colorScheme } = resolveDocumentTheme('system')
   return (
-    <html lang="en" data-visual-theme="refined" style={{ colorScheme }} suppressHydrationWarning>
+    <html lang="en" style={{ colorScheme }} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: SYSTEM_THEME_SCRIPT }} />
         <meta charSet="utf-8" />

@@ -188,7 +188,6 @@ export function ArticlePerformanceTable() {
                       <div className="flex items-center gap-2 min-w-0">
                         <Badge
                           size="sm"
-                          shape="pill"
                           variant={article.status === 'published' ? 'default' : 'secondary'}
                           className={
                             article.status === 'published'

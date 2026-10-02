@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { generateThemeCSS, parseThemeConfig } from '../generator'
 import type { ThemeConfig } from '../types'
 
-const ROOT = ':root:where([data-visual-theme="refined"])'
-const DARK = '.dark:where([data-visual-theme="refined"])'
+const ROOT = ':root'
+const DARK = '.dark'
 
 /**
  * A branding config is a loose JSON blob: the picker writes whichever variables
@@ -115,7 +115,7 @@ describe('generateThemeCSS with a partially-specified config', () => {
     // The dark gaps fill from the dark base, not the light one.
     expect(readVar(css, DARK, '--background')).toBe('#0a0a0a')
     expect(readVar(css, DARK, '--foreground')).toBe('#fafafa')
-    expect(readVar(css, DARK, '--card')).toBe('#0a0a0a')
+    expect(readVar(css, DARK, '--card')).toBe('#141414')
     expect(readVar(css, DARK, '--muted')).toBe('#181818')
     expect(readVar(css, DARK, '--muted-foreground')).toBe('#a1a1a1')
     expect(readVar(css, DARK, '--border')).toBe('#262626')
@@ -174,7 +174,7 @@ describe('generateThemeCSS with a partially-specified config', () => {
   })
 
   it('handles an empty or absent config', () => {
-    // An absent branding config still renders the refined base.
+    // An absent branding config still renders the default tokens.
     expect(readVar(generateThemeCSS({}), ROOT, '--background')).toBe('#ffffff')
     expect(generateThemeCSS(null as unknown as ThemeConfig)).toBe('')
     expect(parseThemeConfig(null)).toBeNull()

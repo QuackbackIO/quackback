@@ -24,7 +24,7 @@ function BoardAccessBadge({ access }: { access: BoardAccess }) {
   const teamOnly = presetForAccess(normalized) === 'private' || normalized.view === 'team'
   if (!teamOnly && !segments) return null
   return (
-    <Badge size="sm" shape="pill" variant="secondary">
+    <Badge size="sm" variant="secondary">
       {teamOnly ? (
         <>
           <LockClosedIcon />

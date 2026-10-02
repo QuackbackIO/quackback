@@ -1,3 +1,4 @@
+import { railControlClass } from '@/components/admin/rail-item'
 import { ArrowsRightLeftIcon } from '@heroicons/react/24/solid'
 import {
   DropdownMenu,
@@ -37,11 +38,7 @@ export function WorkspaceSwitcher({
   return (
     <DropdownMenu defaultOpen={defaultOpen}>
       <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          data-admin-rail-item=""
-          className="relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-muted-foreground/70 transition-all duration-200 hover:bg-muted/50 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
+        <button type="button" data-admin-rail-item="" className={railControlClass()}>
           <ArrowsRightLeftIcon className="size-5 shrink-0" />
           <span className="min-w-0 flex-1 truncate text-left">Switch workspace</span>
         </button>

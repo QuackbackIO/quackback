@@ -601,7 +601,7 @@ function GroupHeader({
   return (
     <div className="flex items-center gap-2 bg-muted/30 px-4 py-2">
       <span className="text-[13px] font-semibold">{label}</span>
-      <Badge size="sm" shape="pill" variant="secondary">
+      <Badge size="sm" variant="secondary">
         {count}
       </Badge>
       {dragHint && (
@@ -764,20 +764,20 @@ function WorkflowStatusBadge({
   return (
     <>
       {status === 'live' ? (
-        <Badge size="sm" shape="pill" variant="success">
+        <Badge size="sm" variant="success">
           Live
         </Badge>
       ) : status === 'paused' ? (
-        <Badge size="sm" shape="pill" variant="warning">
+        <Badge size="sm" variant="warning">
           Paused
         </Badge>
       ) : (
-        <Badge size="sm" shape="pill" variant="secondary">
+        <Badge size="sm" variant="secondary">
           Draft
         </Badge>
       )}
       {needsSetup && (
-        <Badge size="sm" shape="pill" variant="warning" title={needsSetup}>
+        <Badge size="sm" variant="warning" title={needsSetup}>
           <ExclamationTriangleIcon className="size-3" />
           {needsSetup}
         </Badge>

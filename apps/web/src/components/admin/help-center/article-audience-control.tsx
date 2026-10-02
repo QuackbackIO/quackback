@@ -41,7 +41,7 @@ export function ArticleAudienceControl({
           {value.length === 0 ? (
             <span className="text-muted-foreground">Everyone</span>
           ) : (
-            <Badge size="sm" shape="pill" variant="secondary">
+            <Badge size="sm" variant="secondary">
               {value.length}
             </Badge>
           )}

@@ -363,7 +363,7 @@ export function CreatePostDialog({
                                     key={tag.id}
                                     variant="secondary"
                                     className={cn(
-                                      'cursor-pointer text-[11px] font-normal transition-colors',
+                                      'cursor-pointer text-[11px] transition-colors',
                                       isSelected
                                         ? 'bg-foreground text-background hover:bg-foreground/90'
                                         : 'hover:bg-muted/80'
@@ -482,7 +482,7 @@ export function CreatePostDialog({
                                 key={tag.id}
                                 variant="secondary"
                                 className={cn(
-                                  'cursor-pointer text-[11px] font-normal transition-colors',
+                                  'cursor-pointer text-[11px] transition-colors',
                                   isSelected
                                     ? 'bg-foreground text-background hover:bg-foreground/90'
                                     : 'hover:bg-muted/80'

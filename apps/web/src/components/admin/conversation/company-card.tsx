@@ -46,7 +46,6 @@ export function CompanyCard({
             type="button"
             size="sm"
             variant="ghost"
-            shape="default"
             onClick={() => setEditing((open) => !open)}
           >
             {editing ? 'Cancel' : 'Add company'}
@@ -198,7 +197,6 @@ function QualificationEditor({
       <Button
         size="sm"
         variant="outline"
-        shape="default"
         className="w-full"
         disabled={!name.trim() || saving}
         onClick={() => void commit()}

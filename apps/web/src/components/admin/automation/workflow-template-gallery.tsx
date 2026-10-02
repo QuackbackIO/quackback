@@ -166,7 +166,7 @@ function TemplateCard({
             key={`${chip.kind}-${chip.label}`}
             size="sm"
             variant="outline"
-            className={cn('font-medium', chipClass(chip))}
+            className={cn('', chipClass(chip))}
           >
             {chip.label}
           </Badge>
