@@ -8,6 +8,7 @@
  * Loaded on demand by `FileViewerProvider`, so no surface pays for it until
  * someone opens a file.
  */
+import { useLocalDateFormatter, type LocalDateFormatter } from '@/components/ui/local-date'
 import {
   Component,
   Suspense,
@@ -188,18 +189,18 @@ function sendOpenBeacon(fileId: string) {
   fetch(url, { method: 'POST', keepalive: true }).catch(() => {})
 }
 
-function formatSentAt(iso: string | undefined): string | null {
+function formatSentAt(iso: string | undefined, format: LocalDateFormatter): string | null {
   if (!iso) return null
   const at = new Date(iso)
   if (Number.isNaN(at.getTime())) return null
   const now = new Date()
   const sameDay = at.toDateString() === now.toDateString()
-  return new Intl.DateTimeFormat(undefined, {
+  return format(at, {
     ...(sameDay ? {} : { month: 'short', day: 'numeric' }),
     ...(at.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }),
     hour: 'numeric',
     minute: '2-digit',
-  }).format(at)
+  })
 }
 
 function isTextEntry(el: HTMLElement): boolean {
@@ -245,6 +246,7 @@ export default function FileViewer({
   engines = ENGINES,
 }: FileViewerProps) {
   const intl = useIntl()
+  const formatDate = useLocalDateFormatter()
   const [current, setCurrent] = useState(() =>
     Math.min(Math.max(0, index), Math.max(0, files.length - 1))
   )
@@ -356,7 +358,7 @@ export default function FileViewer({
   }
 
   const jumpable = !compact && Boolean(onJumpToMessage && file.messageId)
-  const subLine = [file.senderName, formatSentAt(file.sentAt), formatBytes(file.size)]
+  const subLine = [file.senderName, formatSentAt(file.sentAt, formatDate), formatBytes(file.size)]
     .filter(Boolean)
     .join(' · ')
 
