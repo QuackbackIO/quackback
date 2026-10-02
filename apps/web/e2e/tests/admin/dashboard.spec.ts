@@ -136,13 +136,12 @@ test.describe('Admin Feedback Page (Dashboard Content)', () => {
   test('shows filter controls or boards sidebar', async ({ page }) => {
     // Boards / filter sidebar or floating filter button should be present
     const hasFilterSidebar = (await page.locator('aside').count()) > 1
-    const hasFilterButton =
-      (await page.getByRole('button', { name: /filter/i }).count()) > 0
+    const hasFilterButton = (await page.getByRole('button', { name: /filter/i }).count()) > 0
     expect(hasFilterSidebar || hasFilterButton).toBe(true)
   })
 
   test('feedback link is active in sidebar while on feedback page', async ({ page }) => {
-    // The active nav item gets bg-muted/80 applied via CSS class
+    // The active rail item is marked data-active and pressed into the rail
     // The Feedback link should exist and have an active state
     const feedbackLink = page.getByRole('link', { name: 'Feedback' }).first()
     await expect(feedbackLink).toBeVisible()
