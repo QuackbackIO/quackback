@@ -166,7 +166,6 @@
   "files.count.sheets": "{count, plural, other {# 个工作表}}",
   "files.count.lines": "{count, plural, other {# 行}}",
   "files.count.files": "{count, plural, other {# 个文件}}",
-  "files.count.filesCapped": "{count, plural, other {#+ 个文件}}",
   "files.archive.columnName": "名称",
   "files.archive.columnSize": "大小",
   "files.archive.unpacked": "解压后 {size}",

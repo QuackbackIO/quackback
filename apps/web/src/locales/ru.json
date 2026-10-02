@@ -166,7 +166,6 @@
   "files.count.sheets": "{count, plural, one {# лист} few {# листа} many {# листов} other {# листа}}",
   "files.count.lines": "{count, plural, one {# строка} few {# строки} many {# строк} other {# строки}}",
   "files.count.files": "{count, plural, one {# файл} few {# файла} many {# файлов} other {# файла}}",
-  "files.count.filesCapped": "{count, plural, one {#+ файл} other {#+ файлов}}",
   "files.archive.columnName": "Имя",
   "files.archive.columnSize": "Размер",
   "files.archive.unpacked": "{size} в распакованном виде",

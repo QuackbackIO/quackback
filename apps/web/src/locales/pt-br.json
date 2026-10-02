@@ -166,7 +166,6 @@
   "files.count.sheets": "{count, plural, one {# planilha} other {# planilhas}}",
   "files.count.lines": "{count, plural, one {# linha} other {# linhas}}",
   "files.count.files": "{count, plural, one {# arquivo} other {# arquivos}}",
-  "files.count.filesCapped": "{count, plural, one {#+ arquivo} other {#+ arquivos}}",
   "files.archive.columnName": "Nome",
   "files.archive.columnSize": "Tamanho",
   "files.archive.unpacked": "{size} descompactado",

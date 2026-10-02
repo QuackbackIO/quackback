@@ -166,7 +166,6 @@
   "files.count.sheets": "{count, plural, zero {لا أوراق} one {ورقة واحدة} two {ورقتان} few {# أوراق} many {# ورقة} other {# ورقة}}",
   "files.count.lines": "{count, plural, zero {لا أسطر} one {سطر واحد} two {سطران} few {# أسطر} many {# سطرًا} other {# سطر}}",
   "files.count.files": "{count, plural, zero {لا ملفات} one {ملف واحد} two {ملفان} few {# ملفات} many {# ملفًا} other {# ملف}}",
-  "files.count.filesCapped": "{count, plural, many {#+ ملفًا} other {#+ ملف}}",
   "files.archive.columnName": "الاسم",
   "files.archive.columnSize": "الحجم",
   "files.archive.unpacked": "{size} بعد فك الضغط",

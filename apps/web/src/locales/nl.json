@@ -166,7 +166,6 @@
   "files.count.sheets": "{count, plural, one {# blad} other {# bladen}}",
   "files.count.lines": "{count, plural, one {# regel} other {# regels}}",
   "files.count.files": "{count, plural, one {# bestand} other {# bestanden}}",
-  "files.count.filesCapped": "{count, plural, one {#+ bestand} other {#+ bestanden}}",
   "files.archive.columnName": "Naam",
   "files.archive.columnSize": "Grootte",
   "files.archive.unpacked": "{size} uitgepakt",
