@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { zipSync, strToU8 } from 'fflate'
-import { extractDocxText } from '../docx-text'
+import { extractDocxText, docxDocumentText } from '../docx-text'
 
 /**
  * Build the smallest .docx that carries real content: a zip whose
@@ -65,5 +65,33 @@ describe('extractDocxText', () => {
 
   it('returns an empty string for input that is not a zip at all', () => {
     expect(extractDocxText(strToU8('not a docx file'))).toBe('')
+  })
+
+  it('refuses an archive whose index is over the zip budget', () => {
+    const files: Record<string, Uint8Array> = {
+      'word/document.xml': strToU8(
+        '<w:document><w:body>' + paragraph('Hidden behind padding') + '</w:body></w:document>'
+      ),
+    }
+    for (let i = 0; i < 2001; i++) files[`pad/${i}.xml`] = new Uint8Array(0)
+    expect(extractDocxText(zipSync(files))).toBe('')
+  })
+
+  it('scans unclosed paragraphs in linear time', () => {
+    const started = performance.now()
+    expect(docxDocumentText('<w:p><w:t>x'.repeat(40_000))).toBe('')
+    expect(performance.now() - started).toBeLessThan(1000)
+  })
+
+  it('reads paragraphs with attributes and skips look-alike tags', () => {
+    const xml =
+      '<w:p w:rsidR="00A1"><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:t xml:space="preserve">Centered </w:t></w:r><w:r><w:t>title</w:t></w:r></w:p>' +
+      '<w:p/><w:p><w:r><w:t>Body</w:t></w:r></w:p>'
+    expect(docxDocumentText(xml)).toBe('Centered title\nBody')
+  })
+
+  it('drops numeric entities that are not characters instead of throwing', () => {
+    const bytes = buildDocx(paragraph('a&#x110000;b&#0;c&#xD800;d'))
+    expect(extractDocxText(bytes)).toBe('abcd')
   })
 })

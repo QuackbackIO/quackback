@@ -5,6 +5,12 @@ import {
   isRtlLocale,
   SUPPORTED_LOCALES,
   DEFAULT_LOCALE,
+  isViewerMessage,
+  loadMessages,
+  loadPortalMessages,
+  loadViewerMessages,
+  loadWidgetMessages,
+  withoutViewerMessages,
 } from '../i18n'
 
 describe('normalizeLocale', () => {
@@ -159,5 +165,26 @@ describe('SUPPORTED_LOCALES', () => {
   })
   it('DEFAULT_LOCALE is en', () => {
     expect(DEFAULT_LOCALE).toBe('en')
+  })
+})
+
+describe('viewer strings', () => {
+  it('are left out of the catalogs pages seed and kept for the viewer', async () => {
+    const [all, widget, portal, viewer] = await Promise.all([
+      loadMessages('de'),
+      loadWidgetMessages('de'),
+      loadPortalMessages('de'),
+      loadViewerMessages('de'),
+    ])
+    for (const seeded of [widget, portal, withoutViewerMessages(all)]) {
+      expect(Object.keys(seeded).filter(isViewerMessage)).toEqual([])
+      expect(seeded['files.download']).toBe(all['files.download'])
+    }
+    expect(viewer['files.viewer.close']).toBe('Schließen')
+    expect(Object.keys(viewer).length).toBeGreaterThan(0)
+    expect(Object.keys(viewer).every(isViewerMessage)).toBe(true)
+    expect(Object.keys(viewer).length + Object.keys(withoutViewerMessages(all)).length).toBe(
+      Object.keys(all).length
+    )
   })
 })

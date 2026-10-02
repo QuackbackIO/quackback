@@ -81,6 +81,61 @@ describe('buildConversationTranscript', () => {
 })
 
 /**
+ * A text-less message that only carries an attachment must still render as a
+ * line (never silently dropped): an image gets the pre-existing
+ * `[image attached: name]` note, and any other file gets the analogous
+ * `[file attached: name]` note.
+ */
+describe('attachment notes', () => {
+  const pdfAttachment = {
+    url: '/api/storage/files/invoice.pdf',
+    name: 'invoice.pdf',
+    contentType: 'application/pdf',
+    size: 100,
+  }
+  const imageAttachment = {
+    url: '/api/storage/files/shot.png',
+    name: 'shot.png',
+    contentType: 'image/png',
+    size: 10,
+  }
+
+  it('renders a text-less, file-only customer message as a file-attached note', () => {
+    const transcript = buildTicketTranscript([
+      msg({ senderType: 'visitor', content: '', attachments: [pdfAttachment] }),
+    ])
+    expect(transcript).toBe('Customer: [file attached: invoice.pdf]')
+  })
+
+  it('renders a text-less, image-only customer message as an image-attached note', () => {
+    const transcript = buildTicketTranscript([
+      msg({ senderType: 'visitor', content: '', attachments: [imageAttachment] }),
+    ])
+    expect(transcript).toBe('Customer: [image attached: shot.png]')
+  })
+
+  it('appends both notes after the message text when a turn carries one of each', () => {
+    const transcript = buildTicketTranscript([
+      msg({
+        senderType: 'visitor',
+        content: 'see attached',
+        attachments: [imageAttachment, pdfAttachment],
+      }),
+    ])
+    expect(transcript).toBe(
+      'Customer: see attached [image attached: shot.png] [file attached: invoice.pdf]'
+    )
+  })
+
+  it('renders a text-less, file-only agent message too', () => {
+    const transcript = buildTicketTranscript([
+      msg({ senderType: 'agent', content: '', attachments: [pdfAttachment] }),
+    ])
+    expect(transcript).toBe('Agent: [file attached: invoice.pdf]')
+  })
+})
+
+/**
  * Phase C conversational block layer (slice C-1) open item: this renderer
  * must never need to understand `block`/`blockReply` — every block kind's
  * honest plain-text fallback lives in `content` by construction (the

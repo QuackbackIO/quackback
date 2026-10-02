@@ -552,6 +552,12 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
     resolvesTo: PERMISSIONS.CONVERSATION_VIEW,
     why: 'transcript export carries internal notes; team-only on top of the CONVERSATION_VIEW permission gate',
   },
+  'lib/server/functions/conversation-files.ts::listConversationFilesFn::isTeamMember': {
+    intent: 'SECONDARY_GATE',
+    roleBar: 'team',
+    resolvesTo: PERMISSIONS.CONVERSATION_VIEW,
+    why: 'the Files sidebar lists attachments off internal notes too; team-only on top of the CONVERSATION_VIEW permission gate (the conversation-target branch only — the ticket-target branch gates on TICKET_VIEW + assertTicketVisible, mirroring getTicketActivityFn)',
+  },
   'lib/server/functions/embeds.ts::scopeTicketEmbed::isTeamMember': NOT_A_GATE(
     'getEmbedPreviewFn already gates on portal access; team resolves any ticket embed (teammate read path), non-team callers resolve only their own customer ticket via the same ownership rule as loadOwnedTicketOr404'
   ),

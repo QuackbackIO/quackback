@@ -94,6 +94,25 @@ describe.skipIf(!mailpitAvailable)('email delivery (real SMTP via mailpit)', () 
     expect(headers['References']?.[0]).toBe(`<${rootId}> <${parentId}>`)
   })
 
+  it('delivers a real MIME attachment alongside the body', async () => {
+    const content = new TextEncoder().encode('id,name\n1,ada\n2,grace')
+    const result = await sendRawEmail({
+      from: sendingAs('Support <support@acme.test>'),
+      to: 'customer@example.test',
+      subject: 'Your export',
+      html: '<p>Your export is attached.</p>',
+      attachments: [{ filename: 'export.csv', contentType: 'text/csv', content }],
+    })
+    expect(result.sent).toBe(true)
+
+    const [summary] = await waitForMessages(1)
+    const message = await getMessage(summary.ID)
+    expect(message.Attachments).toHaveLength(1)
+    expect(message.Attachments[0].FileName).toBe('export.csv')
+    expect(message.Attachments[0].ContentType).toBe('text/csv')
+    expect(message.Attachments[0].Size).toBe(content.byteLength)
+  })
+
   it('refuses to deliver to a synthetic anonymous address', async () => {
     // Anonymous principals carry temp-<id>@anon.quackback.io, which is not
     // deliverable. The guard should drop it before it reaches the transport.

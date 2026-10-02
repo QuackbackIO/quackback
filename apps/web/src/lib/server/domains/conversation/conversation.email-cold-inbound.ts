@@ -45,7 +45,7 @@ import type {
 import type { PrincipalId, ChannelAccountId, ConversationId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
-import { validateAttachments } from '@/lib/server/messages/message-core'
+import { resolveAttachments, linkFilesToMessage } from '@/lib/server/domains/files/files.service'
 import {
   createPrincipal,
   ensurePrincipalForUser,
@@ -196,7 +196,11 @@ export async function createEmailConversation(input: {
   const safeContentJson = contentJson
     ? sanitizeTiptapContent(contentJson, { restrictImagesToTrustedOrigins: true })
     : null
-  const attachments = validateAttachments(input.attachments)
+  // The attachments were stored by the inbound pipeline as this sender's files.
+  const attachments = await resolveAttachments(input.attachments, {
+    principalId,
+    canAttachAnyFile: false,
+  })
   const now = new Date()
   const { conversation, message } = await db.transaction(async (tx) => {
     const [created] = await tx
@@ -247,6 +251,7 @@ export async function createEmailConversation(input: {
         metadata: { source: 'email', emailMessageId: inboundDedupeKey(parsed) ?? undefined },
       })
       .returning()
+    await linkFilesToMessage(tx, attachments, inserted!.id)
     return { conversation: created, message: inserted }
   })
 

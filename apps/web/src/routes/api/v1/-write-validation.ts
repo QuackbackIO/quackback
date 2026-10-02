@@ -18,15 +18,29 @@ export const priorityEnum = z.enum(CONVERSATION_PRIORITIES)
 export const messageContentSchema = z.string().min(1).max(4000)
 
 /**
- * A single image/file attachment ref. The service re-validates count/size/url,
- * so this only shapes the wire payload (matches `functions/tickets.ts`).
+ * A single image/file attachment ref, either a stored file by id (the
+ * documented flow: `POST /files` first, then attach the result here) or a
+ * legacy trusted URL. The service re-validates both shapes — count, the
+ * fileId's ownership, or the URL's trust and size — so this only shapes the
+ * wire payload (matches `functions/tickets.ts`). `url`/`size` are required
+ * only for the legacy shape: when `fileId` is given the service rebuilds
+ * every field (url, name, contentType, size) from the stored row, so nothing
+ * else on the wire is trusted.
  */
-export const attachmentSchema = z.object({
-  url: z.string(),
-  name: z.string().optional(),
-  contentType: z.string().optional(),
-  size: z.number(),
-})
+export const attachmentSchema = z
+  .object({
+    fileId: z
+      .string()
+      .regex(/^file_/, 'fileId must be a file ID (starts with "file_")')
+      .optional(),
+    url: z.string().optional(),
+    name: z.string().optional(),
+    contentType: z.string().optional(),
+    size: z.number().optional(),
+  })
+  .refine((a) => !!a.fileId || !!a.url, {
+    message: 'Provide either fileId (from POST /files) or url',
+  })
 
 export const attachmentsSchema = z.array(attachmentSchema).optional()
 

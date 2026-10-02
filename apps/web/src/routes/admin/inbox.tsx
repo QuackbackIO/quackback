@@ -753,12 +753,24 @@ function InboxPage() {
           conversationKeys.agentThread(conversationId),
           (prev) => applyAgentThreadEvent(prev, evt, conversationId)
         )
+        // A new message with files invalidates the detail panel's Files
+        // section — same event, no separate read.
+        if (evt.kind === 'message' && evt.message.attachments.length > 0) {
+          void queryClient.invalidateQueries({
+            queryKey: conversationKeys.agentConversationFiles(conversationId),
+          })
+        }
       } else if (evt.kind === 'ticket_message' || evt.kind === 'ticket_message_updated') {
         reconcileCachedThread<TicketThreadCache>(
           queryClient,
           ticketKeys.thread(evt.ticketId),
           (prev) => applyTicketThreadEvent(prev, evt, evt.ticketId)
         )
+        if (evt.kind === 'ticket_message' && evt.message.attachments.length > 0) {
+          void queryClient.invalidateQueries({
+            queryKey: conversationKeys.agentConversationFiles(evt.ticketId),
+          })
+        }
       }
     },
   })

@@ -39,6 +39,11 @@ const FORBIDDEN_CONTENT: { marker: string; library: string }[] = [
   { marker: 'reactEasyCrop_Container', library: 'react-easy-crop' },
   { marker: 'transliterate', library: 'transliteration tables' },
   { marker: 'Imports & exports', library: 'admin settings page registry' },
+  // File viewer engines: each loads only when someone opens a file of its format.
+  { marker: 'Setting up fake worker', library: 'PDF renderer' },
+  { marker: 'renderAltChunks', library: 'Word renderer' },
+  { marker: 'Sheet name cannot exceed 31 chars', library: 'spreadsheet reader' },
+  { marker: 'Could not find the language', library: 'syntax highlighting' },
 ]
 
 if (!existsSync(ASSETS_DIR)) {

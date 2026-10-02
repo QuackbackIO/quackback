@@ -18,6 +18,7 @@ import type { PermissionKey } from '@/lib/shared/permissions'
 import { PortalHeader } from '@/components/public/portal-header'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
 import { AuthDialog } from '@/components/auth/auth-dialog'
+import { FileViewerProvider, scrollToMessage } from '@/components/shared/files/file-viewer-context'
 import { buildPortalAuthDialogConfig } from '@/components/auth/portal-auth-dialog-config'
 import type { PortalAccessGateError } from '@/lib/shared/types/portal-gate-error'
 import { generateWorkspaceThemeCSS, readFontSans } from '@/lib/shared/theme'
@@ -409,7 +410,9 @@ function PortalLayout() {
                 showThemeToggle={themeMode === 'user' && !preview}
               />
               <main className="flex-1 w-full flex flex-col">
-                <Outlet />
+                <FileViewerProvider onJumpToMessage={scrollToMessage}>
+                  <Outlet />
+                </FileViewerProvider>
               </main>
               <AuthDialog authConfig={authConfig} workspaceName={workspaceName} />
             </div>

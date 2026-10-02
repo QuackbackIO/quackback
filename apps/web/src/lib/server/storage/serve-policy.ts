@@ -8,6 +8,7 @@
  * with a sandbox policy, never a page. Files embedded in the app (an <img>, a
  * <video>) are unaffected: browsers ignore Content-Disposition on embeds.
  */
+import { stripInvisible } from '@/lib/shared/files/file-name'
 
 const INLINE_TYPES = new Set([
   'image/jpeg',
@@ -52,6 +53,8 @@ const INLINE_EXTENSIONS: Record<string, string> = {
 /** The Content-Security-Policy a download carries, in case it is opened anyway. */
 export const DOWNLOAD_CSP = "sandbox; default-src 'none'"
 
+const MAX_DOWNLOAD_NAME_CHARS = 255
+
 export function isInlineType(contentType: string): boolean {
   return INLINE_TYPES.has(contentType.split(';')[0]!.trim().toLowerCase())
 }
@@ -62,6 +65,50 @@ const STORAGE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 export function downloadFileName(key: string): string {
   const base = key.slice(key.lastIndexOf('/') + 1).replace(STORAGE_ID, '')
   return base.replace(/[^A-Za-z0-9._-]/g, '_') || 'file'
+}
+
+/**
+ * A download name a link asks for, safe for a header: no control,
+ * bidirectional or invisible characters, quotes, backslashes or path
+ * separators, and at most 255 characters with the extension kept. Null when
+ * nothing is left.
+ */
+export function cleanDownloadName(raw: string | null | undefined): string | null {
+  const name = stripInvisible(String(raw ?? ''))
+    .replace(/["\\/]/g, '')
+    .trim()
+  if (!name || name === '.' || name === '..') return null
+  const chars = Array.from(name)
+  if (chars.length <= MAX_DOWNLOAD_NAME_CHARS) return name
+  const dot = name.lastIndexOf('.')
+  const ext = dot > 0 && name.length - dot <= 16 ? Array.from(name.slice(dot)) : []
+  return chars.slice(0, MAX_DOWNLOAD_NAME_CHARS - ext.length).join('') + ext.join('')
+}
+
+/** RFC 5987 percent-encoding: everything but its attr-chars. */
+function extValue(s: string): string {
+  return encodeURIComponent(s).replace(
+    /['()*]/g,
+    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`
+  )
+}
+
+/**
+ * `attachment`, with the exact name as `filename*` and an ASCII `filename`
+ * for clients that read only that. Safe for any name: the ASCII one keeps
+ * printable characters other than quotes, backslashes and percent signs.
+ */
+export function attachmentDisposition(name: string): string {
+  const ascii = name.replace(/[^\x20-\x7e]|["\\%]/gu, '_')
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${extValue(name)}`
+}
+
+/** Headers that make any response a download under `name`. */
+export function downloadHeaders(name: string): Record<string, string> {
+  return {
+    'Content-Disposition': attachmentDisposition(name),
+    'Content-Security-Policy': DOWNLOAD_CSP,
+  }
 }
 
 /** Headers that make a proxied response a download, unless its type is safe inline. */

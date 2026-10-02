@@ -46,7 +46,7 @@ export function canonicalizeImageMime(mime: string): string {
   return mime
 }
 
-function startsWithAt(buf: Buffer, offset: number, pattern: number[]): boolean {
+export function startsWithAt(buf: Uint8Array, offset: number, pattern: readonly number[]): boolean {
   if (buf.length < offset + pattern.length) return false
   for (let i = 0; i < pattern.length; i++) {
     if (buf[offset + i] !== pattern[i]) return false

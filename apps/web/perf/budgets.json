@@ -535,7 +535,7 @@
     },
     "sweep:doc:admin:/admin/settings/companies": {
       "dbQueries": 7,
-      "htmlKB": 136.5
+      "htmlKB": 143.4
     },
     "sweep:ui:admin:/admin/settings/companies": {
       "dbQueries": 7,

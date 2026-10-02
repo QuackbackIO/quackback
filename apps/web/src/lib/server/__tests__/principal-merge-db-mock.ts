@@ -107,6 +107,7 @@ export function mockDbModule(): Record<string, unknown> {
       principalId: 'conversationMessages.principalId',
       __name: 'conversation_messages',
     },
+    files: { uploadedById: 'files.uploadedById', __name: 'files' },
     conversationParticipants: {
       principalId: 'conversationParticipants.principalId',
       conversationId: 'conversationParticipants.conversationId',

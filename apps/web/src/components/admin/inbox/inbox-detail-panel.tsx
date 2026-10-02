@@ -21,7 +21,7 @@ import {
   TicketIcon,
   UserCircleIcon,
 } from '@heroicons/react/24/outline'
-import type { ConversationId, PrincipalId } from '@quackback/ids'
+import type { ConversationId, PrincipalId, TicketId } from '@quackback/ids'
 import {
   HANDOFF_REASON_LABELS,
   CONVERSATION_END_REASON_LABELS,
@@ -31,6 +31,9 @@ import {
 import type { InboxItemRef } from '@/lib/shared/inbox/items'
 import type { TicketDTO } from '@/lib/server/domains/tickets'
 import { conversationPanelQueries } from '@/lib/client/queries/conversation-panels'
+import { FileRow } from '@/components/shared/files/file-card'
+import { useFileViewer } from '@/components/shared/files/file-viewer-context'
+import { toViewerFile } from '@/components/shared/files/types'
 
 import { useCopilotTabGate } from '@/lib/client/hooks/use-copilot-tab-gate'
 import { formatSlaCountdown, dueCountdownTone } from '@/lib/shared/conversation/sla'
@@ -177,6 +180,55 @@ function TicketSlaChip({ sla }: { sla: NonNullable<TicketDTO['sla']> }) {
       <ClockIcon className="h-3 w-3" aria-hidden />
       {label}
     </span>
+  )
+}
+
+/**
+ * The Files section (after Contact): every attachment across the item's
+ * whole thread, newest first, as compact rows. Renders nothing for an item
+ * with no files at all — no empty section, no "no files yet" copy.
+ */
+function FilesSection({
+  target,
+  visible,
+}: {
+  target: { conversationId: ConversationId } | { ticketId: TicketId }
+  visible: boolean
+}) {
+  const { open } = useFileViewer()
+  const { data } = useQuery({
+    ...conversationPanelQueries.files(target),
+    enabled: visible,
+  })
+  const entries = data ?? []
+  if (entries.length === 0) return null
+
+  const galleryFiles = entries.map((e) =>
+    toViewerFile(e.attachment, {
+      senderName: e.senderName ?? undefined,
+      sentAt: e.sentAt,
+      messageId: e.messageId,
+    })
+  )
+
+  return (
+    <div className="space-y-1.5 border-t border-border/30 pt-4">
+      <div className="flex items-center justify-between">
+        <span className={MENU_LABEL}>
+          <FormattedMessage id="admin.inbox.filesSectionTitle" defaultMessage="Files" />
+        </span>
+        <span className="text-xs text-muted-foreground">{entries.length}</span>
+      </div>
+      <div className="flex flex-col">
+        {entries.map((entry, index) => (
+          <FileRow
+            key={`${entry.messageId}-${index}`}
+            attachment={entry.attachment}
+            onOpen={() => open(galleryFiles, index)}
+          />
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -486,6 +538,13 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
             )}
           </div>
         )}
+
+        {/* 1b. Files — every attachment across the item's whole thread. */}
+        {isTicketItem
+          ? ticket && <FilesSection target={{ ticketId: ticket.id }} visible={isVisible} />
+          : conversation && (
+              <FilesSection target={{ conversationId: conversation.id }} visible={isVisible} />
+            )}
 
         {!isTicketItem &&
           conversation?.channel === 'github' &&

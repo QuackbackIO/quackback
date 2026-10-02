@@ -9,7 +9,7 @@ import { BackLink } from '@/components/ui/back-link'
 import { EmptyState } from '@/components/shared/empty-state'
 import { VisitorConversationThread } from '@/components/shared/conversation/visitor-conversation-thread'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
-import { usePortalImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { usePortalFileUpload } from '@/lib/client/hooks/use-file-upload'
 import { getConversationPresenceFn } from '@/lib/server/functions/conversation'
 import {
   CONVERSATION_PRESENCE_POLL_MS,
@@ -45,7 +45,7 @@ function SupportThreadPage() {
       ? (portalLoader.initialUserData?.avatarUrl ?? null)
       : null
   const authPopover = useAuthPopoverSafe()
-  const { upload } = usePortalImageUpload()
+  const { upload } = usePortalFileUpload()
 
   // Converged Messages: ticket pairs open here too, so a tickets-enabled
   // workspace keeps this route alive even with the messenger/portal-support
@@ -125,7 +125,7 @@ function SupportThreadPage() {
             }
             linkPreviews={!!settings?.featureFlags?.supportInbox}
             currentUser={user ? { name: user.name, avatarUrl: portalAvatar ?? user.image } : null}
-            uploadImage={upload}
+            uploadFile={upload}
             presence={presenceQuery.data ?? OFFLINE}
             embedOpenMode="navigate"
             onConversationStarted={onConversationStarted}

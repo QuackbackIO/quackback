@@ -72,6 +72,7 @@ export {
 export {
   mapRowsToThreadMessages,
   loadConversationThread,
+  loadThreadFileExcerpts,
   loadAssistantItemState,
   ASSISTANT_THREAD_WINDOW,
   type AssistantItemState,

@@ -364,6 +364,7 @@ describe('replayGateVerdict', () => {
       '0287_conversation_message_edited_at',
       '0288_kb_translations_dutch_search',
       '0289_identity_provider_id_token_nonce',
+      '0290_files',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)

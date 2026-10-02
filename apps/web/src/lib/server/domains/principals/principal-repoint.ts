@@ -38,6 +38,7 @@ import {
   postActivity,
   conversations,
   conversationMessages,
+  files,
   conversationParticipants,
   conversationSummaries,
   postSubscriptions,
@@ -291,6 +292,12 @@ export const REPOINT_STEPS: RepointStep[] = [
     conversationMessages,
     'principal_id',
     'Message authorship. ON DELETE RESTRICT, same as conversations.'
+  ),
+  simpleRepoint(
+    'files',
+    files,
+    'uploaded_by_id',
+    'File uploader. A visitor who identifies mid-compose can still send the files they uploaded anonymously, and sent files keep their sender.'
   ),
   collisionRepoint(
     'conversation_participants',

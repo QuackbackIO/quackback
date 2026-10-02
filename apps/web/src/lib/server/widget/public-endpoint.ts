@@ -58,10 +58,14 @@ export async function enforcePerIpLimit(
   })
 }
 
-/** Bound widget abuse across IP, bearer session, and workspace. */
+/**
+ * Bound widget abuse across IP, bearer session, and workspace. The workspace
+ * bucket is shared by every visitor, so an endpoint one visitor calls many
+ * times in a burst (attaching several files) sets a larger `workspaceLimit`.
+ */
 export async function enforceWidgetQuota(
   request: Request,
-  spec: PerIpLimitSpec & { workspaceKey: string }
+  spec: PerIpLimitSpec & { workspaceKey: string; workspaceLimit?: number }
 ): Promise<Response | null> {
   const auth = request.headers.get('authorization') ?? ''
   const sessionKey = auth
@@ -72,9 +76,10 @@ export async function enforceWidgetQuota(
     { key: `${spec.keyPrefix}:session:${sessionKey}`, windowSeconds: spec.windowSeconds },
     { key: `${spec.keyPrefix}:workspace:${spec.workspaceKey}`, windowSeconds: spec.windowSeconds },
   ]
+  const limits = [spec.limit, spec.limit, spec.workspaceLimit ?? spec.limit]
   const results = await Promise.all(buckets.map((bucket) => incrementBucket(bucket)))
   const blockedIndex = results.findIndex(
-    (result) => result.count !== null && result.count > spec.limit
+    (result, i) => result.count !== null && result.count > limits[i]!
   )
   if (blockedIndex < 0) return null
   const retryAfter = await bucketRetryAfter(buckets[blockedIndex])

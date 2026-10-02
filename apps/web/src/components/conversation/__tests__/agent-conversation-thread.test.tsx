@@ -17,8 +17,25 @@
  */
 import { createRef } from 'react'
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { act, render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react'
+import {
+  act,
+  render as rtlRender,
+  screen,
+  cleanup,
+  fireEvent,
+  waitFor,
+  within,
+} from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+
+function render(node: React.ReactNode) {
+  return rtlRender(
+    <IntlProvider locale="en-US" messages={{}}>
+      {node}
+    </IntlProvider>
+  )
+}
 import type { TicketDTO } from '@/lib/server/domains/tickets'
 import type { ConversationDTO, AgentConversationMessageDTO } from '@/lib/shared/conversation/types'
 import type { LinkedTicketSummary } from '@/lib/shared/inbox/items'
@@ -272,17 +289,21 @@ vi.mock('@/lib/client/hooks/use-inbox-translation', () => ({
   },
 }))
 vi.mock('@/lib/client/hooks/use-copilot-insert', () => ({ useCopilotInsert: () => vi.fn() }))
-vi.mock('@/lib/client/hooks/use-image-upload', () => ({
-  useImageUpload: () => ({ upload: vi.fn() }),
+vi.mock('@/lib/client/hooks/use-file-upload', () => ({
+  useAgentFileUpload: () => ({ upload: vi.fn() }),
 }))
 const addFiles = vi.fn()
 vi.mock('@/lib/client/hooks/use-conversation-composer-attachments', () => ({
   useConversationComposerAttachments: () => ({
-    pending: [],
+    items: [],
+    attachments: [],
     addFiles,
     remove: vi.fn(),
+    retry: vi.fn(),
     clear: vi.fn(),
+    restore: vi.fn(),
     uploading: false,
+    hasErrors: false,
   }),
 }))
 
