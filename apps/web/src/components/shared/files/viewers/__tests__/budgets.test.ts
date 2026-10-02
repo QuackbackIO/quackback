@@ -8,7 +8,7 @@ import {
   withTimeout,
   BudgetTimeoutError,
 } from '../budgets'
-import { declareSize, deferSizes, renameInIndex } from './zip-fixtures'
+import { declareSize, deferSizes, localMethod, markEncrypted, renameInIndex } from './zip-fixtures'
 
 const MB = 1024 * 1024
 
@@ -159,6 +159,28 @@ describe('rebuildZipPackage: the rebuilt package', () => {
       ok: false,
       failure: 'corrupt',
     })
+  })
+
+  it('refuses a package with an encrypted part', () => {
+    const zip = zipOf({
+      '[Content_Types].xml': strToU8('<Types/>'),
+      'word/document.xml': strToU8('<w:document>hello</w:document>'),
+    })
+    expect(rebuildZipPackage(markEncrypted(zip, 'word/document.xml'))).toEqual({
+      ok: false,
+      failure: 'corrupt',
+    })
+  })
+
+  it('checks a folder entry’s local header too, though it rebuilds no folders', () => {
+    const zip = zipOf({
+      'word/document.xml': strToU8('<w:document>hello</w:document>'),
+      'word/media/': new Uint8Array(0),
+    })
+    const corrupt = { ok: false, failure: 'corrupt' }
+    expect(rebuildZipPackage(zip)).toMatchObject({ ok: true })
+    expect(rebuildZipPackage(markEncrypted(zip, 'word/media/'))).toEqual(corrupt)
+    expect(rebuildZipPackage(localMethod(zip, 'word/media/', 0))).toEqual(corrupt)
   })
 
   it('accepts sizes deferred to a data descriptor, as streaming writers leave them', () => {

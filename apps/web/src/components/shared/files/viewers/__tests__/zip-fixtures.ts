@@ -66,6 +66,22 @@ export function deferSizes(zip: Uint8Array, name: string): Uint8Array {
   return out
 }
 
+/** Marks an entry's local header encrypted, leaving its data as it is. */
+export function markEncrypted(zip: Uint8Array, name: string): Uint8Array {
+  const out = zip.slice()
+  const local = u32(out, centralHeaders(out)[entryIndex(out, name)]! + 42)
+  out[local + 6] = out[local + 6]! | 0x01
+  return out
+}
+
+/** Rewrites an entry's compression method in its local header only. */
+export function localMethod(zip: Uint8Array, name: string, method: number): Uint8Array {
+  const out = zip.slice()
+  const local = u32(out, centralHeaders(out)[entryIndex(out, name)]! + 42)
+  out[local + 8] = method
+  return out
+}
+
 /** Renames an entry in its central directory header only (same length). */
 export function renameInIndex(zip: Uint8Array, from: string, to: string): Uint8Array {
   if (from.length !== to.length) throw new Error('Names must be the same length')

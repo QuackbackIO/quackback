@@ -12,6 +12,7 @@
 import { zipSync, type Zippable } from 'fflate'
 import {
   checkZipBudget,
+  checkZipLocalHeader,
   inflateZipEntry,
   readZipIndex,
   ZIP_BUDGET,
@@ -20,8 +21,8 @@ import {
 } from '@/lib/shared/files/zip-budget'
 import type { EngineFailure } from '../types'
 
-export const MAX_ZIP_ENTRIES = 2_000
-export const MAX_ZIP_UNCOMPRESSED_BYTES = 150 * 1024 * 1024
+export const MAX_ZIP_ENTRIES = ZIP_BUDGET.maxEntries
+export const MAX_ZIP_UNCOMPRESSED_BYTES = ZIP_BUDGET.maxTotalBytes
 /**
  * Deflate cannot expand a stream by more than about 1,032:1, so an entry
  * declaring more than this is lying about its size.
@@ -68,10 +69,11 @@ export function rebuildZipPackage(
   const parts: Zippable = Object.create(null) as Zippable
   let uncompressedBytes = 0
   for (const entry of entries) {
-    if (!localHeaderAgrees(bytes, entry)) return CORRUPT
-    if (entry.name.endsWith('/')) continue
-    if (entry.name in parts) return CORRUPT
     try {
+      // Every local header must agree with the index, folders included.
+      checkZipLocalHeader(bytes, entry)
+      if (entry.name.endsWith('/')) continue
+      if (entry.name in parts) return CORRUPT
       // Stops at the declared size; a part that outgrows it lied.
       const data = inflateZipEntry(bytes, entry)
       parts[entry.name] = data
@@ -86,39 +88,6 @@ export function rebuildZipPackage(
     entries: entries.length,
     uncompressedBytes,
   }
-}
-
-function u16(b: Uint8Array, o: number): number {
-  return b[o]! | (b[o + 1]! << 8)
-}
-
-function u32(b: Uint8Array, o: number): number {
-  return (b[o]! | (b[o + 1]! << 8) | (b[o + 2]! << 16)) + b[o + 3]! * 0x1000000
-}
-
-const ENCRYPTED = 0x1
-const SIZES_IN_DESCRIPTOR = 0x8
-const ZIP64_SIZE = 0xffffffff
-
-/**
- * Whether an entry's local header tells the same story as the index: a
- * library that reads the local header would otherwise inflate a different
- * size than the one the budget checked. Sizes a streaming writer defers to a
- * data descriptor (zero here) and Zip64 sizes (in an extra field) leave the
- * index as the only record.
- */
-function localHeaderAgrees(bytes: Uint8Array, entry: ZipEntry): boolean {
-  const at = entry.localHeaderOffset
-  if (!Number.isSafeInteger(at) || at < 0 || at + 30 > bytes.length) return false
-  if (u32(bytes, at) !== 0x04034b50) return false
-  const flags = u16(bytes, at + 6)
-  if (flags & ENCRYPTED) return false
-  if (u16(bytes, at + 8) !== entry.compression) return false
-  const compressed = u32(bytes, at + 18)
-  const original = u32(bytes, at + 22)
-  if (compressed === ZIP64_SIZE || original === ZIP64_SIZE) return true
-  if (flags & SIZES_IN_DESCRIPTOR && compressed === 0 && original === 0) return true
-  return compressed === entry.compressedSize && original === entry.originalSize
 }
 
 /** True when the bytes open with a zip local file header. */
