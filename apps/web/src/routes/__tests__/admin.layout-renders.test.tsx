@@ -11,7 +11,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render, screen } from '@testing-library/react'
-import { QueryClient } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
   Outlet,
   RouterProvider,
@@ -107,7 +107,7 @@ function grant(permissions: PermissionKey[]) {
   }
 }
 
-function buildRouter() {
+function buildRouter(queryClient: QueryClient) {
   const rootRoute = createRootRouteWithContext<object>()({
     beforeLoad: () => rootAnswer,
     component: () => <Outlet />,
@@ -132,15 +132,20 @@ function buildRouter() {
   return createRouter({
     routeTree: rootRoute.addChildren([adminRoute.addChildren([inbox, roadmap])]),
     history: createMemoryHistory({ initialEntries: ['/admin/inbox'] }),
-    context: { queryClient: new QueryClient() },
+    context: { queryClient },
   })
 }
 
 async function mount() {
   shell.sidebarRenders = 0
   shell.widgetRenders = 0
-  const router = buildRouter()
-  render(<RouterProvider router={router as never} />)
+  const queryClient = new QueryClient()
+  const router = buildRouter(queryClient)
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router as never} />
+    </QueryClientProvider>
+  )
   await screen.findByText('inbox page')
   return router
 }

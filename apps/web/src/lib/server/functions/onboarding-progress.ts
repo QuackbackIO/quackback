@@ -5,6 +5,7 @@ import { readOnboardingProgress, markOnboardingProgress } from '@/lib/server/onb
 import { detectFirstWin } from '@/lib/server/activation-wins'
 import { getSettings } from './workspace'
 import { getSetupState } from '@/lib/shared/db-types'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 export const getOnboardingProgressFn = createServerFn({ method: 'GET' }).handler(async () => {
   const auth = await requireAuth()
@@ -22,7 +23,7 @@ export const markTourSeenFn = createServerFn({ method: 'POST' }).handler(async (
 })
 
 export const claimFirstWinMomentFn = createServerFn({ method: 'POST' }).handler(async () => {
-  const auth = await requireAuth()
+  const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
   const settings = await getSettings()
   const win = await detectFirstWin(getSetupState(settings?.setupState ?? null))
   return { show: win.reached && (await markOnboardingProgress(auth.user.id, 'firstWinShownAt')) }
