@@ -19,6 +19,8 @@ const SUSPICIOUS_RATIO = 100
 const SUSPICIOUS_UNPACKED = 1024 * 1024 * 1024
 /** Below this, a high ratio is just a small file of repeated bytes. */
 const RATIO_FLOOR = 1024 * 1024
+/** One collator for every comparison: building one per call dominates a long sort. */
+const NAME_ORDER = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
 
 interface TreeNode {
   name: string
@@ -83,11 +85,7 @@ function readListing(bytes: Uint8Array): Listing {
   const rows: Row[] = []
   let total = 0
   const order = (a: TreeNode, b: TreeNode) =>
-    a.dir !== b.dir
-      ? a.dir
-        ? -1
-        : 1
-      : a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+    a.dir !== b.dir ? (a.dir ? -1 : 1) : NAME_ORDER.compare(a.name, b.name)
   const walk = (node: TreeNode, depth: number) => {
     for (const child of [...node.children.values()].sort(order)) {
       total++
