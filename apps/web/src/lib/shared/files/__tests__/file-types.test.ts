@@ -7,6 +7,7 @@ import {
   isBlockedExtension,
   isPreviewable,
   maxBytesForFamily,
+  canDrawImageInline,
   MAX_ATTACHMENT_BYTES,
   MAX_VIDEO_ATTACHMENT_BYTES,
 } from '../file-types'
@@ -104,8 +105,24 @@ describe('formatBytes', () => {
     expect(formatBytes(184 * 1024)).toBe('184 KB')
     expect(formatBytes(18.4 * 1024 * 1024)).toBe('18.4 MB')
   })
+  it('drops a zero decimal', () => {
+    expect(formatBytes(25 * 1024 * 1024)).toBe('25 MB')
+    expect(formatBytes(1024 * 1024 * 1024)).toBe('1 GB')
+  })
   it('returns empty for nonsense', () => {
     expect(formatBytes(-1)).toBe('')
     expect(formatBytes(Number.NaN)).toBe('')
+  })
+})
+
+describe('canDrawImageInline', () => {
+  it('refuses TIFF and HEIC by type or by name', () => {
+    expect(canDrawImageInline('image/tiff', 'scan')).toBe(false)
+    expect(canDrawImageInline('application/octet-stream', 'photo.HEIC')).toBe(false)
+    expect(canDrawImageInline('image/heif; foo=bar', 'x')).toBe(false)
+  })
+  it('allows formats browsers draw', () => {
+    expect(canDrawImageInline('image/png', 'a.png')).toBe(true)
+    expect(canDrawImageInline('image/svg+xml', 'a.svg')).toBe(true)
   })
 })

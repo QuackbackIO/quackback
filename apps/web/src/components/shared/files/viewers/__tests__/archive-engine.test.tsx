@@ -80,7 +80,7 @@ describe('ArchiveEngine', () => {
 
   it('flags an archive that unpacks to far more than its size', () => {
     const { note } = renderZip({ 'zeros.bin': new Uint8Array(5 * 1024 * 1024) })
-    expect(note()).toBe('1 file · 5.0 MB unpacked · Unusually large when unpacked')
+    expect(note()).toBe('1 file · 5 MB unpacked · Unusually large when unpacked')
   })
 
   it('caps the listing and says how many more there are', () => {

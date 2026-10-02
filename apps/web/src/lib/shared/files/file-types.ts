@@ -342,6 +342,25 @@ export function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return ''
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
+  // One decimal, dropped when it is zero: "18.4 MB", "25 MB".
+  const oneDecimal = (n: number) => n.toFixed(1).replace(/\.0$/, '')
+  if (bytes < 1024 * 1024 * 1024) return `${oneDecimal(bytes / (1024 * 1024))} MB`
+  return `${oneDecimal(bytes / (1024 * 1024 * 1024))} GB`
+}
+
+/**
+ * Storage prefix of every file stored through the upload pipeline. Its
+ * objects are private, read through expiring links, and attached to messages
+ * only by file id.
+ */
+export const PIPELINE_FILES_PREFIX = 'files'
+
+/** Image formats most browsers cannot draw; the preview job derives a copy that they can. */
+const UNDRAWABLE_IMAGE_TYPES = new Set(['image/tiff', 'image/heic', 'image/heif'])
+const UNDRAWABLE_IMAGE_EXTENSIONS = new Set(['tif', 'tiff', 'heic', 'heif'])
+
+/** Whether a browser can draw this image as it is stored, by its type or its name. */
+export function canDrawImageInline(contentType: string, name: string): boolean {
+  const type = contentType.split(';')[0]!.trim().toLowerCase()
+  return !UNDRAWABLE_IMAGE_TYPES.has(type) && !UNDRAWABLE_IMAGE_EXTENSIONS.has(fileExtension(name))
 }
