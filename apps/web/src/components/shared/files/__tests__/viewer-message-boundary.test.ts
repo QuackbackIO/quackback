@@ -16,9 +16,22 @@ const SRC = resolve(__dirname, '../../../..')
 const VIEWER_MODULE =
   /^components\/shared\/files\/(file-viewer\.tsx|viewer-skeleton\.tsx|viewers\/)/
 
-const VIEWER_ID = new RegExp(
-  `['"\`](${VIEWER_MESSAGE_PREFIXES.map((p) => p.replace(/\./g, '\\.')).join('|')})[A-Za-z]`
-)
+/**
+ * Whether a source names a message id under one of the viewer's prefixes: a
+ * quoted prefix followed by the rest of an id (the prefix list itself is not
+ * a use).
+ */
+function usesViewerMessage(source: string): boolean {
+  for (const prefix of VIEWER_MESSAGE_PREFIXES) {
+    for (const quote of ["'", '"', '`']) {
+      const needle = quote + prefix
+      for (let at = source.indexOf(needle); at !== -1; at = source.indexOf(needle, at + 1)) {
+        if (/[A-Za-z]/.test(source.charAt(at + needle.length))) return true
+      }
+    }
+  }
+  return false
+}
 
 function sourceFiles(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
@@ -57,7 +70,7 @@ function resolveImport(from: string, specifier: string): string | null {
 
 const files = sourceFiles(SRC)
 const rel = (path: string) => relative(SRC, path)
-const users = files.filter((path) => VIEWER_ID.test(readFileSync(path, 'utf8')))
+const users = files.filter((path) => usesViewerMessage(readFileSync(path, 'utf8')))
 
 describe('viewer strings stay with the viewer', () => {
   it('are used only by modules loaded with the viewer', () => {
