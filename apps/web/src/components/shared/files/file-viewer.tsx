@@ -36,7 +36,7 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { buttonVariants } from '@/components/ui/button'
 import { formatBytes, MAX_ATTACHMENT_BYTES } from '@/lib/shared/files/file-types'
 import { cn } from '@/lib/shared/utils'
-import { downloadUrl } from './download-url'
+import { downloadUrl, withQueryParams } from './download-url'
 import { FileBadge } from './file-badge'
 import { ViewerSkeleton } from './viewer-skeleton'
 import {
@@ -88,10 +88,7 @@ const FAILURE_MESSAGE: Record<EngineFailure, { id: string; defaultMessage: strin
 
 /** The same-origin URL for a stored file's bytes (`?proxy=1` streams through this origin). */
 export function proxyUrl(url: string): string {
-  const hashAt = url.indexOf('#')
-  const base = hashAt === -1 ? url : url.slice(0, hashAt)
-  if (/[?&]proxy=1(&|$)/.test(base)) return base
-  return `${base}${base.includes('?') ? '&' : '?'}proxy=1`
+  return withQueryParams(url, { proxy: '1' })
 }
 
 class FetchFailure extends Error {

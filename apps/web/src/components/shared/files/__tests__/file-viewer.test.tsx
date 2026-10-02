@@ -314,6 +314,20 @@ describe('FileViewer fetching', () => {
     expect(new Headers(fetchMock.mock.calls[0]![1]?.headers).get('range')).toBeNull()
   })
 
+  it('keeps a URL fragment after the proxy query, instead of swallowing it', async () => {
+    const annotated = file({
+      name: 'annotated.pdf',
+      family: 'pdf',
+      fileId: 'file_annotated',
+      url: '/api/storage/files/annotated.pdf?read=tok#page=2',
+    })
+    renderViewer({ files: [annotated] })
+    await screen.findByTestId('engine')
+    expect(fetchMock.mock.calls[0]![0]).toBe(
+      '/api/storage/files/annotated.pdf?read=tok&proxy=1#page=2'
+    )
+  })
+
   it('starts the query when the stored URL has none', async () => {
     renderViewer({ files: [contract] })
     await screen.findByTestId('engine')
