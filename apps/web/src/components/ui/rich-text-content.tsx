@@ -69,6 +69,8 @@ const DOMPURIFY_CONFIG = {
     'rel',
     'width',
     'height',
+    'loading',
+    'decoding',
     'frameborder',
     'allow',
     'allowfullscreen',
@@ -77,6 +79,7 @@ const DOMPURIFY_CONFIG = {
     'checked',
     'disabled',
     'controls',
+    'start',
     'preload',
     'playsinline',
     'data-type',
@@ -177,7 +180,10 @@ export function RichTextContent({ content, className }: RichTextContentProps) {
     const html = canSanitize ? DOMPurify.sanitize(rawHtml, DOMPURIFY_CONFIG) : rawHtml
     return (
       <div
-        className={cn('prose prose-neutral dark:prose-invert max-w-none', className)}
+        className={cn(
+          'prose prose-neutral dark:prose-invert min-w-0 max-w-full [overflow-wrap:anywhere] [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto',
+          className
+        )}
         dangerouslySetInnerHTML={{ __html: html }}
       />
     )

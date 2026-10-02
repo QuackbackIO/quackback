@@ -109,8 +109,10 @@ export function generateContentHTML(content: JSONContent): string {
       case 'bulletList':
         return `<ul>${node.content?.map(renderNode).join('') ?? ''}</ul>`
 
-      case 'orderedList':
-        return `<ol>${node.content?.map(renderNode).join('') ?? ''}</ol>`
+      case 'orderedList': {
+        const start = safePositiveInt(node.attrs?.start, 1, 999999)
+        return `<ol${start !== 1 ? ` start="${start}"` : ''}>${node.content?.map(renderNode).join('') ?? ''}</ol>`
+      }
 
       case 'listItem': {
         // Unwrap single-paragraph list items to avoid <li><p>…</p></li>

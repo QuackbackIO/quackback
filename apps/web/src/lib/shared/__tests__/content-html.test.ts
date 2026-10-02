@@ -10,6 +10,14 @@ import type { JSONContent } from '@tiptap/core'
 import { generateContentHTML } from '../content-html'
 
 describe('generateContentHTML', () => {
+  it('preserves an ordered list start while refusing invalid attribute values', () => {
+    expect(generateContentHTML({ type: 'orderedList', attrs: { start: 7 } })).toBe(
+      '<ol start="7"></ol>'
+    )
+    for (const start of [-1, '7" onclick="alert(1)', Infinity, 1000000]) {
+      expect(generateContentHTML({ type: 'orderedList', attrs: { start } })).toBe('<ol></ol>')
+    }
+  })
   it('renders an uploaded video with native controls', () => {
     const html = generateContentHTML({
       type: 'doc',

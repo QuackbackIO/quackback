@@ -32,8 +32,10 @@ export function sanitizeUrl(url: string): string {
       return ''
     }
 
-    // Return the original URL if it was relative, otherwise the full href
-    return url.startsWith('/') ? url : parsed.href
+    // The base above is only for validation. Keep relative paths, fragments,
+    // and query references relative to the actual serving origin.
+    const trimmed = url.trim()
+    return /^[a-z][a-z\d+.-]*:/i.test(trimmed) ? parsed.href : trimmed
   } catch {
     // Invalid URL - reject it
     return ''

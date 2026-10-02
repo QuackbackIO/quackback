@@ -39,6 +39,7 @@ import { NoteContent } from '@/components/admin/conversation/note-content'
 import { isJumboEmojiMessage, JUMBO_EMOJI_CLASS } from '@/lib/shared/conversation/jumbo-emoji'
 import { RichTextContent } from '@/components/ui/rich-text-content'
 import { EmbedHydration } from '@/components/shared/embed-hydration'
+import { MessageMarkdown } from '@/components/shared/conversation/message-markdown'
 import type { EmbedOpenMode } from '@/components/shared/quackback-embed-card'
 import { LinkPreviews } from '@/components/shared/link-preview-card'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -265,9 +266,15 @@ export function bubbleContentTextClass(
   side: BubbleSide,
   opts: { note?: boolean; agentSelf?: boolean } = {}
 ): string {
-  if (opts.note) return 'text-foreground/90'
-  if (side === 'self' && opts.agentSelf) return 'text-foreground/90'
-  return side === 'self' ? 'text-primary-foreground' : 'text-foreground/90'
+  const color =
+    side === 'self' && !opts.note && !opts.agentSelf
+      ? 'text-primary-foreground'
+      : 'text-foreground/90'
+  return cn(
+    color,
+    '[&_p]:text-inherit [&_a]:text-inherit! [&_strong]:text-inherit [&_em]:text-inherit [&_code]:text-inherit [&_pre]:text-inherit [&_blockquote]:text-inherit [&_h1]:text-inherit [&_h2]:text-inherit [&_h3]:text-inherit [&_h4]:text-inherit [&_h5]:text-inherit [&_h6]:text-inherit [&_table]:text-inherit [&_thead]:text-inherit [&_th]:text-inherit [&_td]:text-inherit [&_li::marker]:text-inherit',
+    '[&_code]:bg-foreground/5 [&_pre]:bg-foreground/5'
+  )
 }
 
 /** A thin "New" divider rendered immediately above the first unread message. */
@@ -626,13 +633,15 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
                 ) : (
                   message.content && (
                     <>
-                      <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-                        {translation
-                          ? translation.showingOriginal
-                            ? translation.originalContent
-                            : translation.translatedContent
-                          : message.content}
-                      </div>
+                      <MessageMarkdown
+                        text={
+                          translation
+                            ? translation.showingOriginal
+                              ? translation.originalContent
+                              : translation.translatedContent
+                            : message.content
+                        }
+                      />
                       {translation && (
                         <button
                           type="button"
@@ -919,7 +928,7 @@ export function VisitorMessageBubble({
           (isAiReply ? (
             <AssistantAnswer text={content} citations={cited ?? []} />
           ) : (
-            <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">{content}</div>
+            <MessageMarkdown text={content} />
           ))
         )}
         {attachments && attachments.length > 0 && (
