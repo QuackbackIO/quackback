@@ -33,20 +33,26 @@ export function selfHostedPdfFiles(): Record<ResourceKind, Record<string, string
       })
     ),
     standardFontDataUrl: byFileName(
-      import.meta.glob<string>('../../../../../node_modules/pdfjs-dist/standard_fonts/*.{pfb,ttf}', {
-        query: '?url&no-inline',
-        import: 'default',
-        eager: true,
-        exhaustive: true,
-      })
+      import.meta.glob<string>(
+        '../../../../../node_modules/pdfjs-dist/standard_fonts/*.{pfb,ttf}',
+        {
+          query: '?url&no-inline',
+          import: 'default',
+          eager: true,
+          exhaustive: true,
+        }
+      )
     ),
     wasmUrl: byFileName(
-      import.meta.glob<string>('../../../../../node_modules/pdfjs-dist/wasm/{openjpeg,jbig2}.wasm', {
-        query: '?url&no-inline',
-        import: 'default',
-        eager: true,
-        exhaustive: true,
-      })
+      import.meta.glob<string>(
+        '../../../../../node_modules/pdfjs-dist/wasm/{openjpeg,jbig2}.wasm',
+        {
+          query: '?url&no-inline',
+          import: 'default',
+          eager: true,
+          exhaustive: true,
+        }
+      )
     ),
   }
   return files

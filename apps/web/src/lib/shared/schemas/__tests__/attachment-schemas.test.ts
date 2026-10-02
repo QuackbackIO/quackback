@@ -25,6 +25,8 @@ describe('attachment wire schemas', () => {
     expect(conversationAttachmentSchema.parse(legacy)).toEqual(legacy)
   })
   it('refuse an overlong file id', () => {
-    expect(() => conversationAttachmentSchema.parse({ ...upload, fileId: 'x'.repeat(200) })).toThrow()
+    expect(() =>
+      conversationAttachmentSchema.parse({ ...upload, fileId: 'x'.repeat(200) })
+    ).toThrow()
   })
 })
