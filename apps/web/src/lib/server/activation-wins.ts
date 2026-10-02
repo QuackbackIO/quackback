@@ -15,12 +15,14 @@ import {
   postVotes,
   principal,
   sql,
+  statusComponents,
   type OnboardingOutcome,
   type SetupState,
 } from '@/lib/server/db'
 
 export interface FirstWinFacts {
   customerOriginatedConversation?: boolean
+  serviceAdded?: boolean
   publishedArticle?: boolean
   deleted?: boolean
   externalPost?: boolean
@@ -36,6 +38,8 @@ export function qualifiesAsFirstWin(outcome: OnboardingOutcome, facts: FirstWinF
   switch (outcome) {
     case 'customer_support':
       return facts.customerOriginatedConversation === true
+    case 'status_page':
+      return facts.serviceAdded === true
     case 'help_center':
       return facts.publishedArticle === true
     case 'internal':
@@ -56,7 +60,8 @@ const externalPrincipal = or(eq(principal.role, 'user'), eq(principal.type, 'ano
 
 /** Query the first real outcome; onboarding-generated/test records never qualify. */
 export async function detectFirstWin(state: SetupState | null): Promise<FirstWinResult> {
-  const outcome = state?.useCase ?? 'product_feedback'
+  const primary = state?.goals?.[0] ?? state?.useCase ?? 'product_feedback'
+  const outcome = primary === 'product_feedback' && state?.feedbackPrivate ? 'internal' : primary
   if (outcome === 'customer_support') {
     const [row] = await db
       .select({ reachedAt: conversations.createdAt })
@@ -76,6 +81,16 @@ export async function detectFirstWin(state: SetupState | null): Promise<FirstWin
         )
       )
       .orderBy(asc(conversations.createdAt))
+      .limit(1)
+    return { reached: Boolean(row), reachedAt: row?.reachedAt.toISOString() ?? null }
+  }
+
+  if (outcome === 'status_page') {
+    const [row] = await db
+      .select({ reachedAt: statusComponents.createdAt })
+      .from(statusComponents)
+      .where(isNull(statusComponents.deletedAt))
+      .orderBy(asc(statusComponents.createdAt))
       .limit(1)
     return { reached: Boolean(row), reachedAt: row?.reachedAt.toISOString() ?? null }
   }

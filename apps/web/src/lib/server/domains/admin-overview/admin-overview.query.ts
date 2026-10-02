@@ -30,6 +30,7 @@ import {
   changelogEntries,
   changelogEntryPosts,
   helpCenterArticles,
+  statusComponents,
 } from '@/lib/server/db'
 import { can } from '@/lib/server/policy/authorize'
 import { conversationFilter } from '@/lib/server/policy/conversations'
@@ -131,7 +132,49 @@ export async function getAdminOverview(input: {
     help: helpOn ? { draftCount: help.draftCount, draftLink: help.draftLink } : undefined,
   })
 
+  const [realConversation, realPost, realArticle, realUpdate, realService] = await Promise.all([
+    supportOn
+      ? db.query.conversations.findFirst({
+          columns: { id: true },
+          where: and(
+            conversationFilter(actor),
+            sql`coalesce(${conversations.customAttributes}->>'test', 'false') <> 'true'`,
+            sql`coalesce(${conversations.customAttributes}->>'onboardingGenerated', 'false') <> 'true'`
+          ),
+        })
+      : undefined,
+    feedbackOn
+      ? db.query.posts.findFirst({
+          columns: { id: true },
+          where: and(
+            isNull(posts.deletedAt),
+            sql`coalesce(${posts.widgetMetadata}->>'onboardingGenerated', 'false') <> 'true'`,
+            sql`coalesce(${posts.widgetMetadata}->>'test', 'false') <> 'true'`
+          ),
+        })
+      : undefined,
+    helpOn
+      ? db.query.helpCenterArticles.findFirst({
+          columns: { id: true },
+          where: isNull(helpCenterArticles.deletedAt),
+        })
+      : undefined,
+    changelogOn
+      ? db.query.changelogEntries.findFirst({
+          columns: { id: true },
+          where: isNull(changelogEntries.deletedAt),
+        })
+      : undefined,
+    isProductEnabled(flags, 'status') && can(actor, PERMISSIONS.SETTINGS_MANAGE)
+      ? db.query.statusComponents.findFirst({
+          columns: { id: true },
+          where: isNull(statusComponents.deletedAt),
+        })
+      : undefined,
+  ])
+
   return {
+    hasRealData: Boolean(realConversation || realPost || realArticle || realUpdate || realService),
     metrics,
     attention: mixAttention(
       [support.attention, feedback.attention, feedback.announce],

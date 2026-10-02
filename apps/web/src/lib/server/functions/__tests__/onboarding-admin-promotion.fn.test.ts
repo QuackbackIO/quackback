@@ -25,9 +25,22 @@ const hoisted = vi.hoisted(() => ({
   settingsInsert: vi.fn(),
   invalidateSettingsCache: vi.fn(),
   flagWrites: [] as Record<string, unknown>[],
+  prepared: [] as { executor: unknown; state: { goals?: string[]; useCase?: string } }[],
   /** What `settings.cloud_workspace_key` holds — null on an install, a key on a
    *  workspace a control plane created. Read by the tx `execute` double below. */
   stamp: { value: null as string | null },
+}))
+
+vi.mock('@/lib/server/onboarding-board', () => ({
+  prepareOnboardingBoard: async (
+    executor: unknown,
+    state: { goals?: string[]; useCase?: string }
+  ) => {
+    const writer = executor as { insert?: unknown; update?: unknown }
+    expect(typeof writer.insert === 'function' || typeof writer.update === 'function').toBe(true)
+    expect(state.goals?.[0]).toBe(state.useCase)
+    hoisted.prepared.push({ executor, state })
+  },
 }))
 
 vi.mock('@/lib/server/auth/session', () => ({ getSession: hoisted.getSession }))
@@ -138,6 +151,7 @@ const { bootstrapAdminLock } = await import('@/lib/server/domains/principals/boo
 beforeEach(() => {
   vi.clearAllMocks()
   hoisted.flagWrites = []
+  hoisted.prepared = []
   hoisted.getSession.mockResolvedValue({
     session: { scope: 'dashboard' },
     user: { id: 'user_caller' },
@@ -180,6 +194,7 @@ describe('saveWorkspaceAndGoalFn bootstrap authorization', () => {
       })
     ).rejects.toThrow(/only admin/i)
     expect(hoisted.settingsInsert).not.toHaveBeenCalled()
+    expect(hoisted.prepared).toHaveLength(0)
     // Refused at the gate: the promoter is never even opened.
     expect(hoisted.ensurePrincipalForUser).not.toHaveBeenCalled()
     expect(hoisted.txExecute).not.toHaveBeenCalled()
@@ -206,6 +221,7 @@ describe('saveWorkspaceAndGoalFn bootstrap authorization', () => {
       { userId: 'user_caller', role: 'admin' },
       expect.any(Object)
     )
+    expect(hoisted.prepared[0]?.state.goals).toEqual(['product_feedback'])
   })
 
   it('promotes the first user and creates one combined V2 workspace record', async () => {

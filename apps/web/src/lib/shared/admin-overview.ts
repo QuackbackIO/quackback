@@ -152,6 +152,7 @@ export type OverviewSectionState = {
 }
 
 export type AdminOverviewData = {
+  hasRealData?: boolean
   metrics: OverviewMetric[]
   attention: OverviewAttentionItem[]
   momentum: OverviewMomentumItem[]

@@ -1,3 +1,6 @@
+import { LaunchPlanDock } from '@/components/onboarding/launch-plan-dock'
+import { useProductTour } from '@/components/onboarding/product-tour'
+import { FormattedMessage } from 'react-intl'
 import { railControlClass } from '@/components/admin/rail-item'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
@@ -170,6 +173,7 @@ function NavItem({
       to={href}
       onClick={onClick}
       data-admin-rail-item=""
+      data-tour={href === '/admin/roadmap' ? 'roadmap' : undefined}
       data-labeled=""
       {...railLinkProps(exact)}
     >
@@ -232,6 +236,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
   })
   // Each part is selected: the route context is a new object after every
   // navigation, while these stay the same until the viewer or workspace changes.
+  const tour = useProductTour()
   const session = useSessionContext()
   const settings = useWorkspaceSettings()
   const billingEnabled = useBillingEnabled()
@@ -334,7 +339,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
             </Link>
 
             {/* Main Navigation */}
-            <nav className="flex flex-col gap-0.5 px-2">
+            <nav data-tour="products" className="flex flex-col gap-0.5 px-2">
               {railItems.map((item) => (
                 <NavItem
                   key={item.href}
@@ -353,6 +358,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
 
             {/* Bottom Section */}
             <div className="flex flex-col gap-0.5 px-2">
+              <LaunchPlanDock />
               {/* Settings (admin-only) */}
               {showSettings && (
                 <NavItem href="/admin/settings" icon={Cog6ToothIcon} label="Settings" />
@@ -366,7 +372,12 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
               <NotificationBell labeled active={onNotificationsPage} />
 
               {/* Portal Link */}
-              <Link to="/" data-admin-rail-item="" className={railControlClass()}>
+              <Link
+                to="/"
+                data-tour="view-portal"
+                data-admin-rail-item=""
+                className={railControlClass()}
+              >
                 <GlobeAltIcon className="size-5 shrink-0" />
                 <span className="min-w-0 flex-1 truncate">View portal</span>
               </Link>
@@ -383,6 +394,12 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-52">
+                  <DropdownMenuItem onClick={() => tour?.start()}>
+                    <FormattedMessage
+                      id="onboarding.tour.replay"
+                      defaultMessage="Replay the tour"
+                    />
+                  </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <a
                       href="https://www.quackback.io/docs/"
@@ -538,6 +555,17 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                 <GlobeAltIcon className="h-5 w-5" />
                 View portal
               </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false)
+                  tour?.start()
+                }}
+                className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-muted-foreground hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-muted-foreground"
+              >
+                <QuestionMarkCircleIcon className="h-5 w-5" />
+                <FormattedMessage id="onboarding.tour.replay" defaultMessage="Replay the tour" />
+              </button>
               <div className="h-px bg-border/40 my-4" />
               <a
                 href="https://www.quackback.io/docs/"

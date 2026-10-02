@@ -21,6 +21,7 @@ describe('SetupState V2 normalization', () => {
       version: 1,
       steps: { core: true, workspace: true, boards: true },
       useCase: 'help_center',
+      goals: ['help_center'],
       completedAt: '2026-01-02T03:04:05.000Z',
     })
 
@@ -38,6 +39,7 @@ describe('SetupState V2 normalization', () => {
         },
       },
       useCase: 'help_center',
+      goals: ['help_center'],
       completedAt: '2026-01-02T03:04:05.000Z',
       completionSource: 'legacy',
       activationHandoffSeenAt: '2026-01-02T03:04:05.000Z',

@@ -44,6 +44,8 @@ export interface LaunchStatus {
   hasIntegration?: boolean
   hasFirstWin?: boolean
   firstWinAt?: string | null
+  goals?: OnboardingOutcome[]
+  feedbackPrivate?: boolean
   useCase?: UseCaseType | null
   taskResolutions?: OutcomeTaskResolutions
   permissions?: LaunchPermissions
@@ -130,6 +132,7 @@ export const OUTCOME_TAB_LABEL: Record<OnboardingOutcome, string> = {
   customer_support: 'Customer support',
   help_center: 'Help Center',
   internal: 'Internal feedback',
+  status_page: 'Status page',
 }
 
 export const OUTCOME_HOME: Record<OnboardingOutcome, { label: string; href: LaunchTaskHref }> = {
@@ -137,6 +140,7 @@ export const OUTCOME_HOME: Record<OnboardingOutcome, { label: string; href: Laun
   customer_support: { label: 'Open support', href: '/admin/inbox' },
   help_center: { label: 'Open Help Center', href: '/admin/help-center' },
   internal: { label: 'Open feedback', href: '/admin/feedback' },
+  status_page: { label: 'Open status', href: '/admin/status' },
 }
 
 export const FIRST_WIN_NOUN: Record<OnboardingOutcome, string> = {
@@ -144,6 +148,7 @@ export const FIRST_WIN_NOUN: Record<OnboardingOutcome, string> = {
   customer_support: 'customer conversation',
   help_center: 'published article',
   internal: 'team idea',
+  status_page: 'service',
 }
 
 const ALLOW_ALL: LaunchPermissions = {
@@ -196,7 +201,7 @@ function materializeTask(
   }
 }
 
-export function buildLaunchTasks(
+function buildOutcomeTasks(
   status: LaunchStatus,
   outcomeOverride?: OnboardingOutcome
 ): LaunchTask[] {
@@ -349,9 +354,11 @@ export function buildLaunchTasks(
         ? 'Receive your first customer conversation'
         : outcome === 'help_center'
           ? 'Publish your first article'
-          : outcome === 'internal'
-            ? 'Collect your first team idea'
-            : 'Receive your first customer post or vote',
+          : outcome === 'status_page'
+            ? 'Add your first service'
+            : outcome === 'internal'
+              ? 'Collect your first team idea'
+              : 'Receive your first customer post or vote',
     description: 'We’ll mark this complete automatically when it happens.',
     completed: Boolean(status.hasFirstWin),
     classification: 'first_win',
@@ -368,6 +375,61 @@ export function buildLaunchTasks(
   inputs.push(invite, branding, integration, firstWin)
 
   return inputs.map((task) => materializeTask(task, outcome, status.taskResolutions))
+}
+
+/** Merge selected product work in goal order, then shared polish and the primary win. */
+export function buildLaunchTasks(
+  status: LaunchStatus,
+  goalsOverride?: readonly OnboardingOutcome[] | OnboardingOutcome
+): LaunchTask[] {
+  if (typeof goalsOverride === 'string') return buildOutcomeTasks(status, goalsOverride)
+  const goals = goalsOverride ?? status.goals
+  if (!goals?.length) return buildOutcomeTasks(status)
+  const taskIds: Record<OnboardingOutcome, readonly string[]> = {
+    product_feedback: ['create-board', 'distribute-feedback'],
+    internal: ['create-board'],
+    customer_support: ['connect-messenger', 'set-up-quinn'],
+    help_center: ['help-article'],
+    status_page: ['add-status-service'],
+  }
+  const tasks: LaunchTask[] = []
+  const seen = new Set<string>()
+  for (const goal of goals) {
+    const outcome = goal === 'product_feedback' && status.feedbackPrivate ? 'internal' : goal
+    for (const task of buildOutcomeTasks(
+      {
+        ...status,
+        taskResolutions: {
+          ...status.taskResolutions,
+          [outcome]: {
+            ...status.taskResolutions?.[outcome],
+            ...status.taskResolutions?.[goals[0]],
+          },
+        },
+      },
+      outcome
+    )) {
+      if (!taskIds[outcome].includes(task.id) || seen.has(task.id)) continue
+      tasks.push(task.id === 'set-up-quinn' ? { ...task, classification: 'polish' } : task)
+      seen.add(task.id)
+    }
+  }
+  const shared = buildOutcomeTasks(status, goals[0]).filter(
+    (task) =>
+      task.classification === 'polish' ||
+      task.classification === 'first_win' ||
+      (task.id === 'publish-changelog' && goals.includes('product_feedback'))
+  )
+  for (const task of shared) {
+    if (seen.has(task.id)) continue
+    tasks.push(task.id === 'publish-changelog' ? { ...task, classification: 'polish' } : task)
+    seen.add(task.id)
+  }
+  return [
+    ...tasks.filter((task) => task.classification === 'prerequisite'),
+    ...tasks.filter((task) => task.classification === 'polish'),
+    ...tasks.filter((task) => task.classification === 'first_win'),
+  ]
 }
 
 export function launchChecklistSummary(
@@ -387,8 +449,8 @@ export function launchChecklistSummary(
   headline: string
   percent: number
 } {
-  const outcome = outcomeOverride ?? normalizeOutcome(status.useCase)
-  const tasks = buildLaunchTasks(status, outcome)
+  const outcome = outcomeOverride ?? status.goals?.[0] ?? normalizeOutcome(status.useCase)
+  const tasks = buildLaunchTasks(status, outcomeOverride)
   const prerequisites = tasks.filter((task) => task.classification === 'prerequisite')
   const skippedTasks = tasks.filter((task) => task.isSkipped && task.classification !== 'first_win')
   const counted = prerequisites.filter((task) => !task.isSkipped)

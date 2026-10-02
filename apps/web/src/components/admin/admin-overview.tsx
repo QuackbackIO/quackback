@@ -40,9 +40,11 @@ type Filter = OverviewAttentionKind | 'all'
 export function OverviewDashboard({
   actions,
   banner,
+  header,
 }: {
   actions?: ReactNode
   banner?: ReactNode
+  header?: ReactNode
 }) {
   const overview = useQuery(adminOverviewQueries.get())
   const [filter, setFilter] = useState<Filter>('all')
@@ -76,7 +78,7 @@ export function OverviewDashboard({
 
   return (
     <div className="min-w-0 space-y-6">
-      <PageHeader title="Home" actions={actions} />
+      {header ?? <PageHeader title="Home" actions={actions} />}
 
       {banner}
 
@@ -89,92 +91,96 @@ export function OverviewDashboard({
         </SettingsCard>
       ) : (
         <>
-          <CountsCard
-            metrics={data?.metrics ?? []}
-            loading={overview.isLoading}
-            onFilter={(next) => {
-              if (next !== 'helpCenter') setFilter(next)
-            }}
-          />
+          {data?.hasRealData !== false && (
+            <CountsCard
+              metrics={data?.metrics ?? []}
+              loading={overview.isLoading}
+              onFilter={(next) => {
+                if (next !== 'helpCenter') setFilter(next)
+              }}
+            />
+          )}
 
-          <div
-            className={cn(
-              'grid items-start gap-6',
-              hasAside && 'lg:grid-cols-[minmax(0,1.65fr)_minmax(280px,1fr)]'
-            )}
-          >
-            <SettingsCard flush>
-              {filters.length > 2 ? (
-                <Tabs
-                  value={filter}
-                  onValueChange={(value) => setFilter(value as Filter)}
-                  variant="line"
-                  className="gap-0 px-4"
-                >
-                  <TabsList className="h-9">
-                    {filters.map((item) => (
-                      <TabsTrigger key={item.id} value={item.id} className="pb-2">
-                        {item.label}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </Tabs>
-              ) : null}
+          {data?.hasRealData !== false && (
+            <div
+              className={cn(
+                'grid items-start gap-6',
+                hasAside && 'lg:grid-cols-[minmax(0,1.65fr)_minmax(280px,1fr)]'
+              )}
+            >
+              <SettingsCard flush>
+                {filters.length > 2 ? (
+                  <Tabs
+                    value={filter}
+                    onValueChange={(value) => setFilter(value as Filter)}
+                    variant="line"
+                    className="gap-0 px-4"
+                  >
+                    <TabsList className="h-9">
+                      {filters.map((item) => (
+                        <TabsTrigger key={item.id} value={item.id} className="pb-2">
+                          {item.label}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </Tabs>
+                ) : null}
+
+                {overview.isLoading ? (
+                  <RowsSkeleton rows={5} />
+                ) : (
+                  <>
+                    {feedError && attention.length > 0 ? (
+                      <p className="border-b border-border px-3 py-2.5 text-sm text-muted-foreground sm:px-4">
+                        {feedError}{' '}
+                        <RetryButton onClick={() => void overview.refetch()}>Try again</RetryButton>
+                      </p>
+                    ) : null}
+                    {attention.length > 0 ? (
+                      <div className="divide-y divide-border">
+                        {attention.map((item) => (
+                          <AttentionRow key={item.id} item={item} />
+                        ))}
+                      </div>
+                    ) : feedError ? (
+                      <Quiet>
+                        {feedError}{' '}
+                        <RetryButton onClick={() => void overview.refetch()}>Try again</RetryButton>
+                      </Quiet>
+                    ) : (
+                      <Quiet>Nothing to review</Quiet>
+                    )}
+                  </>
+                )}
+              </SettingsCard>
 
               {overview.isLoading ? (
-                <RowsSkeleton rows={5} />
-              ) : (
-                <>
-                  {feedError && attention.length > 0 ? (
-                    <p className="border-b border-border px-3 py-2.5 text-sm text-muted-foreground sm:px-4">
-                      {feedError}{' '}
-                      <RetryButton onClick={() => void overview.refetch()}>Try again</RetryButton>
-                    </p>
-                  ) : null}
-                  {attention.length > 0 ? (
-                    <div className="divide-y divide-border">
-                      {attention.map((item) => (
-                        <AttentionRow key={item.id} item={item} />
-                      ))}
-                    </div>
-                  ) : feedError ? (
-                    <Quiet>
-                      {feedError}{' '}
-                      <RetryButton onClick={() => void overview.refetch()}>Try again</RetryButton>
-                    </Quiet>
-                  ) : (
-                    <Quiet>Nothing to review</Quiet>
-                  )}
-                </>
-              )}
-            </SettingsCard>
-
-            {overview.isLoading ? (
-              <Skeleton className="hidden h-40 rounded-xl lg:block" />
-            ) : hasAside ? (
-              <aside className="min-w-0 space-y-6">
-                <ModuleCard title="Feedback" items={momentum}>
-                  {(item) => <MomentumRow key={item.postId} item={item} />}
-                </ModuleCard>
-                <ModuleCard
-                  title="Changelog"
-                  items={changelog}
-                  error={changelogError}
-                  onRetry={() => void overview.refetch()}
-                >
-                  {(item) => <DeskRow key={item.id} item={item} />}
-                </ModuleCard>
-                <ModuleCard
-                  title="Help Center"
-                  items={helpCenter}
-                  error={helpError}
-                  onRetry={() => void overview.refetch()}
-                >
-                  {(item) => <DeskRow key={item.id} item={item} />}
-                </ModuleCard>
-              </aside>
-            ) : null}
-          </div>
+                <Skeleton className="hidden h-40 rounded-xl lg:block" />
+              ) : hasAside ? (
+                <aside className="min-w-0 space-y-6">
+                  <ModuleCard title="Feedback" items={momentum}>
+                    {(item) => <MomentumRow key={item.postId} item={item} />}
+                  </ModuleCard>
+                  <ModuleCard
+                    title="Changelog"
+                    items={changelog}
+                    error={changelogError}
+                    onRetry={() => void overview.refetch()}
+                  >
+                    {(item) => <DeskRow key={item.id} item={item} />}
+                  </ModuleCard>
+                  <ModuleCard
+                    title="Help Center"
+                    items={helpCenter}
+                    error={helpError}
+                    onRetry={() => void overview.refetch()}
+                  >
+                    {(item) => <DeskRow key={item.id} item={item} />}
+                  </ModuleCard>
+                </aside>
+              ) : null}
+            </div>
+          )}
         </>
       )}
     </div>

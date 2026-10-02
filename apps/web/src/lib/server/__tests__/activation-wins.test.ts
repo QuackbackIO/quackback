@@ -5,6 +5,7 @@ describe('first-win predicates', () => {
   it.each([
     ['customer_support', { customerOriginatedConversation: true }],
     ['help_center', { publishedArticle: true }],
+    ['status_page', { serviceAdded: true }],
     ['product_feedback', { externalPost: true }],
     ['product_feedback', { externalVote: true }],
     ['internal', { onInternalBoard: true }],

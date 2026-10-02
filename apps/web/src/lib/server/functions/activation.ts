@@ -10,7 +10,6 @@ import {
   eq,
   getSetupState,
   helpCenterArticles,
-  helpCenterCategories,
   isNull,
   settings,
   sql,
@@ -51,6 +50,7 @@ const PRIMARY_TASK: Record<OnboardingOutcome, string> = {
   customer_support: 'connect-messenger',
   help_center: 'help-article',
   internal: 'create-board',
+  status_page: 'add-status-service',
 }
 
 function withTaskResolution(
@@ -249,7 +249,7 @@ export const setActivationGoalFn = createServerFn({ method: 'POST' })
         .set({ featureFlags: JSON.stringify(flags) })
         .where(eq(settings.id, row.id))
       return {
-        state: { ...current, useCase: data.outcome },
+        state: { ...current, useCase: data.outcome, goals: [data.outcome] },
         value: { enabledModules },
       }
     })
@@ -343,61 +343,23 @@ export const completeStartingPointFn = createServerFn({ method: 'POST' })
           resolution = 'configured'
         }
       } else if (outcome === 'help_center') {
-        if (!flags.helpCenter) {
-          resolution = 'unavailable'
-        } else {
-          let category = await tx.query.helpCenterCategories.findFirst({
-            where: eq(helpCenterCategories.slug, 'getting-started'),
-          })
-          if (category?.deletedAt) {
-            ;[category] = await tx
-              .update(helpCenterCategories)
-              .set({ deletedAt: null, updatedAt: new Date() })
-              .where(eq(helpCenterCategories.id, category.id))
-              .returning()
-          } else if (!category) {
-            ;[category] = await tx
-              .insert(helpCenterCategories)
-              .values({
-                name: 'Getting started',
-                slug: 'getting-started',
-                description: 'The first answers your customers need.',
-                position: 0,
-              })
-              .returning()
-          }
-
-          let article = await tx.query.helpCenterArticles.findFirst({
-            where: eq(helpCenterArticles.slug, 'getting-started-with-quackback'),
-          })
-          if (article?.deletedAt) {
-            ;[article] = await tx
-              .update(helpCenterArticles)
-              .set({ deletedAt: null, categoryId: category.id, updatedAt: new Date() })
-              .where(eq(helpCenterArticles.id, article.id))
-              .returning()
-            source = 'existing'
-          } else if (!article) {
-            ;[article] = await tx
-              .insert(helpCenterArticles)
-              .values({
-                categoryId: category.id,
-                slug: 'getting-started-with-quackback',
-                title: `Getting started with ${row.name}`,
-                content: 'Write the first answer your customers should find here.',
-                principalId: auth.principal.id,
-                position: 0,
-              })
-              .returning()
-          } else {
-            source = 'existing'
-          }
+        const article = flags.helpCenter
+          ? await tx.query.helpCenterArticles.findFirst({
+              where: isNull(helpCenterArticles.deletedAt),
+            })
+          : null
+        if (article) {
           resourceType = 'article'
           resourceId = article.id
-          resolution = source === 'existing' ? 'configured' : 'created'
+          source = 'existing'
+          resolution = 'configured'
+        } else {
+          resolution = flags.helpCenter ? 'deferred' : 'unavailable'
         }
+      } else if (outcome === 'status_page') {
+        resolution = flags.statusPage ? 'deferred' : 'unavailable'
       } else {
-        const internal = outcome === 'internal'
+        const internal = outcome === 'internal' || current.feedbackPrivate === true
         const slug = internal ? 'team-feedback' : 'feedback'
         let board = await tx.query.boards.findFirst({ where: eq(boards.slug, slug) })
         if (board?.deletedAt) {

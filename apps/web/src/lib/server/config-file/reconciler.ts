@@ -169,6 +169,9 @@ export function mergeSetupState(
       })
     : parsed.steps.startingPoint
   return {
+    ...parsed,
+    ...(workspace.useCase !== undefined && outcome ? { goals: [outcome] } : {}),
+    ...(outcome === 'internal' ? { feedbackPrivate: true } : {}),
     version: 2,
     steps: {
       core: forceComplete ? true : parsed.steps.core,

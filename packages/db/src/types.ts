@@ -292,6 +292,7 @@ export const USE_CASE_TYPES = [
   'product_feedback',
   'customer_support',
   'help_center',
+  'status_page',
   'internal',
   // Legacy — do not show in the picker
   'saas',
@@ -305,6 +306,7 @@ export const ONBOARDING_OUTCOMES = [
   'product_feedback',
   'customer_support',
   'help_center',
+  'status_page',
   'internal',
 ] as const
 export type OnboardingOutcome = (typeof ONBOARDING_OUTCOMES)[number]
@@ -362,6 +364,9 @@ export interface SetupState {
   completedAt?: string
   /** ICP outcome for setup and activation personalization. */
   useCase?: OnboardingOutcome
+  /** Ordered products selected during setup; the first is the activation goal. */
+  goals?: OnboardingOutcome[]
+  feedbackPrivate?: boolean
   /** Cloud owner saved or skipped the optional post-handoff identity polish. */
   workspaceDetailsSeenAt?: string
   completionSource?: SetupCompletionSource
@@ -467,9 +472,33 @@ function normalizeTaskResolutions(value: unknown): OutcomeTaskResolutions | unde
 export function normalizeSetupStateV2(value: unknown): SetupState | null {
   if (!isRecord(value)) return null
   const steps = isRecord(value.steps) ? value.steps : {}
-  const useCase = normalizeOnboardingOutcome(
+  const legacyUseCase = normalizeOnboardingOutcome(
     typeof value.useCase === 'string' ? value.useCase : undefined
   )
+
+  const selected = Array.isArray(value.goals)
+    ? value.goals.filter(
+        (goal): goal is OnboardingOutcome =>
+          typeof goal === 'string' && (ONBOARDING_OUTCOMES as readonly string[]).includes(goal)
+      )
+    : []
+  const legacyInternal = legacyUseCase === 'internal' || selected.includes('internal')
+  const goals = [
+    ...new Set(
+      (selected.length ? selected : legacyUseCase ? [legacyUseCase] : []).map((goal) =>
+        goal === 'internal' ? ('product_feedback' as const) : goal
+      )
+    ),
+  ]
+  const useCase = goals[0]
+  const intent = {
+    ...(goals.length ? { goals } : {}),
+    ...(legacyInternal
+      ? { feedbackPrivate: true }
+      : typeof value.feedbackPrivate === 'boolean'
+        ? { feedbackPrivate: value.feedbackPrivate }
+        : {}),
+  }
 
   if (value.version === 2) {
     const startingPoint = normalizeStartingPoint(steps.startingPoint)
@@ -493,6 +522,7 @@ export function normalizeSetupStateV2(value: unknown): SetupState | null {
       },
       ...(asIsoString(value.completedAt) ? { completedAt: value.completedAt as string } : {}),
       ...(useCase ? { useCase } : {}),
+      ...intent,
       ...(asIsoString(value.workspaceDetailsSeenAt)
         ? { workspaceDetailsSeenAt: value.workspaceDetailsSeenAt as string }
         : {}),
@@ -541,6 +571,7 @@ export function normalizeSetupStateV2(value: unknown): SetupState | null {
     },
     ...(completedAt ? { completedAt } : {}),
     ...(useCase ? { useCase } : {}),
+    ...intent,
     ...(legacyComplete ? { completionSource: knownCompletionSource } : {}),
     ...(legacyComplete ? { activationHandoffSeenAt: migrationTime } : {}),
     ...(Object.keys(migratedTasks).length > 0

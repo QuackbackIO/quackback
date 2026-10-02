@@ -1199,7 +1199,7 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
 /** Onboarding outcomes that may turn extra products on. Kept local so this
  *  file stays free of the db package. */
 export type FeatureFlagUseCase =
-  'product_feedback' | 'customer_support' | 'help_center' | 'internal'
+  'product_feedback' | 'customer_support' | 'help_center' | 'status_page' | 'internal'
 
 /** Flags to persist for a new workspace, or to merge on (never off) when
  *  the operator picks a goal that needs a module. */
@@ -1210,6 +1210,8 @@ export function featureFlagsForUseCase(useCase?: FeatureFlagUseCase | null): Fea
     flags.supportTickets = true
   } else if (useCase === 'help_center') {
     flags.helpCenter = true
+  } else if (useCase === 'status_page') {
+    flags.statusPage = true
   }
   return flags
 }
@@ -1225,6 +1227,7 @@ export function enableFlagsForUseCase(
     supportInbox: current.supportInbox || needed.supportInbox,
     supportTickets: current.supportTickets || needed.supportTickets,
     helpCenter: current.helpCenter || needed.helpCenter,
+    statusPage: current.statusPage || needed.statusPage,
   }
 }
 
@@ -1296,6 +1299,15 @@ export function flagsForGoal(
   useCase?: FeatureFlagUseCase | null
 ): { flags: FeatureFlags; enabledModules: string[] } {
   const flags = enableFlagsForUseCase(current, useCase)
+  return { flags, enabledModules: newlyEnabledProductLabels(current, flags) }
+}
+
+/** Enable the union of selected goals without disabling existing products. */
+export function flagsForGoals(
+  current: FeatureFlags,
+  goals: readonly FeatureFlagUseCase[]
+): { flags: FeatureFlags; enabledModules: string[] } {
+  const flags = goals.reduce((flags, goal) => enableFlagsForUseCase(flags, goal), current)
   return { flags, enabledModules: newlyEnabledProductLabels(current, flags) }
 }
 

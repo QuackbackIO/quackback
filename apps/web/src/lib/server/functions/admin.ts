@@ -456,7 +456,9 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
     hasIntegration,
     hasFirstWin: firstWin.reached,
     firstWinAt: firstWin.reachedAt,
-    useCase: setupState?.useCase ?? null,
+    useCase: setupState?.goals?.[0] ?? setupState?.useCase ?? null,
+    goals: setupState?.goals,
+    feedbackPrivate: setupState?.feedbackPrivate,
     taskResolutions: setupState?.taskResolutions ?? {},
     boardCount: orgBoards.length,
     maxBoards: tierLimits.maxBoards,
@@ -491,7 +493,13 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
  *  be skipped; storage is always `dismissed`. Legacy clients may still send
  *  `deferred`, which is accepted and normalized. */
 const taskResolutionSchema = z.object({
-  outcome: z.enum(['product_feedback', 'customer_support', 'help_center', 'internal']),
+  outcome: z.enum([
+    'product_feedback',
+    'customer_support',
+    'help_center',
+    'status_page',
+    'internal',
+  ]),
   taskId: z.string().min(1),
   resolution: z.enum(['deferred', 'dismissed']).nullable(),
 })
@@ -503,9 +511,7 @@ export const setLaunchTaskResolutionFn = createServerFn({ method: 'POST' })
     await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     const { buildLaunchTasks } = await import('@/lib/shared/launch-checklist')
     const status = await fetchOnboardingStatus()
-    const task = buildLaunchTasks(status, data.outcome).find(
-      (candidate) => candidate.id === data.taskId
-    )
+    const task = buildLaunchTasks(status).find((candidate) => candidate.id === data.taskId)
     if (!task) throw new Error('Unknown launch task')
     if (task.classification === 'first_win' && data.resolution) {
       throw new Error('The milestone cannot be skipped')
