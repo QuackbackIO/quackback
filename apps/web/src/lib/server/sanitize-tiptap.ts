@@ -17,7 +17,7 @@ import {
   sanitizeMediaUrl,
   safePositiveInt,
 } from '@/lib/shared/utils/sanitize'
-import { isTrustedAttachmentUrl, namesPipelineFile } from '@/lib/server/storage/trusted-url'
+import { namesPipelineFile, isTrustedInlineMediaUrl } from '@/lib/server/storage/trusted-url'
 import { normalizeVideoMimeType } from '@/lib/shared/storage-config'
 
 function isExtraTrustedImageHost(rawSrc: string, extraHosts: string[] | undefined): boolean {
@@ -173,7 +173,7 @@ function sanitizeAttrs(
       // shape intact so the serializer renders nothing.
       if (
         opts?.restrictImagesToTrustedOrigins &&
-        !isTrustedAttachmentUrl(rawSrc) &&
+        !isTrustedInlineMediaUrl(rawSrc) &&
         !isExtraTrustedImageHost(rawSrc, opts.extraTrustedImageHosts)
       ) {
         return { src: '', alt: '' }
@@ -201,7 +201,7 @@ function sanitizeAttrs(
       // pixel that fires against an agent's browser. An untrusted/empty/unsafe
       // src clears both attrs so the serializer renders nothing.
       const rawSrc = String(attrs.src ?? '')
-      if (!isTrustedAttachmentUrl(rawSrc) || namesPipelineFile(rawSrc)) return { src: '', alt: '' }
+      if (!isTrustedInlineMediaUrl(rawSrc)) return { src: '', alt: '' }
       const src = sanitizeImageUrl(rawSrc)
       if (!src) return { src: '', alt: '' }
       return { src, alt: String(attrs.alt ?? '').slice(0, 500) }
@@ -212,7 +212,7 @@ function sanitizeAttrs(
       // Native video is always an upload, never a remote embed. Keeping it on
       // the workspace's storage origin prevents a post from becoming a hidden
       // third-party tracking request.
-      if (!isTrustedAttachmentUrl(rawSrc) || namesPipelineFile(rawSrc)) {
+      if (!isTrustedInlineMediaUrl(rawSrc)) {
         return { src: '', mimeType: '', title: '' }
       }
       const src = sanitizeMediaUrl(rawSrc)

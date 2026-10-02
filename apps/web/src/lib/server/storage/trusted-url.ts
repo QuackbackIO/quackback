@@ -70,3 +70,14 @@ export function namesPipelineFile(url: string): boolean {
   const key = storedAssetKeyFromSrc(url) ?? publicBucketKey(url)
   return key !== null && key.split('/', 1)[0] === PIPELINE_FILES_PREFIX
 }
+
+/**
+ * Whether a URL may be rendered as inline media (an `image`, `chatImage` or
+ * `video` node's src): it must come from our own upload pipeline or the
+ * configured storage host, AND it must not name a file the file pipeline
+ * stored — those are attachments, attached by id, never inline. One gate for
+ * every inline media node, so a future node type cannot forget either half.
+ */
+export function isTrustedInlineMediaUrl(url: string): boolean {
+  return isTrustedAttachmentUrl(url) && !namesPipelineFile(url)
+}
