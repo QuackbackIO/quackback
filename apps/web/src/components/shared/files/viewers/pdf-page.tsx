@@ -229,43 +229,38 @@ export function PdfPage({
 }
 
 const THUMB_WIDTH = 80
+/** The page number under a thumbnail: its line and the gap above it. */
+const THUMB_LABEL_PX = 16 + 6
 
+/** The height a thumbnail and its page number take in the rail. */
+export function thumbSlotHeight(aspect: number): number {
+  return Math.round(THUMB_WIDTH * aspect) + THUMB_LABEL_PX
+}
+
+/**
+ * One page in the rail. The rail is virtualized, so a thumbnail exists only
+ * near the rail's view and draws as soon as it mounts.
+ */
 export function PdfThumb({
   pdf,
   pageNumber,
   pageWidthPt,
   aspect,
-  drawn,
   current,
   onSelect,
-  register,
 }: {
   pdf: PDFDocumentProxy
   pageNumber: number
   pageWidthPt: number
   /** Page height over width. */
   aspect: number
-  drawn: boolean
   current: boolean
   onSelect: (pageNumber: number) => void
-  register: (pageNumber: number, el: HTMLElement | null) => void
 }) {
   const intl = useIntl()
   const host = useRef<HTMLSpanElement>(null)
-  const buttonRef = useRef<HTMLButtonElement | null>(null)
-  const ref = useCallback(
-    (el: HTMLButtonElement | null) => {
-      buttonRef.current = el
-      register(pageNumber, el)
-    },
-    [register, pageNumber]
-  )
 
   useEffect(() => {
-    if (!drawn) {
-      host.current?.replaceChildren()
-      return
-    }
     let cancelled = false
     let task: RenderTask | null = null
     drawPage(pdf, pageNumber, THUMB_WIDTH / pageWidthPt, (t) => {
@@ -279,17 +274,11 @@ export function PdfThumb({
       cancelled = true
       task?.cancel()
     }
-  }, [pdf, pageNumber, pageWidthPt, drawn])
-
-  useEffect(() => {
-    if (current) buttonRef.current?.scrollIntoView({ block: 'nearest' })
-  }, [current])
+  }, [pdf, pageNumber, pageWidthPt])
 
   return (
     <button
-      ref={ref}
       type="button"
-      data-page={pageNumber}
       aria-label={intl.formatMessage(
         { id: 'files.pdf.pageAria', defaultMessage: 'Page {number}' },
         { number: pageNumber }
@@ -297,7 +286,7 @@ export function PdfThumb({
       aria-current={current ? 'page' : undefined}
       onClick={() => onSelect(pageNumber)}
       className={cn(
-        'flex cursor-pointer flex-col items-center gap-1.5 text-[11px] text-muted-foreground',
+        'flex cursor-pointer flex-col items-center gap-1.5 text-[11px] leading-4 text-muted-foreground',
         current && 'font-semibold text-foreground'
       )}
     >

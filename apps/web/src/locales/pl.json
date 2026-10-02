@@ -178,6 +178,7 @@
   "files.sheet.tabsAria": "Arkusze",
   "files.pdf.railAria": "Strony",
   "files.pdf.pageAria": "Strona {number}",
+  "files.pdf.firstPages": "Pokazuje pierwsze {count, plural, one {# stronę} few {# strony} many {# stron} other {# strony}}",
   "files.family.image": "Obraz",
   "files.family.video": "Wideo",
   "files.family.audio": "Audio",

@@ -178,6 +178,7 @@
   "files.sheet.tabsAria": "Tabellenblätter",
   "files.pdf.railAria": "Seiten",
   "files.pdf.pageAria": "Seite {number}",
+  "files.pdf.firstPages": "Zeigt die ersten {count, plural, one {# Seite} other {# Seiten}}",
   "files.family.image": "Bild",
   "files.family.video": "Video",
   "files.family.audio": "Audio",

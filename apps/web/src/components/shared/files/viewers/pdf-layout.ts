@@ -5,6 +5,13 @@
  */
 import { MAX_FIND_MATCHES } from './find-limit'
 
+/**
+ * Pages laid out, listed in the rail and searched. Each page costs a box on
+ * the desk, a thumbnail slot and its text for find; past this a preview is
+ * not where people read, and Download has the rest.
+ */
+export const MAX_PDF_PAGES = 500
+
 /** Fit-to-width never enlarges pages past this, so a wide dialog stays readable. */
 const FIT_MAX = 1.25
 /** pdf.js page units are points (1/72 in); CSS pixels are 1/96 in. */

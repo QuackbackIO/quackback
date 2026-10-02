@@ -178,6 +178,7 @@
   "files.sheet.tabsAria": "Bladen",
   "files.pdf.railAria": "Pagina's",
   "files.pdf.pageAria": "Pagina {number}",
+  "files.pdf.firstPages": "Toont de eerste {count, plural, one {# pagina} other {# pagina's}}",
   "files.family.image": "Afbeelding",
   "files.family.video": "Video",
   "files.family.audio": "Audio",

@@ -178,6 +178,7 @@
   "files.sheet.tabsAria": "工作表",
   "files.pdf.railAria": "页面",
   "files.pdf.pageAria": "第 {number} 页",
+  "files.pdf.firstPages": "显示前 {count, plural, other {# 页}}",
   "files.family.image": "图片",
   "files.family.video": "视频",
   "files.family.audio": "音频",

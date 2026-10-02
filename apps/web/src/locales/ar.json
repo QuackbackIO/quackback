@@ -178,6 +178,7 @@
   "files.sheet.tabsAria": "الأوراق",
   "files.pdf.railAria": "الصفحات",
   "files.pdf.pageAria": "صفحة {number}",
+  "files.pdf.firstPages": "يعرض أول {count, plural, other {# صفحة}}",
   "files.family.image": "صورة",
   "files.family.video": "فيديو",
   "files.family.audio": "صوت",

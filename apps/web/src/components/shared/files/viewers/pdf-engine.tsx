@@ -1,10 +1,11 @@
 /**
  * PDFs, drawn with the pdf.js core API (no viewer, no annotation layer, no
  * scripting). Pages sit as white paper on the desk and are drawn only near
- * the viewport; a thumbnail rail tracks the current page; find searches each
- * page's text and highlights matches in the text layer. Encrypted or damaged
- * files are reported as unreadable, and closing the viewer destroys the
- * document and its worker.
+ * the viewport; a thumbnail rail, virtualized like the pages, tracks the
+ * current page; find searches each page's text and highlights matches in the
+ * text layer. A long document shows its first `MAX_PDF_PAGES` pages and says
+ * so. Encrypted or damaged files are reported as unreadable, and closing the
+ * viewer destroys the document and its worker.
  */
 import './pdf-engine.css'
 import {
@@ -17,6 +18,7 @@ import {
   useState,
 } from 'react'
 import { useIntl } from 'react-intl'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   GlobalWorkerOptions,
   TextLayer,
@@ -34,6 +36,7 @@ import {
   currentPage,
   findMatches,
   fitWidthZoom,
+  MAX_PDF_PAGES,
   PDF_TO_CSS,
   pageTextIndex,
   pageTops,
@@ -42,7 +45,7 @@ import {
   stepMatch,
   type TextMatch,
 } from './pdf-layout'
-import { PdfPage, PdfThumb, type PageText } from './pdf-page'
+import { PdfPage, PdfThumb, thumbSlotHeight, type PageText } from './pdf-page'
 import { pdfDocumentParams } from './pdf-resources'
 import { ZOOM_MAX, ZOOM_MIN, clampZoom } from './zoom'
 
@@ -52,8 +55,10 @@ GlobalWorkerOptions.workerSrc = workerUrl
 const PAGE_GAP = 16
 /** Room for the desk's vertical scrollbar when fitting pages to its width. */
 const SCROLLBAR_ALLOWANCE = 16
-/** The thumbnail rail's width (`w-28`). */
+/** The thumbnail rail's width (`w-28`), its padding and the gap between thumbnails. */
 const RAIL_WIDTH = 112
+const RAIL_PADDING = 14
+const RAIL_GAP = 14
 const FIND_DEBOUNCE_MS = 150
 
 interface PageSize {
@@ -75,7 +80,6 @@ export default function PdfEngine({ data, onToolbar, onError, compact }: ViewerE
   const [fit, setFit] = useState(1)
   const [current, setCurrent] = useState(1)
   const [visible, setVisible] = useState<ReadonlySet<number>>(() => new Set([1]))
-  const [railVisible, setRailVisible] = useState<ReadonlySet<number>>(() => new Set([1]))
   const fail = useEffectEvent(onError)
   const report = useEffectEvent(onToolbar)
   const padding = compact ? 12 : 24
@@ -106,14 +110,13 @@ export default function PdfEngine({ data, onToolbar, onError, compact }: ViewerE
       setFit(fitted)
       setZoom(fitted)
       setCurrent(1)
-      setSizes(
-        Array.from({ length: doc.numPages }, () => ({ width: first.width, height: first.height }))
-      )
+      const shown = Math.min(doc.numPages, MAX_PDF_PAGES)
+      setSizes(Array.from({ length: shown }, () => ({ width: first.width, height: first.height })))
       setPdf(doc)
-      if (doc.numPages === 1) return
-      // Mixed page sizes settle once every page's box is known.
+      if (shown === 1) return
+      // Mixed page sizes settle once every shown page's box is known.
       const all = await Promise.all(
-        Array.from({ length: doc.numPages }, (_, i) =>
+        Array.from({ length: shown }, (_, i) =>
           doc.getPage(i + 1).then((page) => page.getViewport({ scale: 1 }))
         )
       )
@@ -225,10 +228,22 @@ export default function PdfEngine({ data, onToolbar, onError, compact }: ViewerE
   // ---- Which pages to draw --------------------------------------------------
 
   const deskObserver = useVisibility(deskRef, pdf, setVisible, '100% 0px')
-  const railObserver = useVisibility(railRef, compact ? null : pdf, setRailVisible, '50% 0px')
-  const total = pdf?.numPages ?? 0
+  const total = pdf ? sizes.length : 0
   const drawnPages = useMemo(() => new Set(pagesNear(visible, total)), [visible, total])
-  const drawnThumbs = useMemo(() => new Set(pagesNear(railVisible, total)), [railVisible, total])
+
+  // The rail holds only the thumbnails near its view, however long the document.
+  const rail = useVirtualizer({
+    count: compact ? 0 : total,
+    getScrollElement: () => railRef.current,
+    estimateSize: (i) => thumbSlotHeight(sizes[i] ? sizes[i].height / sizes[i].width : 1.29),
+    paddingStart: RAIL_PADDING,
+    paddingEnd: RAIL_PADDING,
+    gap: RAIL_GAP,
+    overscan: 3,
+  })
+  useEffect(() => {
+    if (!compact && total > 0) rail.scrollToIndex(current - 1)
+  }, [current, compact, total, rail])
 
   // ---- Find ---------------------------------------------------------------
 
@@ -264,7 +279,7 @@ export default function PdfEngine({ data, onToolbar, onError, compact }: ViewerE
     setSearching(true)
     const timer = setTimeout(() => {
       Promise.all(
-        Array.from({ length: pdf.numPages }, (_, i) => loadText(i + 1).then((t) => t.index.text))
+        Array.from({ length: total }, (_, i) => loadText(i + 1).then((t) => t.index.text))
       )
         .then((pageTexts) => {
           if (cancelled) return
@@ -282,7 +297,7 @@ export default function PdfEngine({ data, onToolbar, onError, compact }: ViewerE
       cancelled = true
       clearTimeout(timer)
     }
-  }, [pdf, findOpen, query, loadText])
+  }, [pdf, total, findOpen, query, loadText])
 
   const step = useCallback(
     (direction: 1 | -1) => {
@@ -320,14 +335,26 @@ export default function PdfEngine({ data, onToolbar, onError, compact }: ViewerE
 
   const changeZoom = useCallback((value: number) => setZoom(clampZoom(value, fit)), [fit])
 
+  const capped = pdf !== null && pdf.numPages > MAX_PDF_PAGES
+  const note = capped
+    ? intl.formatMessage(
+        {
+          id: 'files.pdf.firstPages',
+          defaultMessage: 'Showing the first {count, plural, one {# page} other {# pages}}',
+        },
+        { count: MAX_PDF_PAGES }
+      )
+    : undefined
+
   useEffect(() => {
     if (!pdf) return
     report({
       zoom: { value: zoom, min: Math.min(ZOOM_MIN, fit), max: ZOOM_MAX, set: changeZoom },
-      page: { current, total: pdf.numPages, go },
+      page: { current, total, go },
       find: { open: openFind },
+      ...(note ? { note } : {}),
     })
-  }, [pdf, zoom, fit, changeZoom, current, go, openFind])
+  }, [pdf, total, note, zoom, fit, changeZoom, current, go, openFind])
 
   // ---- Render -------------------------------------------------------------
 
@@ -337,21 +364,29 @@ export default function PdfEngine({ data, onToolbar, onError, compact }: ViewerE
         <nav
           ref={railRef}
           aria-label={intl.formatMessage({ id: 'files.pdf.railAria', defaultMessage: 'Pages' })}
-          className="flex w-28 shrink-0 flex-col items-center gap-3.5 overflow-y-auto border-r border-border bg-background px-3 py-3.5"
+          className="w-28 shrink-0 overflow-y-auto border-r border-border bg-background"
         >
-          {sizes.map((size, i) => (
-            <PdfThumb
-              key={i + 1}
-              pdf={pdf}
-              pageNumber={i + 1}
-              pageWidthPt={size.width}
-              aspect={size.height / size.width}
-              drawn={drawnThumbs.has(i + 1)}
-              current={current === i + 1}
-              onSelect={go}
-              register={railObserver}
-            />
-          ))}
+          <div className="relative w-full" style={{ height: rail.getTotalSize() }}>
+            {rail.getVirtualItems().map((item) => {
+              const size = sizes[item.index]!
+              return (
+                <div
+                  key={item.key}
+                  className="absolute inset-x-0 top-0 flex justify-center"
+                  style={{ transform: `translateY(${item.start}px)` }}
+                >
+                  <PdfThumb
+                    pdf={pdf}
+                    pageNumber={item.index + 1}
+                    pageWidthPt={size.width}
+                    aspect={size.height / size.width}
+                    current={current === item.index + 1}
+                    onSelect={go}
+                  />
+                </div>
+              )
+            })}
+          </div>
         </nav>
       )}
       <div className="relative flex min-h-0 min-w-0 flex-1">

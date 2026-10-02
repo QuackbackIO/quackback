@@ -178,6 +178,7 @@
   "files.sheet.tabsAria": "Листы",
   "files.pdf.railAria": "Страницы",
   "files.pdf.pageAria": "Страница {number}",
+  "files.pdf.firstPages": "Показаны первые {count, plural, one {# страница} few {# страницы} many {# страниц} other {# страницы}}",
   "files.family.image": "Изображение",
   "files.family.video": "Видео",
   "files.family.audio": "Аудио",

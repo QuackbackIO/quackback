@@ -13,6 +13,7 @@ import {
   render as rtlRender,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import type { EngineToolbar, ViewerEngineProps, ViewerFile } from '../../types'
@@ -114,7 +115,7 @@ const { default: PdfEngine } = await import('../pdf-engine')
 
 function render(node: React.ReactNode) {
   return rtlRender(
-    <IntlProvider locale="en-US" messages={{}}>
+    <IntlProvider locale="en" messages={{}}>
       {node}
     </IntlProvider>
   )
@@ -198,5 +199,48 @@ describe('PdfEngine', () => {
     // Escape closes the bar and is marked handled, so the viewer stays open.
     expect(fireEvent.keyDown(input, { key: 'Escape' })).toBe(false)
     expect(screen.queryByRole('searchbox')).toBeNull()
+  })
+
+  it('lays out at most the first 500 pages and says so', async () => {
+    fake.state.pages = Array.from({ length: 1200 }, (_, i) => [`needle on page ${i + 1}`])
+    const p = props()
+    const { container } = render(<PdfEngine {...p} />)
+    await waitFor(() => expect(lastToolbar(p).page).toMatchObject({ current: 1, total: 500 }))
+    expect(lastToolbar(p).note).toBe('Showing the first 500 pages')
+    expect(container.querySelectorAll('[role="group"][data-page]')).toHaveLength(500)
+    expect(container.querySelector('[data-page="501"]')).toBeNull()
+
+    // Find reads only the pages laid out.
+    act(() => lastToolbar(p).find!.open())
+    fireEvent.change(await screen.findByRole('searchbox', { name: 'Find in file' }), {
+      target: { value: 'needle' },
+    })
+    expect(await screen.findByText('1 of 500')).toBeInTheDocument()
+  })
+
+  it('has no note for a document within the cap', async () => {
+    const p = props()
+    render(<PdfEngine {...p} />)
+    await waitFor(() => expect(lastToolbar(p).page).toMatchObject({ total: 3 }))
+    expect(lastToolbar(p).note).toBeUndefined()
+  })
+
+  it('draws only the thumbnails near the rail’s view', async () => {
+    fake.state.pages = Array.from({ length: 300 }, () => ['text'])
+    const p = props()
+    render(<PdfEngine {...p} />)
+    const rail = await screen.findByRole('navigation', { name: 'Pages' })
+    const thumbs = within(rail).getAllByRole('button')
+    expect(thumbs.length).toBeGreaterThan(0)
+    expect(thumbs.length).toBeLessThan(30)
+    expect(thumbs[0]).toHaveAccessibleName('Page 1')
+    expect(within(rail).queryByRole('button', { name: 'Page 300' })).toBeNull()
+  })
+
+  it('leaves the rail out of the widget’s narrow sheet', async () => {
+    const p = props({ compact: true })
+    render(<PdfEngine {...p} />)
+    await waitFor(() => expect(lastToolbar(p).page).toMatchObject({ total: 3 }))
+    expect(screen.queryByRole('navigation', { name: 'Pages' })).toBeNull()
   })
 })
