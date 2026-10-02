@@ -199,6 +199,7 @@
   "files.upload.error.empty": "檔案是空的",
   "files.upload.error.tooLarge": "超過 {size} MB",
   "files.upload.error.blocked": "無法傳送此類型的檔案",
+  "files.upload.error.rateLimited": "上傳次數過多。請一分鐘後再試一次。",
   "admin.inbox.filesSectionTitle": "檔案",
   "portal.header.nav.feedback": "意見回饋",
   "portal.header.nav.roadmap": "產品藍圖",

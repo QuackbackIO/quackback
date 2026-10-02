@@ -215,6 +215,28 @@ describe('ComposerAttachmentTray', () => {
       expect(screen.getByText("This file type can't be sent")).toBeInTheDocument()
     })
 
+    it('maps a rate_limited reason to a localized message instead of the raw server text', () => {
+      render(
+        <ComposerAttachmentTray
+          items={[
+            item({
+              name: 'shot.png',
+              family: 'image',
+              status: 'error',
+              file: undefined,
+              error: 'Too many uploads, slow down',
+              errorReason: 'rate_limited',
+              retryable: true,
+            }),
+          ]}
+          onRemove={vi.fn()}
+          onRetry={vi.fn()}
+        />
+      )
+      expect(screen.getByText('Too many uploads. Try again in a minute.')).toBeInTheDocument()
+      expect(screen.queryByText('Too many uploads, slow down')).not.toBeInTheDocument()
+    })
+
     it('falls back to the raw message for an unrecognized or missing reason', () => {
       render(
         <ComposerAttachmentTray

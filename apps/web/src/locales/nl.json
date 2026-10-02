@@ -199,6 +199,7 @@
   "files.upload.error.empty": "Het bestand is leeg",
   "files.upload.error.tooLarge": "Meer dan {size} MB",
   "files.upload.error.blocked": "Dit bestandstype kan niet worden verzonden",
+  "files.upload.error.rateLimited": "Te veel uploads. Probeer het over een minuut opnieuw.",
   "admin.inbox.filesSectionTitle": "Bestanden",
   "portal.header.nav.feedback": "Feedback",
   "portal.header.nav.roadmap": "Roadmap",

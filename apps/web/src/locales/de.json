@@ -199,6 +199,7 @@
   "files.upload.error.empty": "Die Datei ist leer",
   "files.upload.error.tooLarge": "Über {size} MB",
   "files.upload.error.blocked": "Dieser Dateityp kann nicht gesendet werden",
+  "files.upload.error.rateLimited": "Zu viele Uploads. Versuch es in einer Minute noch einmal.",
   "admin.inbox.filesSectionTitle": "Dateien",
   "portal.header.nav.feedback": "Feedback",
   "portal.header.nav.roadmap": "Roadmap",

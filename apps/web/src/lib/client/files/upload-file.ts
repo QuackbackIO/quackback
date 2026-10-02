@@ -28,6 +28,20 @@ export interface UploadFileOptions {
   signal?: AbortSignal
 }
 
+/**
+ * The widget's own endpoints (401/429/503) answer `{ error: { code,
+ * message } }` (`widgetJsonError`); every other upload failure answers
+ * `{ error: <string>, reason? }`. Reads a message out of either shape,
+ * never stringifying an object into "[object Object]".
+ */
+function errorMessageFrom(error: unknown): string | undefined {
+  if (typeof error === 'string') return error
+  if (error && typeof error === 'object' && typeof (error as { message?: unknown }).message === 'string') {
+    return (error as { message: string }).message
+  }
+  return undefined
+}
+
 /** Clipboard pastes often hand over a nameless Blob. Give it a name that
  *  matches its declared type so the server (and the tray) show something
  *  sensible instead of a bare extension-less "file". */
@@ -66,7 +80,7 @@ export function uploadFile(file: File, options: UploadFileOptions): Promise<Uplo
     xhr.onabort = () => reject(new DOMException('Aborted', 'AbortError'))
     xhr.onerror = () => reject(new UploadError('Upload failed'))
     xhr.onload = () => {
-      let body: { error?: string; reason?: string } & Partial<UploadedFile> = {}
+      let body: { error?: unknown; reason?: string } & Partial<UploadedFile> = {}
       try {
         body = JSON.parse(xhr.responseText || '{}')
       } catch {
@@ -80,7 +94,12 @@ export function uploadFile(file: File, options: UploadFileOptions): Promise<Uplo
         resolve(body as UploadedFile)
         return
       }
-      reject(new UploadError(body.error || 'Upload failed', body.reason))
+      const message = errorMessageFrom(body.error)
+      if (xhr.status === 429) {
+        reject(new UploadError(message ?? 'Too many uploads, slow down', 'rate_limited'))
+        return
+      }
+      reject(new UploadError(message ?? 'Upload failed', body.reason))
     }
     xhr.send(file)
   })

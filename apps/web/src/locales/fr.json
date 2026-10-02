@@ -199,6 +199,7 @@
   "files.upload.error.empty": "Le fichier est vide",
   "files.upload.error.tooLarge": "Plus de {size} MB",
   "files.upload.error.blocked": "Ce type de fichier ne peut pas être envoyé",
+  "files.upload.error.rateLimited": "Trop d'envois. Veuillez réessayer dans une minute.",
   "admin.inbox.filesSectionTitle": "Fichiers",
   "portal.header.nav.feedback": "Feedback",
   "portal.header.nav.roadmap": "Roadmap",

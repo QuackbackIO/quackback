@@ -36,6 +36,11 @@ function localizedError(item: ComposerAttachmentItem, intl: IntlShape): string {
         id: 'files.upload.error.blocked',
         defaultMessage: "This file type can't be sent",
       })
+    case 'rate_limited':
+      return intl.formatMessage({
+        id: 'files.upload.error.rateLimited',
+        defaultMessage: 'Too many uploads. Try again in a minute.',
+      })
     default:
       return item.error ?? ''
   }

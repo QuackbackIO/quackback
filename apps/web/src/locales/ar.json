@@ -199,6 +199,7 @@
   "files.upload.error.empty": "الملف فارغ",
   "files.upload.error.tooLarge": "أكبر من {size} MB",
   "files.upload.error.blocked": "لا يمكن إرسال هذا النوع من الملفات",
+  "files.upload.error.rateLimited": "عدد كبير جدًا من التحميلات. يرجى المحاولة مرة أخرى بعد دقيقة.",
   "admin.inbox.filesSectionTitle": "الملفات",
   "portal.header.nav.feedback": "الملاحظات",
   "portal.header.nav.roadmap": "خارطة الطريق",

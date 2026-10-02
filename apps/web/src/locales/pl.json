@@ -199,6 +199,7 @@
   "files.upload.error.empty": "Plik jest pusty",
   "files.upload.error.tooLarge": "Ponad {size} MB",
   "files.upload.error.blocked": "Tego typu plików nie można wysłać",
+  "files.upload.error.rateLimited": "Za dużo przesyłanych plików. Spróbuj ponownie za minutę.",
   "admin.inbox.filesSectionTitle": "Pliki",
   "portal.header.nav.feedback": "Pomysły",
   "portal.header.nav.roadmap": "Plan rozwoju",

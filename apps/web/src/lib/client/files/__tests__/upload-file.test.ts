@@ -148,6 +148,49 @@ describe('uploadFile', () => {
     await expect(promise).rejects.toMatchObject({ message: 'Upload failed', reason: undefined })
   })
 
+  it('reads the message out of a widget error response, which answers { error: { code, message } }', async () => {
+    const f = file('a.png', 1, 'image/png')
+    const promise = uploadFile(f, { endpoint: '/api/widget/files' })
+    const xhr = lastXhr()
+    xhr.status = 401
+    xhr.responseText = JSON.stringify({ error: { code: 'AUTH_REQUIRED', message: 'Valid widget session required' } })
+    xhr.onload?.()
+    await expect(promise).rejects.toMatchObject({ message: 'Valid widget session required' })
+  })
+
+  it('never surfaces "[object Object]" when the error body is an object with no message', async () => {
+    const f = file('a.png', 1, 'image/png')
+    const promise = uploadFile(f, { endpoint: '/api/widget/files' })
+    const xhr = lastXhr()
+    xhr.status = 503
+    xhr.responseText = JSON.stringify({ error: { code: 'WORKSPACE_UNAVAILABLE' } })
+    xhr.onload?.()
+    await expect(promise).rejects.toMatchObject({ message: 'Upload failed' })
+  })
+
+  it('maps a 429 to a rate-limited reason regardless of the body shape', async () => {
+    const f = file('a.png', 1, 'image/png')
+    const promise = uploadFile(f, { endpoint: '/api/widget/files' })
+    const xhr = lastXhr()
+    xhr.status = 429
+    xhr.responseText = JSON.stringify({ error: { code: 'RATE_LIMITED', message: 'Too many uploads, slow down' } })
+    xhr.onload?.()
+    await expect(promise).rejects.toMatchObject({ reason: 'rate_limited' })
+  })
+
+  it('still reads a string error with a reason from the plain upload endpoint', async () => {
+    const f = file('big.mov', 1, 'video/quicktime')
+    const promise = uploadFile(f, { endpoint: '/api/upload/file' })
+    const xhr = lastXhr()
+    xhr.status = 415
+    xhr.responseText = JSON.stringify({ error: "This file type can't be sent", reason: 'blocked' })
+    xhr.onload?.()
+    await expect(promise).rejects.toMatchObject({
+      message: "This file type can't be sent",
+      reason: 'blocked',
+    })
+  })
+
   it('aborts the underlying request and rejects with an AbortError when the signal aborts', async () => {
     const controller = new AbortController()
     const f = file('a.txt', 1, 'text/plain')

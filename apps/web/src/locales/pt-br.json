@@ -199,6 +199,7 @@
   "files.upload.error.empty": "O arquivo está vazio",
   "files.upload.error.tooLarge": "Mais de {size} MB",
   "files.upload.error.blocked": "Esse tipo de arquivo não pode ser enviado",
+  "files.upload.error.rateLimited": "Muitos envios. Tente novamente em um minuto.",
   "admin.inbox.filesSectionTitle": "Arquivos",
   "portal.header.nav.feedback": "Feedback",
   "portal.header.nav.roadmap": "Roadmap",

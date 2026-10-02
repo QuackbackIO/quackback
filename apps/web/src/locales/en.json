@@ -199,6 +199,7 @@
   "files.upload.error.empty": "The file is empty",
   "files.upload.error.tooLarge": "Over {size} MB",
   "files.upload.error.blocked": "This file type can't be sent",
+  "files.upload.error.rateLimited": "Too many uploads. Try again in a minute.",
   "admin.inbox.filesSectionTitle": "Files",
   "portal.header.nav.feedback": "Feedback",
   "portal.header.nav.roadmap": "Roadmap",

@@ -199,6 +199,7 @@
   "files.upload.error.empty": "Файл пуст",
   "files.upload.error.tooLarge": "Больше {size} MB",
   "files.upload.error.blocked": "Файлы такого типа нельзя отправить",
+  "files.upload.error.rateLimited": "Слишком много загрузок. Повторите попытку через минуту.",
   "admin.inbox.filesSectionTitle": "Файлы",
   "portal.header.nav.feedback": "Обратная связь",
   "portal.header.nav.roadmap": "Дорожная карта",

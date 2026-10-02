@@ -199,6 +199,7 @@
   "files.upload.error.empty": "文件为空",
   "files.upload.error.tooLarge": "超过 {size} MB",
   "files.upload.error.blocked": "无法发送此类型的文件",
+  "files.upload.error.rateLimited": "上传次数过多。请一分钟后重试。",
   "admin.inbox.filesSectionTitle": "文件",
   "portal.header.nav.feedback": "反馈",
   "portal.header.nav.roadmap": "路线图",
