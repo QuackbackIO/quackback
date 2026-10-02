@@ -166,6 +166,16 @@ describe('LocalDate inside an IntlProvider', () => {
     expect(container.textContent).toBe('2 Oct 2026')
   })
 
+  it('passes over a preferred language Intl cannot read', async () => {
+    setPreferredLanguages(['en-US@posix'])
+    const { container, errors } = await serverThenHydrate(
+      inApp('en', <LocalDate date={AT} options={DAY} />)
+    )
+
+    expect(errors).toEqual([])
+    expect(container.textContent).toBe(formatIn('en', VIEWER.timeZone, AT, DAY))
+  })
+
   it('keeps a locale it is given over the app language', async () => {
     setPreferredLanguages(['pl-PL'])
     const { container, serverHtml, errors } = await serverThenHydrate(
@@ -187,6 +197,9 @@ describe('viewerLocaleFor', () => {
     // Traditional Chinese is not a regional form of Simplified Chinese.
     ['zh-cn', ['zh-TW'], 'zh-cn'],
     ['en', [], 'en'],
+    // Chromium on a POSIX locale reports a tag Intl rejects; it is passed over.
+    ['en', ['en-US@posix', 'en-GB'], 'en-GB'],
+    ['en', ['en-US@posix'], 'en'],
   ])('for %s with %j reads %s', (appLocale, preferred, expected) => {
     expect(viewerLocaleFor(appLocale, preferred)).toBe(expected)
   })

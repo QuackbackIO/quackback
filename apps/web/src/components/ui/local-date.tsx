@@ -123,11 +123,25 @@ function preferredLanguages(): readonly string[] {
 }
 
 /**
+ * Whether Intl accepts `tag`. A browser can report a language it does not:
+ * Chromium on a POSIX locale says "en-US@posix", and formatting with it
+ * throws.
+ */
+function isValidLocale(tag: string): boolean {
+  try {
+    return Intl.getCanonicalLocales(tag).length > 0
+  } catch {
+    return false
+  }
+}
+
+/**
  * The locale a hydrated date formats with when the app renders in
  * `appLocale`: the first of the viewer's preferred languages that is a
  * regional form of it, so an English page reads "1 Oct 2026" for a viewer who
  * prefers en-GB, else `appLocale` itself. A viewer whose browser prefers
- * another language altogether still reads dates in the page's language.
+ * another language altogether, or reports one Intl cannot read, still reads
+ * dates in the page's language.
  */
 export function viewerLocaleFor(
   appLocale: string,
@@ -135,7 +149,9 @@ export function viewerLocaleFor(
 ): string {
   const language = normalizeLocale(appLocale)
   if (!language) return appLocale
-  return preferred.find((tag) => normalizeLocale(tag) === language) ?? appLocale
+  return (
+    preferred.find((tag) => normalizeLocale(tag) === language && isValidLocale(tag)) ?? appLocale
+  )
 }
 
 /**
