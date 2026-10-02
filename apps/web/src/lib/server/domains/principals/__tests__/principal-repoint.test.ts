@@ -58,6 +58,7 @@ describe('REPOINT_STEPS registry', () => {
       'post_activity',
       'conversations',
       'conversation_messages',
+      'files',
       'post_subscriptions',
       'in_app_notifications',
       'page_views',

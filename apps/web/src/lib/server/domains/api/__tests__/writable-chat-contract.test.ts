@@ -69,4 +69,30 @@ describe('writable tickets/conversations/moderation OpenAPI contract', () => {
     expect(tickets?.description).toBe('Manage support tickets')
     expect(spec.tags?.map((t) => t.name)).toContain('Moderation')
   })
+
+  it('registers POST /files, with a Files tag', () => {
+    expect(paths['/files']).toHaveProperty('post')
+    expect(spec.tags?.map((t) => t.name)).toContain('Files')
+  })
+
+  it('documents the upload-then-attach flow with a real fileId example, not a server-rejected URL', () => {
+    const replyBody = JSON.stringify(
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      (paths['/conversations/{conversationId}/reply'] as any).post.requestBody.content[
+        'application/json'
+      ].schema
+    )
+    expect(replyBody).toContain('fileId')
+    // The old example URL is one the server would reject outright (not a
+    // trusted/stored URL): the documented example must not point at it.
+    expect(replyBody).not.toContain('cdn.example.com')
+
+    const ticketReplyBody = JSON.stringify(
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      (paths['/tickets/{ticketId}/reply'] as any).post.requestBody.content['application/json']
+        .schema
+    )
+    expect(ticketReplyBody).toContain('fileId')
+    expect(ticketReplyBody).not.toContain('cdn.example.com')
+  })
 })

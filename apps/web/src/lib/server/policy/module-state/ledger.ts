@@ -73,6 +73,13 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'Maps the query key of each registered read to its query factory, built once from the static BATCHED_READS list. It holds code, not data: every workspace resolves the same keys to the same factories, and each factory runs its own gated server function for the calling workspace.',
   },
   {
+    file: 'apps/web/src/lib/server/domains/files/preview/mupdf.ts',
+    name: 'loading',
+    category: 'fleet-wide',
+    reason:
+      'Memoizes the import of the bundled PDF and raster engine (a WebAssembly module), so it initializes once per process. It holds library code, not data: every workspace would load the same module, and each preview opens its own document from its own bytes and frees it.',
+  },
+  {
     file: 'apps/web/src/lib/shared/content-emoji.ts',
     name: 'byChar',
     category: 'fleet-wide',
@@ -438,14 +445,6 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     reason:
       'Role to permission-set memo derived from the static RBAC catalogue. No database read, ' +
       'identical for every workspace.',
-  },
-  {
-    file: 'apps/web/src/lib/shared/assistant/markdown-lite.ts',
-    name: 'inlineReCache',
-    category: 'content-addressed',
-    reason:
-      'Compiled regexes keyed by their own source string. A cross-workspace hit returns the same ' +
-      'compiled pattern the requesting workspace would have built from the same characters.',
   },
   {
     file: 'apps/web/src/lib/shared/i18n.ts',

@@ -140,6 +140,7 @@ export type {
   AssistantToolCallId,
   AssistantSnippetId,
   AssistantDocumentId,
+  FileId,
   AssistantWebSourceId,
   TicketId,
   TicketStatusId,

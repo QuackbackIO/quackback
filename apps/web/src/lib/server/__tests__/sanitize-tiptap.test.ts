@@ -16,6 +16,22 @@ const sanitize = sanitizeTiptapContent as (
 ) => ReturnType<typeof sanitizeTiptapContent>
 
 describe('sanitizeTiptapContent', () => {
+  it('preserves integer list starts and rejects hostile or fractional values', () => {
+    for (const [start, expected] of [
+      [0, 0],
+      [-3, -3],
+      [7, 7],
+      [999999999, 999999999],
+      ['7" onclick="alert(1)', 1],
+      [Infinity, 1],
+      [1000000000, 1],
+      [1.5, 1],
+    ]) {
+      const result = sanitize({ type: 'doc', content: [{ type: 'orderedList', attrs: { start } }] })
+      expect(result.content?.[0].attrs?.start).toBe(expected)
+    }
+  })
+
   // ============================================
   // Basic structure
   // ============================================
@@ -801,6 +817,59 @@ describe('sanitizeTiptapContent', () => {
     const result = sanitizeTiptapContent(input)
     const node = result.content!.find((n) => n.type === 'chatImage')
     expect(node!.attrs!.src).toBe('')
+  })
+
+  // ============================================
+  // Pipeline files are attachments, attached by id, never inline: a src
+  // naming one would be re-signed on every read, past its link's expiry and
+  // without the file's ownership check.
+  // ============================================
+
+  const PIPELINE_SRCS = [
+    '/api/storage/files/2026/10/0b1c-report.png?read=abc&exp=1',
+    '/api/storage/files%2F2026%2F10%2F0b1c-report.png',
+    'https://other-host.example.com/api/storage/files/2026/10/0b1c-report.png',
+  ]
+
+  it('clears an inline image src that names a pipeline file, whatever the node or options', () => {
+    for (const src of PIPELINE_SRCS) {
+      for (const type of ['chatImage', 'image', 'resizableImage']) {
+        for (const restrict of [false, true]) {
+          const result = sanitizeTiptapContent(
+            { type: 'doc', content: [{ type, attrs: { src, alt: 'x' } }] },
+            { restrictImagesToTrustedOrigins: restrict }
+          )
+          expect(result.content![0]!.attrs, `${type} ${src} ${restrict}`).toEqual({
+            src: '',
+            alt: '',
+          })
+        }
+      }
+    }
+  })
+
+  it('clears a video src that names a pipeline file', () => {
+    const result = sanitizeTiptapContent({
+      type: 'doc',
+      content: [{ type: 'video', attrs: { src: PIPELINE_SRCS[0], mimeType: 'video/mp4' } }],
+    })
+    expect(result.content![0]!.attrs!.src).toBe('')
+  })
+
+  it('keeps inline srcs under every other prefix', () => {
+    for (const src of [
+      '/api/storage/chat-images/2026/10/a.png',
+      '/api/storage/filesystem/a.png',
+      '/api/storage/post-images/files/a.png',
+    ]) {
+      for (const type of ['chatImage', 'image', 'resizableImage']) {
+        const result = sanitizeTiptapContent({
+          type: 'doc',
+          content: [{ type, attrs: { src, alt: 'x' } }],
+        })
+        expect(result.content![0]!.attrs!.src, `${type} ${src}`).toBe(src)
+      }
+    }
   })
 
   // ============================================

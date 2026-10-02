@@ -13,10 +13,10 @@
 
 import { describe, it, expect, vi } from 'vitest'
 import { Editor } from '@tiptap/core'
+import { generateContentHTML } from '@/lib/shared/content-html'
 import type { EditorFeatures } from '../rich-text-editor'
 import {
   buildExtensions,
-  generateContentHTML,
   hasActiveSuggestion,
   markdownFromEditor,
   plaintextFromTiptapJson,
@@ -668,39 +668,5 @@ describe('generateContentHTML — quackbackEmbed nodes', () => {
     })
     expect(html).not.toContain('<script>')
     expect(html).toContain('&lt;script&gt;')
-  })
-})
-
-describe('generateContentHTML — chatImage nodes', () => {
-  it('serializes a valid chatImage to a bounded img with src + alt', () => {
-    const html = generateContentHTML({
-      type: 'doc',
-      content: [
-        {
-          type: 'chatImage',
-          attrs: { src: 'https://example.com/photo.png', alt: 'A screenshot' },
-        },
-      ],
-    })
-    expect(html).toContain('<img')
-    expect(html).toContain('src="https://example.com/photo.png"')
-    expect(html).toContain('alt="A screenshot"')
-    expect(html).toContain('class="max-w-xs h-auto object-contain rounded-md"')
-  })
-
-  it('renders nothing for a chatImage with no src', () => {
-    const html = generateContentHTML({
-      type: 'doc',
-      content: [{ type: 'chatImage', attrs: { alt: 'orphan' } }],
-    })
-    expect(html).not.toContain('<img')
-  })
-
-  it('renders nothing for a chatImage with an unsafe src', () => {
-    const html = generateContentHTML({
-      type: 'doc',
-      content: [{ type: 'chatImage', attrs: { src: 'javascript:alert(1)' } }],
-    })
-    expect(html).not.toContain('<img')
   })
 })

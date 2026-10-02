@@ -3,6 +3,7 @@
  * the SSE transport. No server-only imports here — this module is bundled into
  * the browser.
  */
+import type { FileFamily } from '@/lib/shared/files/file-types'
 import type {
   ConversationId,
   ConversationMessageId,
@@ -96,12 +97,52 @@ export interface ConversationTagDTO {
   color: string
 }
 
-/** An image/file attachment ref on a message (URL from the upload pipeline). */
+/**
+ * An image/file attachment ref on a message (URL from the upload pipeline).
+ *
+ * `fileId`, `family` and `preview` are present for files that went through the
+ * file pipeline; older rows and inline images lifted from rich content carry
+ * only the four base fields, and every consumer must render those too.
+ */
 export interface ConversationAttachment {
   url: string
   name: string
   contentType: string
   size: number
+  fileId?: string
+  family?: FileFamily
+  preview?: AttachmentPreview
+}
+
+/** What a card and the viewer can show without opening the file. */
+export interface AttachmentPreview {
+  pages?: number
+  sheets?: string[]
+  rows?: number
+  lines?: number
+  entries?: number
+  width?: number
+  height?: number
+  durationMs?: number
+  /** First rows of a sheet or CSV as display text. */
+  head?: string[][]
+  /** First lines of a text file. */
+  text?: string
+  /** A rendered thumbnail: page one of a PDF, a scaled image. */
+  thumbUrl?: string
+  /** A browser-viewable copy of a format browsers cannot show (HEIC). */
+  renditionUrl?: string
+  macro?: boolean
+}
+
+/** A file as the upload endpoints return it, ready to attach to a message. */
+export interface UploadedFile {
+  fileId: string
+  url: string
+  name: string
+  contentType: string
+  size: number
+  family: FileFamily
 }
 
 /** A source the AI assistant grounded a reply in — a KB article, a feedback

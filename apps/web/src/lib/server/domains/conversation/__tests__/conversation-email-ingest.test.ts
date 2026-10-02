@@ -25,6 +25,10 @@ const resolveConversationByMessageIds = vi.fn<(...a: unknown[]) => Promise<strin
 const resolvePrincipalIdByEmail = vi.fn<(...a: unknown[]) => Promise<string | null>>()
 const uploadImageBuffer = vi.fn()
 const uploadObject = vi.fn()
+// Discrete attachments are stored through the file pipeline; its type, size and
+// sender policy are covered by files.service tests. Here the seam is what the
+// inbound path hands it and what it does with the answer.
+const storeFile = vi.fn()
 // Ticket reply branch (D9) seams: the ticket load + the requester-reply append
 // core are mocked (the append core is exercised for real in the tickets domain's
 // requester.service.test.ts); the cold-inbound channel resolver is spied so a
@@ -140,6 +144,13 @@ vi.mock('@/lib/server/storage/s3', async (importOriginal) => ({
   isS3Usable: () => true,
   uploadImageBuffer: (...a: unknown[]) => uploadImageBuffer(...a),
   uploadObject: (...a: unknown[]) => uploadObject(...a),
+  getPublicUrlOrNull: (key: string | null | undefined) =>
+    key ? `https://quackback.ngrok.app/api/storage/${key}` : null,
+}))
+
+vi.mock('@/lib/server/domains/files/files.service', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/domains/files/files.service')>()),
+  storeFile: (...a: unknown[]) => storeFile(...a),
 }))
 
 vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
@@ -234,6 +245,21 @@ beforeEach(() => {
   }))
   uploadObject.mockImplementation(
     async (key: string) => `https://quackback.ngrok.app/api/storage/${key}`
+  )
+  let fileSeq = 0
+  storeFile.mockImplementation(
+    async (input: { bytes: Uint8Array; name: string; declaredType?: string | null }) => {
+      const id = `file_${++fileSeq}`
+      return {
+        id,
+        storageKey: `files/2026/10/${id}-${input.name}`,
+        name: input.name,
+        contentType: input.declaredType || 'application/octet-stream',
+        size: input.bytes.byteLength,
+        family: 'other',
+        meta: {},
+      }
+    }
   )
 })
 
@@ -960,25 +986,35 @@ describe('ingestInboundEmail', () => {
       const json = JSON.stringify(contentJson)
       expect(json).toContain('/api/storage/chat-images')
       expect(json).not.toContain('cid:')
-      // The PDF is a discrete attachment carrying name/type/size + a trusted url.
+      // The PDF is stored through the file pipeline as the sender's file, from an
+      // unverified sender, and attached by file id.
+      expect(storeFile).toHaveBeenCalledTimes(1)
+      expect(storeFile.mock.calls[0]![0]).toMatchObject({
+        name: 'invoice.pdf',
+        declaredType: 'application/pdf',
+        source: 'email',
+        uploadedById: 'principal_v',
+        unverifiedSender: true,
+      })
       expect(input.attachments).toHaveLength(1)
       expect(input.attachments![0]).toMatchObject({
+        fileId: 'file_1',
         name: 'invoice.pdf',
-        contentType: 'application/pdf',
         size: pdf.length,
       })
-      expect((input.attachments![0] as { url: string }).url).toContain('/api/storage/chat-files')
     })
 
-    it('drops an oversized part but still ingests the message', async () => {
+    it('drops a part the file pipeline refuses but still ingests the message', async () => {
+      const { FileRejectedError } = await import('@/lib/server/domains/files/files.service')
+      storeFile.mockRejectedValueOnce(
+        new FileRejectedError('blocked', "This file type can't be sent")
+      )
       const result = await ingestParsedEmail(
-        reply({
-          attachments: [part({ filename: 'big.pdf', bytes: Buffer.alloc(5 * 1024 * 1024 + 1) })],
-        })
+        reply({ attachments: [part({ filename: 'setup.exe', bytes: Buffer.from('MZ payload') })] })
       )
       expect(result).toEqual({ status: 'ingested', conversationId: 'conversation_abc' })
+      expect(storeFile).toHaveBeenCalledTimes(1)
       expect(lastSend()[0].attachments).toBeUndefined()
-      expect(uploadObject).not.toHaveBeenCalled()
     })
 
     it('keeps only the first 10 of 11+ attachments', async () => {
@@ -988,9 +1024,31 @@ describe('ingestInboundEmail', () => {
       const result = await ingestParsedEmail(reply({ attachments: parts }))
       expect(result.status).toBe('ingested')
       expect(lastSend()[0].attachments).toHaveLength(10)
+      expect(storeFile).toHaveBeenCalledTimes(10)
     })
 
-    it('rejects an image part whose bytes do not match its declared type', async () => {
+    it('drops an inline image whose bytes do not match its declared type', async () => {
+      const result = await ingestParsedEmail(
+        reply({
+          html: '<p>see <img src="cid:fake@x"></p>',
+          attachments: [
+            part({
+              contentType: 'image/png',
+              filename: 'fake.png',
+              contentId: 'fake@x',
+              disposition: 'inline',
+              bytes: Buffer.from('this is definitely not a png image payload'),
+            }),
+          ],
+        })
+      )
+      expect(result.status).toBe('ingested')
+      expect(uploadImageBuffer).not.toHaveBeenCalled()
+      expect(storeFile).not.toHaveBeenCalled()
+      expect(JSON.stringify(lastSend()[3])).not.toContain('/api/storage/')
+    })
+
+    it('stores a discrete file declared as an image through the pipeline, which types it by its bytes', async () => {
       const result = await ingestParsedEmail(
         reply({
           attachments: [
@@ -1003,8 +1061,11 @@ describe('ingestInboundEmail', () => {
         })
       )
       expect(result.status).toBe('ingested')
-      expect(lastSend()[0].attachments).toBeUndefined()
       expect(uploadImageBuffer).not.toHaveBeenCalled()
+      expect(storeFile.mock.calls[0]![0]).toMatchObject({
+        name: 'fake.png',
+        declaredType: 'image/png',
+      })
     })
 
     it('caps total uploads so many cid-referenced inline images cannot amplify', async () => {
@@ -1045,10 +1106,11 @@ describe('ingestInboundEmail', () => {
       expect(result.status).toBe('ingested')
       const [input, , , contentJson] = lastSend()
       expect(input.attachments).toHaveLength(1)
-      expect(input.attachments![0]).toMatchObject({ name: 'orphan.png', contentType: 'image/png' })
-      // It did NOT get inlined into the body.
+      expect(input.attachments![0]).toMatchObject({ name: 'orphan.png', fileId: 'file_1' })
+      // It did NOT get inlined into the body; it went through the file pipeline.
       expect(JSON.stringify(contentJson)).not.toContain('/api/storage/chat-images')
-      expect(uploadImageBuffer).toHaveBeenCalledTimes(1)
+      expect(uploadImageBuffer).not.toHaveBeenCalled()
+      expect(storeFile).toHaveBeenCalledTimes(1)
     })
   })
 })

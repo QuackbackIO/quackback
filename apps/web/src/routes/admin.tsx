@@ -2,7 +2,7 @@ import { useEffect, type ComponentProps } from 'react'
 import { createFileRoute, Outlet, redirect, useRouterState } from '@tanstack/react-router'
 import { IntlProvider } from 'react-intl'
 import { useAdminPresence } from '@/lib/client/hooks/use-admin-presence'
-import { DEFAULT_LOCALE, loadMessages } from '@/lib/shared/i18n'
+import { DEFAULT_LOCALE, loadMessages, withoutViewerMessages } from '@/lib/shared/i18n'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { isProductEnabled } from '@/lib/shared/types/settings'
@@ -15,6 +15,7 @@ import { UpdateBanner } from '@/components/admin/update-banner'
 import { PlanNoticeBanner } from '@/components/admin/plan-notice-banner'
 import { getPlanNotice } from '@/lib/server/functions/plan-notice'
 import { CloudQuackbackWidget } from '@/components/shared/cloud-quackback-widget'
+import { FileViewerProvider, scrollToMessage } from '@/components/shared/files/file-viewer-context'
 import { useHasPermission } from '@/lib/client/use-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { createRouteContextMemo } from '@/lib/client/route-context-memo'
@@ -102,7 +103,7 @@ export const Route = createFileRoute('/admin')({
         currentUser: null,
         planNotice: null,
         locale: DEFAULT_LOCALE,
-        messages: await loadMessages(DEFAULT_LOCALE),
+        messages: withoutViewerMessages(await loadMessages(DEFAULT_LOCALE)),
       }
     }
 
@@ -123,7 +124,7 @@ export const Route = createFileRoute('/admin')({
       }),
       getLatestVersion(),
       getPlanNotice(),
-      loadMessages(locale),
+      loadMessages(locale).then(withoutViewerMessages),
       // The rail's unread badge rides the document rather than a request of
       // its own after hydration. Unreadable now, it is left to the bell.
       context.queryClient.ensureQueryData(unreadCountQuery()).catch(() => null),
@@ -270,7 +271,9 @@ function AdminLayout() {
                 dismissedVersion={updateBannerDismissedVersion}
               />
               <div className="flex-1 min-h-0 overflow-hidden">
-                <Outlet />
+                <FileViewerProvider onJumpToMessage={scrollToMessage}>
+                  <Outlet />
+                </FileViewerProvider>
               </div>
             </div>
           </main>

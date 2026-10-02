@@ -136,18 +136,18 @@
     /* Dark mode */
     --background: #0a0a0a;
     --foreground: #fafafa;
-    /* Cards sit one step above the page, so portal and widget surfaces read as raised. */
-    --card: #141414;
+    /* Cards sit a step above the page and controls on them a step higher, so portal and widget surfaces read as raised. */
+    --card: #0f0f0f;
     --card-foreground: #fafafa;
     --popover: #101010;
     --popover-foreground: #fafafa;
     --primary: oklch(0.886 0.176 86);
     --primary-foreground: #0a0a0a;
-    --secondary: #181818;
+    --secondary: #222222;
     --secondary-foreground: #fafafa;
-    --muted: #181818;
+    --muted: #222222;
     --muted-foreground: #a1a1a1;
-    --accent: #181818;
+    --accent: #222222;
     --accent-foreground: #fafafa;
     /* Same hue as light destructive; lifted to sit next to --success on near-black. */
     --destructive: oklch(0.70 0.19 25);
@@ -181,7 +181,7 @@
     --sidebar-foreground: #fafafa;
     --sidebar-primary: oklch(0.886 0.176 86);
     --sidebar-primary-foreground: oklch(0.145 0 0);
-    --sidebar-accent: #181818;
+    --sidebar-accent: #222222;
     --sidebar-accent-foreground: #fafafa;
     --sidebar-border: #262626;
     --sidebar-ring: oklch(0.556 0 0);
@@ -201,7 +201,7 @@
     --post-card-background: var(--card);
     --post-card-border: #262626;
     --post-card-voted-color: var(--primary);
-    --nav-active-background: #181818;
+    --nav-active-background: #222222;
     --nav-active-foreground: #fafafa;
     --nav-inactive-color: #a1a1a1;
     --portal-button-background: var(--primary);

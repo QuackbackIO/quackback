@@ -223,10 +223,20 @@ describe('a key that would escape never reaches a command', () => {
     await withWorkspace('workspace-alpha', () =>
       generatePresignedGetUrl(PRIVATE_KEY, 60, undefined, 'application/pdf')
     )
-    await withWorkspace('workspace-alpha', () => generatePresignedGetUrl(PRIVATE_KEY, 60, 'contract.pdf'))
+    await withWorkspace('workspace-alpha', () =>
+      generatePresignedGetUrl(PRIVATE_KEY, 60, 'contract.pdf')
+    )
+    await withWorkspace('workspace-alpha', () =>
+      generatePresignedGetUrl(PRIVATE_KEY, 60, 'Résumé "v2".pdf')
+    )
     expect(presigned[0]).toMatchObject({ ResponseContentType: 'application/pdf' })
     expect(presigned[0]).not.toHaveProperty('ResponseContentDisposition')
-    expect(presigned[1]).toMatchObject({ ResponseContentDisposition: 'attachment; filename="contract.pdf"' })
+    expect(presigned[1]).toMatchObject({
+      ResponseContentDisposition: `attachment; filename="contract.pdf"; filename*=UTF-8''contract.pdf`,
+    })
+    expect(presigned[2]).toMatchObject({
+      ResponseContentDisposition: `attachment; filename="R_sum_ _v2_.pdf"; filename*=UTF-8''R%C3%A9sum%C3%A9%20%22v2%22.pdf`,
+    })
   })
 
   it('refuses a traversal on the write path', async () => {

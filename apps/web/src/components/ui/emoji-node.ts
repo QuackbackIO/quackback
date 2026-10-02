@@ -7,7 +7,7 @@
  * shortcuts and emoji typed or pasted as characters need it. This node follows
  * that extension's behavior and markup and reads the dataset from
  * `@/lib/shared/content-emoji`, imported the first time the editor gains
- * focus, opens the picker or shows a node stored without its character.
+ * focus or opens the picker.
  * Until it arrives those shortcuts leave the text as typed.
  *
  * New nodes store the character in `attrs.emoji` (and the shortcode in
@@ -40,11 +40,9 @@ export function loadEmojiData(): Promise<EmojiData> {
   return emojiDataLoad
 }
 
-/** A node's character: stored on the node, else looked up by its shortcode. */
-function emojiChar(attrs: { name?: unknown; emoji?: unknown }): string | null {
-  if (typeof attrs.emoji === 'string' && attrs.emoji) return attrs.emoji
-  const name = typeof attrs.name === 'string' ? attrs.name : ''
-  return (name && emojiData?.lookupEmoji(name)?.emoji) || null
+/** Persisted Unicode characters render without loading the dataset. */
+function emojiChar(attrs: { emoji?: unknown }): string {
+  return typeof attrs.emoji === 'string' ? attrs.emoji : ''
 }
 
 const EmojiSuggestionPluginKey = new PluginKey('emojiSuggestion')
@@ -124,7 +122,11 @@ export const EmojiNode = Node.create<EmojiNodeOptions>({
       },
       // The Unicode character, persisted so read-only HTML and email render
       // the emoji without the dataset.
-      emoji: { default: null },
+      emoji: {
+        default: '',
+        parseHTML: (element) => element.textContent ?? '',
+        renderHTML: () => ({}),
+      },
     }
   },
 
@@ -136,37 +138,14 @@ export const EmojiNode = Node.create<EmojiNodeOptions>({
     const attributes = mergeAttributes(HTMLAttributes, this.options.HTMLAttributes, {
       'data-type': this.name,
     })
-    return ['span', attributes, emojiChar(node.attrs) ?? `:${node.attrs.name}:`]
-  },
-
-  // A node stored without its character shows `:shortcode:` until the dataset
-  // loads, then the emoji, without changing the document.
-  addNodeView() {
-    return ({ node, HTMLAttributes }) => {
-      const dom = document.createElement('span')
-      const attributes = mergeAttributes(HTMLAttributes, this.options.HTMLAttributes, {
-        'data-type': this.name,
-      })
-      for (const [key, value] of Object.entries(attributes)) {
-        if (value !== null && value !== undefined) dom.setAttribute(key, String(value))
-      }
-      const char = emojiChar(node.attrs)
-      dom.textContent = char ?? `:${node.attrs.name}:`
-      if (!char) {
-        void loadEmojiData().then(() => {
-          const loaded = emojiChar(node.attrs)
-          if (loaded) dom.textContent = loaded
-        })
-      }
-      return { dom, ignoreMutation: (mutation) => mutation.type !== 'selection' }
-    }
+    return ['span', attributes, emojiChar(node.attrs)]
   },
 
   renderText({ node }) {
-    return emojiChar(node.attrs) ?? `:${node.attrs.name}:`
+    return emojiChar(node.attrs)
   },
 
-  renderMarkdown: (node) => (node.attrs?.name ? `:${node.attrs.name}:` : ''),
+  renderMarkdown: (node) => emojiChar(node.attrs ?? {}),
 
   onFocus() {
     void loadEmojiData()

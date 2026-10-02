@@ -741,11 +741,64 @@ export const MESSAGE_SENDER_TYPES = ['visitor', 'agent', 'system'] as const
 export type MessageSenderType = (typeof MESSAGE_SENDER_TYPES)[number]
 
 // A single attachment ref stored on a conversation message (conversation_messages.attachments).
+// Files uploaded through the file pipeline carry `fileId` (a `files` row whose
+// type and size were read from the stored bytes) and whatever preview data was
+// ready when the message was written or since. Rows written before the
+// pipeline, and inline images lifted from rich content, have neither.
 export interface ConversationAttachment {
   url: string
   name: string
   contentType: string
   size: number
+  fileId?: string
+  family?: StoredFileFamily
+  preview?: FilePreviewMeta
+}
+
+/** Mirrors `FileFamily` in the app's file-type registry (files.family). */
+export type StoredFileFamily =
+  | 'image'
+  | 'video'
+  | 'audio'
+  | 'pdf'
+  | 'document'
+  | 'spreadsheet'
+  | 'presentation'
+  | 'csv'
+  | 'text'
+  | 'code'
+  | 'archive'
+  | 'other'
+
+/**
+ * What a file's card and viewer can show without opening the file. Written by
+ * the preview job onto the `files` row and copied onto the message attachment.
+ * Every field is optional: a family fills only what it has.
+ */
+export interface FilePreviewMeta {
+  /** Pages of a PDF or a Word document, slides of a presentation. */
+  pages?: number
+  /** Sheet names of a workbook, in order. */
+  sheets?: string[]
+  /** Data rows of the first sheet or of a CSV. */
+  rows?: number
+  /** Lines of a text file. */
+  lines?: number
+  /** Entries in an archive. */
+  entries?: number
+  width?: number
+  height?: number
+  durationMs?: number
+  /** First rows of a sheet or CSV as display text, for the card's mini grid. */
+  head?: string[][]
+  /** First lines of a text file, for the card. */
+  text?: string
+  /** Storage key of a rendered thumbnail (page one of a PDF, a scaled image). */
+  thumbKey?: string
+  /** Storage key of a browser-viewable rendition (a HEIC photo as JPEG). */
+  renditionKey?: string
+  /** An Office file that carries a VBA project. */
+  macro?: boolean
 }
 
 // A source the AI assistant grounded a message in (conversation_messages.citations).

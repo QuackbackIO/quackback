@@ -12,8 +12,9 @@ import { PORTAL_MESSAGE_PREFIX_LIST } from '@/lib/shared/i18n'
 // authored. Covers the portal route tree, the two standalone auth pages (they
 // render under the same PortalIntlProvider via loadPortalIntl), and the
 // component dirs the portal pages render — including the specific shared
-// files the portal reaches (the conversation thread). If the portal grows a
-// new surface, add its dir here so the guard keeps covering it.
+// files the portal reaches (the conversation thread, and the file viewer/
+// card/attachment-list it renders attachments through). If the portal grows
+// a new surface, add its dir here so the guard keeps covering it.
 const APP_SRC = fileURLToPath(new URL('../../../', import.meta.url))
 
 const PORTAL_SOURCE_ROOTS = [
@@ -22,9 +23,14 @@ const PORTAL_SOURCE_ROOTS = [
   'components/public',
   'components/help-center',
   'components/shared/conversation',
+  'components/shared/files',
 ]
 
-const PORTAL_SOURCE_FILES = ['routes/auth.recovery.tsx', 'routes/auth.reset-password.tsx']
+const PORTAL_SOURCE_FILES = [
+  'routes/auth.recovery.tsx',
+  'routes/auth.reset-password.tsx',
+  'components/shared/composer-attachment-tray.tsx',
+]
 
 function walk(dir: string): string[] {
   const out: string[] = []

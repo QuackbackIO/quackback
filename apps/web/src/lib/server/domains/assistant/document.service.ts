@@ -3,7 +3,7 @@
  * documents) whose extracted text grounds Quinn's answers.
  *
  * Ingest is synchronous and small: extract the text layer (`./pdf-text`,
- * `./docx-text`), store the row, then embed best-effort — mirroring the
+ * `lib/server/content/docx-text`), store the row, then embed best-effort — mirroring the
  * changelog embedding pattern (embedding failure is logged, never thrown,
  * and only costs semantic ranking: the keyword arm of
  * `documents-retrieval.ts` still finds the row).
@@ -18,7 +18,7 @@ import { generateEmbedding } from '@/lib/server/domains/embeddings/embedding.ser
 import { getEmbeddingModel } from '@/lib/server/domains/ai/models'
 import { isS3Usable, uploadObject, generateStorageKey } from '@/lib/server/storage/s3'
 import { extractPdfText } from './pdf-text'
-import { extractDocxText } from './docx-text'
+import { extractDocxText } from '@/lib/server/content/docx-text'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'assistant-documents' })

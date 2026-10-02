@@ -1,125 +1,136 @@
-/**
- * Pure text helpers for Copilot's P2-C features (COPILOT-SIDEBAR-UX.md "What
- * P2-C adds"), e.g. saving an answer as a macro (C.2). Isomorphic so client
- * and server share formatting.
- */
-import { parseMarkdownLite, type MarkdownLiteBlock, type MarkdownLiteSpan } from './markdown-lite'
+import { unified } from 'unified'
+import remarkParse from 'remark-parse'
+import remarkGfm from 'remark-gfm'
+import remarkStringify from 'remark-stringify'
+import type { Definition, PhrasingContent, Root, RootContent } from 'mdast'
+import { sanitizeUrl } from '@/lib/shared/utils/sanitize'
+import { CITATION_MARKER_RE } from './citation-markers'
 
-// The `[n]` citation-marker pattern (markdown-lite's citation construct), the
-// numbered dots the answer card renders inline. A macro body has no citation
-// list to resolve them against, so they're stripped rather than carried over.
-const CITATION_MARKER_RE = /[ \t]*\[\d+\]/g
-
-/**
- * Strip inline `[n]` citation markers from an answer's plain text (e.g. before
- * saving it as a reusable macro body). Consumes a leading space with the
- * marker so removing it never leaves a double space or a stray space before
- * punctuation, and collapses any incidental run of spaces/tabs left behind.
- * Leaves newlines untouched, so multi-line/list formatting survives.
- */
-export function stripCitationMarkers(text: string): string {
-  return text
-    .replace(CITATION_MARKER_RE, '')
-    .replace(/[ \t]{2,}/g, ' ')
-    .trim()
-}
-
-/**
- * The insert-fidelity model for a Copilot answer headed into a composer
- * (COPILOT-SIDEBAR-UX.md B.4's insert seam): the shared markdown-lite grammar
- * the answer card renders (markdown-lite.ts — paragraphs, ordered/bullet
- * lists, bold), extended with italic and inline code, plus verbatim
- * triple-backtick fences as `codeBlock` blocks. The only construct with no
- * composer mapping (headings) has its markers stripped rather than passed
- * through as literal punctuation.
- */
-export type AnswerInsertSpan = MarkdownLiteSpan
-export type AnswerInsertBlock = MarkdownLiteBlock | { kind: 'codeBlock'; text: string }
-
-/**
- * The strip rules a pass through the insert pipeline applies — made explicit
- * so the two callers can't share the wrong defaults: an ANSWER insert strips
- * `[n]` citation markers (a composer has no citation list to resolve them
- * against), while a DRAFT transform (Improve replacing the teammate's
- * own text) must not — a literal `[2]` the teammate typed is their content,
- * not a dangling citation.
- */
+/** Answers omit source dots when inserted. Draft transforms keep literal text. */
 export interface AnswerInsertOptions {
-  /** Strip `[n]` citation markers. Default true (the answer-insert path). */
   stripCitations?: boolean
 }
 
-// This surface's inline grammar: bold + italic + inline code. No citation
-// spans — on the answer path the markers are stripped by
-// answerMarkdownForInsert before parsing; on the draft path they stay
-// literal text (this grammar simply doesn't recognize them).
-const INSERT_GRAMMAR = { italic: true, code: true } as const
+// Use the same CommonMark/GFM grammar as the answer renderer, without editor
+// or server dependencies. The resulting tree also supplies the draft's mirror.
+const processor = unified().use(remarkParse).use(remarkGfm).use(remarkStringify, {
+  bullet: '-',
+  emphasis: '*',
+  strong: '*',
+  fences: true,
+  listItemIndent: 'one',
+})
 
-// Headings have no composer mapping: strip the markers, keep the text.
-const HEADING_RE = /^\s*#{1,6}\s+/
-
-// A triple-backtick fence, opening and closing markers on their own lines.
-// Fences are split out BEFORE any stripping or inline parsing so their
-// contents stay verbatim (a `[1]` array index or `# comment` inside code is
-// code, not markup). The `m` flag anchors ^/$ per line.
-const FENCE_RE = /^```[^\n]*\n[\s\S]*?\n```[ \t]*$/gm
-
-/** Split text into alternating segments outside and inside code fences. */
-function splitFences(text: string): { fence: boolean; text: string }[] {
-  const segments: { fence: boolean; text: string }[] = []
-  let last = 0
-  for (const m of text.matchAll(FENCE_RE)) {
-    const idx = m.index ?? 0
-    if (idx > last) segments.push({ fence: false, text: text.slice(last, idx) })
-    segments.push({ fence: true, text: m[0] })
-    last = idx + m[0].length
-  }
-  if (last < text.length) segments.push({ fence: false, text: text.slice(last) })
-  return segments
-}
-
-/** A fence segment's inner code, without the ``` marker lines. */
-function fenceBody(fence: string): string {
-  return fence.replace(/^```[^\n]*\n/, '').replace(/\n```[ \t]*$/, '')
-}
-
-/**
- * A Copilot answer's text as it should read once inserted: citation markers
- * gone when `stripCitations` (the answer path; a draft transform keeps them),
- * heading markers stripped to their text, mappable markdown-lite syntax
- * (bold/italic/inline code/lists) kept, and code fences preserved verbatim —
- * this is the composer's markdown mirror for the insert.
- */
-export function answerMarkdownForInsert(
+/** Normalize an answer to the conversation composer's supported structures.
+ * Protect code and link labels from citation removal, validate destinations,
+ * and keep unsupported document structures readable as ordinary chat content. */
+export function prepareAnswerMarkdown(
   text: string,
   { stripCitations = true }: AnswerInsertOptions = {}
-): string {
-  return splitFences(text)
-    .map((segment) => {
-      if (segment.fence) return segment.text
-      const stripped = stripCitations ? stripCitationMarkers(segment.text) : segment.text
-      return stripped
-        .split('\n')
-        .map((line) => line.replace(HEADING_RE, ''))
-        .join('\n')
+): { tree: Root; markdown: string } {
+  const stripCitationsRE = new RegExp(`[ \\t]*${CITATION_MARKER_RE.source}`, 'g')
+  const tree = processor.parse(text)
+  const definitions = new Map<string, Definition>()
+  function collect(nodes: RootContent[]) {
+    for (const node of nodes) {
+      if (node.type === 'definition' && !definitions.has(node.identifier))
+        definitions.set(node.identifier, node)
+      if ('children' in node) collect(node.children)
+    }
+  }
+  collect(tree.children)
+
+  function normalize(nodes: RootContent[], strip = stripCitations): RootContent[] {
+    return nodes.flatMap((node): RootContent[] => {
+      switch (node.type) {
+        case 'definition':
+          return []
+        case 'text':
+          return [
+            {
+              ...node,
+              value: strip
+                ? node.value.replace(stripCitationsRE, '').replace(/[ \t]{2,}/g, ' ')
+                : node.value,
+            },
+          ]
+        case 'heading':
+          return [
+            { type: 'paragraph', children: normalize(node.children, strip) as PhrasingContent[] },
+          ]
+        case 'html':
+          return [{ type: 'text', value: node.value }]
+        case 'link':
+        case 'linkReference': {
+          const destination = node.type === 'link' ? node : definitions.get(node.identifier)
+          const children = normalize(node.children, false) as PhrasingContent[]
+          const url = sanitizeUrl(destination?.url ?? '')
+          return url ? [{ type: 'link', url, children }] : children
+        }
+        case 'image':
+        case 'imageReference': {
+          const destination = node.type === 'image' ? node : definitions.get(node.identifier)
+          const children: PhrasingContent[] = [{ type: 'text', value: node.alt || 'Image' }]
+          const url = sanitizeUrl(destination?.url ?? '')
+          // Conversation images use the attachment tray. Keep Markdown images
+          // as links rather than inserting unsupported inline image nodes.
+          return url ? [{ type: 'link', url, children }] : children
+        }
+        case 'table':
+          return node.children.map((row) => ({
+            type: 'paragraph',
+            children: row.children.flatMap((cell, index) => [
+              ...(index ? [{ type: 'text' as const, value: ' | ' }] : []),
+              ...(normalize(cell.children, strip) as PhrasingContent[]),
+            ]),
+          }))
+        case 'blockquote':
+          return [
+            {
+              ...node,
+              children: normalize(node.children, strip).map(asBlock) as typeof node.children,
+            },
+          ]
+        case 'listItem': {
+          const children = normalize(node.children, strip).map(asBlock) as typeof node.children
+          // The composer schema requires each list item to start with a paragraph.
+          if (children[0]?.type !== 'paragraph')
+            children.unshift({ type: 'paragraph', children: [] })
+          if (node.checked !== null && node.checked !== undefined) {
+            const prefix = { type: 'text' as const, value: node.checked ? '☑ ' : '☐ ' }
+            if (children[0]?.type === 'paragraph') children[0].children.unshift(prefix)
+            else children.unshift({ type: 'paragraph', children: [prefix] })
+          }
+          return [{ ...node, checked: null, children }]
+        }
+        case 'footnoteDefinition': {
+          const children = normalize(node.children, strip).map(asBlock)
+          // The composer has no footnote nodes. Retain the label with its body.
+          const prefix = { type: 'text' as const, value: `[${node.identifier}] ` }
+          if (children[0]?.type === 'paragraph') children[0].children.unshift(prefix)
+          else children.unshift({ type: 'paragraph', children: [prefix] })
+          return children
+        }
+        case 'footnoteReference':
+          return [{ type: 'text', value: `[${node.identifier}]` }]
+        case 'thematicBreak':
+          return []
+        default:
+          // Code/inlineCode have no children, so their contents stay verbatim.
+          return [
+            'children' in node
+              ? ({ ...node, children: normalize(node.children, strip) } as RootContent)
+              : node,
+          ]
+      }
     })
-    .join('\n\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
+  }
+  const nodes = normalize(tree.children)
+  // Standalone HTML becomes a paragraph of escaped text, never executable HTML.
+  tree.children = nodes.map(asBlock)
+  return { tree, markdown: processor.stringify(tree).trim() }
 }
 
-/**
- * Parse markdown already prepared by `answerMarkdownForInsert` into the
- * block/span model: the single-pass seam for callers that need both the
- * markdown mirror and the blocks (copilot-insert-content.ts). Fences become
- * `codeBlock` blocks with their inner text verbatim; everything else goes
- * through the markdown-lite grammar.
- */
-export function parseAnswerMarkdown(markdown: string): AnswerInsertBlock[] {
-  const blocks: AnswerInsertBlock[] = []
-  for (const segment of splitFences(markdown)) {
-    if (segment.fence) blocks.push({ kind: 'codeBlock', text: fenceBody(segment.text) })
-    else blocks.push(...parseMarkdownLite(segment.text, INSERT_GRAMMAR))
-  }
-  return blocks
+function asBlock(node: RootContent): RootContent {
+  return node.type === 'text' ? { type: 'paragraph', children: [node] } : node
 }

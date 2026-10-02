@@ -78,6 +78,7 @@ import {
   sniffVideoMime,
 } from '@/lib/server/content/magic-bytes'
 import { resolveVideoMimeType } from '@/lib/shared/storage-config'
+import { PIPELINE_FILES_PREFIX } from '@/lib/shared/files/file-types'
 import {
   getCurrentWorkspace,
   getWorkspaceStorageCredential,
@@ -89,6 +90,7 @@ import {
 } from '@/lib/server/workspaces/workspace-keyed'
 import { absolutizeOffHostAssetUrl, storedAssetKeyFromSrc } from './asset-url'
 import { composeNamespacedKey, workspaceNamespace } from './namespace'
+import { attachmentDisposition } from './serve-policy'
 import { currentWorkspaceId } from './workspace-scope'
 
 // ============================================================================
@@ -480,7 +482,12 @@ export interface WorkspaceStorage {
   presignPut(key: string, contentType: string, expiresIn: number): Promise<string>
   put(key: string, body: Buffer | Uint8Array, contentType: string): Promise<void>
   get(key: string, range?: string): Promise<S3ObjectResult>
-  presignGet(key: string, expiresIn: number, downloadName?: string, contentType?: string): Promise<string>
+  presignGet(
+    key: string,
+    expiresIn: number,
+    downloadName?: string,
+    contentType?: string
+  ): Promise<string>
   remove(key: string): Promise<void>
 }
 
@@ -590,7 +597,7 @@ function workspaceStorage(selfReportedWorkspaceId: WorkspaceId): WorkspaceStorag
         Bucket: connection.bucket,
         Key,
         ...(downloadName
-          ? { ResponseContentDisposition: `attachment; filename="${downloadName}"` }
+          ? { ResponseContentDisposition: attachmentDisposition(downloadName) }
           : {}),
         ...(contentType ? { ResponseContentType: contentType } : {}),
       })
@@ -689,15 +696,88 @@ function storageReadSig(secret: string, key: string): string {
     .slice(0, 32)
 }
 
-/** Verify the capability attached to a private storage URL. */
-export function verifyStorageReadToken(secret: string, key: string, sig: string | null): boolean {
+/**
+ * Prefixes whose read capability expires. `PIPELINE_FILES_PREFIX` is the file
+ * pipeline's prefix. Nothing written before the pipeline lives there, so no
+ * stored link depends on a token that never expires; every other prefix keeps
+ * that token, because stored content embeds it.
+ */
+const EXPIRING_READ_PREFIXES = new Set([PIPELINE_FILES_PREFIX])
+
+/** Whether a key's read link is `?read=<hmac>&exp=<ms>` rather than `?read=<hmac>`. */
+export function hasExpiringReadToken(key: string): boolean {
+  return EXPIRING_READ_PREFIXES.has(key.split('/', 1)[0] ?? '')
+}
+
+const DAY_MS = 86_400_000
+
+/** Days a file link stays valid past the end of the UTC day it was minted on. */
+export const FILE_READ_LINK_DAYS = 30
+
+/**
+ * Longest validity a verifier accepts. A minted link never exceeds 31 days;
+ * the extra day absorbs clock skew between the instance that minted it and
+ * the one that verifies it.
+ */
+const MAX_FILE_READ_LINK_MS = (FILE_READ_LINK_DAYS + 2) * DAY_MS
+
+/**
+ * When a file link minted now expires: the end of the current UTC day plus
+ * {@link FILE_READ_LINK_DAYS}. Every link minted on one day carries the same
+ * `exp`, so the URL is stable for that day (browser and query caches keep
+ * working) and valid for 30 to 31 days.
+ */
+export function fileReadTokenExpiry(now: number = Date.now()): number {
+  return (Math.floor(now / DAY_MS) + 1) * DAY_MS + FILE_READ_LINK_DAYS * DAY_MS
+}
+
+function expiringReadSig(secret: string, key: string, exp: number): string {
+  return createHmac('sha256', secret)
+    .update(workspaceBind(`read|${key}|${exp}`))
+    .digest('hex')
+    .slice(0, 32)
+}
+
+/** A canonical millisecond timestamp: no sign, no leading zero, no exponent. */
+const EXP_RE = /^[1-9]\d{0,15}$/
+
+/**
+ * Verify the capability attached to a private storage URL.
+ *
+ * A key with an expiring token ({@link hasExpiringReadToken}) verifies only
+ * with an unexpired `exp` the signature binds; the non-expiring token for that
+ * key is refused. Every other key verifies its non-expiring token and ignores
+ * `exp`.
+ */
+export function verifyStorageReadToken(
+  secret: string,
+  key: string,
+  sig: string | null,
+  exp: string | null = null
+): boolean {
   if (!sig) return false
-  const expected = storageReadSig(secret, key)
+  let expected: string
+  if (hasExpiringReadToken(key)) {
+    if (!exp || !EXP_RE.test(exp)) return false
+    const expMs = Number(exp)
+    const left = expMs - Date.now()
+    if (left <= 0 || left > MAX_FILE_READ_LINK_MS) return false
+    expected = expiringReadSig(secret, key, expMs)
+  } else {
+    expected = storageReadSig(secret, key)
+  }
   try {
     return timingSafeEqual(Buffer.from(sig), Buffer.from(expected))
   } catch {
     return false
   }
+}
+
+/** The query string that grants read access to a private key. */
+function readCapability(secret: string, key: string): string {
+  if (!hasExpiringReadToken(key)) return `read=${storageReadSig(secret, key)}`
+  const exp = fileReadTokenExpiry()
+  return `read=${expiringReadSig(secret, key, exp)}&exp=${exp}`
 }
 
 function buildPublicUrl(_placement: StoragePlacement, key: string): string {
@@ -710,7 +790,7 @@ function buildPublicUrl(_placement: StoragePlacement, key: string): string {
   // cannot: minting a read capability requires the signing secret, so a workspace
   // whose credentials are unresolvable has no URL to offer rather than a broken
   // one. `getPublicUrlOrNull` turns that into null; `getPublicUrl` still throws.
-  return `${base}?read=${storageReadSig(resolveStorageCredentials().secretAccessKey, key)}`
+  return `${base}?${readCapability(resolveStorageCredentials().secretAccessKey, key)}`
 }
 
 // ============================================================================
@@ -1086,9 +1166,9 @@ export function getPublicUrl(key: string): string {
  *   The sole caller (GET /api/storage 302 redirect) marks the redirect
  *   cacheable for 24h, so the presigned URL must outlive cached copies;
  *   48h keeps a 2x margin over that cache window.
- * @param downloadName - When set, S3 responds with
- *   `Content-Disposition: attachment; filename="<downloadName>"`, so the
- *   browser saves a friendly name instead of the raw object key.
+ * @param downloadName - When set, S3 responds with an attachment
+ *   Content-Disposition naming it (`attachmentDisposition`), so the browser
+ *   saves a friendly name instead of the raw object key.
  * @param contentType - When set, S3 responds with this Content-Type instead of
  *   the stored one, which came from whoever uploaded or sent the file.
  */

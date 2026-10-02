@@ -394,6 +394,28 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       import('@/lib/server/events/segment-scheduler').then((m) => m.runSegmentEvaluation),
   },
   {
+    // Thumbnails, counts and text excerpts for uploaded files. Bounded so a burst
+    // of uploads cannot starve the other queues of CPU.
+    name: 'file-preview',
+    concurrency: 2,
+    maxAttempts: 2,
+    leaseMs: 120_000,
+    retryBackoffMs: 5_000,
+    retentionMs: DAY_MS,
+    failedRetentionMs: 7 * DAY_MS,
+    handler: () => import('@/lib/server/messages/file-preview-job').then((m) => m.runFilePreview),
+  },
+  {
+    // Removes uploads never sent and files whose message was deleted for good.
+    // Offset from the other daily sweeps: it is bounded by object-store deletes
+    // rather than by rows.
+    name: 'file-retention',
+    cron: '40 4 * * *',
+    maxAttempts: 3,
+    handler: () =>
+      import('@/lib/server/domains/files/files.retention').then((m) => m.runFileRetention),
+  },
+  {
     // Was `{help-center-translate}`. The 120s lease is the case §7.2 was built
     // for, and the reason this tier runs a bounded pool instead of one serial
     // drain — see runner.ts.

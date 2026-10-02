@@ -41,6 +41,7 @@ import {
   ensureAssistantPrincipal,
   getAssistantPrincipal,
   loadConversationThread,
+  loadThreadFileExcerpts,
   mapRowsToThreadMessages,
   getLatestInvolvement,
   openInvolvement,
@@ -205,7 +206,12 @@ export async function runAssistantTurnForConversation(
     ensureAssistantPrincipalId(),
     loadConversationThread(conversationId),
   ])
-  const messages = mapRowsToThreadMessages(threadRows, assistantPrincipalId)
+  // This is the one call site whose `messages` actually reaches the model
+  // (streamed into runAssistantTurn below), so it is the one that pays for
+  // the file-excerpt read — the eligibility probe and the failure floor only
+  // need a turn count, not excerpt text.
+  const fileExcerpts = await loadThreadFileExcerpts(threadRows)
+  const messages = mapRowsToThreadMessages(threadRows, assistantPrincipalId, fileExcerpts)
   if (messages.length === 0) return
 
   // Silence rule: a human is handling it. Bail before touching the involvement

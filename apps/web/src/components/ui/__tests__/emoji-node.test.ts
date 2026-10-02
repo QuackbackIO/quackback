@@ -1,10 +1,4 @@
 // @vitest-environment happy-dom
-/**
- * The editor's emoji node, which reads the emoji dataset only once it has
- * loaded it (read-surface-imports.test.ts pins that the editor never imports
- * the dataset statically). The tests run in order: the first two before
- * anything has asked for the dataset.
- */
 import { afterEach, describe, expect, it } from 'vitest'
 import { Editor, type JSONContent } from '@tiptap/core'
 import { buildExtensions, createEmojiExtension } from '../rich-text-editor'
@@ -64,8 +58,6 @@ function emojiNodes(editor: Editor) {
   return found
 }
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 20))
-
 describe('emoji node', () => {
   it('renders a stored emoji from its own character', () => {
     const editor = mountEditor(paragraph({ type: 'emoji', attrs: { name: 'tada', emoji: '🎉' } }))
@@ -73,17 +65,17 @@ describe('emoji node', () => {
     expect(editor.view.dom.textContent).toBe('🎉')
   })
 
-  it('shows a node stored without its character as its shortcode, then as the emoji', async () => {
-    const editor = mountEditor(paragraph({ type: 'emoji', attrs: { name: 'rocket' } }))
-    expect(editor.view.dom.textContent).toBe(':rocket:')
-    await loadEmojiData()
-    await tick()
-    expect(editor.view.dom.textContent).toBe('🚀')
-    // The document itself is untouched: no edit, no attrs rewrite.
-    expect(emojiNodes(editor)).toEqual([{ name: 'rocket', emoji: null }])
+  it('preserves a stored character through HTML copy and paste', () => {
+    const original = mountEditor(
+      paragraph({ type: 'emoji', attrs: { name: 'rocket', emoji: '🚀' } })
+    )
+    const copied = mountEditor(original.getHTML())
+    expect(emojiNodes(copied)).toEqual([{ name: 'rocket', emoji: '🚀' }])
+    expect(copied.getText()).toBe('🚀')
   })
 
-  it('turns a typed :shortcode: into an emoji', () => {
+  it('turns a typed :shortcode: into an emoji', async () => {
+    await loadEmojiData()
     const editor = mountEditor('<p>Shipped </p>')
     editor.commands.focus('end')
     type(editor, ':tada')
@@ -119,9 +111,9 @@ describe('emoji node', () => {
     expect(editor.getText()).toBe('Party 🎉 time')
   })
 
-  it('writes an emoji to markdown as its shortcode', () => {
+  it('writes the stored Unicode character to markdown', () => {
     const editor = mountEditor(paragraph({ type: 'emoji', attrs: { name: 'tada', emoji: '🎉' } }))
-    expect(editor.getMarkdown().trim()).toBe(':tada:')
+    expect(editor.getMarkdown().trim()).toBe('🎉')
   })
 
   it('offers the picker matches from the loaded dataset', async () => {
