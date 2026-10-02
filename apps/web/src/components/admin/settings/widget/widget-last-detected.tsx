@@ -10,7 +10,7 @@ export function WidgetLastDetected({ at, inline }: { at?: string | null; inline?
   const title = formatDate(parsed, NUMERIC_DATE_TIME)
   const content = (
     <>
-      Last detected <TimeAgo date={at} />
+      Last detected <TimeAgo date={at} locale="en" />
     </>
   )
   if (inline) return <span title={title}>{content}</span>

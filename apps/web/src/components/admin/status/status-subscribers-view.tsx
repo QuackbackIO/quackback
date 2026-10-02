@@ -222,11 +222,11 @@ export function StatusSubscribersView() {
                 <div className="text-xs text-muted-foreground text-right shrink-0 whitespace-nowrap">
                   {sub.unsubscribedAt ? (
                     <span>
-                      Unsubscribed <TimeAgo date={sub.unsubscribedAt} />
+                      Unsubscribed <TimeAgo date={sub.unsubscribedAt} locale="en" />
                     </span>
                   ) : (
                     <span>
-                      Subscribed <TimeAgo date={sub.createdAt} />
+                      Subscribed <TimeAgo date={sub.createdAt} locale="en" />
                     </span>
                   )}
                 </div>

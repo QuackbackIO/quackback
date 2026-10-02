@@ -108,6 +108,6 @@ describe('GitHubChannelPage', () => {
     expect(screen.getByText('Last sent')).toBeInTheDocument()
     expect(screen.getByText('No deliveries yet')).toBeInTheDocument()
     expect(screen.getByText('Last received')).toBeInTheDocument()
-    expect(screen.getByText(/about 1 hour ago/)).toBeInTheDocument()
+    expect(screen.getByText(/1 hour ago/)).toBeInTheDocument()
   })
 })

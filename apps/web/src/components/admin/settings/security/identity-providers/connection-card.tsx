@@ -103,7 +103,7 @@ function ConnectionSummary({
                 <CheckCircleIcon className="size-4 shrink-0 text-success" />
                 <span>Connected as {who}</span>
                 <span className="font-normal text-muted-foreground">
-                  · Tested <TimeAgo date={state.testedAt} />
+                  · Tested <TimeAgo date={state.testedAt} locale="en" />
                 </span>
               </p>
               {capture?.identity?.email && who !== capture.identity.email && (
@@ -113,7 +113,7 @@ function ConnectionSummary({
           ) : state.kind === 'verified' ? (
             <p className="flex items-center gap-1.5 font-medium">
               <CheckCircleIcon className="size-4 shrink-0 text-success" />
-              Connected · Tested <TimeAgo date={state.testedAt} />
+              Connected · Tested <TimeAgo date={state.testedAt} locale="en" />
             </p>
           ) : state.kind === 'stale' ? (
             <p className="flex items-center gap-1.5 font-medium text-warning">

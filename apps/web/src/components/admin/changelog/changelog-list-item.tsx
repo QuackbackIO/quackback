@@ -99,7 +99,7 @@ export function ChangelogListItem({
           <span className="text-muted-foreground/70">
             {status === 'published' && publishedAt ? (
               <>
-                Published <TimeAgo date={publishedAt} />
+                Published <TimeAgo date={publishedAt} locale="en" />
               </>
             ) : status === 'scheduled' && publishedAt ? (
               <>
@@ -112,7 +112,7 @@ export function ChangelogListItem({
               </>
             ) : (
               <>
-                Created <TimeAgo date={createdAt} />
+                Created <TimeAgo date={createdAt} locale="en" />
               </>
             )}
           </span>

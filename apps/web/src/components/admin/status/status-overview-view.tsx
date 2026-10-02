@@ -246,7 +246,7 @@ function ActiveIncidentsCard({ incidents }: { incidents: OverviewIncident[] }) {
                     ))}
                     <span className="text-muted-foreground/50">·</span>
                     <span>
-                      Started <TimeAgo date={incident.startedAt} />
+                      Started <TimeAgo date={incident.startedAt} locale="en" />
                     </span>
                   </div>
                 </div>
@@ -257,7 +257,7 @@ function ActiveIncidentsCard({ incidents }: { incidents: OverviewIncident[] }) {
               {latest && (
                 <p className="text-xs text-muted-foreground border-l-2 border-border pl-2.5 ml-1 line-clamp-2">
                   <span className="text-foreground/80 font-medium">
-                    Latest update <TimeAgo date={latest.createdAt} />:
+                    Latest update <TimeAgo date={latest.createdAt} locale="en" />:
                   </span>{' '}
                   {latest.body}
                 </p>

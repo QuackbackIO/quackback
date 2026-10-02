@@ -58,7 +58,7 @@ export function ExportWorkspaceAction() {
       </Button>
       {activeRun && (
         <span className="text-sm text-muted-foreground">
-          started <TimeAgo date={activeRun.createdAt} />
+          started <TimeAgo date={activeRun.createdAt} locale="en" />
         </span>
       )}
       <UpgradeModal
