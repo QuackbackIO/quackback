@@ -10,12 +10,7 @@
 import type { PrincipalId } from '@quackback/ids'
 import { isS3Usable } from '@/lib/server/storage/s3'
 import { readBodyWithLimit } from '@/lib/server/utils/read-body'
-import {
-  familyFor,
-  formatBytes,
-  maxBytesForFamily,
-  MAX_ATTACHMENT_BYTES,
-} from '@/lib/shared/files/file-types'
+import { familyFor, formatBytes, maxBytesForFamily } from '@/lib/shared/files/file-types'
 import { logger } from '@/lib/server/logger'
 import { storeFile, toUploadedFile, FileRejectedError, type FileSource } from './files.service'
 
@@ -45,7 +40,7 @@ export async function handleFileUploadRequest(
   // real family afterwards, and storeFile re-checks against that family's cap,
   // so a "video" that turns out to be a 90 MB PDF is still refused.
   const readCap = maxBytesForFamily(familyFor(name, declaredType ?? ''))
-  const bytes = await readBodyWithLimit(request, Math.max(readCap, MAX_ATTACHMENT_BYTES))
+  const bytes = await readBodyWithLimit(request, readCap)
   if (!bytes) {
     return Response.json(
       { error: `Over ${formatBytes(readCap)}`, reason: 'too_large' },
