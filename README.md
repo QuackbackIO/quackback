@@ -86,6 +86,19 @@ Requires PostgreSQL. Set all variables in the canonical [runtime configuration t
 
 Quackback's hosted service runs this same codebase, and the client side of that arrangement lives here: a default-off `cloud` settings block, plan and entitlement gating, and a control-plane client. On a self-hosted install none of it activates — an install with no cloud configuration is entitled to every feature, no upgrade prompts render, and no outbound requests are made. Disabling is the default; there is nothing to opt out of. This is stated here so you never have to discover it in the code first.
 
+### Kubernetes
+
+```bash
+helm install quackback ./deploy/kubernetes/quackback \
+  --namespace quackback --create-namespace \
+  --set secretKey="$(openssl rand -base64 32)" \
+  --set baseUrl=https://feedback.example.com \
+  --set ingress.host=feedback.example.com \
+  --set ingress.tls.secretName=feedback-tls
+```
+
+See the [Helm chart guide](deploy/kubernetes/quackback/README.md) for full configuration, including running against an external database and object storage.
+
 ## Contributing
 
 See the [Contributing Guide](CONTRIBUTING.md) to get started.

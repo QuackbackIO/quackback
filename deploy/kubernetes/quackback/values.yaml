@@ -1,0 +1,267 @@
+# Default values for the Quackback Helm chart.
+# Field-by-field docs: ../README.md
+# Environment variable reference: /.env.prod.example (repo root)
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Pull secrets for private image registries (app image and/or bundled
+# datastore images, if you've mirrored them internally).
+imagePullSecrets: []
+# - name: regcred
+
+# ──────────────────────────────────────────────────────────────────────────
+# Required — no default. Set via --set or a values override file.
+# ──────────────────────────────────────────────────────────────────────────
+
+# Session signing + encryption key, >= 32 chars. Generate with:
+#   openssl rand -base64 32
+secretKey: ""
+
+# Public URL of this instance. Auth, emails and OAuth callbacks depend on it.
+baseUrl: ""
+
+# ──────────────────────────────────────────────────────────────────────────
+# Quackback application
+# ──────────────────────────────────────────────────────────────────────────
+app:
+  replicaCount: 1
+  image:
+    repository: ghcr.io/quackbackio/quackback
+    # Defaults to .Chart.AppVersion when empty. Pin to a release tag in
+    # production — see https://quackback.io/docs/self-hosting/docker#docker-images
+    # for the tag scheme (latest / latest-enterprise / vX.Y.Z / vX.Y.Z-enterprise).
+    tag: ""
+    pullPolicy: IfNotPresent
+  port: 3000
+
+  podAnnotations: {}
+  podLabels: {}
+
+  # Matches the non-root `quackback` user (uid/gid 1001) created in
+  # apps/web/Dockerfile.
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    fsGroup: 1001
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop: ["ALL"]
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 75
+
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+  # Escape hatch for anything not covered by an explicit value below —
+  # integrations (Slack/Linear/Jira/Discord/...), AI_*_MODEL overrides,
+  # EMAIL_INBOUND_*, etc. See .env.prod.example for the full variable list.
+  extraEnv: []
+  # - name: DISCORD_WEBHOOK_URL
+  #   value: https://discord.com/api/webhooks/...
+  extraEnvFrom: []
+  # - secretRef:
+  #     name: quackback-integrations
+
+disableTelemetry: "true"
+seedDatabase: "false"
+
+# ──────────────────────────────────────────────────────────────────────────
+# Migrations
+#
+# apps/web/Dockerfile documents the intended K8s pattern: run migrations from
+# a pre-install/pre-upgrade Helm hook Job, and set SKIP_MIGRATIONS=true on the
+# app Deployment so it never races the hook (or double-runs them per replica).
+# This chart follows that pattern — the app's SKIP_MIGRATIONS is hardcoded to
+# "true" whenever migrations.enabled is true.
+# ──────────────────────────────────────────────────────────────────────────
+migrations:
+  enabled: true
+  backoffLimit: 3
+  activeDeadlineSeconds: 300
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+# ──────────────────────────────────────────────────────────────────────────
+# Email — leave smtp.host and resendApiKey both empty to log OTP/invite codes
+# to the pod's console instead of sending real email (fine for evaluation).
+# ──────────────────────────────────────────────────────────────────────────
+email:
+  smtp:
+    host: ""
+    port: ""
+    user: ""
+    pass: ""
+    secure: ""
+  resendApiKey: ""
+  from: ""
+
+# ──────────────────────────────────────────────────────────────────────────
+# OAuth sign-in providers (optional)
+# ──────────────────────────────────────────────────────────────────────────
+oauth:
+  github:
+    clientId: ""
+    clientSecret: ""
+  google:
+    clientId: ""
+    clientSecret: ""
+
+# ──────────────────────────────────────────────────────────────────────────
+# AI features (optional) — summaries, duplicate detection, feedback
+# extraction. All AI features stay off until both an API key and at least
+# one model are set; Quackback talks to any OpenAI-compatible endpoint.
+# ──────────────────────────────────────────────────────────────────────────
+ai:
+  openaiApiKey: ""
+  openaiBaseUrl: ""
+  chatModel: ""
+  embeddingModel: ""
+
+# ──────────────────────────────────────────────────────────────────────────
+# The internal SLA-tick CronJob (below) and any external scheduler need this
+# to call authenticated internal endpoints. Leave empty to disable both the
+# CronJob and the endpoints it targets.
+# ──────────────────────────────────────────────────────────────────────────
+internalTaskSecret: ""
+
+# Drives the SLA escalation tick (POST /api/v1/internal/sla-tick once a
+# minute) the way deploy/self-hosted/README.md recommends for operators who
+# aren't running pg_cron: "drive the SLA tick from any external scheduler
+# (systemd timer, Kubernetes CronJob, ...)". Requires internalTaskSecret.
+slaTickCronJob:
+  enabled: false
+  schedule: "* * * * *"
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+
+# ──────────────────────────────────────────────────────────────────────────
+# PostgreSQL — bundled StatefulSet, enabled by default so the chart is
+# deployable with just secretKey/baseUrl/ingress.host. Set enabled: false and
+# externalDatabaseUrl for a managed database (recommended for production —
+# see the note in README.md about pg_cron and the bundled image).
+# ──────────────────────────────────────────────────────────────────────────
+postgres:
+  enabled: true
+  image:
+    repository: pgvector/pgvector
+    tag: pg17
+    pullPolicy: IfNotPresent
+  user: "quackback"
+  password: "" # auto-generated at install time when left empty
+  database: "quackback"
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  storage:
+    size: 5Gi
+    # Empty uses the cluster's default StorageClass.
+    storageClassName: ""
+
+# Required when postgres.enabled is false.
+externalDatabaseUrl: ""
+
+# ──────────────────────────────────────────────────────────────────────────
+# Dragonfly — Redis-compatible store for the BullMQ job queue.
+# ──────────────────────────────────────────────────────────────────────────
+dragonfly:
+  enabled: true
+  image:
+    repository: docker.dragonflydb.io/dragonflydb/dragonfly
+    tag: v1.27.1
+    pullPolicy: IfNotPresent
+  # 4 Dragonfly threads need at least ~1GiB; keep maxmemory above that floor.
+  maxmemory: "1280mb"
+  resources:
+    requests:
+      cpu: 50m
+      memory: 1536Mi
+    limits:
+      cpu: 200m
+      memory: 2Gi
+  storage:
+    size: 5Gi
+    storageClassName: ""
+
+# Required when dragonfly.enabled is false.
+externalRedisUrl: ""
+
+# ──────────────────────────────────────────────────────────────────────────
+# MinIO — bundled S3-compatible object storage for uploads (logos, avatars,
+# changelog images). Traffic is proxied through the app (S3_PROXY) since the
+# in-cluster MinIO has no public endpoint of its own.
+# ──────────────────────────────────────────────────────────────────────────
+minio:
+  enabled: true
+  image:
+    repository: minio/minio
+    tag: latest
+    pullPolicy: IfNotPresent
+  rootUser: "quackback"
+  rootPassword: "" # auto-generated at install time when left empty
+  bucketName: "quackback"
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  storage:
+    size: 20Gi
+    storageClassName: ""
+
+# ──────────────────────────────────────────────────────────────────────────
+# Ingress
+# ──────────────────────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: "nginx"
+  # Extra annotations merged in verbatim — use this for cert-manager
+  # (cert-manager.io/cluster-issuer: ...) or controller-specific tuning.
+  annotations: {}
+  host: ""
+  tls:
+    enabled: true
+    secretName: ""
+
+# ──────────────────────────────────────────────────────────────────────────
+# Scheduling shared by every bundled workload (app, postgres, dragonfly,
+# minio). Per-component overrides live under app.nodeSelector etc. above.
+# ──────────────────────────────────────────────────────────────────────────
+nodeSelector: {}
+tolerations: []
