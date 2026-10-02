@@ -87,7 +87,7 @@ const FAILURE_MESSAGE: Record<EngineFailure, { id: string; defaultMessage: strin
 }
 
 /** The same-origin URL for a stored file's bytes (`?proxy=1` streams through this origin). */
-export function proxyUrl(url: string): string {
+function proxyUrl(url: string): string {
   return withQueryParams(url, { proxy: '1' })
 }
 
@@ -668,7 +668,7 @@ function WrapButton({ wrap }: { wrap: NonNullable<EngineToolbar['wrap']> }) {
  * The one failure state, for every format and every cause: the badge, what
  * happened in one sentence, and Download (unless the file is gone).
  */
-export function ViewerFallback({ file, failure }: { file: ViewerFile; failure: EngineFailure }) {
+function ViewerFallback({ file, failure }: { file: ViewerFile; failure: EngineFailure }) {
   const intl = useIntl()
   const message = FAILURE_MESSAGE[failure]
   return (
