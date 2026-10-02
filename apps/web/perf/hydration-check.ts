@@ -11,12 +11,31 @@
  *   bun perf/hydration-check.ts
  */
 import { chromium, type BrowserContext } from '@playwright/test'
-import { BENCH_URL, signedInContext, startBenchServer } from './config'
+import postgres from 'postgres'
+import { fromUuid } from '@quackback/ids'
+import { BENCH_DATABASE_URL, BENCH_URL, signedInContext, startBenchServer } from './config'
 
 const appDir = process.env.PERF_APP_DIR ?? new URL('..', import.meta.url).pathname
 const baseURL = BENCH_URL
 
-const PAGES: { path: string; as: 'anon' | 'admin' }[] = [
+/**
+ * The inbox with a seeded conversation open, as a deep link renders it: the
+ * thread and its detail panel come with the document. Seeded ids differ per
+ * database, so the conversation is looked up by its subject.
+ */
+async function seededConversationPath(subject: string): Promise<string> {
+  const sql = postgres(BENCH_DATABASE_URL, { max: 1, onnotice: () => {} })
+  try {
+    const [row] = await sql<{ id: string }[]>`
+      SELECT id FROM conversations WHERE subject = ${subject}`
+    if (!row) throw new Error(`no seeded conversation "${subject}"`)
+    return `/admin/inbox?i=${fromUuid('conversation', row.id)}`
+  } finally {
+    await sql.end()
+  }
+}
+
+const PAGES: { path: string | (() => Promise<string>); as: 'anon' | 'admin' }[] = [
   { path: '/?sort=trending', as: 'anon' },
   { path: '/roadmap', as: 'anon' },
   { path: '/changelog', as: 'anon' },
@@ -24,6 +43,7 @@ const PAGES: { path: string; as: 'anon' | 'admin' }[] = [
   { path: '/?sort=trending', as: 'admin' },
   { path: '/admin/feedback', as: 'admin' },
   { path: '/admin/inbox', as: 'admin' },
+  { path: () => seededConversationPath('Bench conversation 3'), as: 'admin' },
   { path: '/admin/roadmap', as: 'admin' },
   { path: '/admin/users?sort=newest', as: 'admin' },
   { path: '/admin/changelog', as: 'admin' },
@@ -93,7 +113,8 @@ try {
     console.log(`✓ self-test: a corrupted document is reported (${detected.slice(0, 60)}...)`)
   }
 
-  for (const { path, as } of PAGES) {
+  for (const { path: pathOrLookup, as } of PAGES) {
+    const path = typeof pathOrLookup === 'string' ? pathOrLookup : await pathOrLookup()
     const problems = await problemsLoading(contexts[as], path)
     if (problems.length) {
       failures++
