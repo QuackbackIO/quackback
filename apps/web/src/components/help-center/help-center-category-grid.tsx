@@ -1,4 +1,5 @@
 import { Link } from '@tanstack/react-router'
+import { FormattedMessage } from 'react-intl'
 import { getTopLevelCategories } from './help-center-utils'
 import { CategoryIcon } from './category-icon'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
@@ -27,7 +28,10 @@ export function HelpCenterCategoryGrid({ categories, locale }: HelpCenterCategor
   if (topLevel.length === 0) {
     return (
       <div className="flex items-center justify-center py-16 text-muted-foreground">
-        No categories yet. Check back soon.
+        <FormattedMessage
+          id="portal.hc.categoryGrid.empty"
+          defaultMessage="No categories yet. Check back soon."
+        />
       </div>
     )
   }
@@ -58,7 +62,11 @@ export function HelpCenterCategoryGrid({ categories, locale }: HelpCenterCategor
               </p>
             )}
             <span className="mt-3 block text-xs font-medium text-muted-foreground">
-              {cat.articleCount} {cat.articleCount === 1 ? 'article' : 'articles'}
+              <FormattedMessage
+                id="portal.hc.articleCount"
+                defaultMessage="{count, plural, one {# article} other {# articles}}"
+                values={{ count: cat.articleCount }}
+              />
             </span>
           </div>
         </Link>

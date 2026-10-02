@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { HelpCenterHero } from '@/components/help-center/help-center-hero'
 import { HelpCenterHeroSearch } from '@/components/help-center/help-center-search'
 import { HelpCenterCategoryGrid } from '@/components/help-center/help-center-category-grid'
@@ -27,8 +28,10 @@ export const Route = createFileRoute('/_portal/hc/$locale/')({
 
     return {
       categories,
-      title: chrome?.homepageTitle || DEFAULT_TITLE,
-      description: chrome?.homepageDescription || DEFAULT_DESCRIPTION,
+      // Unset chrome falls back to the default copy: English in the page
+      // metadata below, the app's language on the page itself.
+      title: chrome?.homepageTitle || null,
+      description: chrome?.homepageDescription || null,
       searchPlaceholder: chrome?.searchPlaceholder || undefined,
       workspaceName: settings?.name ?? 'Help Center',
       logoUrl: resolvePortalOgImageUrl(
@@ -39,7 +42,9 @@ export const Route = createFileRoute('/_portal/hc/$locale/')({
   },
   head: ({ loaderData }) => {
     if (!loaderData) return {}
-    const { title, description, workspaceName, logoUrl } = loaderData
+    const { workspaceName, logoUrl } = loaderData
+    const title = loaderData.title ?? DEFAULT_TITLE
+    const description = loaderData.description ?? DEFAULT_DESCRIPTION
     const pageTitle = `${title} - ${workspaceName}`
     return {
       meta: [
@@ -55,9 +60,19 @@ export const Route = createFileRoute('/_portal/hc/$locale/')({
 })
 
 function LocaleHelpCenterLandingPage() {
-  const { categories, title, description } = Route.useLoaderData()
+  const intl = useIntl()
+  const { categories, title: chromeTitle, description: chromeDescription } = Route.useLoaderData()
   const { locale } = Route.useParams()
   const collectionCount = getTopLevelCategories(categories).length
+  const title =
+    chromeTitle ??
+    intl.formatMessage({ id: 'portal.hc.home.title', defaultMessage: 'How can we help?' })
+  const description =
+    chromeDescription ??
+    intl.formatMessage({
+      id: 'portal.hc.home.localeDescription',
+      defaultMessage: 'Search our knowledge base or browse by category',
+    })
 
   return (
     <>
@@ -72,11 +87,15 @@ function LocaleHelpCenterLandingPage() {
       >
         <div className="mb-6 flex items-baseline justify-between gap-4">
           <h2 id="hc-topics" className="text-2xl font-semibold tracking-tight text-foreground">
-            Browse by topic
+            <FormattedMessage id="portal.hc.home.browseByTopic" defaultMessage="Browse by topic" />
           </h2>
           {collectionCount > 0 && (
             <span className="shrink-0 text-sm text-muted-foreground">
-              {collectionCount} {collectionCount === 1 ? 'collection' : 'collections'}
+              <FormattedMessage
+                id="portal.hc.home.collectionCount"
+                defaultMessage="{count, plural, one {# collection} other {# collections}}"
+                values={{ count: collectionCount }}
+              />
             </span>
           )}
         </div>

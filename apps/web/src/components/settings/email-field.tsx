@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
@@ -36,6 +37,7 @@ const message = (err: unknown, fallback: string) =>
  * it.
  */
 export function EmailField() {
+  const intl = useIntl()
   const { data, refetch } = useQuery({
     queryKey: ['email-change-state'],
     queryFn: () => getEmailChangeStateFn(),
@@ -57,8 +59,18 @@ export function EmailField() {
   if (!data) {
     return (
       <div className="space-y-2">
-        <Label htmlFor="email">Email</Label>
-        <Input id="email" type="email" disabled placeholder="Loading…" />
+        <Label htmlFor="email">
+          <FormattedMessage id="portal.settings.email.label" defaultMessage="Email" />
+        </Label>
+        <Input
+          id="email"
+          type="email"
+          disabled
+          placeholder={intl.formatMessage({
+            id: 'portal.settings.email.loading',
+            defaultMessage: 'Loading…',
+          })}
+        />
       </div>
     )
   }
@@ -87,35 +99,65 @@ export function EmailField() {
       setStep('address')
       return
     }
-    await run(async () => {
-      await sendCurrentAddressCodeFn()
-      setStep('address')
-    }, 'Could not send a code to your current address.')
+    await run(
+      async () => {
+        await sendCurrentAddressCodeFn()
+        setStep('address')
+      },
+      intl.formatMessage({
+        id: 'portal.settings.email.error.sendCurrent',
+        defaultMessage: 'Could not send a code to your current address.',
+      })
+    )
   }
 
   const sendToNewAddress = () =>
-    run(async () => {
-      await requestEmailChangeFn({
-        data: { email: newEmail, ...(requiresCurrentCode ? { currentCode } : {}) },
+    run(
+      async () => {
+        await requestEmailChangeFn({
+          data: { email: newEmail, ...(requiresCurrentCode ? { currentCode } : {}) },
+        })
+        setStep('verify')
+      },
+      intl.formatMessage({
+        id: 'portal.settings.email.error.sendNew',
+        defaultMessage: 'Could not send a code to that address.',
       })
-      setStep('verify')
-    }, 'Could not send a code to that address.')
+    )
 
   const confirm = () =>
-    run(async () => {
-      const res = await confirmEmailChangeFn({ data: { email: newEmail, code: newCode } })
-      if (!res.ok) {
-        toast.error('That code is not right, or the address is no longer available.')
-        return
-      }
-      toast.success('Email updated.')
-      reset()
-      await refetch()
-    }, 'Could not confirm that code.')
+    run(
+      async () => {
+        const res = await confirmEmailChangeFn({ data: { email: newEmail, code: newCode } })
+        if (!res.ok) {
+          toast.error(
+            intl.formatMessage({
+              id: 'portal.settings.email.error.invalidCode',
+              defaultMessage: 'That code is not right, or the address is no longer available.',
+            })
+          )
+          return
+        }
+        toast.success(
+          intl.formatMessage({
+            id: 'portal.settings.email.updated',
+            defaultMessage: 'Email updated.',
+          })
+        )
+        reset()
+        await refetch()
+      },
+      intl.formatMessage({
+        id: 'portal.settings.email.error.confirm',
+        defaultMessage: 'Could not confirm that code.',
+      })
+    )
 
   return (
     <div className="space-y-2">
-      <Label htmlFor="email">Email</Label>
+      <Label htmlFor="email">
+        <FormattedMessage id="portal.settings.email.label" defaultMessage="Email" />
+      </Label>
 
       {step === 'idle' && (
         <>
@@ -125,16 +167,25 @@ export function EmailField() {
               type="email"
               value={currentEmail ?? ''}
               disabled
-              placeholder="No email address"
+              placeholder={intl.formatMessage({
+                id: 'portal.settings.email.none',
+                defaultMessage: 'No email address',
+              })}
             />
             <Button type="button" variant="outline" size="sm" onClick={begin} disabled={busy}>
-              {currentEmail ? 'Change' : 'Add email'}
+              {currentEmail ? (
+                <FormattedMessage id="portal.settings.email.change" defaultMessage="Change" />
+              ) : (
+                <FormattedMessage id="portal.settings.email.add" defaultMessage="Add email" />
+              )}
             </Button>
           </div>
           {!currentEmail && (
             <p className="text-xs text-muted-foreground">
-              Your sign-in provider doesn&apos;t share an address, so we can&apos;t tell you when
-              someone replies to you.
+              <FormattedMessage
+                id="portal.settings.email.noProviderAddress"
+                defaultMessage="Your sign-in provider doesn't share an address, so we can't tell you when someone replies to you."
+              />
             </p>
           )}
         </>
@@ -143,25 +194,46 @@ export function EmailField() {
       {step === 'address' && (
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">
-            {requiresCurrentCode
-              ? `We sent a code to ${currentEmail}. Enter it, then tell us the new address.`
-              : 'Enter the address you want to use.'}
+            {requiresCurrentCode ? (
+              <FormattedMessage
+                id="portal.settings.email.codeSentCurrent"
+                defaultMessage="We sent a code to {email}. Enter it, then tell us the new address."
+                values={{ email: currentEmail }}
+              />
+            ) : (
+              <FormattedMessage
+                id="portal.settings.email.enterNew"
+                defaultMessage="Enter the address you want to use."
+              />
+            )}
           </p>
           {requiresCurrentCode && (
             <Input
-              aria-label="Code sent to your current address"
+              aria-label={intl.formatMessage({
+                id: 'portal.settings.email.currentCodeLabel',
+                defaultMessage: 'Code sent to your current address',
+              })}
               value={currentCode}
               onChange={(e) => setCurrentCode(e.target.value)}
-              placeholder="6-digit code"
+              placeholder={intl.formatMessage({
+                id: 'portal.settings.email.codePlaceholder',
+                defaultMessage: '6-digit code',
+              })}
               disabled={busy}
             />
           )}
           <Input
-            aria-label="New email address"
+            aria-label={intl.formatMessage({
+              id: 'portal.settings.email.newAddress',
+              defaultMessage: 'New email address',
+            })}
             type="email"
             value={newEmail}
             onChange={(e) => setNewEmail(e.target.value)}
-            placeholder="New email address"
+            placeholder={intl.formatMessage({
+              id: 'portal.settings.email.newAddress',
+              defaultMessage: 'New email address',
+            })}
             disabled={busy}
           />
           <div className="flex items-center gap-2">
@@ -171,10 +243,13 @@ export function EmailField() {
               onClick={sendToNewAddress}
               disabled={busy || !newEmail.trim() || (requiresCurrentCode && !currentCode.trim())}
             >
-              Send verification code
+              <FormattedMessage
+                id="portal.settings.email.sendCode"
+                defaultMessage="Send verification code"
+              />
             </Button>
             <Button type="button" variant="ghost" size="sm" onClick={reset} disabled={busy}>
-              Cancel
+              <FormattedMessage id="common.cancel" defaultMessage="Cancel" />
             </Button>
           </div>
         </div>
@@ -183,21 +258,31 @@ export function EmailField() {
       {step === 'verify' && (
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">
-            We sent a code to {newEmail}. Enter it to finish.
+            <FormattedMessage
+              id="portal.settings.email.codeSentNew"
+              defaultMessage="We sent a code to {email}. Enter it to finish."
+              values={{ email: newEmail }}
+            />
           </p>
           <Input
-            aria-label="Code sent to the new address"
+            aria-label={intl.formatMessage({
+              id: 'portal.settings.email.newCodeLabel',
+              defaultMessage: 'Code sent to the new address',
+            })}
             value={newCode}
             onChange={(e) => setNewCode(e.target.value)}
-            placeholder="6-digit code"
+            placeholder={intl.formatMessage({
+              id: 'portal.settings.email.codePlaceholder',
+              defaultMessage: '6-digit code',
+            })}
             disabled={busy}
           />
           <div className="flex items-center gap-2">
             <Button type="button" size="sm" onClick={confirm} disabled={busy || !newCode.trim()}>
-              Confirm
+              <FormattedMessage id="portal.settings.email.confirm" defaultMessage="Confirm" />
             </Button>
             <Button type="button" variant="ghost" size="sm" onClick={reset} disabled={busy}>
-              Cancel
+              <FormattedMessage id="common.cancel" defaultMessage="Cancel" />
             </Button>
           </div>
         </div>

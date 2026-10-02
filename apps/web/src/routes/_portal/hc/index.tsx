@@ -1,4 +1,5 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { createIsomorphicFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { HelpCenterHero } from '@/components/help-center/help-center-hero'
@@ -105,12 +106,21 @@ export const Route = createFileRoute('/_portal/hc/')({
 })
 
 function HelpCenterLandingPage() {
+  const intl = useIntl()
   const { categories, popularArticles, helpCenterConfig } = Route.useLoaderData()
   const settings = useWorkspaceSettings()
   const askAiEnabled = !!settings?.featureFlags?.helpCenter
 
-  const title = helpCenterConfig?.homepageTitle ?? DEFAULT_TITLE
-  const description = helpCenterConfig?.homepageDescription ?? DEFAULT_DESCRIPTION
+  const title =
+    helpCenterConfig?.homepageTitle ??
+    intl.formatMessage({ id: 'portal.hc.home.title', defaultMessage: 'How can we help?' })
+  const description =
+    helpCenterConfig?.homepageDescription ??
+    intl.formatMessage({
+      id: 'portal.hc.home.description',
+      defaultMessage:
+        'Search our guides or ask AI for an instant answer. Real answers, fast, no ticket required.',
+    })
   const collectionCount = getTopLevelCategories(categories).length
 
   return (
@@ -126,11 +136,15 @@ function HelpCenterLandingPage() {
       >
         <div className="mb-6 flex items-baseline justify-between gap-4">
           <h2 id="hc-topics" className="text-2xl font-semibold tracking-tight text-foreground">
-            Browse by topic
+            <FormattedMessage id="portal.hc.home.browseByTopic" defaultMessage="Browse by topic" />
           </h2>
           {collectionCount > 0 && (
             <span className="shrink-0 text-sm text-muted-foreground">
-              {collectionCount} {collectionCount === 1 ? 'collection' : 'collections'}
+              <FormattedMessage
+                id="portal.hc.home.collectionCount"
+                defaultMessage="{count, plural, one {# collection} other {# collections}}"
+                values={{ count: collectionCount }}
+              />
             </span>
           )}
         </div>
