@@ -76,14 +76,16 @@ describe('getShortTimeAgo', () => {
   })
 
   // Narrow unit forms move between CLDR releases, so the expected text is
-  // worded by Intl itself; what is under test is the locale reaching it.
+  // worded by Intl itself; what is under test is the locale reaching it. The
+  // locales write in other scripts, because a Latin-script narrow form can
+  // match English outright (German reads "3h" in newer CLDR data).
   const narrow = (locale: string, unit: string, value: number) =>
     new Intl.NumberFormat(locale, { style: 'unit', unit, unitDisplay: 'narrow' }).format(value)
 
   it.each([
-    ['2026-09-26T10:05:00.000Z', 'pl', narrow('pl', 'minute', 5)],
-    ['2026-09-26T13:00:00.000Z', 'de', narrow('de', 'hour', 3)],
-    ['2026-09-28T10:00:00.000Z', 'fr', narrow('fr', 'day', 2)],
+    ['2026-09-26T10:05:00.000Z', 'ru', narrow('ru', 'minute', 5)],
+    ['2026-09-26T13:00:00.000Z', 'zh-cn', narrow('zh-cn', 'hour', 3)],
+    ['2026-09-28T10:00:00.000Z', 'ar', narrow('ar', 'day', 2)],
   ])('at %s reads in %s as %s', (now, locale, label) => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date(now))
