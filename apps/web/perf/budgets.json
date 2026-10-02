@@ -40,7 +40,7 @@
     },
     "doc:admin-feedback": {
       "dbQueries": 25,
-      "htmlKB": 215.2
+      "htmlKB": 226
     },
     "doc:admin-inbox": {
       "dbQueries": 23,
@@ -366,7 +366,7 @@
     },
     "sweep:doc:admin:/admin/feedback": {
       "dbQueries": 25,
-      "htmlKB": 215.2
+      "htmlKB": 226
     },
     "sweep:ui:admin:/admin/feedback": {
       "dbQueries": 25,
@@ -457,7 +457,7 @@
     },
     "sweep:doc:admin:/admin/settings/boards": {
       "dbQueries": 8,
-      "htmlKB": 138.3
+      "htmlKB": 145.4
     },
     "sweep:ui:admin:/admin/settings/boards": {
       "dbQueries": 8,
@@ -699,7 +699,7 @@
       "requests": 106,
       "jsRequests": 101,
       "jsKB": 389.5,
-      "htmlTransferKB": 28.8,
+      "htmlTransferKB": 30.3,
       "componentRenders": 403
     },
     "sweep:doc:admin:/admin/settings/notifications": {
