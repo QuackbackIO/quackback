@@ -100,26 +100,21 @@ describe('useWidgetFileUpload — session guard', () => {
     expect(readPersistedToken()).toBe('anon-fresh')
   })
 
-  it('does not upload when no session can be established; surfaces onError and rejects', async () => {
+  it('does not upload when no session can be established', async () => {
     mintFails()
-    const onError = vi.fn()
-    const { result } = renderHook(() => useWidgetFileUpload({ onError }), { wrapper })
+    const { result } = renderHook(() => useWidgetFileUpload(), { wrapper })
 
     await expect(result.current.upload(txtFile(), {})).rejects.toBeInstanceOf(WidgetSessionError)
     expect(mockUpload).not.toHaveBeenCalled()
-    expect(onError).toHaveBeenCalledTimes(1)
-    expect(onError.mock.calls[0]?.[0]).toBeInstanceOf(WidgetSessionError)
   })
 
   it('blocks an anonymous visitor from sending a blocked extension before minting anything', async () => {
     mintSucceedsWith('anon-should-not-exist')
-    const onError = vi.fn()
-    const { result } = renderHook(() => useWidgetFileUpload({ onError }), { wrapper })
+    const { result } = renderHook(() => useWidgetFileUpload(), { wrapper })
 
     await expect(result.current.upload(exeFile(), {})).rejects.toThrow(
       "This file type can't be sent"
     )
-    expect(onError).toHaveBeenCalledTimes(1)
     expect(mintAnon).not.toHaveBeenCalled()
     expect(mockUpload).not.toHaveBeenCalled()
   })

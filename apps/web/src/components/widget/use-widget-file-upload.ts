@@ -1,19 +1,11 @@
 import { useCallback } from 'react'
-import { uploadFile, UploadError } from '@/lib/client/files/upload-file'
+import { UploadError } from '@/lib/client/files/upload-file'
+import { useFileUpload, type FileUploadCallOptions } from '@/lib/client/hooks/use-file-upload'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { isBlockedExtension } from '@/lib/shared/files/file-types'
 import type { UploadedFile } from '@/lib/shared/conversation/types'
 import { useWidgetAuth } from './widget-auth-provider'
 import { WidgetSessionError } from './use-widget-image-upload'
-
-interface UseWidgetFileUploadOptions {
-  onError?: (error: Error) => void
-}
-
-interface FileUploadCallOptions {
-  onProgress?: (progress: number) => void
-  signal?: AbortSignal
-}
 
 /**
  * File upload for the widget messenger composer.
@@ -25,37 +17,23 @@ interface FileUploadCallOptions {
  * scripts are refused client-side too, before the session mint or the
  * network call — the server refuses them regardless.
  */
-export function useWidgetFileUpload(options: UseWidgetFileUploadOptions = {}) {
-  const { onError } = options
+export function useWidgetFileUpload() {
   const { ensureSession, isIdentified } = useWidgetAuth()
+  const { upload: uploadToWidget } = useFileUpload({
+    endpoint: '/api/widget/files',
+    headers: getWidgetAuthHeaders,
+  })
 
   const upload = useCallback(
     async (file: File, opts: FileUploadCallOptions = {}): Promise<UploadedFile> => {
       if (!isIdentified && isBlockedExtension(file.name)) {
-        const error = new UploadError("This file type can't be sent", 'blocked')
-        onError?.(error)
-        throw error
+        throw new UploadError("This file type can't be sent", 'blocked')
       }
       const ready = await ensureSession()
-      if (!ready) {
-        const error = new WidgetSessionError()
-        onError?.(error)
-        throw error
-      }
-      try {
-        return await uploadFile(file, {
-          endpoint: '/api/widget/files',
-          headers: getWidgetAuthHeaders(),
-          onProgress: opts.onProgress,
-          signal: opts.signal,
-        })
-      } catch (err) {
-        const error = err instanceof Error ? err : new Error('Upload failed')
-        onError?.(error)
-        throw error
-      }
+      if (!ready) throw new WidgetSessionError()
+      return uploadToWidget(file, opts)
     },
-    [ensureSession, isIdentified, onError]
+    [ensureSession, isIdentified, uploadToWidget]
   )
 
   return { upload }

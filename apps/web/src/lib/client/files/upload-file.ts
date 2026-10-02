@@ -5,7 +5,7 @@
  * any until the whole thing has landed. The server decides the real type and
  * cap; this stays dumb about anything but the transport.
  */
-import { familyFor, maxBytesForFamily } from '@/lib/shared/files/file-types'
+import { familyFor, formatBytes, maxBytesForFamily } from '@/lib/shared/files/file-types'
 import type { UploadedFile } from '@/lib/shared/conversation/types'
 
 /** A rejected upload. `reason` mirrors the server's FileRejectedError reason
@@ -116,7 +116,7 @@ export function checkFileBeforeUpload(file: File): UploadError | null {
   const family = familyFor(file.name, file.type)
   const maxBytes = maxBytesForFamily(family)
   if (file.size > maxBytes) {
-    return new UploadError(`Over ${Math.round(maxBytes / (1024 * 1024))} MB`, 'too_large')
+    return new UploadError(`Over ${formatBytes(maxBytes)}`, 'too_large')
   }
   return null
 }

@@ -40,13 +40,6 @@ export type ComposerUploadFn = (
   opts: { onProgress: (progress: number) => void; signal: AbortSignal }
 ) => Promise<UploadedFile>
 
-export interface UseConversationComposerAttachmentsOptions {
-  /** An extra rejection run after the universal size/empty checks — e.g. the
-   *  widget's blocked-extension check for an anonymous visitor. Returning an
-   *  UploadError skips the upload entirely, same as the universal checks. */
-  precheck?: (file: File) => UploadError | null
-}
-
 let nextLocalId = 0
 function createLocalId(): string {
   nextLocalId += 1
@@ -110,11 +103,7 @@ function makeCapNoticeItem(): ComposerAttachmentItem {
  * marks each failure `retryable` based on whether it carries a definitive
  * server/pre-check reason.
  */
-export function useConversationComposerAttachments(
-  upload: ComposerUploadFn,
-  options: UseConversationComposerAttachmentsOptions = {}
-) {
-  const { precheck } = options
+export function useConversationComposerAttachments(upload: ComposerUploadFn) {
   const [items, setItems] = useState<ComposerAttachmentItem[]>([])
   const generationRef = useRef(0)
   // The authoritative slot count: every real tile `addFiles` stages counts
@@ -139,7 +128,7 @@ export function useConversationComposerAttachments(
 
   const runUpload = useCallback(
     (localId: string, file: File, generation: number): Promise<void> => {
-      const failure = checkFileBeforeUpload(file) ?? precheck?.(file) ?? null
+      const failure = checkFileBeforeUpload(file)
       if (failure) {
         patchItem(localId, {
           status: 'error',
@@ -181,7 +170,7 @@ export function useConversationComposerAttachments(
         }
       )
     },
-    [upload, precheck, patchItem]
+    [upload, patchItem]
   )
 
   const addFiles = useCallback(

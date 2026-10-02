@@ -5,10 +5,9 @@ import type { UploadedFile } from '@/lib/shared/conversation/types'
 interface UseFileUploadOptions {
   endpoint: string
   headers?: () => HeadersInit
-  onError?: (error: Error) => void
 }
 
-interface FileUploadCallOptions {
+export interface FileUploadCallOptions {
   onProgress?: (progress: number) => void
   signal?: AbortSignal
 }
@@ -18,7 +17,7 @@ interface FileUploadCallOptions {
  * surface's endpoint/headers so the composer attachments hook only has to
  * inject `(file, { onProgress, signal }) => Promise<UploadedFile>`.
  */
-export function useFileUpload({ endpoint, headers, onError }: UseFileUploadOptions) {
+export function useFileUpload({ endpoint, headers }: UseFileUploadOptions) {
   const upload = useCallback(
     async (file: File, opts: FileUploadCallOptions = {}): Promise<UploadedFile> => {
       try {
@@ -29,23 +28,21 @@ export function useFileUpload({ endpoint, headers, onError }: UseFileUploadOptio
           signal: opts.signal,
         })
       } catch (err) {
-        const error = err instanceof Error ? err : new Error('Upload failed')
-        onError?.(error)
-        throw error
+        throw err instanceof Error ? err : new Error('Upload failed')
       }
     },
-    [endpoint, headers, onError]
+    [endpoint, headers]
   )
 
   return { upload }
 }
 
 /** A team member attaching a file to a conversation/ticket reply or note. */
-export function useAgentFileUpload(options: Omit<UseFileUploadOptions, 'endpoint'> = {}) {
-  return useFileUpload({ ...options, endpoint: '/api/upload/file' })
+export function useAgentFileUpload() {
+  return useFileUpload({ endpoint: '/api/upload/file' })
 }
 
 /** A signed-in portal user attaching a file to their support thread. */
-export function usePortalFileUpload(options: Omit<UseFileUploadOptions, 'endpoint'> = {}) {
-  return useFileUpload({ ...options, endpoint: '/api/portal/files' })
+export function usePortalFileUpload() {
+  return useFileUpload({ endpoint: '/api/portal/files' })
 }

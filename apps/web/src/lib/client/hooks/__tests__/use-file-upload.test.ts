@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 /**
  * The generic composer file-upload wrapper: forwards to uploadFile() with a
- * fixed endpoint/headers and reports failures through onError, same contract
- * every surface-specific flavour below it relies on.
+ * fixed endpoint/headers, same contract every surface-specific flavour below
+ * it relies on.
  */
 import { describe, it, expect, vi } from 'vitest'
 import { renderHook } from '@testing-library/react'
@@ -48,15 +48,12 @@ describe('useFileUpload', () => {
     })
   })
 
-  it('reports a failed upload through onError and rethrows', async () => {
+  it('rethrows a failed upload', async () => {
     mockUpload.mockRejectedValue(new Error('Over 25 MB'))
-    const onError = vi.fn()
-    const { result } = renderHook(() => useFileUpload({ endpoint: '/api/upload/file', onError }))
+    const { result } = renderHook(() => useFileUpload({ endpoint: '/api/upload/file' }))
     const file = new File(['x'], 'a.txt', { type: 'text/plain' })
 
     await expect(result.current.upload(file, {})).rejects.toThrow('Over 25 MB')
-    expect(onError).toHaveBeenCalledTimes(1)
-    expect(onError.mock.calls[0]?.[0]).toBeInstanceOf(Error)
   })
 })
 
