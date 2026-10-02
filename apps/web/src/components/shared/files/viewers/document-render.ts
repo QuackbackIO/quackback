@@ -7,7 +7,11 @@
  * styles and `data:` images and fonts. Its only permission is opening web and
  * mail links in a new tab. File-derived HTML never reaches the app's DOM.
  */
-import DOMPurify from 'dompurify'
+// The library's standalone build, not its module entry: rich text imports
+// that one on nearly every page, and sharing it would split it into a chunk
+// of its own that each of those pages fetches. This copy stays in the lazy
+// Word viewer.
+import DOMPurify from 'dompurify/purify.min.js'
 import { parseAsync, renderDocument, type HElement, type Options } from 'docx-preview'
 
 export const DOCUMENT_CSP =
