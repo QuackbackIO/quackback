@@ -236,7 +236,9 @@ export function expandTheme(
     destructive: minimal.destructive,
     success: minimal.success,
     primaryForeground,
-    ring: minimal.ring ?? minimal.primary,
+    // Focus stays neutral. A ring that only repeats the brand colour is the
+    // default this replaced, not a choice, so it reads as unset.
+    ring: minimal.ring && minimal.ring !== minimal.primary ? minimal.ring : minimal.mutedForeground,
     cardForeground: minimal.foreground,
     popover: minimal.card,
     popoverForeground: minimal.foreground,
@@ -274,7 +276,7 @@ export function extractMinimal(vars: ThemeVariables): Partial<MinimalThemeVariab
     border: vars.border,
     destructive: vars.destructive,
     success: vars.success,
-    ring: vars.ring !== vars.primary ? vars.ring : undefined,
+    ring: vars.ring !== vars.mutedForeground ? vars.ring : undefined,
     fontSans: vars.fontSans,
     radius: vars.radius,
     // Only include secondary/accent if they differ from muted

@@ -37,7 +37,7 @@ describe('theme chrome tokens', () => {
     ['--chrome-active-text', '#09090b', '#fafafa'],
     ['--chrome-active-icon', '#9a6c00', '#ffcf20'],
     ['--chrome-pane-active-background', '#f4f4f5', '#1f1f23'],
-    ['--chrome-focus', '#9a6c00', '#ffcf20'],
+    ['--chrome-focus', 'var(--chrome-label)', 'var(--chrome-label)'],
   ])('%s is %s in light and %s in dark', (name, light, dark) => {
     expect(lightTokens).toContain(`${name}: ${light};`)
     expect(darkTokens).toContain(`${name}: ${dark};`)
