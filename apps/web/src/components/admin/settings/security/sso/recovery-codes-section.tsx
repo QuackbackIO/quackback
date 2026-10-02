@@ -19,6 +19,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
+import { LocalDate } from '@/components/ui/local-date'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   KeyIcon,
@@ -86,7 +87,7 @@ export function RecoveryCodesSection() {
             {activeCount > 0 && <Badge variant="secondary">{activeCount} active</Badge>}
             {latest ? (
               <span className="text-muted-foreground">
-                Last generated {new Date(latest.createdAt).toLocaleDateString()}
+                Last generated <LocalDate date={latest.createdAt} />
               </span>
             ) : (
               <span className="text-muted-foreground">No codes generated yet.</span>

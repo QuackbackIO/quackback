@@ -64,7 +64,8 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { MENU_LABEL } from '@/components/ui/menu'
-import { DetailRow as Row, formatDate } from '@/components/shared/detail-row'
+import { DETAIL_DATE, DetailDate, DetailRow as Row } from '@/components/shared/detail-row'
+import { useLocalDateFormatter } from '@/components/ui/local-date'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
 import { useFeatureFlags } from '@/lib/client/hooks/use-root-context'
@@ -109,6 +110,7 @@ function AiOutcomePill({ outcome }: { outcome: AssistantInvolvementOutcome }) {
  * date set, and only after mount (the label depends on "now").
  */
 function TicketDueChip({ dueAt, resolvedAt }: { dueAt: string | null; resolvedAt: string | null }) {
+  const formatDate = useLocalDateFormatter()
   const [now, setNow] = useState<Date | null>(null)
   useEffect(() => {
     setNow(new Date())
@@ -128,7 +130,7 @@ function TicketDueChip({ dueAt, resolvedAt }: { dueAt: string | null; resolvedAt
         'inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums',
         TONE_CLASSES[tone]
       )}
-      title={`Due ${formatDate(dueAt)}`}
+      title={`Due ${formatDate(dueAt, DETAIL_DATE)}`}
     >
       <ClockIcon className="h-3 w-3" aria-hidden />
       {overdue ? `${formatSlaCountdown(abs)} over` : formatSlaCountdown(abs)}
@@ -450,7 +452,9 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
                 {firstSeen && (
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">First seen</span>
-                    <span className="font-medium text-foreground">{formatDate(firstSeen)}</span>
+                    <span className="font-medium text-foreground">
+                      <DetailDate date={firstSeen} />
+                    </span>
                   </div>
                 )}
               </div>
@@ -569,18 +573,18 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
             )}
             <Row icon={CalendarIcon} label="Opened">
               <span className="text-sm font-medium text-foreground">
-                {formatDate(ticket.createdAt)}
+                <DetailDate date={ticket.createdAt} />
               </span>
             </Row>
             <Row icon={CalendarIcon} label="First response">
               <span className="text-sm font-medium text-foreground">
-                {ticket.firstResponseAt ? formatDate(ticket.firstResponseAt) : 'Not yet'}
+                {ticket.firstResponseAt ? <DetailDate date={ticket.firstResponseAt} /> : 'Not yet'}
               </span>
             </Row>
             {ticket.resolvedAt && (
               <Row icon={CalendarIcon} label="Resolved">
                 <span className="text-sm font-medium text-foreground">
-                  {formatDate(ticket.resolvedAt)}
+                  <DetailDate date={ticket.resolvedAt} />
                 </span>
               </Row>
             )}
@@ -705,7 +709,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
           {!isTicketItem && conversation && (
             <Row icon={CalendarIcon} label="Created">
               <span className="text-sm font-medium text-foreground">
-                {formatDate(conversation.createdAt)}
+                <DetailDate date={conversation.createdAt} />
               </span>
             </Row>
           )}

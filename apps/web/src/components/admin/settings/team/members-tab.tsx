@@ -14,6 +14,7 @@ import { settingsQueries } from '@/lib/client/queries/settings'
 import { EnvelopeIcon, PlusIcon } from '@heroicons/react/24/solid'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
+import { NUMERIC_DATE_TIME, useLocalDateFormatter } from '@/components/ui/local-date'
 import {
   Table,
   TableBody,
@@ -112,6 +113,7 @@ interface MembersTabProps {
 /** The teammate roster + pending invitations (the Members tab of Members & Teams). */
 export function MembersTab({ currentMember }: MembersTabProps) {
   const session = useSessionContext()
+  const formatDate = useLocalDateFormatter()
   const teamDataQuery = useSuspenseQuery(settingsQueries.teamMembersAndInvitations())
   const { members, avatarMap, formattedInvitations, seatUsage } = teamDataQuery.data
 
@@ -262,8 +264,8 @@ export function MembersTab({ currentMember }: MembersTabProps) {
                 ? 'Yesterday'
                 : daysAgo < 30
                   ? `${daysAgo}d ago`
-                  : date.toLocaleDateString()
-          return <span title={date.toLocaleString()}>{label}</span>
+                  : formatDate(date)
+          return <span title={formatDate(date, NUMERIC_DATE_TIME)}>{label}</span>
         },
       },
       {
@@ -305,7 +307,7 @@ export function MembersTab({ currentMember }: MembersTabProps) {
         },
       },
     ],
-    [avatarMap, currentMember.id, isCurrentUserAdmin, isLastAdmin]
+    [avatarMap, currentMember.id, formatDate, isCurrentUserAdmin, isLastAdmin]
   )
 
   const table = useTable({
@@ -460,7 +462,7 @@ export function MembersTab({ currentMember }: MembersTabProps) {
                                     ? 'Yesterday'
                                     : daysAgo < 30
                                       ? `${daysAgo}d ago`
-                                      : date.toLocaleDateString()
+                                      : formatDate(date)
                               return `Last sign-in: ${label}`
                             })()
                           : 'Never signed in'}

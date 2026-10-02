@@ -1339,6 +1339,17 @@ describe('snooze action: relative duration', () => {
     )
   })
 
+  it("formats a legacy absolute snooze with the labels' date formatter", () => {
+    const untilIso = '2026-08-01T09:00:00.000Z'
+    const formatDate = (date: unknown, options?: Intl.DateTimeFormatOptions) =>
+      `${String(date)} as ${JSON.stringify(options)}`
+    expect(actionSummary({ type: 'snooze', untilIso }, { formatDate })).toBe(
+      `Snooze until ${untilIso} as {"dateStyle":"medium","timeStyle":"short"}`
+    )
+    // Without one, the format the server and the hydrating browser share.
+    expect(actionSummary({ type: 'snooze', untilIso })).toBe('Snooze until Aug 1, 2026, 9:00 AM')
+  })
+
   it('flags a zero-duration relative snooze as an issue; a legacy value never is', () => {
     expect(actionIssue({ type: 'snooze', seconds: 0 })).toBe('Choose how long to snooze for')
     expect(actionIssue({ type: 'snooze', seconds: 60 })).toBeNull()

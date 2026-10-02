@@ -18,6 +18,7 @@ import {
 } from '@/lib/client/queries/conversation-attributes'
 import { useUserAttributes } from '@/lib/client/hooks/use-user-attributes-queries'
 import { useCompanyAttributes } from '@/lib/client/hooks/use-company-attributes-queries'
+import { useLocalDateFormatter } from '@/components/ui/local-date'
 import {
   toAttributeFieldDefs,
   toPersonCompanyAttributeFieldDefs,
@@ -92,6 +93,7 @@ export function WorkflowEntitiesProvider({ children }: { children: ReactNode }) 
   // attribute access simply sees that group stay empty rather than erroring.
   const { data: personAttributeDefs } = useUserAttributes()
   const { data: companyAttributeDefs } = useCompanyAttributes()
+  const formatDate = useLocalDateFormatter()
   const value = useMemo<WorkflowEntities>(() => {
     const memberOptions = (members ?? []).map((m) => ({ id: m.id, name: m.name ?? 'Unnamed' }))
     const teamOptions = (teams ?? []).map((t) => ({ id: t.id, name: t.name }))
@@ -127,6 +129,7 @@ export function WorkflowEntitiesProvider({ children }: { children: ReactNode }) 
         companyAttributes: toPersonCompanyAttributeFieldDefs(companyAttributeDefs ?? []),
         ticketStatuses: toMap(ticketStatusOptions),
         ticketTypes: toMap(ticketTypeOptions),
+        formatDate,
       },
     }
   }, [
@@ -139,6 +142,7 @@ export function WorkflowEntitiesProvider({ children }: { children: ReactNode }) 
     attributes,
     personAttributeDefs,
     companyAttributeDefs,
+    formatDate,
   ])
 
   return (
