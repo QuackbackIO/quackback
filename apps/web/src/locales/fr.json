@@ -196,6 +196,8 @@
   "files.tray.remove": "Supprimer {name}",
   "files.tray.retry": "Réessayer",
   "files.tray.retryAria": "Réessayer d'envoyer {name}",
+  "files.tray.dismiss": "Fermer",
+  "files.tray.capReached": "Vous pouvez joindre jusqu'à {max} fichiers",
   "files.upload.error.empty": "Le fichier est vide",
   "files.upload.error.tooLarge": "Plus de {size} MB",
   "files.upload.error.blocked": "Ce type de fichier ne peut pas être envoyé",

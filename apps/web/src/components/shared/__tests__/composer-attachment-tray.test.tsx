@@ -154,6 +154,34 @@ describe('ComposerAttachmentTray', () => {
     expect(onRetry).toHaveBeenCalledWith('att_err_2')
   })
 
+  it('shows the cap notice as a single line, not a file tile', () => {
+    const onRemove = vi.fn()
+    render(
+      <ComposerAttachmentTray
+        items={[
+          item(),
+          item({
+            localId: 'cap_1',
+            name: '',
+            size: 0,
+            family: 'other',
+            status: 'error',
+            file: undefined,
+            errorReason: 'cap',
+            retryable: false,
+          }),
+        ]}
+        onRemove={onRemove}
+        onRetry={vi.fn()}
+      />
+    )
+    expect(screen.getByText('You can attach up to 10 files')).toBeInTheDocument()
+    // No badge/name/retry chrome for the notice — it is text, not a tile.
+    expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument()
+    screen.getByRole('button', { name: /dismiss/i }).click()
+    expect(onRemove).toHaveBeenCalledWith('cap_1')
+  })
+
   it('removes a tile via its accessible remove button', () => {
     const onRemove = vi.fn()
     render(<ComposerAttachmentTray items={[item()]} onRemove={onRemove} onRetry={vi.fn()} />)

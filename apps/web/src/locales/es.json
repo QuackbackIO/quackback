@@ -196,6 +196,8 @@
   "files.tray.remove": "Quitar {name}",
   "files.tray.retry": "Reintentar",
   "files.tray.retryAria": "Reintentar subir {name}",
+  "files.tray.dismiss": "Descartar",
+  "files.tray.capReached": "Puedes adjuntar hasta {max} archivos",
   "files.upload.error.empty": "El archivo está vacío",
   "files.upload.error.tooLarge": "Más de {size} MB",
   "files.upload.error.blocked": "Este tipo de archivo no se puede enviar",

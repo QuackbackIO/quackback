@@ -196,6 +196,8 @@
   "files.tray.remove": "{name} verwijderen",
   "files.tray.retry": "Opnieuw proberen",
   "files.tray.retryAria": "{name} opnieuw proberen te uploaden",
+  "files.tray.dismiss": "Sluiten",
+  "files.tray.capReached": "Je kunt maximaal {max} bestanden toevoegen",
   "files.upload.error.empty": "Het bestand is leeg",
   "files.upload.error.tooLarge": "Meer dan {size} MB",
   "files.upload.error.blocked": "Dit bestandstype kan niet worden verzonden",

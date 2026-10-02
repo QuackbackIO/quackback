@@ -2,6 +2,7 @@ import { useIntl, type IntlShape } from 'react-intl'
 import { XMarkIcon } from '@heroicons/react/24/solid'
 import { FileBadge } from '@/components/shared/files/file-badge'
 import { formatBytes, maxBytesForFamily } from '@/lib/shared/files/file-types'
+import { MAX_CONVERSATION_ATTACHMENTS } from '@/lib/shared/conversation/types'
 import { cn } from '@/lib/shared/utils/cn'
 import type { ComposerAttachmentItem } from '@/lib/client/hooks/use-conversation-composer-attachments'
 
@@ -41,6 +42,11 @@ function localizedError(item: ComposerAttachmentItem, intl: IntlShape): string {
         id: 'files.upload.error.rateLimited',
         defaultMessage: 'Too many uploads. Try again in a minute.',
       })
+    case 'cap':
+      return intl.formatMessage(
+        { id: 'files.tray.capReached', defaultMessage: 'You can attach up to {max} files' },
+        { max: MAX_CONVERSATION_ATTACHMENTS }
+      )
     default:
       return item.error ?? ''
   }
@@ -170,6 +176,31 @@ function FileTile({ item, onRemove, onRetry }: TileProps) {
 }
 
 /**
+ * The tray's one-line notice when `addFiles` refuses a file for being over
+ * the attachment cap — text, not a file-shaped tile, since it names no file
+ * of its own.
+ */
+function CapNoticeLine({ item, onRemove }: Omit<TileProps, 'onRetry'>) {
+  const intl = useIntl()
+  return (
+    <div
+      role="alert"
+      className="flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-1.5 text-[11px] font-medium text-destructive"
+    >
+      <span>{localizedError(item, intl)}</span>
+      <button
+        type="button"
+        onClick={() => onRemove(item.localId)}
+        aria-label={intl.formatMessage({ id: 'files.tray.dismiss', defaultMessage: 'Dismiss' })}
+        className="text-destructive/70 transition-colors hover:text-destructive"
+      >
+        <XMarkIcon className="h-3 w-3" />
+      </button>
+    </div>
+  )
+}
+
+/**
  * Pending-attachment tray for the conversation composer: every added file
  * stages as its own tile with upload progress and, on failure, the error on
  * the tile itself — error tiles stay until removed, never block Send, and
@@ -192,7 +223,9 @@ export function ComposerAttachmentTray({
   return (
     <div className="flex flex-wrap gap-2 pt-2">
       {items.map((item) =>
-        item.family === 'image' ? (
+        item.errorReason === 'cap' ? (
+          <CapNoticeLine key={item.localId} item={item} onRemove={onRemove} />
+        ) : item.family === 'image' ? (
           <ImageTile key={item.localId} item={item} onRemove={onRemove} onRetry={onRetry} />
         ) : (
           <FileTile key={item.localId} item={item} onRemove={onRemove} onRetry={onRetry} />

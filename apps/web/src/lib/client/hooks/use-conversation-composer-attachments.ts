@@ -17,10 +17,14 @@ export interface ComposerAttachmentItem {
   /** The server's (or the pre-check's) English message — the tray only shows
    *  it verbatim when `errorReason` is absent or not one it recognizes. */
   error?: string
-  /** `UploadError.reason` (empty | too_large | blocked) when the rejection is
-   *  definitive, so the tray can show a localized message instead of
-   *  `error`. Undefined for a transient failure (network, abort-adjacent,
-   *  a 500) or a reason the tray doesn't have a translation for. */
+  /** `UploadError.reason` (empty | too_large | blocked | rate_limited) when
+   *  the rejection is definitive, so the tray can show a localized message
+   *  instead of `error`. Undefined for a transient failure (network,
+   *  abort-adjacent, a 500) or a reason the tray doesn't have a translation
+   *  for. `cap` marks the one synthetic notice tile `addFiles` adds when a
+   *  file is refused for being over the attachment cap — it never carries a
+   *  real file (`file`/`previewUrl` stay unset) and never counts toward the
+   *  cap itself. */
   errorReason?: string
   /** False for a definitive rejection (too large, blocked type, empty) — the
    *  tray only offers Retry when a failure might succeed on a second try. */
@@ -72,6 +76,22 @@ function makeItem(file: File, previewUrl: string | undefined): ComposerAttachmen
   }
 }
 
+/** The one tile `addFiles` shows when it refuses files for being over the
+ *  cap — not a real file, so it carries no size/progress worth showing and
+ *  is never retryable. */
+function makeCapNoticeItem(): ComposerAttachmentItem {
+  return {
+    localId: createLocalId(),
+    name: '',
+    size: 0,
+    family: 'other',
+    status: 'error',
+    progress: 0,
+    errorReason: 'cap',
+    retryable: false,
+  }
+}
+
 /**
  * Manages pending attachments for a conversation composer: stages every added
  * file as a tray tile immediately (so progress/errors render per-file), runs
@@ -96,13 +116,17 @@ export function useConversationComposerAttachments(
 ) {
   const { precheck } = options
   const [items, setItems] = useState<ComposerAttachmentItem[]>([])
-  // Mirrors `items` so addFiles reads the live count (for the slot math)
-  // without a stale closure — see the doc comment above for why a second,
-  // reservation-based count is still needed alongside it.
-  const itemsRef = useRef<ComposerAttachmentItem[]>([])
-  itemsRef.current = items
   const generationRef = useRef(0)
-  const reservedSlotsRef = useRef(0)
+  // The authoritative slot count: every real tile `addFiles` stages counts
+  // here the instant it's queued, and the count only drops on remove/clear —
+  // never when an upload settles, since the tile still occupies a slot
+  // whether it ends up ready or failed. Kept separate from `items.length`
+  // (which lags a render behind a synchronous state update, and which also
+  // includes the cap-notice tile below, never a real slot) so two addFiles
+  // calls in the same tick, or a call made before React has re-rendered the
+  // last one, both see the true count instead of double- or under-counting
+  // tiles that are still uploading.
+  const countRef = useRef(0)
   // The original File per tile (kept for the lifetime of the tile, so a
   // failed upload can be retried) and the controller for whichever attempt is
   // currently in flight (replaced on retry, so remove() aborts the live one).
@@ -163,11 +187,10 @@ export function useConversationComposerAttachments(
   const addFiles = useCallback(
     (files: FileList | File[]): Promise<void> => {
       const generation = generationRef.current
-      const slotsLeft =
-        MAX_CONVERSATION_ATTACHMENTS - itemsRef.current.length - reservedSlotsRef.current
-      const list = Array.from(files).slice(0, Math.max(0, slotsLeft))
-      if (list.length === 0) return Promise.resolve()
-      reservedSlotsRef.current += list.length
+      const incoming = Array.from(files)
+      const slotsLeft = Math.max(0, MAX_CONVERSATION_ATTACHMENTS - countRef.current)
+      const list = incoming.slice(0, slotsLeft)
+      const refused = incoming.length - list.length
 
       const newItems = list.map((file) => {
         const previewUrl =
@@ -176,13 +199,18 @@ export function useConversationComposerAttachments(
         filesRef.current.set(item.localId, file)
         return item
       })
-      setItems((prev) => [...prev, ...newItems])
+      countRef.current += newItems.length
 
-      const settled = newItems.map((item, i) =>
-        runUpload(item.localId, list[i]!, generation).finally(() => {
-          reservedSlotsRef.current = Math.max(0, reservedSlotsRef.current - 1)
-        })
-      )
+      setItems((prev) => {
+        // Drop any earlier cap notice so a repeated refusal shows one line,
+        // not a stack of them.
+        const withoutCapNotice = prev.filter((it) => it.errorReason !== 'cap')
+        const next = [...withoutCapNotice, ...newItems]
+        return refused > 0 ? [...next, makeCapNoticeItem()] : next
+      })
+
+      if (newItems.length === 0) return Promise.resolve()
+      const settled = newItems.map((item, i) => runUpload(item.localId, list[i]!, generation))
       return Promise.all(settled).then(() => undefined)
     },
     [runUpload]
@@ -212,13 +240,17 @@ export function useConversationComposerAttachments(
     setItems((prev) => {
       const found = prev.find((it) => it.localId === localId)
       if (found?.previewUrl) URL.revokeObjectURL(found.previewUrl)
+      // The cap notice never claimed a slot, so removing it never frees one.
+      if (found && found.errorReason !== 'cap') {
+        countRef.current = Math.max(0, countRef.current - 1)
+      }
       return prev.filter((it) => it.localId !== localId)
     })
   }, [])
 
   const clear = useCallback(() => {
     generationRef.current += 1
-    reservedSlotsRef.current = 0
+    countRef.current = 0
     controllersRef.current.forEach((controller) => controller.abort())
     controllersRef.current.clear()
     filesRef.current.clear()
@@ -237,6 +269,7 @@ export function useConversationComposerAttachments(
     controllersRef.current.forEach((controller) => controller.abort())
     controllersRef.current.clear()
     filesRef.current.clear()
+    countRef.current = attachments.length
     setItems((prev) => {
       prev.forEach((it) => {
         if (it.previewUrl) URL.revokeObjectURL(it.previewUrl)

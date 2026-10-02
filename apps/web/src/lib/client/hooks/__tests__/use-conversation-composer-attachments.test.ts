@@ -101,7 +101,7 @@ describe('useConversationComposerAttachments', () => {
     expect(result.current.uploading).toBe(false)
   })
 
-  it('does not upload a second near-cap paste while the last slot is reserved', async () => {
+  it('does not upload a second near-cap paste while the last slot is reserved, and notes the refusal', async () => {
     const upload = vi.fn((file: File) => Promise.resolve(uploadedFileFor(file)))
     const { result } = renderHook(() => useConversationComposerAttachments(upload))
     act(() => {
@@ -134,8 +134,9 @@ describe('useConversationComposerAttachments', () => {
       await firstDone
       await secondDone
     })
-    expect(result.current.items).toHaveLength(MAX_CONVERSATION_ATTACHMENTS)
-    expect(result.current.items.at(-1)?.name).toBe('last.png')
+    expect(result.current.items).toHaveLength(MAX_CONVERSATION_ATTACHMENTS + 1)
+    expect(result.current.items.some((i) => i.name === 'last.png')).toBe(true)
+    expect(result.current.items.find((i) => i.errorReason === 'cap')).toBeDefined()
   })
 
   it('keeps a failed upload as an error tile alongside the ones that succeeded', async () => {
@@ -273,6 +274,107 @@ describe('useConversationComposerAttachments', () => {
     })
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:shot.png')
     expect(result.current.items).toEqual([])
+  })
+
+  it('accepts a full cap across waves while earlier tiles are still uploading', async () => {
+    const deferreds: Array<ReturnType<typeof deferred<ReturnType<typeof uploadedFileFor>>>> = []
+    const upload = vi.fn((file: File) => {
+      const d = deferred<ReturnType<typeof uploadedFileFor>>()
+      deferreds.push(d)
+      return d.promise
+    })
+    const { result } = renderHook(() => useConversationComposerAttachments(upload))
+
+    act(() => {
+      void result.current.addFiles([png('a1.png'), png('a2.png'), png('a3.png'), png('a4.png')])
+    })
+    expect(result.current.items).toHaveLength(4)
+
+    // The first wave is still uploading (its promises are unresolved) when
+    // the second wave lands — the bug double-counted an uploading tile
+    // against both the live item count and a "reserved" count for the same
+    // file, so this wave got silently truncated to 2 files instead of 4.
+    act(() => {
+      void result.current.addFiles([png('b1.png'), png('b2.png'), png('b3.png'), png('b4.png')])
+    })
+    expect(result.current.items).toHaveLength(8)
+    expect(result.current.items.every((i) => i.status === 'uploading')).toBe(true)
+
+    act(() => {
+      void result.current.addFiles([png('c1.png'), png('c2.png')])
+    })
+    expect(result.current.items).toHaveLength(10)
+    expect(upload).toHaveBeenCalledTimes(10)
+
+    await act(async () => {
+      deferreds.forEach((d, i) => d.resolve(uploadedFileFor(png(`f${i}.png`))))
+      await Promise.all(deferreds.map((d) => d.promise))
+    })
+    expect(result.current.items.every((i) => i.status === 'ready')).toBe(true)
+  })
+
+  it('refuses files over the 10-file cap with one notice instead of silently dropping them', async () => {
+    const upload = vi.fn((file: File) => Promise.resolve(uploadedFileFor(file)))
+    const { result } = renderHook(() => useConversationComposerAttachments(upload))
+
+    act(() => {
+      result.current.restore(
+        Array.from({ length: MAX_CONVERSATION_ATTACHMENTS }, (_, i) => ({
+          fileId: `file_${i}`,
+          url: `/api/storage/files/${i}.png`,
+          name: `${i}.png`,
+          contentType: 'image/png',
+          size: 1,
+          family: 'image' as const,
+        }))
+      )
+    })
+
+    await act(async () => {
+      await result.current.addFiles([png('overflow1.png'), png('overflow2.png')])
+    })
+    expect(upload).not.toHaveBeenCalled()
+    expect(result.current.items).toHaveLength(MAX_CONVERSATION_ATTACHMENTS + 1)
+    const notices = result.current.items.filter((i) => i.errorReason === 'cap')
+    expect(notices).toHaveLength(1)
+
+    // A second refusal replaces the notice instead of stacking another one.
+    await act(async () => {
+      await result.current.addFiles([png('overflow3.png')])
+    })
+    expect(result.current.items.filter((i) => i.errorReason === 'cap')).toHaveLength(1)
+    expect(result.current.items).toHaveLength(MAX_CONVERSATION_ATTACHMENTS + 1)
+  })
+
+  it('removing the cap notice never frees up a real slot', async () => {
+    const upload = vi.fn((file: File) => Promise.resolve(uploadedFileFor(file)))
+    const { result } = renderHook(() => useConversationComposerAttachments(upload))
+    act(() => {
+      result.current.restore(
+        Array.from({ length: MAX_CONVERSATION_ATTACHMENTS }, (_, i) => ({
+          fileId: `file_${i}`,
+          url: `/api/storage/files/${i}.png`,
+          name: `${i}.png`,
+          contentType: 'image/png',
+          size: 1,
+          family: 'image' as const,
+        }))
+      )
+    })
+    await act(async () => {
+      await result.current.addFiles([png('overflow.png')])
+    })
+    const notice = result.current.items.find((i) => i.errorReason === 'cap')!
+    act(() => {
+      result.current.remove(notice.localId)
+    })
+    expect(result.current.items).toHaveLength(MAX_CONVERSATION_ATTACHMENTS)
+
+    await act(async () => {
+      await result.current.addFiles([png('still-over.png')])
+    })
+    expect(upload).not.toHaveBeenCalled()
+    expect(result.current.items.filter((i) => i.errorReason === 'cap')).toHaveLength(1)
   })
 
   it('exposes hasErrors once any tile has failed', async () => {

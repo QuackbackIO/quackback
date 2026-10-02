@@ -196,6 +196,8 @@
   "files.tray.remove": "Удалить {name}",
   "files.tray.retry": "Повторить",
   "files.tray.retryAria": "Повторить загрузку {name}",
+  "files.tray.dismiss": "Закрыть",
+  "files.tray.capReached": "Можно прикрепить не более {max} файлов",
   "files.upload.error.empty": "Файл пуст",
   "files.upload.error.tooLarge": "Больше {size} MB",
   "files.upload.error.blocked": "Файлы такого типа нельзя отправить",

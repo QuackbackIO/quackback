@@ -196,6 +196,8 @@
   "files.tray.remove": "Remover {name}",
   "files.tray.retry": "Tentar novamente",
   "files.tray.retryAria": "Tentar enviar {name} novamente",
+  "files.tray.dismiss": "Dispensar",
+  "files.tray.capReached": "Você pode anexar até {max} arquivos",
   "files.upload.error.empty": "O arquivo está vazio",
   "files.upload.error.tooLarge": "Mais de {size} MB",
   "files.upload.error.blocked": "Esse tipo de arquivo não pode ser enviado",

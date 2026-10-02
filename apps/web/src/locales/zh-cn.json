@@ -196,6 +196,8 @@
   "files.tray.remove": "移除{name}",
   "files.tray.retry": "重试",
   "files.tray.retryAria": "重试上传{name}",
+  "files.tray.dismiss": "关闭",
+  "files.tray.capReached": "最多可添加 {max} 个文件",
   "files.upload.error.empty": "文件为空",
   "files.upload.error.tooLarge": "超过 {size} MB",
   "files.upload.error.blocked": "无法发送此类型的文件",

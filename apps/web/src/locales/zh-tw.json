@@ -196,6 +196,8 @@
   "files.tray.remove": "移除{name}",
   "files.tray.retry": "重試",
   "files.tray.retryAria": "重試上傳{name}",
+  "files.tray.dismiss": "關閉",
+  "files.tray.capReached": "最多可附加 {max} 個檔案",
   "files.upload.error.empty": "檔案是空的",
   "files.upload.error.tooLarge": "超過 {size} MB",
   "files.upload.error.blocked": "無法傳送此類型的檔案",
