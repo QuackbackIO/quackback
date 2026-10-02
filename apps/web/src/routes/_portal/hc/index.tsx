@@ -12,7 +12,7 @@ import {
   listPopularPublicArticlesFn,
 } from '@/lib/server/functions/help-center'
 import { HC_LOCALE_COOKIE, resolveHcLandingLocale } from '@/lib/shared/help-center-url'
-import type { HelpCenterConfig } from '@/lib/shared/types/settings'
+import { DEFAULT_HELP_CENTER_CONFIG, type HelpCenterConfig } from '@/lib/shared/types/settings'
 import { resolvePortalOgImageUrl } from '@/lib/shared/portal-og-image'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
@@ -111,16 +111,27 @@ function HelpCenterLandingPage() {
   const settings = useWorkspaceSettings()
   const askAiEnabled = !!settings?.featureFlags?.helpCenter
 
+  // Settings store the English defaults until an admin edits them, so a stored
+  // default is worded in the app's language like a missing one.
+  const storedTitle = helpCenterConfig?.homepageTitle
   const title =
-    helpCenterConfig?.homepageTitle ??
-    intl.formatMessage({ id: 'portal.hc.home.title', defaultMessage: 'How can we help?' })
+    storedTitle == null || storedTitle === DEFAULT_HELP_CENTER_CONFIG.homepageTitle
+      ? intl.formatMessage({ id: 'portal.hc.home.title', defaultMessage: 'How can we help?' })
+      : storedTitle
+  const storedDescription = helpCenterConfig?.homepageDescription
   const description =
-    helpCenterConfig?.homepageDescription ??
-    intl.formatMessage({
-      id: 'portal.hc.home.description',
-      defaultMessage:
-        'Search our guides or ask AI for an instant answer. Real answers, fast, no ticket required.',
-    })
+    storedDescription == null
+      ? intl.formatMessage({
+          id: 'portal.hc.home.description',
+          defaultMessage:
+            'Search our guides or ask AI for an instant answer. Real answers, fast, no ticket required.',
+        })
+      : storedDescription === DEFAULT_HELP_CENTER_CONFIG.homepageDescription
+        ? intl.formatMessage({
+            id: 'portal.hc.home.localeDescription',
+            defaultMessage: 'Search our knowledge base or browse by category',
+          })
+        : storedDescription
   const collectionCount = getTopLevelCategories(categories).length
 
   return (

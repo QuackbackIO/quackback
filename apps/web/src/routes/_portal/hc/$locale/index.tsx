@@ -5,7 +5,7 @@ import { HelpCenterHeroSearch } from '@/components/help-center/help-center-searc
 import { HelpCenterCategoryGrid } from '@/components/help-center/help-center-category-grid'
 import { getTopLevelCategories } from '@/components/help-center/help-center-utils'
 import { listPublicCategoriesFn } from '@/lib/server/functions/help-center'
-import type { HelpCenterConfig } from '@/lib/shared/types/settings'
+import { DEFAULT_HELP_CENTER_CONFIG, type HelpCenterConfig } from '@/lib/shared/types/settings'
 import { resolvePortalOgImageUrl } from '@/lib/shared/portal-og-image'
 
 const DEFAULT_TITLE = 'How can we help?'
@@ -64,15 +64,19 @@ function LocaleHelpCenterLandingPage() {
   const { categories, title: chromeTitle, description: chromeDescription } = Route.useLoaderData()
   const { locale } = Route.useParams()
   const collectionCount = getTopLevelCategories(categories).length
+  // Enabling a language stores the English default title, so a stored default
+  // is worded in the app's language like a missing one.
   const title =
-    chromeTitle ??
-    intl.formatMessage({ id: 'portal.hc.home.title', defaultMessage: 'How can we help?' })
+    chromeTitle && chromeTitle !== DEFAULT_HELP_CENTER_CONFIG.homepageTitle
+      ? chromeTitle
+      : intl.formatMessage({ id: 'portal.hc.home.title', defaultMessage: 'How can we help?' })
   const description =
-    chromeDescription ??
-    intl.formatMessage({
-      id: 'portal.hc.home.localeDescription',
-      defaultMessage: 'Search our knowledge base or browse by category',
-    })
+    chromeDescription && chromeDescription !== DEFAULT_HELP_CENTER_CONFIG.homepageDescription
+      ? chromeDescription
+      : intl.formatMessage({
+          id: 'portal.hc.home.localeDescription',
+          defaultMessage: 'Search our knowledge base or browse by category',
+        })
 
   return (
     <>
