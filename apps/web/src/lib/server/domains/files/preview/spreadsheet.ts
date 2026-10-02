@@ -9,18 +9,15 @@ import { stripInvisible } from '@/lib/shared/files/file-name'
 import { rebuildWorkbookZip } from './workbook-parts'
 import {
   NO_DEADLINE,
-  cell,
   cleanText,
   clip,
+  headGrid,
   loadDependency,
   normalizeExcerpt,
   type Deadline,
   type PreviewResult,
 } from './result'
 
-const HEAD_ROWS = 6
-const HEAD_COLUMNS = 8
-const CELL_CHARS = 40
 /** Rows of the first sheet that are parsed: a header plus the excerpt's rows. */
 const PARSED_ROWS = 201
 /** Columns the excerpt carries. */
@@ -73,9 +70,7 @@ export async function deriveSpreadsheetPreview(
     defval: '',
     blankrows: false,
   })
-  const head = grid
-    .slice(0, HEAD_ROWS)
-    .map((row) => row.slice(0, HEAD_COLUMNS).map((v) => cell(v, CELL_CHARS)))
+  const head = headGrid(grid)
   const csv = XLSX.utils.sheet_to_csv(sheet, { blankrows: false, strip: true })
 
   return {

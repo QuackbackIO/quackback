@@ -124,6 +124,19 @@ export function cell(value: unknown, max: number): string {
   return s.length <= max ? s : clip(s, max - 1) + ELLIPSIS
 }
 
+/** Rows, then columns, of a card's mini grid. */
+export const HEAD_ROWS = 6
+export const HEAD_COLUMNS = 8
+export const CELL_CHARS = 40
+
+/** The card's mini grid: the first {@link HEAD_ROWS} rows and {@link HEAD_COLUMNS}
+ *  columns of a parsed table, as display cells. */
+export function headGrid(rows: readonly unknown[][]): string[][] {
+  return rows
+    .slice(0, HEAD_ROWS)
+    .map((row) => row.slice(0, HEAD_COLUMNS).map((v) => cell(v, CELL_CHARS)))
+}
+
 /**
  * The excerpt stored for the assistant and search: clean text with runs of
  * spaces collapsed, at most two consecutive line breaks, capped. Undefined
