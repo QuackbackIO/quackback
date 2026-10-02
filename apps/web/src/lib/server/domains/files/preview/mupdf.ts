@@ -13,9 +13,10 @@
 import { createRequire } from 'node:module'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { loadDependency } from './result'
+import { loadDependency, type DerivedObject } from './result'
 
 type Mupdf = typeof import('mupdf')
+type Page = InstanceType<Mupdf['Page']>
 
 let loading: Promise<Mupdf> | null = null
 
@@ -62,5 +63,43 @@ export function destroy(...objects: Array<{ destroy(): void } | null | undefined
     } catch {
       // Already freed.
     }
+  }
+}
+
+export interface ThumbnailOptions {
+  /** Whether the pixmap keeps an alpha channel. Default: false. */
+  alpha?: boolean
+  /** Whether annotations and form widgets render into the pixmap. Default: false. */
+  extras?: boolean
+  /** Default: 'png'. */
+  format?: 'png' | 'jpeg'
+  /** JPEG quality, 0-100. Default: 80. */
+  quality?: number
+}
+
+/**
+ * Render a page to a pixmap at `scale`, encode it, and free the pixmap. A
+ * PDF's first-page thumbnail and a raster image's both go through here.
+ */
+export function renderThumbnail(
+  mupdf: Mupdf,
+  page: Page,
+  scale: number,
+  options: ThumbnailOptions = {}
+): DerivedObject {
+  const { alpha = false, extras = false, format = 'png', quality = 80 } = options
+  const pixmap = page.toPixmap(
+    mupdf.Matrix.scale(scale, scale),
+    mupdf.ColorSpace.DeviceRGB,
+    alpha,
+    extras
+  )
+  const bytes = format === 'jpeg' ? pixmap.asJPEG(quality).slice() : pixmap.asPNG().slice()
+  destroy(pixmap)
+  return {
+    suffix: format === 'jpeg' ? 'thumb.jpg' : 'thumb.png',
+    contentType: format === 'jpeg' ? 'image/jpeg' : 'image/png',
+    bytes,
+    field: 'thumbKey',
   }
 }

@@ -2,8 +2,14 @@
  * PDF: page count, page one as a PNG thumbnail, and the text of the first
  * pages. An encrypted or unreadable document throws.
  */
-import { loadMupdf, destroy, cappedRenderScale } from './mupdf'
-import { NO_DEADLINE, normalizeExcerpt, EXCERPT_MAX_CHARS, type PreviewResult } from './result'
+import { loadMupdf, destroy, cappedRenderScale, renderThumbnail } from './mupdf'
+import {
+  NO_DEADLINE,
+  normalizeExcerpt,
+  EXCERPT_MAX_CHARS,
+  type DerivedObject,
+  type PreviewResult,
+} from './result'
 import type { Deadline } from './result'
 
 /** Thumbnail width; neither side may exceed the cap. */
@@ -25,7 +31,7 @@ export async function derivePdfPreview(
     deadline.check()
 
     const first = doc.loadPage(0)
-    let thumb: Uint8Array
+    let thumb: DerivedObject
     try {
       const [x0, y0, x1, y1] = first.getBounds()
       const width = x1 - x0
@@ -36,14 +42,7 @@ export async function derivePdfPreview(
         height,
         Math.min(THUMB_WIDTH / width, THUMB_MAX_SIDE / height)
       )
-      const pixmap = first.toPixmap(
-        mupdf.Matrix.scale(scale, scale),
-        mupdf.ColorSpace.DeviceRGB,
-        false,
-        true
-      )
-      thumb = pixmap.asPNG().slice()
-      destroy(pixmap)
+      thumb = renderThumbnail(mupdf, first, scale, { extras: true })
     } finally {
       destroy(first)
     }
@@ -68,7 +67,7 @@ export async function derivePdfPreview(
       status: 'ready',
       meta: { pages },
       excerpt: normalizeExcerpt(parts.join('\n\n')),
-      derived: [{ suffix: 'thumb.png', contentType: 'image/png', bytes: thumb, field: 'thumbKey' }],
+      derived: [thumb],
     }
   } finally {
     destroy(doc)

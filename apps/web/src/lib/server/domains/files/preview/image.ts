@@ -5,8 +5,9 @@
  * WebP and AVIF sizes come from their headers (mupdf reads neither); SVG has
  * no rasterizer here and records nothing.
  */
-import { loadMupdf, destroy, cappedRenderScale } from './mupdf'
+import { loadMupdf, destroy, cappedRenderScale, renderThumbnail } from './mupdf'
 import { childBoxes, findChild, u32be } from './boxes'
+import { canDrawImageInline } from '@/lib/shared/files/file-types'
 import {
   NO_DEADLINE,
   NOTHING_TO_DERIVE,
@@ -35,8 +36,6 @@ const MAX_DECODE_PIXELS = 50_000_000
 const MAX_HEIC_DECODE_PIXELS = 24_000_000
 
 const RASTER_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/bmp', 'image/tiff'])
-/** Formats the browser cannot show, so they always get a thumbnail. */
-const NEEDS_THUMB = new Set(['image/tiff'])
 const HEIF_TYPES = new Set(['image/heic', 'image/heif'])
 
 type Size = { width: number; height: number }
@@ -129,7 +128,7 @@ async function rasterPreview(
 
       const heavy =
         bytes.byteLength > THUMB_OVER_BYTES || Math.max(size.width, size.height) > THUMB_OVER_SIDE
-      const wantThumb = heavy || NEEDS_THUMB.has(contentType)
+      const wantThumb = heavy || !canDrawImageInline(contentType, '')
       if (!wantThumb || size.width * size.height > MAX_DECODE_PIXELS) {
         return { status: 'ready', meta: size }
       }
@@ -144,25 +143,10 @@ async function rasterPreview(
         )
       )
       const photo = contentType === 'image/jpeg'
-      const pixmap = page.toPixmap(
-        mupdf.Matrix.scale(scale, scale),
-        mupdf.ColorSpace.DeviceRGB,
-        !photo
-      )
-      const thumb: DerivedObject = photo
-        ? {
-            suffix: 'thumb.jpg',
-            contentType: 'image/jpeg',
-            bytes: pixmap.asJPEG(80).slice(),
-            field: 'thumbKey',
-          }
-        : {
-            suffix: 'thumb.png',
-            contentType: 'image/png',
-            bytes: pixmap.asPNG().slice(),
-            field: 'thumbKey',
-          }
-      destroy(pixmap)
+      const thumb = renderThumbnail(mupdf, page, scale, {
+        alpha: !photo,
+        format: photo ? 'jpeg' : 'png',
+      })
       return { status: 'ready', meta: size, derived: [thumb] }
     } finally {
       destroy(page)
