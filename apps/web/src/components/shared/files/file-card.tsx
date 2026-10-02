@@ -211,7 +211,7 @@ function MacroWarning() {
   const intl = useIntl()
   return (
     <span className="text-[11px] font-medium text-amber-700 dark:text-amber-300">
-      {intl.formatMessage({ id: 'files.viewer.macros', defaultMessage: 'Contains macros' })}
+      {intl.formatMessage({ id: 'files.macros', defaultMessage: 'Contains macros' })}
     </span>
   )
 }
@@ -248,7 +248,7 @@ function DownloadLink({ url, name, className }: { url: string; name: string; cla
       download={name || undefined}
       onClick={(e) => e.stopPropagation()}
       aria-label={label}
-      title={intl.formatMessage({ id: 'files.viewer.download', defaultMessage: 'Download' })}
+      title={intl.formatMessage({ id: 'files.download', defaultMessage: 'Download' })}
       className={cn(
         // Hidden until hover/focus on a pointer that supports hover; a touch
         // device has no hover to reveal it, so it stays visible there instead.

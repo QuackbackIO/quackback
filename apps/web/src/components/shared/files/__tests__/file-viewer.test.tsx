@@ -522,7 +522,7 @@ describe('FileViewer fallback', () => {
         locale: 'de',
         messages: {
           'files.viewer.failureUnsupported': 'Keine Vorschau für diesen Dateityp',
-          'files.viewer.download': 'Herunterladen',
+          'files.download': 'Herunterladen',
         },
       }
     )

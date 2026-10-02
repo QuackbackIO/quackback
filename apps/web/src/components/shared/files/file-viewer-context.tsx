@@ -4,19 +4,28 @@
  * with every file of the gallery and the one to show first; the provider,
  * mounted once per app root (inbox, widget, portal), owns the single viewer.
  *
- * The viewer itself is a lazy chunk: a surface pays for it only once someone
- * opens a file.
+ * The viewer itself is a lazy chunk, and so are its strings: a surface pays
+ * for either only once someone opens a file.
  */
 import {
   createContext,
   lazy,
   Suspense,
+  use,
   useCallback,
   useContext,
   useMemo,
   useState,
   type ReactNode,
 } from 'react'
+import { IntlProvider, useIntl } from 'react-intl'
+import {
+  DEFAULT_LOCALE,
+  isViewerMessage,
+  loadViewerMessages,
+  normalizeLocale,
+  type SupportedLocale,
+} from '@/lib/shared/i18n'
 import type { ViewerFile } from './types'
 
 export interface FileViewerApi {
@@ -32,7 +41,51 @@ export function useFileViewer(): FileViewerApi {
   return useContext(FileViewerContext)
 }
 
-const FileViewer = lazy(() => import('./file-viewer'))
+const loadFileViewer = () => import('./file-viewer')
+const FileViewer = lazy(loadFileViewer)
+
+const viewerMessages = new Map<SupportedLocale, Promise<Record<string, string>>>()
+
+function viewerMessagesFor(locale: SupportedLocale): Promise<Record<string, string>> {
+  let pending = viewerMessages.get(locale)
+  if (!pending) {
+    pending = loadViewerMessages(locale).catch(() => ({}))
+    viewerMessages.set(locale, pending)
+  }
+  return pending
+}
+
+/**
+ * Supplies the viewer's strings, which pages leave out of the catalog they
+ * seed. A page whose catalog already holds them (one loaded whole, say)
+ * passes straight through.
+ */
+function ViewerMessages({ children }: { children: ReactNode }) {
+  const intl = useIntl()
+  if (Object.keys(intl.messages).some(isViewerMessage)) return children
+  return <LoadedViewerMessages>{children}</LoadedViewerMessages>
+}
+
+function LoadedViewerMessages({ children }: { children: ReactNode }) {
+  const intl = useIntl()
+  const locale = normalizeLocale(intl.locale) ?? DEFAULT_LOCALE
+  // The viewer chunk loads alongside its strings rather than after them.
+  void loadFileViewer()
+  const viewer = use(viewerMessagesFor(locale))
+  // The app's catalogs are plain strings, never precompiled messages.
+  const pageMessages = intl.messages as Record<string, string>
+  const messages = useMemo(() => ({ ...pageMessages, ...viewer }), [pageMessages, viewer])
+  return (
+    <IntlProvider
+      locale={intl.locale}
+      defaultLocale={intl.defaultLocale}
+      messages={messages}
+      onError={intl.onError}
+    >
+      {children}
+    </IntlProvider>
+  )
+}
 
 interface ViewerSession {
   id: number
@@ -96,17 +149,19 @@ export function FileViewerProvider({
       {children}
       {session && (
         <Suspense fallback={null}>
-          <FileViewer
-            key={session.id}
-            files={session.files}
-            index={session.index}
-            open={session.open}
-            opener={session.opener}
-            compact={compact}
-            onJumpToMessage={onJumpToMessage}
-            onClose={close}
-            onClosed={closed}
-          />
+          <ViewerMessages>
+            <FileViewer
+              key={session.id}
+              files={session.files}
+              index={session.index}
+              open={session.open}
+              opener={session.opener}
+              compact={compact}
+              onJumpToMessage={onJumpToMessage}
+              onClose={close}
+              onClosed={closed}
+            />
+          </ViewerMessages>
         </Suspense>
       )}
     </FileViewerContext.Provider>

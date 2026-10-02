@@ -364,7 +364,7 @@ export default function FileViewer({
 
   const Engine = kind ? engines[kind] : undefined
   const downloadLabel = intl.formatMessage({
-    id: 'files.viewer.download',
+    id: 'files.download',
     defaultMessage: 'Download',
   })
   const download = (
@@ -688,7 +688,7 @@ function ViewerFallback({ file, failure }: { file: ViewerFile; failure: EngineFa
           className={buttonVariants({ variant: 'outline', size: 'sm' })}
         >
           <ArrowDownTrayIcon />
-          {intl.formatMessage({ id: 'files.viewer.download', defaultMessage: 'Download' })}
+          {intl.formatMessage({ id: 'files.download', defaultMessage: 'Download' })}
         </a>
       )}
     </div>

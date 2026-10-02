@@ -3,15 +3,19 @@
  * The provider every app root mounts: `open(files, index)` shows the one
  * viewer (loaded on first use), and closing it hands focus back.
  */
-import { fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { loadViewerMessages } from '@/lib/shared/i18n'
 import { FileViewerProvider, useFileViewer } from '../file-viewer-context'
 import type { ViewerFile } from '../types'
 
-function render(node: React.ReactNode) {
+function render(
+  node: React.ReactNode,
+  intl: { locale: string; messages: Record<string, string> } = { locale: 'en-US', messages: {} }
+) {
   return rtlRender(
-    <IntlProvider locale="en-US" messages={{}}>
+    <IntlProvider locale={intl.locale} messages={intl.messages}>
       {node}
     </IntlProvider>
   )
@@ -36,6 +40,17 @@ const legacyDoc: ViewerFile = {
   family: 'document',
 }
 
+/**
+ * Clicks a button that opens the viewer. The viewer may suspend while its
+ * strings load, and React finishes a suspended render only once an awaited
+ * `act` scope ends.
+ */
+async function clickToOpen(button: HTMLElement) {
+  await act(async () => {
+    fireEvent.click(button)
+  })
+}
+
 function Opener({ files, index }: { files: ViewerFile[]; index: number }) {
   const { open } = useFileViewer()
   return (
@@ -49,6 +64,7 @@ function Opener({ files, index }: { files: ViewerFile[]; index: number }) {
 // first open in a busy run is not timed against the module transform.
 beforeAll(async () => {
   await import('../file-viewer')
+  await Promise.all([loadViewerMessages('en'), loadViewerMessages('de')])
 })
 
 beforeEach(() => {
@@ -72,7 +88,7 @@ describe('FileViewerProvider', () => {
     )
     const opener = screen.getByRole('button', { name: 'Open files' })
     opener.focus()
-    fireEvent.click(opener)
+    await clickToOpen(opener)
 
     const dialog = await screen.findByRole('dialog')
     expect(dialog).toHaveTextContent('q4.pptx')
@@ -89,10 +105,10 @@ describe('FileViewerProvider', () => {
         <Opener files={[legacyDoc]} index={0} />
       </FileViewerProvider>
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Open files' }))
+    await clickToOpen(screen.getByRole('button', { name: 'Open files' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
-    fireEvent.click(screen.getByRole('button', { name: 'Open files' }))
+    await clickToOpen(screen.getByRole('button', { name: 'Open files' }))
     expect(await screen.findByRole('dialog')).toHaveTextContent('notes.doc')
   })
 
@@ -102,7 +118,7 @@ describe('FileViewerProvider', () => {
         <Opener files={[deck]} index={0} />
       </FileViewerProvider>
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Open files' }))
+    await clickToOpen(screen.getByRole('button', { name: 'Open files' }))
     expect(await screen.findByRole('button', { name: 'Back' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Close' })).toBeNull()
   })
@@ -114,10 +130,33 @@ describe('FileViewerProvider', () => {
         <Opener files={[deck]} index={0} />
       </FileViewerProvider>
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Open files' }))
+    await clickToOpen(screen.getByRole('button', { name: 'Open files' }))
     fireEvent.click(await screen.findByRole('button', { name: /^Priya · 3\.1 MB$/ }))
     expect(onJumpToMessage).toHaveBeenCalledWith('msg_9')
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
+  it("loads the viewer's strings in the page's language when the page left them out", async () => {
+    render(
+      <FileViewerProvider>
+        <Opener files={[deck]} index={0} />
+      </FileViewerProvider>,
+      { locale: 'de', messages: { 'files.download': 'Herunterladen' } }
+    )
+    await clickToOpen(screen.getByRole('button', { name: 'Open files' }))
+    expect(await screen.findByRole('button', { name: 'Schließen' })).toBeInTheDocument()
+  })
+
+  it("keeps the page's own viewer strings when its catalog has them", async () => {
+    render(
+      <FileViewerProvider>
+        <Opener files={[deck]} index={0} />
+      </FileViewerProvider>,
+      { locale: 'de', messages: { 'files.viewer.close': 'Zu' } }
+    )
+    await clickToOpen(screen.getByRole('button', { name: 'Open files' }))
+    expect(await screen.findByRole('button', { name: 'Zu' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Schließen' })).toBeNull()
   })
 
   it('ignores an empty gallery', async () => {
@@ -126,7 +165,7 @@ describe('FileViewerProvider', () => {
         <Opener files={[]} index={0} />
       </FileViewerProvider>
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Open files' }))
+    await clickToOpen(screen.getByRole('button', { name: 'Open files' }))
     await new Promise((r) => setTimeout(r, 20))
     expect(screen.queryByRole('dialog')).toBeNull()
   })

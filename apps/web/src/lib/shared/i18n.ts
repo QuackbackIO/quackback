@@ -150,6 +150,42 @@ export function loadMessages(locale: SupportedLocale): Promise<Record<string, st
 }
 
 /**
+ * Key prefixes only the file viewer renders. The viewer is a lazy chunk that
+ * opens on a click, so no page seeds these strings into its document; the
+ * viewer loads them as it opens (see `ViewerMessages`).
+ */
+export const VIEWER_MESSAGE_PREFIXES = [
+  'files.viewer.',
+  'files.find.',
+  'files.archive.',
+  'files.sheet.',
+  'files.pdf.',
+] as const
+
+export function isViewerMessage(key: string): boolean {
+  return VIEWER_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
+}
+
+/** A catalog without the viewer's strings, for seeding a page. */
+export function withoutViewerMessages(all: Record<string, string>): Record<string, string> {
+  const subset: Record<string, string> = {}
+  for (const [key, value] of Object.entries(all)) {
+    if (!isViewerMessage(key)) subset[key] = value
+  }
+  return subset
+}
+
+/** The file viewer's strings in a locale. */
+export async function loadViewerMessages(locale: SupportedLocale): Promise<Record<string, string>> {
+  const all = await loadMessages(locale)
+  const subset: Record<string, string> = {}
+  for (const [key, value] of Object.entries(all)) {
+    if (isViewerMessage(key)) subset[key] = value
+  }
+  return subset
+}
+
+/**
  * Key prefixes the widget surface renders (widget views plus the shared
  * Ask-AI / ui / common / files strings they embed). Everything else in the
  * catalog is portal/admin copy the iframe never shows.
@@ -168,6 +204,7 @@ export async function loadWidgetMessages(locale: SupportedLocale): Promise<Recor
   const all = await loadMessages(locale)
   const subset: Record<string, string> = {}
   for (const [key, value] of Object.entries(all)) {
+    if (isViewerMessage(key)) continue
     if (WIDGET_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))) subset[key] = value
   }
   return subset
@@ -252,6 +289,7 @@ export async function loadPortalMessages(locale: SupportedLocale): Promise<Recor
   const all = await loadMessages(locale)
   const subset: Record<string, string> = {}
   for (const [key, value] of Object.entries(all)) {
+    if (isViewerMessage(key)) continue
     if (PORTAL_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))) subset[key] = value
   }
   return subset

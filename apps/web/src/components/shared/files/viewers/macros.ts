@@ -23,6 +23,6 @@ export function macroNote(
   intl: IntlShape
 ): string | undefined {
   return mayHaveMacros(file)
-    ? intl.formatMessage({ id: 'files.viewer.macros', defaultMessage: 'Contains macros' })
+    ? intl.formatMessage({ id: 'files.macros', defaultMessage: 'Contains macros' })
     : undefined
 }
