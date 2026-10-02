@@ -1,8 +1,8 @@
 import { config } from '@/lib/server/config'
 import { isStoredAssetPath, storedAssetKeyFromSrc, trustedStorageHosts } from './asset-url'
+import { PIPELINE_FILES_PREFIX } from '@/lib/shared/files/file-types'
 
-/** The file pipeline's storage prefix (`FILES_PREFIX` in `domains/files/files.service.ts`). */
-export const PIPELINE_FILES_PREFIX = 'files'
+export { PIPELINE_FILES_PREFIX }
 
 /**
  * Only accept attachment/image URLs that came from our own upload pipeline.

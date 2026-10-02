@@ -78,6 +78,7 @@ import {
   sniffVideoMime,
 } from '@/lib/server/content/magic-bytes'
 import { resolveVideoMimeType } from '@/lib/shared/storage-config'
+import { PIPELINE_FILES_PREFIX } from '@/lib/shared/files/file-types'
 import {
   getCurrentWorkspace,
   getWorkspaceStorageCredential,
@@ -696,13 +697,12 @@ function storageReadSig(secret: string, key: string): string {
 }
 
 /**
- * Prefixes whose read capability expires. `files` is the file pipeline's
- * prefix (`FILES_PREFIX` in `domains/files/files.service.ts`). Nothing written
- * before the pipeline lives there, so no stored link depends on a token that
- * never expires; every other prefix keeps that token, because stored content
- * embeds it.
+ * Prefixes whose read capability expires. `PIPELINE_FILES_PREFIX` is the file
+ * pipeline's prefix. Nothing written before the pipeline lives there, so no
+ * stored link depends on a token that never expires; every other prefix keeps
+ * that token, because stored content embeds it.
  */
-const EXPIRING_READ_PREFIXES = new Set(['files'])
+const EXPIRING_READ_PREFIXES = new Set([PIPELINE_FILES_PREFIX])
 
 /** Whether a key's read link is `?read=<hmac>&exp=<ms>` rather than `?read=<hmac>`. */
 export function hasExpiringReadToken(key: string): boolean {

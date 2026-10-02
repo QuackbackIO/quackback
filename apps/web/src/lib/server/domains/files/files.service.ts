@@ -30,6 +30,7 @@ import {
   familyFor,
   maxBytesForFamily,
   formatBytes,
+  PIPELINE_FILES_PREFIX,
   type FileFamily,
 } from '@/lib/shared/files/file-types'
 import { stripInvisible } from '@/lib/shared/files/file-name'
@@ -39,8 +40,12 @@ import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'files' })
 
-/** Object-storage prefix for every file stored through the pipeline. Private. */
-export const FILES_PREFIX = 'files'
+/**
+ * Object-storage prefix for every file stored through the pipeline. Private.
+ * Alias for `PIPELINE_FILES_PREFIX` (`lib/shared/files/file-types.ts`), kept so
+ * `files.retention.ts` and its tests need not name the shared module.
+ */
+export const FILES_PREFIX = PIPELINE_FILES_PREFIX
 
 export type FileSource = 'agent' | 'visitor' | 'portal' | 'email' | 'api'
 
