@@ -216,7 +216,7 @@ export function ProductTourProvider({ children }: { children: ReactNode }) {
                     className={`h-1.5 rounded-full ${i === index ? 'w-5 bg-foreground' : 'w-1.5 bg-muted-foreground/40'}`}
                   />
                 ))}
-                <span className="sr-only">
+                <span className="ms-auto text-xs text-muted-foreground">
                   <FormattedMessage
                     id="onboarding.tour.step"
                     defaultMessage="Step {step} of {total}"

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { getSetupState } from '@/lib/shared/db-types'
 import { buildLaunchTasks, launchChecklistSummary, type LaunchStatus } from '../launch-checklist'
 
 const status: LaunchStatus = {
@@ -50,4 +51,57 @@ describe('combined launch plan', () => {
         .map((t) => t.id)
     ).toEqual(['add-status-service'])
   })
+})
+
+it('names the first win and summary for private team feedback, including legacy setup state', () => {
+  const legacy = getSetupState(
+    JSON.stringify({
+      version: 2,
+      steps: { core: true, workspace: true, startingPoint: null },
+      useCase: 'internal',
+    })
+  )!
+  for (const intent of [
+    { goals: ['product_feedback' as const], feedbackPrivate: true },
+    { goals: legacy.goals, useCase: legacy.useCase, feedbackPrivate: legacy.feedbackPrivate },
+  ]) {
+    const privateStatus: LaunchStatus = {
+      ...status,
+      ...intent,
+      features: { ...status.features!, supportInbox: false, helpCenter: false, statusPage: false },
+    }
+    const tasks = buildLaunchTasks(privateStatus)
+    expect(tasks.find((task) => task.id === 'first-win')?.title).toBe(
+      'Collect your first team idea'
+    )
+    expect(tasks.find((task) => task.id === 'create-board')?.title).toBe(
+      'Create a private team board'
+    )
+    expect(launchChecklistSummary(privateStatus)).toMatchObject({
+      outcome: 'internal',
+      headline: '1 step to your first team idea',
+    })
+  }
+})
+
+it('keeps the primary goal when private feedback is secondary and keeps public feedback public', () => {
+  const publicStatus: LaunchStatus = {
+    ...status,
+    goals: ['product_feedback'],
+    feedbackPrivate: false,
+  }
+  expect(buildLaunchTasks(publicStatus).find((task) => task.id === 'first-win')?.title).toBe(
+    'Receive your first customer post or vote'
+  )
+  expect(launchChecklistSummary(publicStatus).outcome).toBe('product_feedback')
+
+  const helpStatus: LaunchStatus = {
+    ...status,
+    goals: ['help_center', 'product_feedback'],
+    feedbackPrivate: true,
+  }
+  expect(buildLaunchTasks(helpStatus).find((task) => task.id === 'first-win')?.title).toBe(
+    'Publish your first article'
+  )
+  expect(launchChecklistSummary(helpStatus).outcome).toBe('help_center')
 })

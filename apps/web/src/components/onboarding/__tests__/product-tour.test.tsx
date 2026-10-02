@@ -97,3 +97,15 @@ it('skips products that are disabled and announces the remaining count', async (
   )
   expect(screen.getByText('Open your portal to see what customers see.')).toBeVisible()
 })
+
+it('shows the current step count next to the progress dots', async () => {
+  testState.feedback = true
+  mount()
+  fireEvent.click(screen.getByRole('button', { name: 'Start tour' }))
+  const count = await screen.findByText('Step 1 of 5')
+  expect(count).toBeVisible()
+  expect(count).not.toHaveClass('sr-only')
+  fireEvent.keyDown(document, { key: 'ArrowRight' })
+  const nextCount = await screen.findByText('Step 2 of 5')
+  expect(nextCount).not.toHaveClass('sr-only')
+})

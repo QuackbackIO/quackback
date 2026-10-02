@@ -205,7 +205,9 @@ function buildOutcomeTasks(
   status: LaunchStatus,
   outcomeOverride?: OnboardingOutcome
 ): LaunchTask[] {
-  const outcome = outcomeOverride ?? normalizeOutcome(status.useCase)
+  const selectedOutcome = outcomeOverride ?? normalizeOutcome(status.useCase)
+  const outcome =
+    selectedOutcome === 'product_feedback' && status.feedbackPrivate ? 'internal' : selectedOutcome
   const permissions = status.permissions ?? ALLOW_ALL
   const features = resolvedFeatures(status.features)
   const boardCapacityBlocked =
@@ -449,7 +451,9 @@ export function launchChecklistSummary(
   headline: string
   percent: number
 } {
-  const outcome = outcomeOverride ?? status.goals?.[0] ?? normalizeOutcome(status.useCase)
+  const selectedOutcome = outcomeOverride ?? status.goals?.[0] ?? normalizeOutcome(status.useCase)
+  const outcome =
+    selectedOutcome === 'product_feedback' && status.feedbackPrivate ? 'internal' : selectedOutcome
   const tasks = buildLaunchTasks(status, outcomeOverride)
   const prerequisites = tasks.filter((task) => task.classification === 'prerequisite')
   const skippedTasks = tasks.filter((task) => task.isSkipped && task.classification !== 'first_win')
