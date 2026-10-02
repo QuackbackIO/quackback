@@ -197,6 +197,7 @@
   "files.tray.retry": "Erneut versuchen",
   "files.tray.retryAria": "Hochladen von {name} erneut versuchen",
   "files.tray.dismiss": "Schließen",
+  "files.tray.uploadingAria": "{name} wird hochgeladen",
   "files.tray.capReached": "Du kannst bis zu {max} Dateien anhängen",
   "files.upload.error.empty": "Die Datei ist leer",
   "files.upload.error.tooLarge": "Über {size} MB",

@@ -197,6 +197,7 @@
   "files.tray.retry": "Tentar novamente",
   "files.tray.retryAria": "Tentar enviar {name} novamente",
   "files.tray.dismiss": "Dispensar",
+  "files.tray.uploadingAria": "Enviando {name}",
   "files.tray.capReached": "Você pode anexar até {max} arquivos",
   "files.upload.error.empty": "O arquivo está vazio",
   "files.upload.error.tooLarge": "Mais de {size} MB",

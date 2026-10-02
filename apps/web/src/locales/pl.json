@@ -197,6 +197,7 @@
   "files.tray.retry": "Spróbuj ponownie",
   "files.tray.retryAria": "Spróbuj ponownie przesłać {name}",
   "files.tray.dismiss": "Zamknij",
+  "files.tray.uploadingAria": "Przesyłanie {name}",
   "files.tray.capReached": "Możesz dodać maksymalnie {max} plików",
   "files.upload.error.empty": "Plik jest pusty",
   "files.upload.error.tooLarge": "Ponad {size} MB",

@@ -74,6 +74,21 @@ function RemoveButton({ item, onRemove }: Omit<TileProps, 'onRetry'>) {
   )
 }
 
+/** Visually-hidden, announced once per tile (the visible progress bar itself
+ *  stays `aria-hidden`, since a screen reader re-announcing a changing
+ *  percentage would be far too chatty). */
+function UploadingAnnouncement({ name }: { name: string }) {
+  const intl = useIntl()
+  return (
+    <span role="status" aria-live="polite" className="sr-only">
+      {intl.formatMessage(
+        { id: 'files.tray.uploadingAria', defaultMessage: 'Uploading {name}' },
+        { name: name || 'file' }
+      )}
+    </span>
+  )
+}
+
 function RetryButton({
   item,
   onRetry,
@@ -129,16 +144,22 @@ function ImageTile({ item, onRemove, onRetry, onOpen }: TileProps) {
           <img src={src} alt={item.name || 'Image'} className="size-full object-cover" />
         ))}
       {item.status === 'uploading' && (
-        <div className="absolute inset-x-0 bottom-0 h-1 bg-black/20">
-          <div
-            data-progress={Math.round(item.progress * 100)}
-            className="h-full bg-white/90 transition-[width]"
-            style={{ width: `${Math.round(item.progress * 100)}%` }}
-          />
-        </div>
+        <>
+          <div className="absolute inset-x-0 bottom-0 h-1 bg-black/20" aria-hidden="true">
+            <div
+              data-progress={Math.round(item.progress * 100)}
+              className="h-full bg-white/90 transition-[width]"
+              style={{ width: `${Math.round(item.progress * 100)}%` }}
+            />
+          </div>
+          <UploadingAnnouncement name={item.name} />
+        </>
       )}
       {failed && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 bg-destructive/85 p-1 text-center text-[11px] font-medium leading-tight text-white">
+        <div
+          role="alert"
+          className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 bg-destructive/85 p-1 text-center text-[11px] font-medium leading-tight text-white"
+        >
           <span className="line-clamp-2" title={errorText}>
             {errorText}
           </span>
@@ -164,16 +185,22 @@ function FileTile({ item, onRemove, onRetry, onOpen }: TileProps) {
         <span className="truncate text-xs font-medium text-foreground">{item.name || 'File'}</span>
         {ready && <span className="text-[11px] text-muted-foreground">{formatBytes(item.size)}</span>}
         {item.status === 'uploading' && (
-          <div className="h-1 overflow-hidden rounded-full bg-muted">
-            <div
-              data-progress={Math.round(item.progress * 100)}
-              className="h-full rounded-full bg-foreground/60 transition-[width]"
-              style={{ width: `${Math.round(item.progress * 100)}%` }}
-            />
-          </div>
+          <>
+            <div className="h-1 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+              <div
+                data-progress={Math.round(item.progress * 100)}
+                className="h-full rounded-full bg-foreground/60 transition-[width]"
+                style={{ width: `${Math.round(item.progress * 100)}%` }}
+              />
+            </div>
+            <UploadingAnnouncement name={item.name} />
+          </>
         )}
         {failed && (
-          <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-destructive">
+          <span
+            role="alert"
+            className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-destructive"
+          >
             <span className="truncate">{errorText}</span>
             {item.retryable && (
               <RetryButton

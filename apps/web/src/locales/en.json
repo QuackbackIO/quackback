@@ -197,6 +197,7 @@
   "files.tray.retry": "Retry",
   "files.tray.retryAria": "Retry uploading {name}",
   "files.tray.dismiss": "Dismiss",
+  "files.tray.uploadingAria": "Uploading {name}",
   "files.tray.capReached": "You can attach up to {max} files",
   "files.upload.error.empty": "The file is empty",
   "files.upload.error.tooLarge": "Over {size} MB",

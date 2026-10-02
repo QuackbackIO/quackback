@@ -197,6 +197,7 @@
   "files.tray.retry": "إعادة المحاولة",
   "files.tray.retryAria": "إعادة محاولة رفع {name}",
   "files.tray.dismiss": "إغلاق",
+  "files.tray.uploadingAria": "جارٍ تحميل {name}",
   "files.tray.capReached": "يمكنك إرفاق حتى {max} ملفات",
   "files.upload.error.empty": "الملف فارغ",
   "files.upload.error.tooLarge": "أكبر من {size} MB",

@@ -197,6 +197,7 @@
   "files.tray.retry": "Reintentar",
   "files.tray.retryAria": "Reintentar subir {name}",
   "files.tray.dismiss": "Descartar",
+  "files.tray.uploadingAria": "Subiendo {name}",
   "files.tray.capReached": "Puedes adjuntar hasta {max} archivos",
   "files.upload.error.empty": "El archivo está vacío",
   "files.upload.error.tooLarge": "Más de {size} MB",

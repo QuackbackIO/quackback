@@ -197,6 +197,7 @@
   "files.tray.retry": "重试",
   "files.tray.retryAria": "重试上传{name}",
   "files.tray.dismiss": "关闭",
+  "files.tray.uploadingAria": "正在上传 {name}",
   "files.tray.capReached": "最多可添加 {max} 个文件",
   "files.upload.error.empty": "文件为空",
   "files.upload.error.tooLarge": "超过 {size} MB",

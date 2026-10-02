@@ -197,6 +197,7 @@
   "files.tray.retry": "Opnieuw proberen",
   "files.tray.retryAria": "{name} opnieuw proberen te uploaden",
   "files.tray.dismiss": "Sluiten",
+  "files.tray.uploadingAria": "{name} wordt geüpload",
   "files.tray.capReached": "Je kunt maximaal {max} bestanden toevoegen",
   "files.upload.error.empty": "Het bestand is leeg",
   "files.upload.error.tooLarge": "Meer dan {size} MB",

@@ -117,6 +117,76 @@ describe('ComposerAttachmentTray', () => {
     expect(bar?.getAttribute('data-progress')).toBe('40')
   })
 
+  it('announces an uploading tile politely for a screen reader', () => {
+    render(
+      <ComposerAttachmentTray
+        items={[item({ status: 'uploading', progress: 0.4, file: undefined })]}
+        onRemove={vi.fn()}
+        onRetry={vi.fn()}
+      />
+    )
+    expect(screen.getByRole('status')).toHaveTextContent('Uploading report.pdf')
+  })
+
+  it('announces an uploading image tile politely too', () => {
+    render(
+      <ComposerAttachmentTray
+        items={[
+          item({
+            family: 'image',
+            name: 'shot.png',
+            status: 'uploading',
+            file: undefined,
+            previewUrl: 'blob:shot.png',
+          }),
+        ]}
+        onRemove={vi.fn()}
+        onRetry={vi.fn()}
+      />
+    )
+    expect(screen.getByRole('status')).toHaveTextContent('Uploading shot.png')
+  })
+
+  it('announces a failed tile as an alert', () => {
+    render(
+      <ComposerAttachmentTray
+        items={[
+          item({
+            name: 'huge.csv',
+            family: 'csv',
+            status: 'error',
+            file: undefined,
+            error: 'Over 25 MB',
+            retryable: false,
+          }),
+        ]}
+        onRemove={vi.fn()}
+        onRetry={vi.fn()}
+      />
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent('Over 25 MB')
+  })
+
+  it('announces a failed image tile as an alert too', () => {
+    render(
+      <ComposerAttachmentTray
+        items={[
+          item({
+            family: 'image',
+            name: 'shot.png',
+            status: 'error',
+            file: undefined,
+            error: 'Upload failed',
+            retryable: true,
+          }),
+        ]}
+        onRemove={vi.fn()}
+        onRetry={vi.fn()}
+      />
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent('Upload failed')
+  })
+
   it('renders an image tile as a thumbnail using the local preview while uploading', () => {
     render(
       <ComposerAttachmentTray
