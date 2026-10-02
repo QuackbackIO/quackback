@@ -19,7 +19,7 @@ import {
   typeForExtension,
   type FileFamily,
 } from '@/lib/shared/files/file-types'
-import { sniffImageMime } from './magic-bytes'
+import { sniffImageMime, startsWithAt } from './magic-bytes'
 
 export interface SniffedFile {
   /** Canonical MIME type to store and serve the file as. */
@@ -67,12 +67,6 @@ function ascii(buf: Uint8Array, start: number, end: number): string {
   let s = ''
   for (let i = start; i < Math.min(end, buf.length); i++) s += String.fromCharCode(buf[i]!)
   return s
-}
-
-function startsWith(buf: Uint8Array, offset: number, pattern: readonly number[]): boolean {
-  if (buf.length < offset + pattern.length) return false
-  for (let i = 0; i < pattern.length; i++) if (buf[offset + i] !== pattern[i]) return false
-  return true
 }
 
 function result(
@@ -212,10 +206,10 @@ export function sniffFile(input: Uint8Array, name: string): SniffedFile {
   const nodeBuf = Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength)
 
   // Executables first: a signature here outranks any other reading.
-  if (startsWith(buf, 0, [0x4d, 0x5a])) {
+  if (startsWithAt(buf, 0, [0x4d, 0x5a])) {
     return result('application/x-msdownload', 'other', { executable: true })
   }
-  if (startsWith(buf, 0, [0x7f, 0x45, 0x4c, 0x46])) {
+  if (startsWithAt(buf, 0, [0x7f, 0x45, 0x4c, 0x46])) {
     return result('application/x-executable', 'other', { executable: true })
   }
   for (const magic of [
@@ -226,7 +220,7 @@ export function sniffFile(input: Uint8Array, name: string): SniffedFile {
     // Java class files and universal Mach-O binaries share this one.
     [0xca, 0xfe, 0xba, 0xbe],
   ]) {
-    if (startsWith(buf, 0, magic)) {
+    if (startsWithAt(buf, 0, magic)) {
       return result('application/x-mach-binary', 'other', { executable: true })
     }
   }
@@ -241,7 +235,7 @@ export function sniffFile(input: Uint8Array, name: string): SniffedFile {
     if (brand === 'qt  ') return result('video/quicktime', 'video')
     return result('video/mp4', 'video')
   }
-  if (startsWith(buf, 0, [0x1a, 0x45, 0xdf, 0xa3])) return result('video/webm', 'video')
+  if (startsWithAt(buf, 0, [0x1a, 0x45, 0xdf, 0xa3])) return result('video/webm', 'video')
 
   if (ascii(buf, 0, 3) === 'ID3') return result('audio/mpeg', 'audio')
   if (buf[0] === 0xff && buf.length > 1 && (buf[1]! & 0xe0) === 0xe0) {
@@ -262,14 +256,14 @@ export function sniffFile(input: Uint8Array, name: string): SniffedFile {
   if (ascii(buf, 0, 5) === '{\\rtf') return result('application/rtf', 'document')
 
   if (
-    startsWith(buf, 0, [0x50, 0x4b, 0x03, 0x04]) ||
-    startsWith(buf, 0, [0x50, 0x4b, 0x05, 0x06])
+    startsWithAt(buf, 0, [0x50, 0x4b, 0x03, 0x04]) ||
+    startsWithAt(buf, 0, [0x50, 0x4b, 0x05, 0x06])
   ) {
     return sniffZip(buf, name)
   }
-  if (startsWith(buf, 0, [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])) return sniffOle2(name)
-  if (startsWith(buf, 0, [0x1f, 0x8b])) return result('application/gzip', 'archive')
-  if (startsWith(buf, 0, [0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c])) {
+  if (startsWithAt(buf, 0, [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])) return sniffOle2(name)
+  if (startsWithAt(buf, 0, [0x1f, 0x8b])) return result('application/gzip', 'archive')
+  if (startsWithAt(buf, 0, [0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c])) {
     return result('application/x-7z-compressed', 'archive')
   }
   if (ascii(buf, 0, 6) === 'Rar!\x1a\x07') return result('application/vnd.rar', 'archive')
