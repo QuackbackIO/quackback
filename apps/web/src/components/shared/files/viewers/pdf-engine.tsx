@@ -226,7 +226,7 @@ export default function PdfEngine({ data, onToolbar, onError, compact }: ViewerE
 
   // ---- Which pages to draw --------------------------------------------------
 
-  const deskObserver = useVisibility(deskRef, pdf, setVisible, '100% 0px')
+  const deskObserver = useVisibility(deskRef, pdf, setVisible)
   const total = pdf ? sizes.length : 0
   const drawnPages = useMemo(() => new Set(pagesNear(visible, total)), [visible, total])
 
@@ -430,13 +430,14 @@ export default function PdfEngine({ data, onToolbar, onError, compact }: ViewerE
 
 /**
  * Tracks which pages (elements registered with their page number) are near a
- * scrolling root, and returns the registration callback.
+ * scrolling root, and returns the registration callback. The root's box is
+ * extended by its own height above and below, so a page is "near" and gets
+ * drawn just before it scrolls into view, not the instant it does.
  */
 function useVisibility(
   rootRef: React.RefObject<HTMLElement | null>,
   active: unknown,
-  onChange: (pages: ReadonlySet<number>) => void,
-  rootMargin: string
+  onChange: (pages: ReadonlySet<number>) => void
 ): (pageNumber: number, el: HTMLElement | null) => void {
   const elements = useRef(new Map<number, HTMLElement>())
   const observer = useRef<IntersectionObserver | null>(null)
@@ -455,7 +456,7 @@ function useVisibility(
         }
         report(new Set(near))
       },
-      { root, rootMargin }
+      { root, rootMargin: '100% 0px' }
     )
     for (const el of elements.current.values()) io.observe(el)
     observer.current = io
@@ -463,7 +464,7 @@ function useVisibility(
       io.disconnect()
       observer.current = null
     }
-  }, [rootRef, active, rootMargin])
+  }, [rootRef, active])
 
   return useCallback((pageNumber: number, el: HTMLElement | null) => {
     const previous = elements.current.get(pageNumber)
