@@ -14,7 +14,7 @@ import {
   type PointerEvent,
   type SyntheticEvent,
 } from 'react'
-import { fileExtension } from '@/lib/shared/files/file-types'
+import { canDrawImageInline } from '@/lib/shared/files/file-types'
 import { cn } from '@/lib/shared/utils'
 import { FileBadge } from '../file-badge'
 import {
@@ -41,20 +41,13 @@ function mediaFailure(event: SyntheticEvent<HTMLMediaElement>): EngineFailure | 
   return 'corrupt'
 }
 
-/** Image formats most browsers cannot draw; the server derives a copy that they can. */
-const UNDRAWABLE_TYPES = new Set(['image/tiff', 'image/heic', 'image/heif'])
-const UNDRAWABLE_EXTENSIONS = new Set(['tif', 'tiff', 'heic', 'heif'])
-
 /**
  * The URL to draw an image from: the stored file, or for a format browsers
  * cannot draw, the server's converted copy (HEIC) or rendered thumbnail
  * (TIFF). Null when there is nothing a browser can draw.
  */
 export function drawableImageUrl(file: ViewerFile): string | null {
-  const undrawable =
-    UNDRAWABLE_TYPES.has(file.contentType.toLowerCase()) ||
-    UNDRAWABLE_EXTENSIONS.has(fileExtension(file.name))
-  if (!undrawable) return file.url
+  if (canDrawImageInline(file.contentType, file.name)) return file.url
   return file.preview?.renditionUrl ?? file.preview?.thumbUrl ?? null
 }
 

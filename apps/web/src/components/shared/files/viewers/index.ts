@@ -21,10 +21,7 @@ export const ENGINES: Record<EngineKind, LazyExoticComponent<ComponentType<Viewe
 
 /** The engine for a file, or null when no browser engine can show it. */
 export function engineFor(file: ViewerFile): EngineKind | null {
-  if (!isPreviewable(file.name, file.family)) {
-    // A HEIC photo has no browser engine, but a converted rendition does.
-    return file.family === 'image' && file.preview?.renditionUrl ? 'media' : null
-  }
+  if (!isPreviewable(file.name, file.family)) return null
   switch (file.family) {
     case 'pdf':
       return 'pdf'

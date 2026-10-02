@@ -12,7 +12,9 @@
  * thread. Outside a `ConversationGalleryProvider` (an isolated render, e.g. a
  * unit test) it falls back to a gallery of just this message's attachments.
  */
+import { useMemo } from 'react'
 import { useIntl } from 'react-intl'
+import { canDrawImageInline } from '@/lib/shared/files/file-types'
 import { cn } from '@/lib/shared/utils/cn'
 import { useFileViewer } from './file-viewer-context'
 import { useConversationGallery, isSafeAttachment } from './conversation-gallery'
@@ -26,16 +28,11 @@ import {
 } from './file-card'
 import type { ConversationAttachment } from '@/lib/shared/conversation/types'
 
-/** Image subtypes most browsers cannot decode in an `<img>`. BMP decodes
- *  natively everywhere, so it stays off this list. */
-const UNDISPLAYABLE_IMAGE_TYPES = new Set(['image/tiff', 'image/heic', 'image/heif'])
-
 /** An image attachment the browser cannot render inline, and for which the
  *  preview job hasn't produced a thumbnail or a browser-viewable rendition
  *  yet — it renders as a file card instead of a broken `<img>`. */
 function isUndisplayableImage(a: ConversationAttachment): boolean {
-  const contentType = a.contentType.split(';')[0]?.trim().toLowerCase() ?? ''
-  if (!UNDISPLAYABLE_IMAGE_TYPES.has(contentType)) return false
+  if (canDrawImageInline(a.contentType, a.name)) return false
   return !a.preview?.thumbUrl && !a.preview?.renditionUrl
 }
 
@@ -76,11 +73,20 @@ export function AttachmentList({
   const { open } = useFileViewer()
   const gallery = useConversationGallery()
 
-  const safe = (attachments ?? []).filter(isSafeAttachment)
+  // Re-derived only when this message's own attachments change, not on every
+  // render the surrounding thread causes (typing, other messages arriving).
+  const { safe, images, files, localIndexOf } = useMemo(() => {
+    const safe = (attachments ?? []).filter(isSafeAttachment)
+    const images = safe.filter((a) => resolveFamily(a) === 'image' && !isUndisplayableImage(a))
+    const files = safe.filter((a) => resolveFamily(a) !== 'image' || isUndisplayableImage(a))
+    // Local index of each attachment within `safe` (the order `openAt` and
+    // the fallback gallery both use), kept stable across the images/files split.
+    const localIndexOf = new Map(safe.map((a, i) => [a, i]))
+    return { safe, images, files, localIndexOf }
+  }, [attachments])
+
   if (safe.length === 0) return null
 
-  const images = safe.filter((a) => resolveFamily(a) === 'image' && !isUndisplayableImage(a))
-  const files = safe.filter((a) => resolveFamily(a) !== 'image' || isUndisplayableImage(a))
   const noteTint = note ? 'border-amber-400/30 dark:border-amber-400/25' : undefined
 
   const openAt = (localIndex: number) => {
@@ -101,10 +107,6 @@ export function AttachmentList({
     )
     open(fallback, localIndex)
   }
-
-  // Local index of each attachment within `safe` (the order `openAt` and the
-  // fallback gallery both use), kept stable across the images/files split.
-  const localIndexOf = new Map(safe.map((a, i) => [a, i]))
 
   return (
     <div
