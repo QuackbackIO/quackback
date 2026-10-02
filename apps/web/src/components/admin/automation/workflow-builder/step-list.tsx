@@ -18,7 +18,7 @@ import { cn } from '@/lib/shared/utils'
 import { MENU_LABEL } from '@/components/ui/menu'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { assistantWaitMinutes } from '@/lib/shared/workflows/abandoned-auto-close'
-import { useWorkflowEntities } from './entities'
+import { useEntityLabels } from './entities'
 import {
   ACTION_ICONS,
   BLOCK_ICONS,
@@ -382,7 +382,7 @@ export function StepList({
   onRemoveStep: (id: string) => void
 }) {
   const intl = useIntl()
-  const { labels } = useWorkflowEntities()
+  const labels = useEntityLabels()
   const autoClose = useQuery(settingsQueries.workflowAbandonedAutoClose())
   const assistantEscalateMinutes = assistantWaitMinutes(autoClose.data)
   const selectedId = selection?.kind === 'node' ? selection.id : null

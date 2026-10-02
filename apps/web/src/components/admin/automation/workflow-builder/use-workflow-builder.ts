@@ -10,7 +10,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import type { WorkflowDTO } from '@/lib/server/functions/workflows'
 import { useUpdateWorkflow, useSetWorkflowStatus } from '@/lib/client/mutations/workflows'
-import { useWorkflowEntities } from './entities'
+import { useEntityLabels } from './entities'
 import type { BuilderSelection } from './types'
 import {
   collectStepIssues,
@@ -102,7 +102,7 @@ function jsonEqual(a: unknown, b: unknown): boolean {
 }
 
 export function useWorkflowBuilder(workflow: WorkflowDTO) {
-  const { labels } = useWorkflowEntities()
+  const labels = useEntityLabels()
   const updateMutation = useUpdateWorkflow()
   const statusMutation = useSetWorkflowStatus()
 
