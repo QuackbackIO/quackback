@@ -208,16 +208,17 @@ function legacyAttachment(a: ConversationAttachment): ConversationAttachment {
  * origin at read time.
  */
 export function attachmentFromFile(row: FileRecord): ConversationAttachment {
-  const meta = row.meta ?? {}
-  return {
-    url: getPublicUrlOrNull(row.storageKey) ?? '',
-    name: row.name,
-    contentType: row.contentType,
-    size: row.size,
-    fileId: row.id,
-    family: row.family as FileFamily,
-    ...(Object.keys(meta).length > 0 ? { preview: meta } : {}),
-  }
+  return withFilePreview(
+    {
+      url: getPublicUrlOrNull(row.storageKey) ?? '',
+      name: row.name,
+      contentType: row.contentType,
+      size: row.size,
+      fileId: row.id,
+    },
+    row.family,
+    row.meta ?? {}
+  )
 }
 
 /**
