@@ -12,7 +12,8 @@
  * A reader that inflates parts (`openZip`) also holds the archive to one
  * reading: no second end record after the one the index came from (a parser
  * that scans from the very end would read another index), and every local
- * header it inflates agrees with the index about method and sizes.
+ * header it inflates agrees with the index about method and sizes and is not
+ * encrypted (`checkZipLocalHeader`, which other readers of a package share).
  */
 import { Inflate } from 'fflate'
 
@@ -238,7 +239,18 @@ function localSizes(
   return sizes
 }
 
-function entryData(bytes: Uint8Array, entry: ZipEntry): Uint8Array {
+const ENCRYPTED = 0x1
+const SIZES_IN_DESCRIPTOR = 0x8
+
+/**
+ * Refuse an entry whose local header tells a different story from the index,
+ * and return where its data starts. A reader that trusts the local header
+ * would otherwise inflate a different method or size than the budget
+ * checked. A header that defers its sizes to a data descriptor (flag bit 3)
+ * may record zeros instead, leaving the index as the only record. An
+ * encrypted entry is refused: its data is not the stream the index describes.
+ */
+export function checkZipLocalHeader(bytes: Uint8Array, entry: ZipEntry): number {
   const local = entry.localHeaderOffset
   if (!within(bytes, local, 30) || u32(bytes, local) !== 0x04034b50) {
     throw new ZipFormatError('Broken zip entry')
@@ -247,17 +259,24 @@ function entryData(bytes: Uint8Array, entry: ZipEntry): Uint8Array {
   const start = extraStart + u16(bytes, local + 28)
   if (!within(bytes, start, entry.compressedSize)) throw new ZipFormatError('Broken zip entry')
 
-  // The local header must tell the same story as the index. One that defers
-  // its sizes to a data descriptor (flag bit 3) records zeros instead.
+  const flags = u16(bytes, local + 6)
+  if (flags & ENCRYPTED) throw new ZipFormatError('Zip entry is encrypted')
   if (u16(bytes, local + 8) !== entry.compression) {
     throw new ZipFormatError('Zip entry headers disagree')
   }
-  if ((u16(bytes, local + 6) & 0x08) === 0) {
-    const sizes = localSizes(bytes, local, extraStart, start)
-    if (sizes.compressed !== entry.compressedSize || sizes.original !== entry.originalSize) {
-      throw new ZipFormatError('Zip entry headers disagree')
-    }
+  const sizes = localSizes(bytes, local, extraStart, start)
+  const deferred = flags & SIZES_IN_DESCRIPTOR && sizes.compressed === 0 && sizes.original === 0
+  if (
+    !deferred &&
+    (sizes.compressed !== entry.compressedSize || sizes.original !== entry.originalSize)
+  ) {
+    throw new ZipFormatError('Zip entry headers disagree')
   }
+  return start
+}
+
+function entryData(bytes: Uint8Array, entry: ZipEntry): Uint8Array {
+  const start = checkZipLocalHeader(bytes, entry)
   return bytes.subarray(start, start + entry.compressedSize)
 }
 

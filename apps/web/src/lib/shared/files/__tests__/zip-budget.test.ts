@@ -3,6 +3,7 @@ import { zipSync, strToU8 } from 'fflate'
 import {
   readZipIndex,
   checkZipBudget,
+  checkZipLocalHeader,
   openZip,
   inflateZipEntry,
   ZipBudgetError,
@@ -206,5 +207,42 @@ describe('openZip: one index, read one way', () => {
       setU32(out, local + 22, 0)
     })
     expect(new TextDecoder().decode(openZip(deferred).read('a.xml')!)).toBe(text)
+  })
+
+  it('refuses a deferred-size local header that records other sizes', () => {
+    const lying = editLocalHeader(zip, 0, (out, local) => {
+      out[local + 6] = out[local + 6]! | 0x08
+      setU32(out, local + 22, 64)
+    })
+    expect(() => openZip(lying).read('a.xml')).toThrow(ZipFormatError)
+  })
+
+  it('refuses an encrypted entry', () => {
+    const encrypted = editLocalHeader(zip, 0, (out, local) => {
+      out[local + 6] = out[local + 6]! | 0x01
+    })
+    expect(() => openZip(encrypted).read('a.xml')).toThrow(ZipFormatError)
+    expect(new TextDecoder().decode(openZip(encrypted).read('b.xml')!)).toBe('<b/>')
+  })
+})
+
+describe('checkZipLocalHeader', () => {
+  const zip = zipSync({ 'a.xml': strToU8('<a/>'.repeat(100)), 'logs/': new Uint8Array(0) })
+
+  it('passes headers that agree with the index, folders included', () => {
+    for (const entry of readZipIndex(zip))
+      expect(() => checkZipLocalHeader(zip, entry)).not.toThrow()
+  })
+
+  it('refuses an entry whose local header is missing or disagrees', () => {
+    const [entry] = readZipIndex(zip)
+    expect(() => checkZipLocalHeader(zip, { ...entry!, localHeaderOffset: 1 })).toThrow(
+      ZipFormatError
+    )
+    expect(() => checkZipLocalHeader(zip, { ...entry!, compression: 0 })).toThrow(ZipFormatError)
+    expect(() => checkZipLocalHeader(zip, { ...entry!, originalSize: 401 })).toThrow(ZipFormatError)
+    expect(() => checkZipLocalHeader(zip, { ...entry!, compressedSize: zip.length })).toThrow(
+      ZipFormatError
+    )
   })
 })
