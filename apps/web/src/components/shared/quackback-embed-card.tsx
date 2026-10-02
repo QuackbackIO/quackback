@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { format } from 'date-fns'
+import { LocalDate } from '@/components/ui/local-date'
 import { ChevronUpIcon } from '@heroicons/react/24/solid'
 import type { PostId } from '@quackback/ids'
 import { Avatar } from '@/components/ui/avatar'
@@ -362,7 +362,11 @@ export function QuackbackEmbedCard({
       <h3 className="mt-0.5 line-clamp-1 text-sm font-semibold text-foreground">{data.title}</h3>
       {data.publishedAt && (
         <p className="mt-1 text-[11px] text-muted-foreground">
-          {format(new Date(data.publishedAt), 'MMM d, yyyy')}
+          <LocalDate
+            date={data.publishedAt}
+            options={{ month: 'short', day: 'numeric', year: 'numeric' }}
+            locale="en-US"
+          />
         </p>
       )}
     </div>

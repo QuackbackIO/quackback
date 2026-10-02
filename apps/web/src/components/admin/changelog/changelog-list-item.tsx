@@ -2,6 +2,7 @@ import { isSameDay } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { TimeAgo } from '@/components/ui/time-ago'
+import { LocalDate } from '@/components/ui/local-date'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -101,12 +102,11 @@ export function ChangelogListItem({
             ) : status === 'scheduled' && publishedAt ? (
               <>
                 Scheduled for{' '}
-                {new Date(publishedAt).toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  hour: 'numeric',
-                  minute: '2-digit',
-                })}
+                <LocalDate
+                  date={publishedAt}
+                  options={{ month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }}
+                  locale="en-US"
+                />
               </>
             ) : (
               <>

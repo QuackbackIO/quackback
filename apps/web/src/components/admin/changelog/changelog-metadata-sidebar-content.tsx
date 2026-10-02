@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { format } from 'date-fns'
+import { LocalDate } from '@/components/ui/local-date'
 import {
   DocumentTextIcon,
   PlusIcon,
@@ -55,6 +55,8 @@ interface ChangelogMetadataSidebarContentProps {
   featuredImageUrl?: string | null
   onFeaturedImageChange?: (url: string | null) => void
 }
+
+const PUBLISH_DAY: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' }
 
 const PUBLISH_STATUS_OPTIONS: readonly StatusOption[] = [
   { value: 'draft', label: 'Draft', color: '#94a3b8' }, // slate-400
@@ -119,12 +121,16 @@ export function ChangelogMetadataSidebarContent({
     return tomorrowAt(9)
   })
 
+  // The day the entry went out, in the viewer's zone once hydrated.
+  const publishDay =
+    publishedAt ??
+    (publishState.type === 'published' ? (publishState.publishAt ?? new Date()) : null)
   const displayPlaceholder =
-    publishedAt != null
-      ? format(new Date(publishedAt), 'MMM d, yyyy')
-      : publishState.type === 'published'
-        ? format(publishState.publishAt ?? new Date(), 'MMM d, yyyy')
-        : 'Pick a date'
+    publishDay != null ? (
+      <LocalDate date={publishDay} options={PUBLISH_DAY} locale="en-US" />
+    ) : (
+      'Pick a date'
+    )
 
   // Search shipped posts
   const { data: posts = [], isLoading: postsLoading } = useQuery({

@@ -29,7 +29,12 @@ function formatTimestamp(iso: string, compact: boolean): string {
     timeZone: 'UTC',
   })
   if (compact) return `${time} UTC`
-  const day = date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  const day = date.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
   return `${day} · ${time} UTC`
 }
 

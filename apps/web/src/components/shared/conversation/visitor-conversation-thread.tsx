@@ -19,7 +19,7 @@ import {
   BlockReplyTimeCaption,
 } from './block-affordance'
 import { BlockTicketForm } from './block-ticket-form'
-import { ConversationPresenceBadge } from './conversation-presence-badge'
+import { BackAtTime, ConversationPresenceBadge, hasBackAtTime } from './conversation-presence-badge'
 import { ConversationThreadSkeleton } from './conversation-thread-skeleton'
 import { SystemEventNotice } from './system-event-notice'
 import { conversationAvailable } from '@/lib/shared/conversation/presence'
@@ -729,18 +729,6 @@ export function VisitorConversationThread({
   // when office hours are configured, the schedule also marks us available.
   const available = conversationAvailable(presence.agentsOnline, presence.withinOfficeHours)
 
-  // "Back at" time for the away state, formatted in the visitor's own locale.
-  const reopenLabel = useMemo(() => {
-    if (!presence.nextOpenAt) return null
-    const at = new Date(presence.nextOpenAt)
-    if (Number.isNaN(at.getTime())) return null
-    return new Intl.DateTimeFormat(intl.locale, {
-      weekday: 'long',
-      hour: 'numeric',
-      minute: '2-digit',
-    }).format(at)
-  }, [presence.nextOpenAt, intl.locale])
-
   // Show the offline hint when the team is away. When we can email a reply, only
   // echo the admin's message if one is set; when we can't, always show the
   // neutral "we'll reply here" note instead of a false email promise. With the
@@ -1297,12 +1285,12 @@ export function VisitorConversationThread({
               />
             )}
           </p>
-          {reopenLabel && (
+          {hasBackAtTime(presence.nextOpenAt) && (
             <p className="mt-0.5">
               <FormattedMessage
                 id="widget.messenger.offline.backAt"
                 defaultMessage="Back {when}"
-                values={{ when: reopenLabel }}
+                values={{ when: <BackAtTime at={presence.nextOpenAt} /> }}
               />
             </p>
           )}

@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react'
+import { useMemo, useSyncExternalStore } from 'react'
 
 /**
  * Absolute dates ("Oct 1, 2026", "3:04 PM") that hydrate cleanly.
@@ -13,7 +13,10 @@ import { useSyncExternalStore } from 'react'
  * panel) formats for the viewer from its first render.
  *
  * `<LocalDate>` renders the text; `useLocalDateFormatter()` returns the
- * formatter for strings that go into props, titles and labels.
+ * formatter for strings that go into props, titles and labels. Given a
+ * `locale`, both renders use it and only the time zone switches. Render the
+ * text in a leaf (`<LocalDate>`, or a small component that calls the hook),
+ * so the switch re-renders that text and nothing around it.
  */
 
 /** The locale the first render formats with. */
@@ -40,7 +43,8 @@ export type DateInput = Date | string | number
  */
 export type LocalDateFormatter = (
   date: DateInput | null | undefined,
-  options?: Intl.DateTimeFormatOptions
+  options?: Intl.DateTimeFormatOptions,
+  locale?: string
 ) => string
 
 // Building an Intl.DateTimeFormat is costly next to using one, and a list
@@ -49,11 +53,11 @@ export type LocalDateFormatter = (
 // runtime's defaults, which a kept formatter would pin.
 const firstRenderFormatters = new Map<string, Intl.DateTimeFormat>()
 
-function firstRenderFormatter(options: Intl.DateTimeFormatOptions) {
-  const key = JSON.stringify(options)
+function firstRenderFormatter(options: Intl.DateTimeFormatOptions, locale: string) {
+  const key = `${locale}\0${JSON.stringify(options)}`
   let formatter = firstRenderFormatters.get(key)
   if (!formatter) {
-    formatter = new Intl.DateTimeFormat(FIRST_RENDER_LOCALE, {
+    formatter = new Intl.DateTimeFormat(locale, {
       ...options,
       timeZone: options.timeZone ?? FIRST_RENDER_TIME_ZONE,
     })
@@ -68,18 +72,24 @@ function toDate(date: DateInput | null | undefined): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
-/** Formats as the first render does: the fixed locale, in UTC unless `options` names a zone. */
-export const formatFirstRenderDate: LocalDateFormatter = (date, options = {}) => {
+/**
+ * Formats as the first render does: `locale` or the fixed first-render
+ * locale, in UTC unless `options` names a zone.
+ */
+export const formatFirstRenderDate: LocalDateFormatter = (date, options = {}, locale) => {
   const parsed = toDate(date)
   if (!parsed) return ''
-  return firstRenderFormatter(options).format(parsed)
+  return firstRenderFormatter(options, locale ?? FIRST_RENDER_LOCALE).format(parsed)
 }
 
-/** Formats for the viewer: the runtime's locale, in its zone unless `options` names one. */
-export const formatViewerDate: LocalDateFormatter = (date, options = {}) => {
+/**
+ * Formats for the viewer: `locale` or the runtime's, in the runtime's zone
+ * unless `options` names one.
+ */
+export const formatViewerDate: LocalDateFormatter = (date, options = {}, locale) => {
   const parsed = toDate(date)
   if (!parsed) return ''
-  return new Intl.DateTimeFormat(undefined, options).format(parsed)
+  return new Intl.DateTimeFormat(locale, options).format(parsed)
 }
 
 const subscribe = () => () => {}
@@ -97,21 +107,30 @@ function useHydrated(): boolean {
   )
 }
 
-/** The date formatter for this render: the first-render format until hydrated, then the viewer's. */
-export function useLocalDateFormatter(): LocalDateFormatter {
-  return useHydrated() ? formatViewerDate : formatFirstRenderDate
+/**
+ * The date formatter for this render: the first-render format until hydrated,
+ * then the viewer's. With a `locale`, both use it and only the zone switches.
+ */
+export function useLocalDateFormatter(locale?: string): LocalDateFormatter {
+  const base = useHydrated() ? formatViewerDate : formatFirstRenderDate
+  return useMemo<LocalDateFormatter>(
+    () => (locale ? (date, options) => base(date, options, locale) : base),
+    [base, locale]
+  )
 }
 
 interface LocalDateProps {
   date: DateInput | null | undefined
   /** `Intl.DateTimeFormat` options, e.g. `{ month: 'short', day: 'numeric', year: 'numeric' }`. */
   options?: Intl.DateTimeFormatOptions
+  /** A locale both renders use, e.g. `'en-US'` or the app's; only the zone then switches. */
+  locale?: string
   className?: string
 }
 
 /** An absolute date as a `<time>` element; renders nothing for a missing or invalid date. */
-export function LocalDate({ date, options, className }: LocalDateProps) {
-  const format = useLocalDateFormatter()
+export function LocalDate({ date, options, locale, className }: LocalDateProps) {
+  const format = useLocalDateFormatter(locale)
   const parsed = toDate(date)
   if (!parsed) return null
   return (

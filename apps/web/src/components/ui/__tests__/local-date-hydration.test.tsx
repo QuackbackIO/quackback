@@ -69,6 +69,24 @@ describe('LocalDate', () => {
     expect(container.textContent).toBe(formatIn(VIEWER.locale, 'America/New_York', AT, DAY))
   })
 
+  it('keeps a locale it is given, switching only the zone after hydration', async () => {
+    const { container, serverHtml, errors } = await serverThenHydrate(
+      <LocalDate date={AT} options={DAY} locale="en-US" />
+    )
+
+    expect(errors).toEqual([])
+    expect(serverHtml).toContain('Oct 1, 2026')
+    expect(container.textContent).toBe(formatIn('en-US', VIEWER.timeZone, AT, DAY))
+    expect(container.textContent).toBe('Oct 2, 2026')
+  })
+
+  it('server-renders a locale it is given, in UTC', () => {
+    setRuntimeLocale('en-US', 'Asia/Tokyo')
+    expect(renderToString(<LocalDate date={AT} options={DAY} locale="de-DE" />)).toContain(
+      '>1. Okt. 2026</time>'
+    )
+  })
+
   it('renders nothing for a missing or invalid date', () => {
     expect(renderToString(<LocalDate date={null} />)).toBe('')
     expect(renderToString(<LocalDate date="not a date" />)).toBe('')
