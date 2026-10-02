@@ -85,7 +85,7 @@ export function Combobox<T extends string>({
           aria-label={ariaLabel}
           aria-expanded={open}
           disabled={disabled}
-          className={cn('justify-between font-normal', className)}
+          className={cn('justify-between', className)}
         >
           <span className={cn('truncate', !selected && 'text-muted-foreground')}>
             {selected ? selected.label : (placeholder ?? fallbackPlaceholder)}

@@ -100,7 +100,7 @@ export function CheckoutBuilder(props: {
             role="radiogroup"
             aria-label="Plan"
             data-settings-card=""
-            className="divide-y divide-border/50 overflow-hidden rounded-xl border border-border/50 bg-card"
+            className="divide-y divide-border/50 overflow-hidden border-y border-t-transparent"
           >
             {freePlan && freeAction ? <FreePlanRow plan={freePlan} action={freeAction} /> : null}
             {paidPlans.map((plan) => (
@@ -178,7 +178,7 @@ function CycleToggle(props: {
           >
             {option === 'annual' ? 'Yearly' : 'Monthly'}
             {option === 'annual' && props.savingsLabel ? (
-              <Badge size="sm" shape="pill" variant={active ? 'default' : 'secondary'}>
+              <Badge size="sm" variant={active ? 'default' : 'secondary'}>
                 {props.savingsLabel}
               </Badge>
             ) : null}
@@ -224,11 +224,9 @@ function PlanRow(props: {
           <div className="flex flex-wrap items-center gap-1.5">
             <h3 className="text-sm font-semibold">{plan.name}</h3>
             {current ? (
-              <Badge size="sm" shape="pill">
-                {props.trialActive ? 'Current · trial' : 'Current'}
-              </Badge>
+              <Badge size="sm">{props.trialActive ? 'Current · trial' : 'Current'}</Badge>
             ) : plan.recommended ? (
-              <Badge size="sm" shape="pill" variant="secondary">
+              <Badge size="sm" variant="secondary">
                 Recommended
               </Badge>
             ) : null}
@@ -267,11 +265,7 @@ function FreePlanRow(props: { plan: CataloguePlan; action: BillingPlanAction }) 
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-1.5">
           <h3 className="text-sm font-semibold">{props.plan.name}</h3>
-          {current ? (
-            <Badge size="sm" shape="pill">
-              Current
-            </Badge>
-          ) : null}
+          {current ? <Badge size="sm">Current</Badge> : null}
         </div>
         <p className="mt-1 text-[13px] text-muted-foreground">{props.plan.bestFor}</p>
         <a
@@ -325,7 +319,7 @@ function BrandingAddOnRow(props: {
     <div
       data-settings-card=""
       className={cn(
-        'flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-card px-4 py-3',
+        'flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3',
         selectable && 'cursor-pointer',
         props.checked && 'bg-primary/5 ring-1 ring-inset ring-primary/40'
       )}
@@ -351,7 +345,7 @@ function BrandingAddOnRow(props: {
         </div>
       </div>
       {props.hideBranding ? (
-        <Badge size="sm" shape="pill" variant="secondary">
+        <Badge size="sm" variant="secondary">
           Included
         </Badge>
       ) : (
@@ -386,10 +380,7 @@ function OrderSummary(props: {
 
   return (
     <aside className="lg:sticky lg:top-6">
-      <div
-        data-settings-card=""
-        className="overflow-hidden rounded-xl border border-border/50 bg-card"
-      >
+      <div data-settings-card="" className="overflow-hidden rounded-xl border bg-card">
         <div className="border-b border-border/50 px-5 py-4">
           <h2 className="text-sm font-semibold">Order summary</h2>
         </div>
@@ -399,7 +390,7 @@ function OrderSummary(props: {
               <span className="text-sm font-medium">
                 {plan ? `${plan.name} plan` : 'Add-ons only'}
               </span>
-              <Badge size="sm" shape="pill" variant="secondary">
+              <Badge size="sm" variant="secondary">
                 {period === 'annual' ? 'Yearly' : 'Monthly'}
               </Badge>
             </div>

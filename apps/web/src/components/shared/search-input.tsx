@@ -26,7 +26,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(functi
         aria-label={ariaLabel ?? placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="pl-8 pr-8 h-8 text-sm bg-muted/30 border-border/50"
+        className="pl-8 pr-8 h-8 text-sm border-border/50"
         {...props}
       />
       {value && (

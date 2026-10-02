@@ -69,7 +69,7 @@ export function HomeActions({ flags }: { flags: Partial<FeatureFlags> | undefine
             <Fragment key={group.productId}>
               {index > 0 ? <DropdownMenuSeparator /> : null}
               <DropdownMenuGroup>
-                <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                <DropdownMenuLabel className="uppercase tracking-wide text-muted-foreground">
                   {group.label}
                 </DropdownMenuLabel>
                 {group.actions.map((item) => (

@@ -104,9 +104,7 @@ export function ConversationListToolbar({
       {showRefinements && (
         <>
           <DropdownMenu>
-            <DropdownMenuTrigger
-              render={<Button variant="outline" size="sm" className="font-normal" />}
-            >
+            <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>
               <span className="capitalize">{facet === 'all' ? 'Status' : facet}</span>
               <ChevronDownIcon className="size-3.5 text-muted-foreground" />
             </DropdownMenuTrigger>
@@ -122,7 +120,7 @@ export function ConversationListToolbar({
 
           <DropdownMenu open={filterOpen} onOpenChange={setFilterOpen}>
             <DropdownMenuTrigger
-              render={<Button variant="outline" size="sm" className="border-dashed font-normal" />}
+              render={<Button variant="outline" size="sm" className="border-dashed" />}
             >
               <PlusIcon className="size-3.5" />
               Filter

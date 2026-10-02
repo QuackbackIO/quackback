@@ -110,7 +110,7 @@ export function StatusTemplatesView() {
         </div>
       ) : (
         <div className="p-3 space-y-3">
-          <div className="rounded-xl overflow-hidden border border-border/50 bg-card shadow-sm divide-y divide-border/50">
+          <div className="overflow-hidden border-y border-t-transparent border-border/50 divide-y divide-border/50">
             {visibleTemplates.map((t) => (
               <div key={t.id} className="group flex items-center gap-3 px-4 py-3">
                 <div className="min-w-0 flex-1">

@@ -278,7 +278,7 @@ function StatusIncidentEditorContent({
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 placeholder="What's the latest? This appears on the public status page."
-                className="min-h-24 border-0 shadow-none rounded-none focus-visible:ring-0 resize-y"
+                className="min-h-24 border-0 focus-visible:ring-0 resize-y"
               />
               <div className="flex items-center gap-2 px-3 py-2 border-t border-border/40 bg-muted/30">
                 <TemplatePickerButton

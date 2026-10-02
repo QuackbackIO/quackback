@@ -149,12 +149,12 @@ function ProviderPageShell({
   const badges = (!provider.configured || mappingIssue) && (
     <>
       {!provider.configured && (
-        <Badge size="sm" shape="pill" variant="outline">
+        <Badge size="sm" variant="outline">
           No client secret
         </Badge>
       )}
       {mappingIssue && (
-        <Badge size="sm" shape="pill" variant="warning">
+        <Badge size="sm" variant="warning">
           <ExclamationTriangleIcon />
           {mappingIssue}
         </Badge>

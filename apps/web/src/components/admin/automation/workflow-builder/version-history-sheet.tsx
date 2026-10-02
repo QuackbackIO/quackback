@@ -51,7 +51,7 @@ function VersionRow({
       <div className="flex items-center gap-2">
         <span className="truncate font-medium">{version.name}</span>
         {isCurrent && (
-          <Badge size="sm" shape="pill" variant="outline" className="shrink-0">
+          <Badge size="sm" variant="outline" className="shrink-0">
             Current
           </Badge>
         )}

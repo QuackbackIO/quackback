@@ -219,7 +219,7 @@ function CollectionPage() {
                 const remaining = sub.articles.length - shown.length
                 return (
                   <section key={sub.id}>
-                    <div className="rounded-xl border border-border/50 overflow-hidden divide-y divide-border/50 bg-card">
+                    <div className="border-y border-t-transparent border-border/50 overflow-hidden divide-y divide-border/50">
                       <div className="flex items-center gap-2.5 px-5 py-3 bg-muted/40">
                         <CategoryIcon icon={sub.icon} className="w-5 h-5 shrink-0" />
                         <h2 className="text-sm font-semibold text-foreground">{sub.name}</h2>
@@ -269,7 +269,7 @@ function CollectionPage() {
           {articles.length === 0 && (!subcategories || subcategories.length === 0) ? (
             <p className="text-muted-foreground">No articles in this category yet.</p>
           ) : articles.length > 0 ? (
-            <div className="rounded-xl border border-border/50 overflow-hidden divide-y divide-border/50 bg-card">
+            <div className="border-y border-t-transparent border-border/50 overflow-hidden divide-y divide-border/50">
               {articles.map((article) => (
                 <ArticleRow
                   key={article.id}

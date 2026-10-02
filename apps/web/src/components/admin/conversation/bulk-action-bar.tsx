@@ -344,9 +344,7 @@ export function BulkActionBar({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="center" side="top">
-            <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">
-              Snooze until
-            </DropdownMenuLabel>
+            <DropdownMenuLabel className="text-muted-foreground">Snooze until</DropdownMenuLabel>
             <DropdownMenuItem onClick={() => onSnooze(inHours(4).toISOString())}>
               Later today
             </DropdownMenuItem>

@@ -20,37 +20,27 @@ describe('computeAccentInk', () => {
   })
 })
 
-describe('refined theme baseline', () => {
-  it('emits the refined tokens on the document marker for an unbranded workspace', () => {
+describe('default theme tokens', () => {
+  it('emits the default tokens on :root for an unbranded workspace', () => {
     const css = generateThemeCSS({})
-    expect(css).toContain(':root:where([data-visual-theme="refined"])')
+    expect(css).toContain(':root')
     expect(generateThemeCSS(null as unknown as ThemeConfig)).toBe('')
   })
 
-  it('emits refined unbranded tokens on the document marker', () => {
+  it('emits the unbranded light and dark tokens', () => {
     const css = generateThemeCSS({})
-    expect(css).toContain(':root:where([data-visual-theme="refined"])')
-    expect(readVar(css, ':root:where([data-visual-theme="refined"])', '--background')).toBe(
-      DEFAULT_LIGHT_BASE.background
-    )
-    expect(readVar(css, ':root:where([data-visual-theme="refined"])', '--primary')).toBe(
-      DEFAULT_LIGHT_BASE.primary
-    )
-    expect(css).toContain('.dark:where([data-visual-theme="refined"])')
-    expect(readVar(css, '.dark:where([data-visual-theme="refined"])', '--background')).toBe(
-      DEFAULT_DARK_BASE.background
-    )
+    expect(css).toContain(':root')
+    expect(readVar(css, ':root', '--background')).toBe(DEFAULT_LIGHT_BASE.background)
+    expect(readVar(css, ':root', '--primary')).toBe(DEFAULT_LIGHT_BASE.primary)
+    expect(css).toContain('.dark')
+    expect(readVar(css, '.dark', '--background')).toBe(DEFAULT_DARK_BASE.background)
   })
 
-  it('fills unspecified branding keys from the refined baseline', () => {
+  it('fills unspecified branding keys from the defaults', () => {
     const css = generateThemeCSS({ light: { primary: '#ff0000' } })
-    expect(readVar(css, ':root:where([data-visual-theme="refined"])', '--primary')).toBe('#ff0000')
-    expect(readVar(css, ':root:where([data-visual-theme="refined"])', '--background')).toBe(
-      DEFAULT_LIGHT_BASE.background
-    )
-    expect(readVar(css, '.dark:where([data-visual-theme="refined"])', '--background')).toBe(
-      DEFAULT_DARK_BASE.background
-    )
+    expect(readVar(css, ':root', '--primary')).toBe('#ff0000')
+    expect(readVar(css, ':root', '--background')).toBe(DEFAULT_LIGHT_BASE.background)
+    expect(readVar(css, '.dark', '--background')).toBe(DEFAULT_DARK_BASE.background)
   })
 
   it('preserves an explicit full custom config', () => {
@@ -69,34 +59,26 @@ describe('refined theme baseline', () => {
         radius: '1rem',
       },
     })
-    expect(readVar(css, ':root:where([data-visual-theme="refined"])', '--primary')).toBe('#111111')
-    expect(readVar(css, ':root:where([data-visual-theme="refined"])', '--background')).toBe(
-      '#fafafa'
-    )
-    expect(readVar(css, ':root:where([data-visual-theme="refined"])', '--radius')).toBe('1rem')
+    expect(readVar(css, ':root', '--primary')).toBe('#111111')
+    expect(readVar(css, ':root', '--background')).toBe('#fafafa')
+    expect(readVar(css, ':root', '--radius')).toBe('1rem')
     expect(css).toContain('Georgia, serif')
   })
 
   it('preserves forced one-mode branding', () => {
     const darkOnly = generateThemeCSS({ themeMode: 'dark', dark: { primary: '#ff5722' } })
-    expect(darkOnly).toContain(':root:where([data-visual-theme="refined"])')
+    expect(darkOnly).toContain(':root')
     expect(darkOnly).not.toContain('.dark:where')
-    expect(readVar(darkOnly, ':root:where([data-visual-theme="refined"])', '--primary')).toBe(
-      '#ff5722'
-    )
+    expect(readVar(darkOnly, ':root', '--primary')).toBe('#ff5722')
 
     const lightOnly = generateThemeCSS({ themeMode: 'light', light: { primary: '#00ff00' } })
     expect(lightOnly).not.toContain('.dark')
-    expect(readVar(lightOnly, ':root:where([data-visual-theme="refined"])', '--primary')).toBe(
-      '#00ff00'
-    )
+    expect(readVar(lightOnly, ':root', '--primary')).toBe('#00ff00')
   })
 
-  it('generateWorkspaceThemeCSS always carries the refined baseline', () => {
-    expect(generateWorkspaceThemeCSS({})).toContain(':root:where([data-visual-theme="refined"])')
-    expect(generateWorkspaceThemeCSS(undefined)).toContain(
-      ':root:where([data-visual-theme="refined"])'
-    )
+  it('generateWorkspaceThemeCSS always carries the default tokens', () => {
+    expect(generateWorkspaceThemeCSS({})).toContain(':root')
+    expect(generateWorkspaceThemeCSS(undefined)).toContain(':root')
   })
 
   it('leaves the body radius to the stylesheet and custom CSS when the config sets none', () => {
@@ -111,7 +93,7 @@ describe('refined theme baseline', () => {
     expect(css).toMatch(/body \{[^}]*--radius: 1rem/)
   })
 
-  it('expandTheme fills gaps from the refined palette and radius', () => {
+  it('expandTheme fills gaps from the default palette and radius', () => {
     const expanded = expandTheme({ primary: 'oklch(0.5 0.1 20)' }, { mode: 'light' })
     expect(expanded.background).toBe(DEFAULT_LIGHT_BASE.background)
     expect(expanded.radius).toBe('0.5rem')

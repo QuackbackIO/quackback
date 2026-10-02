@@ -125,8 +125,8 @@ export function IntegrationList({ catalog, integrations }: IntegrationListProps)
             </>
           )
           const TILE =
-            'flex items-center gap-3 rounded-lg border border-border/50 bg-card p-3 text-left transition-colors'
-          const TILE_ACTIVE = 'hover:border-border hover:bg-muted/30'
+            'flex items-center gap-3 rounded-panel border border-border bg-transparent p-3 text-left transition-colors'
+          const TILE_ACTIVE = 'hover:bg-accent'
 
           // Platform-managed or already configured: open the install/settings page
           if (canInstallIntegration(entry)) {

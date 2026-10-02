@@ -140,7 +140,7 @@ export function UseCaseSelector({ value, onChange, disabled }: UseCaseSelectorPr
                     defaultMessage={option.label}
                   />
                 </div>
-                <Badge size="sm" shape="pill" variant="secondary">
+                <Badge size="sm" variant="secondary">
                   <FormattedMessage
                     id={`onboarding.goal.${option.id}.audience`}
                     defaultMessage={option.forWhom}

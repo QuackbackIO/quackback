@@ -170,7 +170,7 @@ function AttributeFormDialog({
               onChange={(e) => setKey(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
               placeholder={copy.keyPlaceholder}
               disabled={isEditing}
-              className={isEditing ? 'bg-muted text-muted-foreground' : ''}
+              className={isEditing ? 'text-muted-foreground' : ''}
               required
             />
             {!isEditing && (

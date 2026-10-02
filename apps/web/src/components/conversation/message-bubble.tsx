@@ -188,13 +188,7 @@ function AgentBlockSummary({ block, state }: { block: WorkflowBlockPayload; stat
           aria-hidden
         >
           {block.options.map((o) => (
-            <Badge
-              key={o.key}
-              variant="outline"
-              size="sm"
-              shape="pill"
-              className="bg-background/60"
-            >
+            <Badge key={o.key} variant="outline" size="sm" className="bg-background/60">
               {o.label}
             </Badge>
           ))}

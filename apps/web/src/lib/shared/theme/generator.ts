@@ -440,7 +440,7 @@ export function generateThemeCSS(config: ThemeConfig): string {
   if (!config) return ''
 
   const themeMode = config.themeMode ?? 'user'
-  // An unbranded config still emits the refined baseline so admin, portal and
+  // An unbranded config still emits the default tokens so admin, portal and
   // widget share one source of tokens when branding is absent.
   const lightVars = themeMode !== 'dark' ? expandTheme(config.light ?? {}, { mode: 'light' }) : {}
   const darkVars = themeMode !== 'light' ? expandTheme(config.dark ?? {}, { mode: 'dark' }) : {}
@@ -448,10 +448,11 @@ export function generateThemeCSS(config: ThemeConfig): string {
   if (darkVars.fontSans) darkVars.fontSans = normalizeFontSans(darkVars.fontSans)
 
   const parts: string[] = []
-  // :where() keeps the selectors at :root / .dark specificity so later
-  // branding and custom CSS still win.
-  const rootSelector = ':root:where([data-visual-theme="refined"])'
-  const darkClassSelector = '.dark:where([data-visual-theme="refined"])'
+  // The same :root / .dark selectors as globals.css. This style comes later in
+  // the document, so it wins over the stylesheet, and custom CSS after it wins
+  // over this.
+  const rootSelector = ':root'
+  const darkClassSelector = '.dark'
 
   if (themeMode !== 'dark') {
     const lightCSS = variablesToCSS(lightVars)
@@ -487,7 +488,7 @@ export function generateThemeCSS(config: ThemeConfig): string {
   return parts.join(' ')
 }
 
-/** Portal, widget and auth helper: the refined baseline with the workspace's branding on top. */
+/** Portal, widget and auth helper: the default tokens with the workspace's branding on top. */
 export function generateWorkspaceThemeCSS(config: ThemeConfig | null | undefined): string {
   return generateThemeCSS(config ?? {})
 }

@@ -25,7 +25,7 @@ export const SortMenu = memo(function SortMenu({ options, value, onChange }: Sor
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={<Button variant="outline" size="sm" className="font-normal whitespace-nowrap" />}
+        render={<Button variant="outline" size="sm" className="whitespace-nowrap" />}
       >
         Sort: {active?.label}
         <ChevronDownIcon className="size-3.5 text-muted-foreground" />

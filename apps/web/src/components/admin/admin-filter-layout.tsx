@@ -37,7 +37,7 @@ export function AdminFilterLayout({
       {/* Filters - Desktop */}
       <aside
         data-side-pane=""
-        className="hidden lg:flex w-64 xl:w-72 shrink-0 flex-col border-e border-border/50 bg-card/30 overflow-hidden"
+        className="hidden lg:flex w-64 xl:w-72 shrink-0 flex-col border-e border-chrome-hairline bg-background overflow-hidden"
       >
         {headerTitle ? (
           <>
@@ -62,7 +62,7 @@ export function AdminFilterLayout({
       <div className="lg:hidden fixed bottom-4 left-4 z-50">
         <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
           <SheetTrigger asChild>
-            <Button size="lg" className="rounded-full shadow-md">
+            <Button size="lg">
               <FunnelIcon className="h-4 w-4 mr-2" />
               Filters
               {hasActiveFilters && (

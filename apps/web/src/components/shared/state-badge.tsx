@@ -21,7 +21,7 @@ const STATES: Record<
 export function StateBadge({ state }: { state: BadgeState }) {
   const { label, variant } = STATES[state]
   return (
-    <Badge variant={variant} size="sm" shape="pill">
+    <Badge variant={variant} size="sm">
       {label}
     </Badge>
   )

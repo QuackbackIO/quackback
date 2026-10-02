@@ -151,14 +151,14 @@ function GettingStartedRow({
             <Button
               type="button"
               size="sm"
-              className="h-8 rounded-full px-3.5 text-[13px]"
+              className="h-8 px-3.5 text-[13px]"
               disabled={pending || task.availability === 'blocked'}
               onClick={onCreateBoard}
             >
               <FormattedMessage id="activation.action.start" defaultMessage="Start" />
             </Button>
           ) : task.href && task.availability !== 'blocked' ? (
-            <Button asChild size="sm" className="h-8 rounded-full px-3.5 text-[13px]">
+            <Button asChild size="sm" className="h-8 px-3.5 text-[13px]">
               <Link to={task.href}>
                 <FormattedMessage id="activation.action.start" defaultMessage="Start" />
               </Link>

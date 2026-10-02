@@ -138,18 +138,11 @@ export function ComposerAiActions({
             type="button"
             variant="secondary"
             size="sm"
-            shape="default"
             onClick={() => applyResult(visibleProposal.mode, visibleProposal.result)}
           >
             Use improved draft
           </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            shape="default"
-            onClick={() => setProposal(null)}
-          >
+          <Button type="button" variant="ghost" size="sm" onClick={() => setProposal(null)}>
             Keep current
           </Button>
         </div>
@@ -164,7 +157,6 @@ export function ComposerAiActions({
             type="button"
             variant="ghost"
             size="sm"
-            shape="default"
             onClick={() => {
               visibleUndo.restore()
               setUndo(null)
@@ -180,7 +172,6 @@ export function ComposerAiActions({
             type="button"
             variant="ghost"
             size="sm"
-            shape="default"
             disabled={transforming || !hasDraftText}
             title={!hasDraftText ? 'Write a draft first' : undefined}
           >

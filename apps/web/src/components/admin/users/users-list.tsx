@@ -101,10 +101,7 @@ function useShowCountryColumn(): [boolean, (next: boolean) => void] {
 function UserListSkeleton() {
   return (
     <div className="p-3">
-      <div
-        data-continuous-list=""
-        className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50"
-      >
+      <div className="overflow-hidden divide-y divide-border/50 border-y border-t-transparent border-border/50">
         {Array.from({ length: 8 }).map((_, i) => (
           <div key={i} className="flex items-center gap-3 px-3 py-2">
             <Skeleton className="h-8 w-8 rounded-full shrink-0" />
@@ -179,10 +176,7 @@ function UserTagFilterDropdown({
         <Button
           variant="outline"
           size="sm"
-          className={cn(
-            'font-normal',
-            selectedTagIds.length > 0 && 'border-primary/40 text-primary'
-          )}
+          className={cn(selectedTagIds.length > 0 && 'border-primary/40 text-primary')}
         >
           <TagIcon className={MENU_ICON} />
           Tags{selectedTagIds.length > 0 ? ` (${selectedTagIds.length})` : ''}
@@ -329,7 +323,7 @@ export function UsersList({
             />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="font-normal">
+                <Button variant="outline" size="sm">
                   <ViewColumnsIcon className={MENU_ICON} />
                   Columns
                 </Button>
@@ -391,10 +385,7 @@ export function UsersList({
 
       {/* User List */}
       <div className="p-3">
-        <div
-          data-continuous-list=""
-          className="rounded-xl overflow-hidden shadow-sm bg-card border border-border/50"
-        >
+        <div className="overflow-hidden border-y border-t-transparent border-border/50">
           {/* Column headers — kept in sync with each row's avatar
               spacer and the column-width constants in `user-card.tsx` so every
               label lands directly above the field it describes, giving the

@@ -31,7 +31,7 @@ type ThemeColorBase = Omit<
 >
 
 /**
- * Palette used for any variable a theme leaves out. The refined stylesheet
+ * Palette used for any variable a theme leaves out. globals.css
  * ships these same values as the un-branded defaults, so filling a gap emits
  * the value the page would otherwise have inherited. The `default` preset is
  * built from these same constants, which keeps the two from drifting apart.
@@ -66,7 +66,7 @@ export const DEFAULT_DARK_BASE: ThemeColorBase = {
  */
 export const DEFAULT_FONT_SANS = '"Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif'
 
-/** The corner radius the refined stylesheet ships. */
+/** The corner radius globals.css ships. */
 export const DEFAULT_RADIUS = '0.5rem'
 
 function basePalette(mode: 'light' | 'dark'): ThemeColorBase {

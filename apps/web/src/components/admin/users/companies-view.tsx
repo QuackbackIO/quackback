@@ -55,7 +55,7 @@ export function formatMonthlySpend(mrrCents: number | null): string {
 export function SourceBadge({ source }: { source: 'api' | 'manual' }) {
   if (source === 'manual') return null
   return (
-    <Badge variant="secondary" size="sm" shape="pill">
+    <Badge variant="secondary" size="sm">
       API
     </Badge>
   )
@@ -538,7 +538,7 @@ export function CompaniesView({
 
       <div className="p-3">
         {isLoading ? (
-          <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
+          <div className="overflow-hidden divide-y divide-border/50 border-y border-t-transparent border-border/50">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="flex items-center gap-3 p-3">
                 <Skeleton className="h-9 w-9 rounded-lg shrink-0" />
@@ -578,7 +578,7 @@ export function CompaniesView({
             />
           </div>
         ) : (
-          <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
+          <div className="overflow-hidden divide-y divide-border/50 border-y border-t-transparent border-border/50">
             {/* Column header */}
             <div className="hidden sm:flex items-center gap-3 px-3 py-2">
               <div className="h-9 w-9 shrink-0" aria-hidden="true" />

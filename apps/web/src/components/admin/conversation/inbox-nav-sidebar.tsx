@@ -275,7 +275,7 @@ function ScopeMenuSection({
   return (
     <>
       <DropdownMenuSeparator />
-      <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
+      <DropdownMenuLabel className="uppercase tracking-wide text-muted-foreground">
         {title}
       </DropdownMenuLabel>
       {rows.map((r) => {
@@ -499,7 +499,7 @@ export const InboxNavSidebar = memo(function InboxNavSidebar({
   return (
     <nav
       data-side-pane=""
-      className="hidden w-64 shrink-0 flex-col overflow-hidden border-e border-border/50 bg-card/30 lg:flex xl:w-72"
+      className="hidden w-64 shrink-0 flex-col overflow-hidden border-e border-chrome-hairline bg-background lg:flex xl:w-72"
     >
       <div className="px-5 py-3.5">
         <PageHeader as="h2" title="Support" />
@@ -631,7 +631,7 @@ export function InboxScopeMenu({
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56">
-        <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
+        <DropdownMenuLabel className="uppercase tracking-wide text-muted-foreground">
           Conversations
         </DropdownMenuLabel>
         {CONVERSATION_VIEWS.map(({ view, label, Icon }) => {
@@ -652,7 +652,7 @@ export function InboxScopeMenu({
         {showTickets && (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            <DropdownMenuLabel className="uppercase tracking-wide text-muted-foreground">
               Tickets
             </DropdownMenuLabel>
             {TICKET_INBOX_VIEWS.map(({ view, label, Icon }) => {
@@ -691,7 +691,7 @@ export function InboxScopeMenu({
         {(views ?? []).length > 0 && (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            <DropdownMenuLabel className="uppercase tracking-wide text-muted-foreground">
               Saved views
             </DropdownMenuLabel>
             {(views ?? []).map((v) => {

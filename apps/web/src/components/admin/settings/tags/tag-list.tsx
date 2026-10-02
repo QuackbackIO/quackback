@@ -379,7 +379,7 @@ export function TagsSettingsPage({ initialTags, boards }: TagsSettingsPageProps)
                 title={tag.name}
                 badges={
                   !tag.isPublic ? (
-                    <Badge size="sm" shape="pill" variant="secondary">
+                    <Badge size="sm" variant="secondary">
                       Internal
                     </Badge>
                   ) : undefined

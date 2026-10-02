@@ -154,7 +154,7 @@ function SidebarContent({
             <Button type="button" variant="ghost" size="sm" onClick={onOpenFeedback}>
               <HandThumbDownIcon className="h-3.5 w-3.5" />
               Unhelpful
-              <Badge size="sm" shape="pill" variant="secondary">
+              <Badge size="sm" variant="secondary">
                 {notHelpfulCount}
               </Badge>
             </Button>

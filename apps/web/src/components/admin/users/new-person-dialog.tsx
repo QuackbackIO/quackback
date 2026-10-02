@@ -270,7 +270,7 @@ export function NewPersonDialog({
                   >
                     <div className="min-w-0 flex items-center gap-1.5">
                       <span className="font-medium truncate">{match.name}</span>
-                      <Badge size="sm" shape="pill" variant="secondary">
+                      <Badge size="sm" variant="secondary">
                         {intl.formatMessage({
                           id: 'admin.people.new.matchLead',
                           defaultMessage: 'Lead',

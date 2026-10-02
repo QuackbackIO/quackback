@@ -12,7 +12,6 @@ import {
 } from '@tanstack/react-router'
 import { isAdmin } from '@/lib/shared/roles'
 import appCss from '../globals.css?url'
-import refinedThemeCss from '../styles/refined-theme.css?url'
 import { getBootstrapData, type BootstrapData } from '@/lib/server/functions/bootstrap'
 import { createRouteContextMemo } from '@/lib/client/route-context-memo'
 import type { WorkspaceSettings } from '@/lib/shared/types/settings'
@@ -130,10 +129,6 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       {
         rel: 'stylesheet',
         href: appCss,
-      },
-      {
-        rel: 'stylesheet',
-        href: refinedThemeCss,
       },
       {
         rel: 'alternate',
@@ -287,7 +282,6 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
       dir={dir}
       className={themeClass}
       style={{ colorScheme }}
-      data-visual-theme="refined"
       suppressHydrationWarning
     >
       <head>

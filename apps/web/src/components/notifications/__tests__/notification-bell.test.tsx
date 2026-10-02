@@ -31,7 +31,7 @@ describe('NotificationBell', () => {
     )
     const button = screen.getByRole('button', { name: 'Notifications' })
     expect(button.getAttribute('data-active')).toBe('true')
-    expect(button.className).toContain('bg-muted/80')
+    expect(button.className).toContain('bg-chrome-active')
   })
 
   it('is not active by default', () => {

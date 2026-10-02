@@ -1,3 +1,4 @@
+import { railControlClass } from '@/components/admin/rail-item'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link, useRouter, useRouterState } from '@tanstack/react-router'
@@ -121,14 +122,6 @@ const RAIL_ITEMS: RailItem[] = [
 /** The rail items a viewer sees: the products that are on. */
 export function buildRailItems(flags: Partial<FeatureFlags> | undefined): RailItem[] {
   return RAIL_ITEMS.filter((item) => !item.product || isProductEnabled(flags, item.product))
-}
-
-function railControlClass(isActive = false) {
-  return cn(
-    'relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-all duration-200',
-    'text-muted-foreground/70 hover:text-foreground hover:bg-muted/50',
-    isActive && 'bg-muted/80 font-semibold text-foreground'
-  )
 }
 
 /**
@@ -318,7 +311,11 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside data-admin-rail="" data-labeled="" className="hidden w-56 shrink-0 flex-col sm:flex">
+      <aside
+        data-admin-rail=""
+        data-labeled=""
+        className="hidden w-56 shrink-0 flex-col border-chrome-hairline bg-chrome [--card:var(--chrome-background)] sm:flex"
+      >
         <ScrollArea className="h-full" scrollBarClassName="w-2" type="auto">
           <div className="flex h-full min-h-screen flex-col py-2">
             {/* Logo */}
@@ -377,13 +374,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
               {/* Help Menu */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button
-                    data-admin-rail-item=""
-                    className={cn(
-                      railControlClass(),
-                      'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-                    )}
-                  >
+                  <button data-admin-rail-item="" className={railControlClass()}>
                     <QuestionMarkCircleIcon className="size-5 shrink-0" />
                     <span className="min-w-0 flex-1 truncate text-left">Help</span>
                     {latestVersion && (
@@ -432,13 +423,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
               {/* User Menu */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button
-                    data-admin-rail-item=""
-                    className={cn(
-                      railControlClass(),
-                      'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-                    )}
-                  >
+                  <button data-admin-rail-item="" className={railControlClass()}>
                     <span className="relative shrink-0">
                       <Avatar className="size-6" src={avatarUrl} name={name} />
                       {conversationsEnabled && (
@@ -457,7 +442,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-56">
-                  <DropdownMenuLabel className="font-normal">
+                  <DropdownMenuLabel>
                     <div className="flex items-center gap-2">
                       <Avatar className="h-8 w-8 shrink-0" src={avatarUrl} name={name} />
                       <div className="flex min-w-0 flex-col gap-0.5">
@@ -620,7 +605,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel className="font-normal">
+              <DropdownMenuLabel>
                 <div className="flex items-center gap-2">
                   <Avatar className="h-8 w-8 shrink-0" src={avatarUrl} name={name} />
                   <div className="flex min-w-0 flex-col gap-0.5">

@@ -277,7 +277,7 @@ export function GitHubConfig({
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <Badge size="sm" shape="pill" variant={inboxBadge.variant}>
+              <Badge size="sm" variant={inboxBadge.variant}>
                 {inboxBadge.label}
               </Badge>
               <ChevronRightIcon className="size-3.5 text-muted-foreground" />

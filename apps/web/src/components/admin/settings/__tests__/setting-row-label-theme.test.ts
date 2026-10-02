@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const css = readFileSync(join(__dirname, '../../../../styles/refined-theme.css'), 'utf8')
+const css = readFileSync(join(__dirname, '../../../../globals.css'), 'utf8')
 
 /** Declarations of the rule whose selector is exactly `selector`. */
 function declarations(selector: string): string | undefined {
@@ -11,9 +11,9 @@ function declarations(selector: string): string | undefined {
   return css.slice(start, css.indexOf('}', start))
 }
 
-describe('refined theme setting row labels', () => {
-  const formLabel = "[data-visual-theme='refined'] [data-settings-page] [data-slot='label']"
-  const rowLabel = `[data-visual-theme='refined'] [data-settings-page] [data-slot='setting-row'] [data-slot='label']`
+describe('theme setting row labels', () => {
+  const formLabel = '[data-settings-page] [data-slot="label"]'
+  const rowLabel = '[data-settings-page] [data-slot="setting-row"] [data-slot="label"]'
 
   it('keeps form field labels at 13px semibold', () => {
     const rule = declarations(formLabel)

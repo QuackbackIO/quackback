@@ -196,7 +196,7 @@ function NavRow({
           onPatch({ label: value.trim() === '' ? undefined : value })
         }}
         className={cn(
-          'h-7 flex-1 border-transparent bg-transparent px-1.5 text-[13px] shadow-none',
+          'h-7 flex-1 border-transparent px-1.5 text-[13px]',
           'hover:border-border focus-visible:border-input',
           gated && 'text-muted-foreground'
         )}

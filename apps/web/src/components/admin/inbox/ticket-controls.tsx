@@ -175,9 +175,7 @@ export function TicketAssigneeControl({
         {teams && teams.length > 0 && (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">
-              Teams
-            </DropdownMenuLabel>
+            <DropdownMenuLabel className="text-muted-foreground">Teams</DropdownMenuLabel>
             {assignee.teamId && (
               <DropdownMenuItem onClick={() => run({ assigneeTeamId: null })}>
                 Clear team
@@ -428,7 +426,7 @@ function WatcherManagePanel({
                 {isMuted(w.mutedUntil) && (
                   <BellSlashIcon className="size-3.5 shrink-0 text-muted-foreground/60" />
                 )}
-                <Badge size="sm" variant="subtle" shape="pill">
+                <Badge size="sm" variant="subtle">
                   {REASON_LABEL[w.reason]}
                 </Badge>
                 <button
