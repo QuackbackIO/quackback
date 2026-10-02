@@ -1,26 +1,33 @@
-import { useMemo, useSyncExternalStore } from 'react'
+import { useContext, useMemo, useSyncExternalStore } from 'react'
+import { IntlContext } from 'react-intl'
+import { normalizeLocale } from '@/lib/shared/i18n'
 import { parseCalendarDate } from '@/lib/shared/utils/date'
 
 /**
- * Absolute dates ("Oct 1, 2026", "3:04 PM") that hydrate cleanly.
+ * Absolute dates ("Oct 1, 2026", "3:04 PM") that hydrate cleanly, in the
+ * app's language.
  *
  * A date formatted with the runtime's default locale and time zone reads
  * differently on the server and in the viewer's browser, and React rejects
  * the server's markup when the hydrating render disagrees with it. So the
  * first render, on the server and in the browser while it hydrates, formats
- * with a fixed locale in UTC and both sides produce the same text. Once
- * hydrated, the text switches to the viewer's locale and time zone. A
- * component that mounts after hydration (a client-side navigation, an opened
- * panel) formats for the viewer from its first render.
+ * in UTC with a locale both sides know: the locale of the surrounding
+ * IntlProvider, which the server resolves and sends with the document, or a
+ * fixed one outside a provider. Once hydrated, the text switches to the
+ * viewer's time zone and, within the app's language, to the viewer's own
+ * regional format (see `viewerLocaleFor`). A component that mounts after
+ * hydration (a client-side navigation, an opened panel) formats for the
+ * viewer from its first render.
  *
  * `<LocalDate>` renders the text; `useLocalDateFormatter()` returns the
  * formatter for strings that go into props, titles and labels. Given a
- * `locale`, both renders use it and only the time zone switches. Render the
- * text in a leaf (`<LocalDate>`, or a small component that calls the hook),
- * so the switch re-renders that text and nothing around it.
+ * `locale`, both renders use exactly it and only the time zone switches, for
+ * a date that sits in copy of a fixed language. Render the text in a leaf
+ * (`<LocalDate>`, or a small component that calls the hook), so the switch
+ * re-renders that text and nothing around it.
  */
 
-/** The locale the first render formats with. */
+/** The locale the first render formats with outside an IntlProvider. */
 export const FIRST_RENDER_LOCALE = 'en-US'
 /** The time zone the first render formats in, unless the options name one. */
 export const FIRST_RENDER_TIME_ZONE = 'UTC'
@@ -108,23 +115,69 @@ function useHydrated(): boolean {
   )
 }
 
+/** The browser's preferred languages, most preferred first; none on the server. */
+function preferredLanguages(): readonly string[] {
+  if (typeof navigator === 'undefined') return []
+  if (navigator.languages?.length) return navigator.languages
+  return navigator.language ? [navigator.language] : []
+}
+
+/**
+ * Whether Intl accepts `tag`. A browser can report a language it does not:
+ * Chromium on a POSIX locale says "en-US@posix", and formatting with it
+ * throws.
+ */
+function isValidLocale(tag: string): boolean {
+  try {
+    return Intl.getCanonicalLocales(tag).length > 0
+  } catch {
+    return false
+  }
+}
+
+/**
+ * The locale a hydrated date formats with when the app renders in
+ * `appLocale`: the first of the viewer's preferred languages that is a
+ * regional form of it, so an English page reads "1 Oct 2026" for a viewer who
+ * prefers en-GB, else `appLocale` itself. A viewer whose browser prefers
+ * another language altogether, or reports one Intl cannot read, still reads
+ * dates in the page's language.
+ */
+export function viewerLocaleFor(
+  appLocale: string,
+  preferred: readonly string[] = preferredLanguages()
+): string {
+  const language = normalizeLocale(appLocale)
+  if (!language) return appLocale
+  return (
+    preferred.find((tag) => normalizeLocale(tag) === language && isValidLocale(tag)) ?? appLocale
+  )
+}
+
 /**
  * The date formatter for this render: the first-render format until hydrated,
- * then the viewer's. With a `locale`, both use it and only the zone switches.
+ * then the viewer's. Inside an IntlProvider both are in the app's language;
+ * with a `locale`, both use exactly it and only the zone switches.
  */
 export function useLocalDateFormatter(locale?: string): LocalDateFormatter {
-  const base = useHydrated() ? formatViewerDate : formatFirstRenderDate
-  return useMemo<LocalDateFormatter>(
-    () => (locale ? (date, options) => base(date, options, locale) : base),
-    [base, locale]
-  )
+  const hydrated = useHydrated()
+  const appLocale = useContext(IntlContext)?.locale
+  return useMemo<LocalDateFormatter>(() => {
+    const base = hydrated ? formatViewerDate : formatFirstRenderDate
+    const fixed = locale ?? (appLocale && (hydrated ? viewerLocaleFor(appLocale) : appLocale))
+    return fixed ? (date, options) => base(date, options, fixed) : base
+  }, [hydrated, locale, appLocale])
 }
 
 interface LocalDateProps {
   date: DateInput | null | undefined
   /** `Intl.DateTimeFormat` options, e.g. `{ month: 'short', day: 'numeric', year: 'numeric' }`. */
   options?: Intl.DateTimeFormatOptions
-  /** A locale both renders use, e.g. `'en-US'` or the app's; only the zone then switches. */
+  /**
+   * A locale both renders use exactly, e.g. `'en-US'` for a date inside
+   * English-only copy; only the zone then switches. Leave it out to format in
+   * the app's language.
+   */
   locale?: string
   className?: string
 }

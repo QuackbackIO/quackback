@@ -217,8 +217,9 @@ const CALENDAR_DAY: Intl.DateTimeFormatOptions = {
 /**
  * A notification's time, with the full stamp ("Oct 1, 2026, 3:04 PM") in its
  * title: relative ("5 minutes ago") always, or only for today with "Oct 1,
- * 3:04 PM" before that. Today and the stamp follow the viewer's zone once
- * hydrated; as a leaf, that switch re-renders only this text.
+ * 3:04 PM" before that, all in the app's language. Today and the stamp follow
+ * the viewer's zone once hydrated; as a leaf, that switch re-renders only
+ * this text.
  */
 function NotificationTime({
   createdAt,
@@ -229,7 +230,7 @@ function NotificationTime({
   relative: 'always' | 'today'
   className: string
 }) {
-  const format = useLocalDateFormatter('en-US')
+  const format = useLocalDateFormatter()
   const isToday = format(createdAt, CALENDAR_DAY) === format(new Date(), CALENDAR_DAY)
   return (
     <time

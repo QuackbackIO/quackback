@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   formatCalendarDate,
+  formatMonthYear,
   parseCalendarDate,
   toIsoString,
   toIsoStringOrNull,
@@ -102,5 +103,25 @@ describe('formatCalendarDate', () => {
 
   it('is null for a value that is not a calendar date', () => {
     expect(formatCalendarDate('soon')).toBeNull()
+  })
+})
+
+describe('formatMonthYear', () => {
+  it('formats the UTC month in English by default', () => {
+    expect(formatMonthYear('2027-03-01T00:00:00.000Z')).toBe('Mar 2027')
+  })
+
+  it('formats the UTC month in a given locale', () => {
+    expect(formatMonthYear('2027-03-01T00:00:00.000Z', 'pl')).toBe(
+      new Intl.DateTimeFormat('pl', { month: 'short', year: 'numeric', timeZone: 'UTC' }).format(
+        new Date('2027-03-01T00:00:00.000Z')
+      )
+    )
+    expect(formatMonthYear('2027-03-01T00:00:00.000Z', 'de')).not.toBe('Mar 2027')
+  })
+
+  it('is null for a missing or invalid value', () => {
+    expect(formatMonthYear(null)).toBeNull()
+    expect(formatMonthYear('not a date', 'pl')).toBeNull()
   })
 })

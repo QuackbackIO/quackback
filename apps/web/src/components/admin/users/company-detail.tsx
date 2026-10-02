@@ -666,7 +666,7 @@ export function CompanyDetail({ companyId, onClose, canManage }: CompanyDetailPr
             <p className="mt-0.5 flex items-center gap-2 text-sm text-muted-foreground">
               <span className="min-w-0 truncate">
                 {company.domain ?? 'No domain'} · Created{' '}
-                <TimeAgo date={new Date(company.createdAt)} />
+                <TimeAgo date={new Date(company.createdAt)} locale="en" />
               </span>
               <SourceBadge source={company.source} />
             </p>

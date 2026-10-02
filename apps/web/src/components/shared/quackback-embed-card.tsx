@@ -365,7 +365,6 @@ export function QuackbackEmbedCard({
           <LocalDate
             date={data.publishedAt}
             options={{ month: 'short', day: 'numeric', year: 'numeric' }}
-            locale="en-US"
           />
         </p>
       )}

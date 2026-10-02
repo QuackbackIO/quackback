@@ -30,20 +30,19 @@ export function toIsoStringOrNull(value: Date | string | null | undefined): stri
   return toIsoString(value)
 }
 
-/** Shared month/year formatter (UTC); building an Intl.DateTimeFormat per call is costly. */
-const monthYearFormatter = new Intl.DateTimeFormat('en-US', {
-  month: 'short',
-  year: 'numeric',
-  timeZone: 'UTC',
-})
+/** Month/year formatters (UTC), one per locale; building an Intl.DateTimeFormat per call is costly. */
+const monthYearFormatters = new Map<string, Intl.DateTimeFormat>()
 
 /**
- * Format a date at month granularity, e.g. "Mar 2027". Used for post ETAs,
- * which are stored as the first of the target month; formatting in UTC keeps
- * the month stable regardless of the viewer's timezone. Returns null for an
- * absent or unparseable value.
+ * Format a date at month granularity in `locale`, e.g. "Mar 2027" or
+ * "mar 2027". Used for post ETAs, which are stored as the first of the target
+ * month; formatting in UTC keeps the month stable regardless of the viewer's
+ * timezone. Returns null for an absent or unparseable value.
  */
-export function formatMonthYear(value: Date | string | null | undefined): string | null {
+export function formatMonthYear(
+  value: Date | string | null | undefined,
+  locale = 'en-US'
+): string | null {
   if (value == null) {
     return null
   }
@@ -51,7 +50,16 @@ export function formatMonthYear(value: Date | string | null | undefined): string
   if (Number.isNaN(date.getTime())) {
     return null
   }
-  return monthYearFormatter.format(date)
+  let formatter = monthYearFormatters.get(locale)
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(locale, {
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'UTC',
+    })
+    monthYearFormatters.set(locale, formatter)
+  }
+  return formatter.format(date)
 }
 
 /**

@@ -58,7 +58,7 @@ quackback/
 │   ├── ids/               # TypeID system (branded UUIDs)
 │   └── email/             # Email service (Amazon SES + React Email)
 ├── packages/widget/       # Embeddable widget package
-└── docker-compose.yml     # Local PostgreSQL, MinIO, and Mailpit
+└── docker-compose.yml     # Local PostgreSQL, Silo (S3), and Mailpit
 ```
 
 ## Architecture

@@ -105,8 +105,8 @@
     "ui:widget-load": {
       "dbQueries": 20,
       "serverRequests": 3,
-      "requests": 170,
-      "jsRequests": 163,
+      "requests": 171,
+      "jsRequests": 164,
       "jsKB": 765,
       "htmlTransferKB": 12.4,
       "componentRenders": 295
@@ -150,8 +150,8 @@
     "ui:admin-inbox-load": {
       "dbQueries": 22,
       "serverRequests": 1,
-      "requests": 216,
-      "jsRequests": 211,
+      "requests": 219,
+      "jsRequests": 214,
       "jsKB": 866.6,
       "htmlTransferKB": 34.1,
       "componentRenders": 632
@@ -159,8 +159,8 @@
     "ui:admin-nav-feedback-to-roadmap": {
       "dbQueries": 18,
       "serverRequests": 2,
-      "requests": 43,
-      "jsRequests": 41,
+      "requests": 44,
+      "jsRequests": 42,
       "jsKB": 82.9,
       "htmlTransferKB": 0,
       "componentRenders": 455
@@ -177,8 +177,8 @@
     "ui:admin-hover-nav-feedback-to-roadmap": {
       "dbQueries": 18,
       "serverRequests": 2,
-      "requests": 43,
-      "jsRequests": 41,
+      "requests": 44,
+      "jsRequests": 42,
       "jsKB": 82.9,
       "htmlTransferKB": 0,
       "componentRenders": 455
@@ -397,8 +397,8 @@
     "sweep:ui:admin:/admin/inbox": {
       "dbQueries": 22,
       "serverRequests": 1,
-      "requests": 216,
-      "jsRequests": 211,
+      "requests": 219,
+      "jsRequests": 214,
       "jsKB": 866.6,
       "htmlTransferKB": 34.1,
       "componentRenders": 632
@@ -1027,8 +1027,8 @@
     "ui:admin-settings-tour": {
       "dbQueries": 52,
       "serverRequests": 10,
-      "requests": 90,
-      "jsRequests": 80,
+      "requests": 93,
+      "jsRequests": 83,
       "jsKB": 138.9,
       "htmlTransferKB": 0,
       "componentRenders": 977

@@ -103,7 +103,7 @@ function StatusIncidentPage() {
               { id: 'portal.status.incidentDetail.started', defaultMessage: 'Started {date}' },
               {
                 date:
-                  new Date(incident.startedAt).toLocaleString('en-US', {
+                  new Date(incident.startedAt).toLocaleString(intl.locale, {
                     month: 'long',
                     day: 'numeric',
                     year: 'numeric',

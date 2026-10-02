@@ -49,7 +49,7 @@ export function AiSummaryCard({ summaryJson, summaryUpdatedAt }: AiSummaryCardPr
             <div className="flex-1" />
             {summaryUpdatedAt && (
               <span className="text-xs text-muted-foreground">
-                Updated <TimeAgo date={summaryUpdatedAt} />
+                Updated <TimeAgo date={summaryUpdatedAt} locale="en" />
               </span>
             )}
             <ChevronDownIcon

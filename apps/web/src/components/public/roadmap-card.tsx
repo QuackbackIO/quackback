@@ -1,4 +1,6 @@
+import { useContext } from 'react'
 import { Link } from '@tanstack/react-router'
+import { IntlContext } from 'react-intl'
 import { ChevronUpIcon, Squares2X2Icon, CalendarIcon } from '@heroicons/react/24/solid'
 import { ChatBubbleLeftIcon } from '@heroicons/react/24/outline'
 import { Badge } from '@/components/ui/badge'
@@ -25,7 +27,8 @@ export function RoadmapCard({
   board,
   eta,
 }: RoadmapCardProps): React.ReactElement {
-  const etaLabel = formatMonthYear(eta)
+  const locale = useContext(IntlContext)?.locale
+  const etaLabel = formatMonthYear(eta, locale)
   return (
     <Link
       to="/b/$slug/posts/$postId"

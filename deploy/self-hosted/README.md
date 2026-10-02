@@ -30,7 +30,7 @@ cd quackback
 cp .env.prod.example .env
 # Edit .env — fill in every value (generate secrets with: openssl rand -base64 32)
 
-# Start the application (app + Postgres + MinIO)
+# Start the application (app + Postgres + Silo object storage)
 docker compose -f docker-compose.prod.yml up -d
 
 # View logs
@@ -288,7 +288,7 @@ Run at least one `worker` replica (or use `all`) at all times, or background job
 
 ### Docker Compose Example
 
-The datastores (Postgres, MinIO) are the same as in `docker-compose.prod.yml`. The app splits into a scaled `web` service and a `worker` service running the same image. Web replicas cannot each publish port 3000 on the host, so run a reverse proxy or load balancer (see [Reverse Proxy](#reverse-proxy)) in front of the `web` service and let Compose's internal DNS balance across replicas.
+The datastores (Postgres, Silo) are the same as in `docker-compose.prod.yml`. The app splits into a scaled `web` service and a `worker` service running the same image. Web replicas cannot each publish port 3000 on the host, so run a reverse proxy or load balancer (see [Reverse Proxy](#reverse-proxy)) in front of the `web` service and let Compose's internal DNS balance across replicas.
 
 ```yaml
 services:
@@ -376,6 +376,8 @@ Contact sales@quackback.io for enterprise licensing information.
 
 ### Docker Compose
 
+For the first upgrade from upstream MinIO to Silo, complete the [storage migration steps](#migrating-the-bundled-minio-to-silo) before pulling new source or restarting the stack.
+
 ```bash
 # 1. Back up your database first
 docker compose -f docker-compose.prod.yml exec postgres \
@@ -388,6 +390,39 @@ docker compose -f docker-compose.prod.yml pull
 # 3. Restart — migrations run automatically on startup
 docker compose -f docker-compose.prod.yml up -d
 ```
+
+#### Migrating the bundled MinIO to Silo
+
+The bundled storage server is now PGSTY Silo. The `minio` service name, `minio_data` volume, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, and S3 endpoint stay the same. Existing `MINIO_IMAGE_TAG` and `MC_IMAGE_TAG` values are ignored because upstream MinIO tags do not identify Silo releases. After taking the snapshot below, remove those settings from `.env`. Leave `SILO_IMAGE` and `SILO_CLIENT_IMAGE` unset to use the digest-pinned defaults, or set them to complete Silo server/client image references, including your private registry if needed. An upstream MinIO server image requires its original healthcheck and Compose configuration.
+
+Before pulling the new source, pause application writes and take a database backup and complete, offline storage snapshot. These commands apply to the bundled single-host stack and save all of `/data`, including `.minio.sys` and IAM state. The backup directory is outside the repository:
+
+```bash
+umask 077
+SILO_MIGRATION_BACKUP="../silo-migration-backup-$(date -u +%Y%m%dT%H%M%SZ)"
+mkdir "$SILO_MIGRATION_BACKUP"
+cp .env "$SILO_MIGRATION_BACKUP/environment.env"
+cp docker-compose.prod.yml "$SILO_MIGRATION_BACKUP/compose-before.yml"
+docker inspect quackback-minio --format '{{.Image}}' > "$SILO_MIGRATION_BACKUP/image-id.txt"
+docker image inspect "$(cat "$SILO_MIGRATION_BACKUP/image-id.txt")" \
+  --format '{{json .RepoDigests}}' > "$SILO_MIGRATION_BACKUP/image-digests.json"
+docker image save "$(cat "$SILO_MIGRATION_BACKUP/image-id.txt")" \
+  > "$SILO_MIGRATION_BACKUP/server-image.tar"
+
+# Keep PostgreSQL running; stop writers before backing up both datastores.
+docker compose -f docker-compose.prod.yml stop app minio
+docker compose -f docker-compose.prod.yml exec -T postgres \
+  sh -c 'exec pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' \
+  > "$SILO_MIGRATION_BACKUP/database.dump"
+docker cp quackback-minio:/data/. - > "$SILO_MIGRATION_BACKUP/data.tar"
+tar -tf "$SILO_MIGRATION_BACKUP/data.tar" > /dev/null
+```
+
+Keep this backup private: it includes credentials and IAM state. Rehearse restoring the archive into a fresh volume with the recorded old image and saved configuration before proceeding. Preserve file ownership and any external encryption keys. Object-format compatibility does not guarantee that old software understands new IAM or bucket metadata; see [Silo migration and recovery guidance](https://silo.pgsty.com/compatibility/migration/#rollback).
+
+After the backup and restore check, follow the usual pull/start steps above. Confirm the `minio` service is healthy and `minio-init` exits successfully, then download an existing attachment and exercise a new upload through Quackback. The production bucket should still deny anonymous direct downloads. Keep the backup and previous image until these checks pass.
+
+If recovery is needed, stop application writes and restore the pre-upgrade snapshot into a fresh volume using the saved configuration and old image. Account for uploads and credential changes made after the snapshot. Avoid an in-place image downgrade, running old and new servers against the same volume, or `docker compose down -v`, which deletes the data volumes.
 
 ### Docker Run
 
