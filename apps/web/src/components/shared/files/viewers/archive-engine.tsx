@@ -1,18 +1,18 @@
 /**
  * Zip listings: the archive's index as a tree, folders first, sizes on the
- * right. Only the central directory is read (the filter declines every entry,
- * so nothing is inflated), and nothing is ever extracted. A zip that unpacks
- * to far more than its own size is flagged in the note.
+ * right. Only the central directory is read (`readZipIndex`, the same reading
+ * the attachment card counts from), so nothing is inflated or extracted. A
+ * zip that unpacks to far more than its own size is flagged in the note.
  */
 import { useEffect, useMemo } from 'react'
 import { useIntl, type IntlShape } from 'react-intl'
-import { unzipSync } from 'fflate'
 import { DocumentIcon, FolderIcon } from '@heroicons/react/24/outline'
 import { formatBytes } from '@/lib/shared/files/file-types'
+import { isZipFileEntry, readZipIndex } from '@/lib/shared/files/zip-budget'
 import type { ViewerEngineProps } from '../types'
 
-/** Entries read from the index before the listing stops counting. */
-const MAX_SCANNED = 50_000
+/** Index entries placed in the tree; the note still counts every file. */
+const MAX_PLACED = 50_000
 /** Rows drawn; the rest are summarized in one row. */
 const MAX_ROWS = 5_000
 const SUSPICIOUS_RATIO = 100
@@ -39,18 +39,15 @@ interface Listing {
   hidden: number
   files: number
   unpacked: number
-  /** The index had more entries than were read. */
+  /** The index had more entries than the tree holds. */
   more: boolean
 }
 
-const STOP = Symbol('stop')
-
 function readListing(bytes: Uint8Array): Listing {
+  const index = readZipIndex(bytes)
   const root: TreeNode = { name: '', dir: true, size: 0, children: new Map() }
-  let scanned = 0
   let files = 0
   let unpacked = 0
-  let more = false
 
   const folder = (parent: TreeNode, name: string): TreeNode => {
     let node = parent.children.get(`d:${name}`)
@@ -61,36 +58,26 @@ function readListing(bytes: Uint8Array): Listing {
     return node
   }
 
-  try {
-    unzipSync(bytes, {
-      filter: (entry) => {
-        if (scanned >= MAX_SCANNED) {
-          more = true
-          throw STOP
-        }
-        scanned++
-        const parts = entry.name.split('/').filter((p) => p && p !== '.')
-        const isDir = entry.name.endsWith('/')
-        if (parts.length === 0) return false
-        let parent = root
-        for (const part of isDir ? parts : parts.slice(0, -1)) parent = folder(parent, part)
-        if (!isDir) {
-          const name = parts[parts.length - 1]!
-          const size = Number.isFinite(entry.originalSize) ? entry.originalSize : 0
-          parent.children.set(`f:${name}:${scanned}`, {
-            name,
-            dir: false,
-            size,
-            children: new Map(),
-          })
-          files++
-          unpacked += size
-        }
-        return false
-      },
-    })
-  } catch (error) {
-    if (error !== STOP) throw error
+  for (const [i, entry] of index.entries()) {
+    const isFile = isZipFileEntry(entry)
+    if (isFile) {
+      files++
+      unpacked += entry.originalSize
+    }
+    if (i >= MAX_PLACED) continue
+    const parts = entry.name.split('/').filter((p) => p && p !== '.')
+    if (parts.length === 0) continue
+    let parent = root
+    for (const part of isFile ? parts.slice(0, -1) : parts) parent = folder(parent, part)
+    if (isFile) {
+      const name = parts[parts.length - 1]!
+      parent.children.set(`f:${name}:${i}`, {
+        name,
+        dir: false,
+        size: entry.originalSize,
+        children: new Map(),
+      })
+    }
   }
 
   const rows: Row[] = []
@@ -111,17 +98,18 @@ function readListing(bytes: Uint8Array): Listing {
     }
   }
   walk(root, 0)
-  return { rows, hidden: total - rows.length, files, unpacked, more }
+  return {
+    rows,
+    hidden: total - rows.length,
+    files,
+    unpacked,
+    more: index.length > MAX_PLACED,
+  }
 }
 
 function noteFor(listing: Listing, packedBytes: number, intl: IntlShape): string {
   const files = intl.formatMessage(
-    {
-      id: listing.more ? 'files.count.filesCapped' : 'files.count.files',
-      defaultMessage: listing.more
-        ? '{count, plural, one {#+ file} other {#+ files}}'
-        : '{count, plural, one {# file} other {# files}}',
-    },
+    { id: 'files.count.files', defaultMessage: '{count, plural, one {# file} other {# files}}' },
     { count: listing.files }
   )
   const parts = [

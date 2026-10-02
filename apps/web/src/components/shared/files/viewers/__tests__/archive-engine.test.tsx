@@ -3,6 +3,7 @@ import { render as rtlRender, screen, within } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import { strToU8, zipSync, type Zippable } from 'fflate'
 import { describe, expect, it, vi } from 'vitest'
+import { deriveArchivePreview } from '@/lib/server/domains/files/preview/archive'
 import ArchiveEngine from '../archive-engine'
 import type { EngineToolbar, ViewerFile } from '../../types'
 
@@ -90,6 +91,32 @@ describe('ArchiveEngine', () => {
     expect(screen.getAllByRole('row')).toHaveLength(1 + 5000 + 1)
     expect(screen.getByText('and 10 more')).toBeInTheDocument()
     expect(note()).toBe('5,010 files · 0 B unpacked')
+  })
+
+  it('counts the files the attachment card counts, folders and nameless entries aside', async () => {
+    const zip = zipSync({
+      'logs/': new Uint8Array(0),
+      'logs/b.log': strToU8('b'),
+      'logs/old/': new Uint8Array(0),
+      './': new Uint8Array(0),
+      '.': strToU8('dot'),
+      './a.txt': strToU8('a'),
+    })
+    const { note } = renderZip(zip)
+    expect(rows()).toEqual(['0:logs:', '1:old:', '1:b.log:1 B', '0:a.txt:1 B'])
+    expect(note()).toBe('2 files · 2 B unpacked')
+    expect((await deriveArchivePreview(zip)).meta).toEqual({ entries: 2 })
+  })
+
+  it('counts every file in a long index, past the entries it draws', async () => {
+    const entries: Zippable = {}
+    for (let i = 0; i < 50_010; i++) entries[`f${String(i).padStart(5, '0')}`] = new Uint8Array(0)
+    const zip = zipSync(entries, { level: 0 })
+    const { note } = renderZip(zip)
+    expect(screen.getAllByRole('row')).toHaveLength(1 + 5000 + 1)
+    expect(screen.getByText('and 45,000+ more')).toBeInTheDocument()
+    expect(note()).toBe('50,010 files · 0 B unpacked')
+    expect((await deriveArchivePreview(zip)).meta).toEqual({ entries: 50_010 })
   })
 
   it('reports a file that is not a zip as corrupt', () => {
