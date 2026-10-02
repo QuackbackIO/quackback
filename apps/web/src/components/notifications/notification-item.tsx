@@ -10,6 +10,7 @@ import { useLocalDateFormatter } from '@/components/ui/local-date'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { getNotificationTypeConfig } from './notification-type-config'
 import { getNotificationTarget } from './notification-target'
+import { notificationText, type NotificationText } from './notification-text'
 import type { SerializedNotification } from '@/lib/client/hooks/use-notifications-queries'
 
 interface NotificationItemProps {
@@ -39,6 +40,8 @@ export function NotificationItem({
   className,
   style,
 }: NotificationItemProps) {
+  const intl = useIntl()
+  const text = notificationText(notification, intl)
   const config = getNotificationTypeConfig(notification.type)
   const Icon = config.icon
   const isUnread = !notification.readAt
@@ -69,6 +72,7 @@ export function NotificationItem({
       iconClass={config.iconClass}
       bgClass={config.bgClass}
       isUnread={isUnread}
+      text={text}
       onArchive={onArchive}
     />
   ) : (
@@ -78,6 +82,7 @@ export function NotificationItem({
       iconClass={config.iconClass}
       bgClass={config.bgClass}
       isUnread={isUnread}
+      text={text}
     />
   )
 
@@ -136,6 +141,8 @@ interface ContentProps {
   iconClass: string
   bgClass: string
   isUnread: boolean
+  /** Title and body in the reader's language. */
+  text: NotificationText
   /** Full-variant only; ignored by CompactContent. */
   onArchive?: (id: SerializedNotification['id']) => void
 }
@@ -244,7 +251,14 @@ function NotificationTime({
   )
 }
 
-function CompactContent({ notification, icon: Icon, iconClass, bgClass, isUnread }: ContentProps) {
+function CompactContent({
+  notification,
+  icon: Icon,
+  iconClass,
+  bgClass,
+  isUnread,
+  text,
+}: ContentProps) {
   return (
     <div
       className={cn(
@@ -269,11 +283,9 @@ function CompactContent({ notification, icon: Icon, iconClass, bgClass, isUnread
           </span>
         )}
         <p className={cn('text-sm leading-tight', isUnread ? 'font-medium' : 'text-foreground')}>
-          {notification.title}
+          {text.title}
         </p>
-        {notification.body && (
-          <p className="text-xs text-muted-foreground line-clamp-2">{notification.body}</p>
-        )}
+        {text.body && <p className="text-xs text-muted-foreground line-clamp-2">{text.body}</p>}
         <NotificationTime
           createdAt={notification.createdAt}
           relative="always"
@@ -294,6 +306,7 @@ function FullContent({
   iconClass,
   bgClass,
   isUnread,
+  text,
   onArchive,
 }: ContentProps) {
   const intl = useIntl()
@@ -337,7 +350,7 @@ function FullContent({
               isUnread ? 'font-medium' : 'text-foreground'
             )}
           >
-            {notification.title}
+            {text.title}
           </p>
           <span className="flex shrink-0 items-center gap-2 transition-opacity group-focus-within:opacity-0 group-hover:opacity-0">
             {isUnread && (
@@ -350,10 +363,10 @@ function FullContent({
             />
           </span>
         </div>
-        {(notification.body || notification.post) && (
+        {(text.body || notification.post) && (
           <p className="mt-0.5 truncate text-xs text-muted-foreground">
-            {notification.body}
-            {notification.body && notification.post && (
+            {text.body}
+            {text.body && notification.post && (
               <span className="text-muted-foreground/40"> · </span>
             )}
             {notification.post && (

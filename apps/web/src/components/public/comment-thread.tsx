@@ -449,7 +449,14 @@ function CommentItem({
       await editMutation.mutateAsync({ content: trimmed, contentJson: editJsonRef.current })
       setIsEditing(false)
     } catch (err) {
-      setEditError(err instanceof Error ? err.message : 'Failed to save edit')
+      setEditError(
+        err instanceof Error
+          ? err.message
+          : intl.formatMessage({
+              id: 'portal.commentThread.editFailed',
+              defaultMessage: 'Failed to save edit',
+            })
+      )
     }
   }
 

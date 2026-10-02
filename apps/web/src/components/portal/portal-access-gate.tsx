@@ -16,7 +16,7 @@ import { nameInitial } from '@/lib/shared/utils/initial'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
-import { FormattedMessage } from 'react-intl'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { toast } from 'sonner'
 import { escapeInlineStyle } from '@/lib/shared/safe-inline-content'
 import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
@@ -347,6 +347,7 @@ function GateCard({
   callbackUrl,
   autoOpenSignin,
 }: GateCardProps) {
+  const intl = useIntl()
   const router = useRouter()
   const queryClient = useQueryClient()
   const [signingOut, setSigningOut] = useState(false)
@@ -446,7 +447,14 @@ function GateCard({
         router.invalidate(),
       ])
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Sign out failed. Please try again.')
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : intl.formatMessage({
+              id: 'portal.accessGate.signOutFailed',
+              defaultMessage: 'Sign out failed. Please try again.',
+            })
+      )
     } finally {
       setSigningOut(false)
     }

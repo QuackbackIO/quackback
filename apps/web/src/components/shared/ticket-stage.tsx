@@ -12,7 +12,7 @@
  * "Duplicate") renders a muted "Closed" affordance instead of nothing — the
  * internal status name never leaks.
  */
-import { FormattedMessage } from 'react-intl'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { TICKET_STAGES } from '@/lib/shared/db-types'
 import { DEFAULT_TICKET_STAGE_LABELS } from '@/lib/shared/tickets'
 import { cn } from '@/lib/shared/utils'
@@ -61,6 +61,8 @@ export function StageChip({
   )
 }
 
+const PROGRESS_LABEL = { id: 'widget.tickets.progress', defaultMessage: 'Ticket progress' }
+
 /** The received -> in_progress -> awaiting_requester -> resolved progress bar,
  *  with every stage labeled under its segment (the full progression stays
  *  visible, not just the current stop). Mobile keeps only the current
@@ -78,10 +80,11 @@ export function StageTracker({
   /** Locale id of the B22 "Closed" bar label (per-surface extracted message). */
   closedLabelId: string
 }) {
+  const intl = useIntl()
   if (!slot && !closed) return null
   if (!slot) {
     return (
-      <div aria-label="Ticket progress">
+      <div aria-label={intl.formatMessage(PROGRESS_LABEL)}>
         <span className="block h-1.5 rounded-full bg-muted-foreground/30" />
         <span className="mt-1.5 block text-[11px] font-semibold text-muted-foreground">
           <FormattedMessage id={closedLabelId} defaultMessage="Closed" />
@@ -91,7 +94,7 @@ export function StageTracker({
   }
   const currentIndex = TICKET_STAGES.indexOf(slot as (typeof TICKET_STAGES)[number])
   return (
-    <ol className="flex items-start gap-1.5" aria-label="Ticket progress">
+    <ol className="flex items-start gap-1.5" aria-label={intl.formatMessage(PROGRESS_LABEL)}>
       {TICKET_STAGES.map((stage, i) => {
         const reached = i <= currentIndex
         const current = i === currentIndex
