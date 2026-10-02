@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { FORM_WIDTH_CLASS } from '@/components/admin/settings/settings-page'
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import type { AuthConfig, PortalConfig } from '@/lib/shared/types/settings'
@@ -86,5 +87,22 @@ describe('AuthSettings audit tab', () => {
       />
     )
     expect(screen.getByRole('tab', { name: /Audit log/i })).toBeDefined()
+  })
+
+  it('keeps the tab bar at form width on every tab', () => {
+    for (const tab of ['portal-access', 'sign-in', 'audit-log'] as const) {
+      const { unmount } = render(
+        <AuthSettings
+          tab={tab}
+          teamAuthConfig={TEAM_AUTH}
+          portalConfig={PORTAL}
+          credentialStatus={{}}
+          customOidcProviderTier
+          auditEntitled
+        />
+      )
+      expect(screen.getByRole('tablist').className).toContain(FORM_WIDTH_CLASS)
+      unmount()
+    }
   })
 })

@@ -24,6 +24,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Avatar } from '@/components/ui/avatar'
+import { LocalDate } from '@/components/ui/local-date'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusBadge } from '@/components/ui/status-badge'
@@ -63,7 +64,7 @@ import type { PrincipalId } from '@quackback/ids'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 const EXTERNAL_ID_KEY = '_externalUserId'
-const EM_DASH = '—'
+const NO_VALUE = '-'
 
 function parseUserMetadata(metadata: string | null): {
   attributes: [string, unknown][]
@@ -89,14 +90,11 @@ interface UserDetailProps {
   currentMemberRole: string
 }
 
-const dateFormatter = new Intl.DateTimeFormat('en-US', {
-  month: 'short',
-  day: 'numeric',
-  year: 'numeric',
-})
+const PROFILE_DATE: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' }
 
-function formatDate(date: Date | string): string {
-  return dateFormatter.format(new Date(date))
+/** A profile date, e.g. "Oct 1, 2026", in the viewer's zone once hydrated. */
+function ProfileDate({ date }: { date: Date | string }) {
+  return <LocalDate date={date} options={PROFILE_DATE} locale="en-US" />
 }
 
 function DetailSkeleton() {
@@ -225,7 +223,7 @@ function EngagedPostCard({ post }: { post: EngagedPost }) {
           </div>
           <Badge
             variant="secondary"
-            className="text-[11px] font-normal bg-muted/50 px-1.5 py-0 inline-flex items-center gap-0.5"
+            className="text-[11px] bg-muted/50 px-1.5 py-0 inline-flex items-center gap-0.5"
           >
             <Squares2X2Icon className="h-2.5 w-2.5 text-muted-foreground/40" />
             {post.boardName}
@@ -683,7 +681,6 @@ export function UserDetail({
                       <Button
                         size="sm"
                         variant="outline"
-                        shape="default"
                         onClick={() => setComposeOpen(true)}
                         disabled={!displayEmail}
                       >
@@ -695,7 +692,7 @@ export function UserDetail({
                   {!displayEmail && <TooltipContent>{noEmailTooltip}</TooltipContent>}
                 </Tooltip>
               )}
-              <Button size="sm" variant="outline" shape="default" asChild>
+              <Button size="sm" variant="outline" asChild>
                 <Link to="/u/$principalId" params={{ principalId: user.principalId }}>
                   <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
                   View public profile
@@ -704,12 +701,7 @@ export function UserDetail({
               {canManageUsers && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button
-                      size="icon-sm"
-                      variant="ghost"
-                      shape="default"
-                      aria-label="More actions"
-                    >
+                    <Button size="icon-sm" variant="ghost" aria-label="More actions">
                       <EllipsisHorizontalIcon className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -804,13 +796,13 @@ export function UserDetail({
           <FactCell value={user.commentCount} label="Comments" numeric />
           <FactCell value={user.voteCount} label="Votes" numeric />
           <FactCell
-            value={user.lastSeenAt ? <TimeAgo date={user.lastSeenAt} /> : EM_DASH}
+            value={user.lastSeenAt ? <TimeAgo date={user.lastSeenAt} /> : NO_VALUE}
             label="Last seen"
             muted={!user.lastSeenAt}
           />
-          <FactCell value={formatDate(user.joinedAt)} label="Joined" />
+          <FactCell value={<ProfileDate date={user.joinedAt} />} label="Joined" />
           <FactCell
-            value={user.country ? countryName(user.country) : EM_DASH}
+            value={user.country ? countryName(user.country) : NO_VALUE}
             label="Country"
             muted={!user.country}
           />
@@ -888,9 +880,15 @@ export function UserDetail({
               )}
             </RailCard>
             <RailCard title="Account">
-              <KvRow label="Account created">{formatDate(user.createdAt)}</KvRow>
+              <KvRow label="Account created">
+                <ProfileDate date={user.createdAt} />
+              </KvRow>
               <KvRow label="External ID">
-                {externalId ? <span className="font-mono text-[11px]">{externalId}</span> : EM_DASH}
+                {externalId ? (
+                  <span className="font-mono text-[11px]">{externalId}</span>
+                ) : (
+                  NO_VALUE
+                )}
               </KvRow>
               {canManageUsers && (
                 <ChangelogSubscriptionControl principalId={user.principalId as PrincipalId} />

@@ -19,6 +19,7 @@ import type { Board, BoardAccess } from '@/lib/shared/db-types'
 import type { BoardId } from '@quackback/ids'
 import { boardKeys } from '@/lib/client/hooks/use-boards-query'
 import { adminQueries } from '@/lib/client/queries/admin'
+import { AUTOSAVE } from '@/lib/client/autosave'
 
 // ============================================================================
 // Mutation Hooks
@@ -84,6 +85,7 @@ export function useUpdateBoard() {
 
   return useMutation({
     mutationFn: (input: UpdateBoardInput) => updateBoardFn({ data: input }),
+    meta: AUTOSAVE,
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: boardKeys.lists() })
       await queryClient.cancelQueries({ queryKey: boardKeys.detail(input.id as BoardId) })
@@ -147,6 +149,7 @@ export function useUpdateBoardAccess() {
   return useMutation({
     mutationFn: (input: { boardId: BoardId; access: BoardAccess }) =>
       updateBoardAccessFn({ data: input }),
+    meta: AUTOSAVE,
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: boardKeys.lists() })
       await queryClient.cancelQueries({ queryKey: boardKeys.detail(input.boardId) })

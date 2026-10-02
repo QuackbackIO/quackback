@@ -88,6 +88,8 @@ export interface ListChangelogParams {
   cursor?: string
   /** Number of items to return */
   limit?: number
+  /** Order by creation time; defaults to newest first */
+  sort?: 'newest' | 'oldest'
 }
 
 // ============================================================================

@@ -12,7 +12,7 @@ test.describe('Admin Users Segments', () => {
 
   test('sidebar shows Segments section with create button', async ({ page }) => {
     await expect(page.getByText('Segments', { exact: true })).toBeVisible({ timeout: 10000 })
-    await expect(page.getByRole('button', { name: 'Create segment' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'New segment' })).toBeVisible()
   })
 
   test('shows segments list or empty state', async ({ page }) => {
@@ -29,16 +29,16 @@ test.describe('Admin Users Segments', () => {
     expect(hasSegments || hasEmptyState).toBe(true)
   })
 
-  test('can open "Create segment" dialog', async ({ page }) => {
-    await page.getByRole('button', { name: 'Create segment' }).click()
+  test('can open the create segment dialog from "New segment"', async ({ page }) => {
+    await page.getByRole('button', { name: 'New segment' }).click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
-    await expect(dialog.getByText(/create segment/i)).toBeVisible()
+    await expect(dialog.getByRole('heading', { name: 'Create segment' })).toBeVisible()
   })
 
   test('create dialog has manual and dynamic type selectors', async ({ page }) => {
-    await page.getByRole('button', { name: 'Create segment' }).click()
+    await page.getByRole('button', { name: 'New segment' }).click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
@@ -49,7 +49,7 @@ test.describe('Admin Users Segments', () => {
   })
 
   test('create dialog has name and description fields', async ({ page }) => {
-    await page.getByRole('button', { name: 'Create segment' }).click()
+    await page.getByRole('button', { name: 'New segment' }).click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
@@ -62,7 +62,7 @@ test.describe('Admin Users Segments', () => {
   })
 
   test('create button is disabled until name is filled', async ({ page }) => {
-    await page.getByRole('button', { name: 'Create segment' }).click()
+    await page.getByRole('button', { name: 'New segment' }).click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
@@ -75,7 +75,7 @@ test.describe('Admin Users Segments', () => {
   })
 
   test('cancel button closes the dialog', async ({ page }) => {
-    await page.getByRole('button', { name: 'Create segment' }).click()
+    await page.getByRole('button', { name: 'New segment' }).click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
@@ -87,7 +87,7 @@ test.describe('Admin Users Segments', () => {
   test('can create a manual segment', async ({ page }) => {
     const segmentName = `E2E Manual ${Date.now()}`
 
-    await page.getByRole('button', { name: 'Create segment' }).click()
+    await page.getByRole('button', { name: 'New segment' }).click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
@@ -104,7 +104,7 @@ test.describe('Admin Users Segments', () => {
   })
 
   test('dynamic type shows rule builder section', async ({ page }) => {
-    await page.getByRole('button', { name: 'Create segment' }).click()
+    await page.getByRole('button', { name: 'New segment' }).click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
@@ -118,7 +118,7 @@ test.describe('Admin Users Segments', () => {
   })
 
   test('dynamic rule builder has "Add condition" button', async ({ page }) => {
-    await page.getByRole('button', { name: 'Create segment' }).click()
+    await page.getByRole('button', { name: 'New segment' }).click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
@@ -137,7 +137,7 @@ test.describe('Admin Users Segments', () => {
   })
 
   test('condition row has attribute and operator selectors', async ({ page }) => {
-    await page.getByRole('button', { name: 'Create segment' }).click()
+    await page.getByRole('button', { name: 'New segment' }).click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
@@ -151,7 +151,7 @@ test.describe('Admin Users Segments', () => {
   })
 
   test('condition attribute dropdown contains built-in options', async ({ page }) => {
-    await page.getByRole('button', { name: 'Create segment' }).click()
+    await page.getByRole('button', { name: 'New segment' }).click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
@@ -178,7 +178,7 @@ test.describe('Admin Users Segments', () => {
   test('can create a dynamic segment with a condition', async ({ page }) => {
     const segmentName = `E2E Dynamic ${Date.now()}`
 
-    await page.getByRole('button', { name: 'Create segment' }).click()
+    await page.getByRole('button', { name: 'New segment' }).click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
@@ -222,7 +222,7 @@ test.describe('Admin Users Segments', () => {
     // Create a segment so a row is guaranteed to exist
     const segmentName = `E2E EditTarget ${Date.now()}`
 
-    await page.getByRole('button', { name: 'Create segment' }).click()
+    await page.getByRole('button', { name: 'New segment' }).click()
     const createDialog = page.getByRole('dialog')
     await expect(createDialog).toBeVisible({ timeout: 5000 })
     await createDialog.locator('#seg-name').fill(segmentName)
@@ -239,7 +239,7 @@ test.describe('Admin Users Segments', () => {
     const editDialog = page.getByRole('dialog')
     await expect(editDialog).toBeVisible({ timeout: 5000 })
 
-    // Edit dialog title should say "Edit Segment"
+    // Edit dialog title should say "Edit segment"
     await expect(editDialog.getByText(/edit segment/i)).toBeVisible()
 
     // Save button should say "Save changes"
@@ -256,7 +256,7 @@ test.describe('Admin Users Segments', () => {
     const segmentName = `E2E Delete Seg ${Date.now()}`
 
     // Create a segment to delete
-    await page.getByRole('button', { name: 'Create segment' }).click()
+    await page.getByRole('button', { name: 'New segment' }).click()
     const createDialog = page.getByRole('dialog')
     await expect(createDialog).toBeVisible({ timeout: 5000 })
     await createDialog.locator('#seg-name').fill(segmentName)
@@ -286,7 +286,7 @@ test.describe('Admin Users Segments', () => {
   test('delete confirmation can be cancelled', async ({ page }) => {
     const segmentName = `E2E Cancel Del Seg ${Date.now()}`
 
-    await page.getByRole('button', { name: 'Create segment' }).click()
+    await page.getByRole('button', { name: 'New segment' }).click()
     const createDialog = page.getByRole('dialog')
     await expect(createDialog).toBeVisible({ timeout: 5000 })
     await createDialog.locator('#seg-name').fill(segmentName)
@@ -309,7 +309,7 @@ test.describe('Admin Users Segments', () => {
   })
 
   test('rule builder match selector has ALL and ANY options', async ({ page }) => {
-    await page.getByRole('button', { name: 'Create segment' }).click()
+    await page.getByRole('button', { name: 'New segment' }).click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })

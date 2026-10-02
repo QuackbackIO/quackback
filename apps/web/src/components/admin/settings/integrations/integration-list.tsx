@@ -1,7 +1,6 @@
 import { lazy, useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import { ChevronRightIcon, Cog6ToothIcon } from '@heroicons/react/24/solid'
-import { Badge } from '@/components/ui/badge'
+import { StateBadge } from '@/components/shared/state-badge'
 import { INTEGRATION_ICON_MAP } from '@/components/icons/integration-icons'
 import {
   INTEGRATION_CATEGORIES,
@@ -10,7 +9,6 @@ import {
   type PlatformCredentialField,
 } from '@/lib/shared/integration-types'
 import { canInstallIntegration } from '@/lib/shared/integration-connect'
-import { MENU_ROW } from '@/components/ui/menu'
 import { cn } from '@/lib/shared/utils'
 
 const PlatformCredentialsDialog = lazy(() =>
@@ -61,124 +59,90 @@ export function IntegrationList({ catalog, integrations }: IntegrationListProps)
   const filteredCatalog =
     activeCategory === 'all' ? catalog : catalog.filter((e) => e.category === activeCategory)
 
+  const statusBadge = (status: IntegrationStatus | undefined) => {
+    if (status?.status === 'active') return <StateBadge state="connected" />
+    if (status?.status === 'paused') return <StateBadge state="off" />
+    if (status?.status === 'error') return <StateBadge state="error" />
+    return null
+  }
+
   return (
-    <div className="flex gap-6">
-      {/* Vertical category menu */}
-      <div className="hidden sm:block w-40 shrink-0">
-        <nav className="space-y-0.5">
+    <div className="space-y-4">
+      <div role="group" aria-label="Categories" className="flex flex-wrap gap-1.5">
+        {[
+          { id: 'all' as const, label: 'All', count: catalog.length },
+          ...populatedCategories.map((cat) => ({
+            id: cat,
+            label: INTEGRATION_CATEGORIES[cat].label,
+            count: categoryCounts.get(cat) ?? 0,
+          })),
+        ].map((chip) => (
           <button
+            key={chip.id}
             type="button"
-            onClick={() => setActiveCategory('all')}
-            data-active={activeCategory === 'all' || undefined}
+            onClick={() => setActiveCategory(chip.id)}
+            aria-pressed={activeCategory === chip.id}
             className={cn(
-              MENU_ROW,
-              'w-full justify-between',
-              activeCategory === 'all'
-                ? 'bg-muted text-foreground font-medium'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+              'h-8 rounded-full border px-3 text-[13px] transition-colors',
+              activeCategory === chip.id
+                ? 'border-transparent bg-muted font-medium text-foreground'
+                : 'border-border/60 text-muted-foreground hover:bg-muted/50 hover:text-foreground'
             )}
           >
-            All
-            <span className="text-xs text-muted-foreground">{catalog.length}</span>
+            {chip.label}{' '}
+            <span className="ml-0.5 tabular-nums text-muted-foreground">{chip.count}</span>
           </button>
-          {populatedCategories.map((cat) => (
-            <button
-              key={cat}
-              type="button"
-              onClick={() => setActiveCategory(cat)}
-              data-active={activeCategory === cat || undefined}
-              className={cn(
-                MENU_ROW,
-                'w-full justify-between',
-                activeCategory === cat
-                  ? 'bg-muted text-foreground font-medium'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              )}
-            >
-              {INTEGRATION_CATEGORIES[cat].label}
-              <span className="text-xs text-muted-foreground">{categoryCounts.get(cat)}</span>
-            </button>
-          ))}
-        </nav>
+        ))}
       </div>
 
-      {/* Compact card grid */}
-      <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 content-start">
+      <div className="grid grid-cols-1 content-start gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {filteredCatalog.map((entry) => {
           const status = getIntegrationStatus(entry.id)
-          const isConnected = status?.status === 'active'
-          const isPaused = status?.status === 'paused'
           const Icon = INTEGRATION_ICON_MAP[entry.id]
 
           const icon = (
             <div
               className={cn(
-                'flex h-8 w-8 items-center justify-center rounded-lg shrink-0',
-                entry.available
-                  ? entry.iconBg
-                  : !entry.configurable
-                    ? 'bg-muted/60'
-                    : entry.iconBg + ' opacity-60'
+                'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
+                entry.iconBg
               )}
             >
               {Icon ? (
                 <Icon className="h-4 w-4 text-white" />
               ) : (
-                <span className="text-white font-semibold text-xs">{entry.name.charAt(0)}</span>
+                <span className="text-xs font-semibold text-white">{entry.name.charAt(0)}</span>
               )}
             </div>
           )
 
-          const statusBadge = isConnected ? (
-            <Badge
-              variant="outline"
-              className="border-green-500/30 text-green-600 text-[11px] px-1.5 py-0"
-            >
-              Enabled
-            </Badge>
-          ) : isPaused ? (
-            <Badge
-              variant="outline"
-              className="border-yellow-500/30 text-yellow-600 text-[11px] px-1.5 py-0"
-            >
-              Paused
-            </Badge>
-          ) : !canInstallIntegration(entry) && !entry.configurable ? (
-            <Badge
-              variant="outline"
-              className="text-[11px] px-1.5 py-0 text-muted-foreground/60 border-border/40"
-            >
-              Coming soon
-            </Badge>
-          ) : !canInstallIntegration(entry) && entry.configurable ? (
-            <Badge
-              variant="outline"
-              className="text-[11px] px-1.5 py-0 text-muted-foreground/60 border-border/40"
-            >
-              Not configured
-            </Badge>
-          ) : null
+          const body = (
+            <>
+              {icon}
+              <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                {entry.name}
+              </span>
+              {statusBadge(status)}
+            </>
+          )
+          const TILE =
+            'flex items-center gap-3 rounded-panel border border-border bg-transparent p-3 text-left transition-colors'
+          const TILE_ACTIVE = 'hover:bg-accent'
 
-          // Platform-managed or already configured — open the install/settings page
+          // Platform-managed or already configured: open the install/settings page
           if (canInstallIntegration(entry)) {
             return (
               <Link
                 key={entry.id}
                 to={entry.settingsPath}
                 data-settings-tile=""
-                className="group flex items-center gap-3 rounded-lg border border-border/50 bg-card p-3 transition-all hover:border-border hover:shadow-sm"
+                className={cn(TILE, TILE_ACTIVE)}
               >
-                {icon}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground">{entry.name}</p>
-                  <div className="mt-0.5">{statusBadge}</div>
-                </div>
-                <ChevronRightIcon className="h-4 w-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
+                {body}
               </Link>
             )
           }
 
-          // Not available but configurable — opens credentials dialog
+          // Not available but configurable: opens the credentials dialog
           if (entry.configurable) {
             return (
               <button
@@ -192,29 +156,21 @@ export function IntegrationList({ catalog, integrations }: IntegrationListProps)
                   })
                 }
                 data-settings-tile=""
-                className="group flex items-center gap-3 rounded-lg border border-dashed border-border/40 bg-muted/10 p-3 text-left transition-all hover:border-border/60"
+                className={cn(TILE, TILE_ACTIVE)}
               >
-                {icon}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-muted-foreground">{entry.name}</p>
-                  <div className="mt-0.5">{statusBadge}</div>
-                </div>
-                <Cog6ToothIcon className="h-4 w-4 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors shrink-0" />
+                {body}
               </button>
             )
           }
 
-          // Coming soon — plain div
+          // Not yet available: the same tile, not interactive
           return (
-            <div
-              key={entry.id}
-              className="flex items-center gap-3 rounded-lg border border-dashed border-border/30 bg-muted/10 p-3"
-            >
+            <div key={entry.id} className={TILE}>
               {icon}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-muted-foreground">{entry.name}</p>
-                <div className="mt-0.5">{statusBadge}</div>
-              </div>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                {entry.name}
+              </span>
+              <span className="text-xs text-muted-foreground">Coming soon</span>
             </div>
           )
         })}

@@ -2,7 +2,7 @@ import { createFileRoute, notFound } from '@tanstack/react-router'
 import { useIntl } from 'react-intl'
 import { RssIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
-import { PageHeader } from '@/components/shared/page-header'
+import { PortalPageHeader } from '@/components/public/portal-page-header'
 import { ChangelogListPublic, ChangelogSubscribeButton } from '@/components/portal/changelog'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { setPublicDocumentCacheHeaders } from '@/lib/server/functions/public-cache'
@@ -46,7 +46,7 @@ function ChangelogPage() {
 
   return (
     <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-8">
-      <PageHeader
+      <PortalPageHeader
         size="large"
         title={intl.formatMessage({ id: 'portal.changelog.title', defaultMessage: 'Changelog' })}
         description={intl.formatMessage({

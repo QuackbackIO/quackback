@@ -51,6 +51,8 @@ export interface QuinnPerformanceSummary {
   systemErrors: number
   /** handedOff / involvements, 0-100. */
   escalationRate: number
+  /** Still with Quinn: involvements neither resolved nor handed off. */
+  pending: number
   /** Successful assistant_tool_calls in the range. */
   actionsTaken: number
   /** Involvements opened + resolved per UTC day, ascending by date. */
@@ -120,6 +122,7 @@ export function summarizeQuinnPerformance(
     handedOff,
     systemErrors,
     escalationRate: pct(handedOff, involvements),
+    pending: involvements - resolved - handedOff - systemErrors,
     actionsTaken,
     dailyTrend,
   }

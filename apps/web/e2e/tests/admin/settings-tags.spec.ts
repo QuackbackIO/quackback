@@ -15,32 +15,36 @@ test.describe('Admin Tags Settings', () => {
     // Seeded data should have tags — the list renders tag names as text
     await page.waitForTimeout(500)
 
-    // Each tag row is a flex container with a color dot and name span
-    const tagRows = page.locator('div.group').filter({
-      has: page.locator('button[style*="background"]'),
-    })
+    // Each tag row is a list row with a color dot button and the full name
+    const tagRows = page.locator('[data-slot="settings-list-row"]')
 
     if ((await tagRows.count()) > 0) {
       await expect(tagRows.first()).toBeVisible()
     } else {
-      // Fallback: the "Add new tag" button is always present, confirming the list rendered
-      await expect(page.getByText('Add new tag')).toBeVisible({ timeout: 10000 })
+      // Fallback: the "New tag" button is always present, confirming the list rendered
+      await expect(page.getByRole('button', { name: 'New tag', exact: true })).toBeVisible({
+        timeout: 10000,
+      })
     }
   })
 
-  test('tags show as colored chips with a visibility label', async ({ page }) => {
+  test('tags show a color dot and mark only internal tags', async ({ page }) => {
     await page.waitForTimeout(500)
 
-    const chips = page.locator('button[style*="background-color"]')
+    const dots = page.getByRole('button', { name: /^Change colour of / })
 
-    if ((await chips.count()) > 0) {
-      await expect(chips.first()).toBeVisible()
-      await expect(page.getByText(/portal|internal/i).first()).toBeVisible()
+    if ((await dots.count()) > 0) {
+      await expect(dots.first()).toBeVisible()
+      // Portal is the default and is not labelled
+      // (scoped to the page content: the settings nav has a Portal link)
+      await expect(page.getByRole('main').last().getByText('Portal', { exact: true })).toHaveCount(
+        0
+      )
     }
   })
 
-  test('can open "Add new tag" dialog', async ({ page }) => {
-    const addButton = page.getByText('Add new tag')
+  test('can open the New tag dialog', async ({ page }) => {
+    const addButton = page.getByRole('button', { name: 'New tag', exact: true })
     await expect(addButton).toBeVisible({ timeout: 10000 })
     await addButton.click()
 
@@ -52,7 +56,7 @@ test.describe('Admin Tags Settings', () => {
   })
 
   test('dialog has name, description, and color fields', async ({ page }) => {
-    const addButton = page.getByText('Add new tag')
+    const addButton = page.getByRole('button', { name: 'New tag', exact: true })
     await addButton.click()
 
     const dialog = page.getByRole('dialog')
@@ -81,7 +85,7 @@ test.describe('Admin Tags Settings', () => {
   })
 
   test('dialog cancel button closes dialog', async ({ page }) => {
-    await page.getByText('Add new tag').click()
+    await page.getByRole('button', { name: 'New tag', exact: true }).click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
@@ -93,7 +97,7 @@ test.describe('Admin Tags Settings', () => {
   test('can create a new tag', async ({ page }) => {
     const tagName = `E2E PostTag ${Date.now()}`
 
-    await page.getByText('Add new tag').click()
+    await page.getByRole('button', { name: 'New tag', exact: true }).click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
@@ -114,20 +118,18 @@ test.describe('Admin Tags Settings', () => {
   test('can open edit dialog for an existing tag', async ({ page }) => {
     await page.waitForTimeout(500)
 
-    // Hover a tag row to reveal the edit button (opacity-0 group-hover:opacity-100)
-    const tagRows = page.locator('div.group').filter({
-      has: page.locator('button[style*="background"]'),
-    })
+    // The row menu holds Edit and Delete
+    const tagRows = page.locator('[data-slot="settings-list-row"]')
 
     if ((await tagRows.count()) > 0) {
       const firstRow = tagRows.first()
       await firstRow.hover()
 
-      // Edit button has title="Edit tag"
-      const editButton = firstRow.getByRole('button', { name: /edit tag/i })
+      const menu = firstRow.getByRole('button', { name: /^Actions for / })
 
-      if ((await editButton.count()) > 0) {
-        await editButton.click()
+      if ((await menu.count()) > 0) {
+        await menu.click()
+        await page.getByRole('menuitem', { name: 'Edit' }).click()
 
         const dialog = page.getByRole('dialog')
         await expect(dialog).toBeVisible({ timeout: 5000 })
@@ -149,7 +151,7 @@ test.describe('Admin Tags Settings', () => {
     // First create a tag we can safely delete
     const tagName = `Delete Me ${Date.now()}`
 
-    await page.getByText('Add new tag').click()
+    await page.getByRole('button', { name: 'New tag', exact: true }).click()
     const createDialog = page.getByRole('dialog')
     await expect(createDialog).toBeVisible({ timeout: 5000 })
     await createDialog.getByRole('textbox', { name: /name/i }).fill(tagName)
@@ -158,12 +160,13 @@ test.describe('Admin Tags Settings', () => {
     await expect(page.getByText(tagName)).toBeVisible({ timeout: 10000 })
 
     // Now delete it
-    const tagRow = page.locator('div.group').filter({ hasText: tagName })
+    const tagRow = page.locator('[data-slot="settings-list-row"]').filter({ hasText: tagName })
     await tagRow.hover()
 
-    const deleteButton = tagRow.getByRole('button', { name: /delete tag/i })
-    if ((await deleteButton.count()) > 0) {
-      await deleteButton.click()
+    const menu = tagRow.getByRole('button', { name: /^Actions for / })
+    if ((await menu.count()) > 0) {
+      await menu.click()
+      await page.getByRole('menuitem', { name: 'Delete' }).click()
 
       // Confirmation dialog should appear
       const confirmDialog = page.getByRole('alertdialog').or(page.getByRole('dialog'))
@@ -173,7 +176,7 @@ test.describe('Admin Tags Settings', () => {
       await expect(confirmDialog.getByText(tagName)).toBeVisible()
 
       // Confirm deletion
-      await confirmDialog.getByRole('button', { name: /^delete$/i }).click()
+      await confirmDialog.getByRole('button', { name: 'Delete tag' }).click()
 
       // PostTag should no longer appear
       await expect(page.getByText(tagName)).toBeHidden({ timeout: 10000 })
@@ -183,7 +186,7 @@ test.describe('Admin Tags Settings', () => {
   test('color dot opens color picker popover', async ({ page }) => {
     await page.waitForTimeout(500)
 
-    const colorDots = page.locator('button[style*="background-color"]')
+    const colorDots = page.getByRole('button', { name: /^Change colour of / })
 
     if ((await colorDots.count()) > 0) {
       await colorDots.first().click()

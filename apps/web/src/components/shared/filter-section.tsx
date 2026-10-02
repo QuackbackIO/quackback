@@ -23,7 +23,7 @@ export function FilterSection({
         <span className={cn('py-1', NAV_SECTION_CLASS)}>{title}</span>
         {action}
       </div>
-      <div className="mt-2">
+      <div className="mt-0.5">
         {children}
         {hint && <p className="mt-2 text-xs text-muted-foreground/60">{hint}</p>}
       </div>

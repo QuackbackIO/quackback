@@ -191,7 +191,7 @@ describe('toMessageDTO', () => {
       makeMessage({ attachments, isInternal: true, senderType: 'agent' }),
       visitorAuthor
     )
-    expect(dto.attachments).toBe(attachments)
+    expect(dto.attachments).toEqual(attachments)
     expect(dto.isInternal).toBe(true)
     expect(dto.senderType).toBe('agent')
   })

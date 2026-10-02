@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import { Label } from '@/components/ui/label'
+import { SettingRow } from '@/components/admin/settings/setting-row'
 import { Switch } from '@/components/ui/switch'
 import { CopyButton } from '@/components/shared/copy-button'
 import {
@@ -83,24 +84,21 @@ export function StatusSyncConfig({
 
   return (
     <div className="space-y-6 border-t border-border/50 pt-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <Label htmlFor="status-sync-toggle" className="text-base font-medium">
-            Status sync
-          </Label>
-          <p className="text-xs text-muted-foreground">
-            Receive status changes from{' '}
-            {integrationType.charAt(0).toUpperCase() + integrationType.slice(1).replace('_', ' ')}.
-            Verified updates apply to linked posts. Other changes appear in Sync history for review.
-          </p>
-        </div>
-        <Switch
-          id="status-sync-toggle"
-          checked={statusSyncEnabled}
-          onCheckedChange={handleSyncToggle}
-          disabled={saving || !enabled}
-        />
-      </div>
+      <SettingRow
+        label="Status sync"
+        htmlFor="status-sync-toggle"
+        description={`Apply verified status changes from ${
+          integrationType.charAt(0).toUpperCase() + integrationType.slice(1).replace('_', ' ')
+        } to linked posts.`}
+        control={
+          <Switch
+            id="status-sync-toggle"
+            checked={statusSyncEnabled}
+            onCheckedChange={handleSyncToggle}
+            disabled={saving || !enabled}
+          />
+        }
+      />
 
       {statusSyncEnabled && isManual && webhookUrl && (
         <div className="rounded-lg border border-border/50 bg-muted/30 p-4 space-y-4">

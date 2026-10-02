@@ -27,16 +27,19 @@ import {
   EllipsisHorizontalIcon,
   PencilSquareIcon,
   PlusIcon,
+  ServerStackIcon,
   TrashIcon,
   UsersIcon,
 } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/shared/empty-state'
+import { NewButton } from '@/components/shared/new-button'
+import { AdminListHeader } from '@/components/admin/admin-list-header'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
 import {
   Select,
   SelectContent,
@@ -390,26 +393,21 @@ export function StatusComponentsView() {
   }
 
   return (
-    <div className="max-w-4xl w-full flex flex-col flex-1 min-h-0">
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-3 py-2.5 flex items-center gap-2 border-b border-border/40">
-        <h2 className="text-sm font-semibold px-1">Services</h2>
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search services…"
-          className="h-8 w-48 text-sm bg-muted/30 border-border/50"
-        />
-        <div className="flex items-center gap-2 ml-auto">
-          <Button variant="outline" size="sm" onClick={() => setCreateGroupDialogOpen(true)}>
-            <PlusIcon className="h-4 w-4 mr-1.5" />
-            New group
-          </Button>
-          <Button size="sm" onClick={() => setCreateGroupId(null)}>
-            <PlusIcon className="h-4 w-4 mr-1.5" />
-            New service
-          </Button>
-        </div>
-      </div>
+    <div className="max-w-5xl w-full flex flex-col flex-1 min-h-0">
+      <AdminListHeader
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search services..."
+        action={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setCreateGroupDialogOpen(true)}>
+              <PlusIcon className="h-4 w-4" />
+              New group
+            </Button>
+            <NewButton noun="service" onClick={() => setCreateGroupId(null)} />
+          </>
+        }
+      />
 
       {isLoading ? (
         <div className="p-3 space-y-2">
@@ -440,7 +438,7 @@ export function StatusComponentsView() {
               resetFromServer()
             }}
           >
-            <div className="rounded-xl overflow-hidden border border-border/50 bg-card shadow-sm divide-y divide-border/50">
+            <div className="overflow-hidden border-y border-t-transparent border-border/50 divide-y divide-border/50">
               {activeDrag && ungrouped.length === 0 && <UngroupedDropZone />}
               <SortableContext
                 items={visibleUngrouped.map((c) => c.id)}
@@ -505,21 +503,14 @@ export function StatusComponentsView() {
           </DndContext>
 
           {groups.length === 0 && ungrouped.length === 0 && (
-            <div className="text-center py-10 space-y-3">
-              <p className="text-sm font-medium text-foreground">Add a service</p>
-              <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                Track a service so you can publish incidents, maintenance, and uptime.
-              </p>
-              <Button size="sm" onClick={() => setCreateGroupId(null)}>
-                Add service
-              </Button>
-            </div>
+            <EmptyState
+              icon={ServerStackIcon}
+              title="No services yet"
+              description="Track a service so you can publish incidents, maintenance, and uptime."
+              action={<NewButton noun="service" onClick={() => setCreateGroupId(null)} />}
+              size="compact"
+            />
           )}
-
-          <p className="text-xs text-muted-foreground max-w-2xl">
-            Changing a service&apos;s status here updates the public page and uptime history. It
-            never emails subscribers; only publishing a new incident or scheduling maintenance does.
-          </p>
 
           <ComponentFormDialog
             open={createGroupId !== undefined}
@@ -605,7 +596,7 @@ function SortableGroupHeader({
     <div
       ref={setNodeRef}
       style={style}
-      className={`group flex items-center gap-2 px-3 py-2 transition-colors ${
+      className={`group flex items-center gap-3 px-3 py-2 transition-colors ${
         isOver ? 'bg-primary/10' : 'bg-muted/40'
       }`}
     >
@@ -617,9 +608,6 @@ function SortableGroupHeader({
         <Bars3Icon className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100" />
       </button>
       <span className="text-sm font-semibold">{group.name}</span>
-      <Badge variant="outline" className="h-5">
-        Group
-      </Badge>
       <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100">
         <Button
           variant="ghost"
@@ -918,7 +906,7 @@ function ComponentFormDialog({
               id="component-description"
               value={values.description}
               onChange={(e) => setValues((v) => ({ ...v, description: e.target.value }))}
-              placeholder="Optional — shown as a tooltip on the public page"
+              placeholder="Optional, shown as a tooltip on the public page"
             />
           </div>
 

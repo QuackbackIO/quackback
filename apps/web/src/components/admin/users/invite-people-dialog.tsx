@@ -49,9 +49,9 @@ export function InvitePeopleDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Invite people to the portal</DialogTitle>
+          <DialogTitle>Invite users to the portal</DialogTitle>
           <DialogDescription>
-            They&apos;ll get a magic link to sign in and access the portal — no password needed.
+            They&apos;ll get a magic link to sign in and access the portal, no password needed.
           </DialogDescription>
         </DialogHeader>
 
@@ -113,12 +113,12 @@ export function InvitePeopleDialog({
               <ul className="mt-1 list-disc pl-4 space-y-0.5">
                 {batchResults.failed.map((f) => (
                   <li key={f.email}>
-                    <span className="font-mono">{f.email}</span> — {f.error}
+                    <span className="font-mono">{f.email}</span>: {f.error}
                   </li>
                 ))}
               </ul>
               <p className="mt-1.5">
-                The failed addresses have been kept in the field above — fix and retry.
+                The failed addresses have been kept in the field above. Fix them and try again.
               </p>
             </div>
           )}

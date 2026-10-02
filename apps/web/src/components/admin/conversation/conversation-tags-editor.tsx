@@ -306,7 +306,7 @@ export function ConversationTagsEditor({
               )}
               {!loadingTags && matching.length === 0 && !showCreate && (
                 <p className="px-1.5 py-1 text-xs text-muted-foreground">
-                  {q ? 'No matching tags' : 'No tags yet — type to create one'}
+                  {q ? 'No matching tags' : 'No tags yet. Type to create one'}
                 </p>
               )}
             </div>

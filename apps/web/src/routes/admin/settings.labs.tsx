@@ -1,19 +1,26 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { LabsSettings } from '@/components/admin/settings/labs/labs-settings'
-import { listVisibleLabsExperimentsFn } from '@/lib/server/functions/labs'
+import { BeakerIcon } from '@heroicons/react/24/solid'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
+import { EmptyState } from '@/components/shared/empty-state'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 
 export const Route = createFileRoute('/admin/settings/labs')({
-  loader: async ({ context }) => {
+  loader: ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
-    const experiments = await listVisibleLabsExperimentsFn()
-    return { experiments }
   },
   component: LabsSettingsPage,
 })
 
 function LabsSettingsPage() {
-  const { experiments } = Route.useLoaderData()
-  return <LabsSettings experiments={experiments} />
+  return (
+    <SettingsPage page="/admin/settings/labs">
+      <EmptyState
+        icon={BeakerIcon}
+        size="compact"
+        title="No experiments right now"
+        description="Features you can try before they ship show up here."
+      />
+    </SettingsPage>
+  )
 }

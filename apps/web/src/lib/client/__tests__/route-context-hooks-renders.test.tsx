@@ -20,7 +20,7 @@ import {
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { usePermission } from '../hooks/use-permission'
 import { useHasPermission, usePermissions } from '../use-permissions'
-import { useRefinedTheme } from '../hooks/use-root-context'
+import { useFeatureFlag } from '../hooks/use-root-context'
 
 afterEach(cleanup)
 
@@ -28,15 +28,15 @@ afterEach(cleanup)
 // keep one answer until something expires it, so the parts are the same
 // objects from one navigation to the next while the route context around
 // them is new each time.
-let rootAnswer: { settings: { visualTheme?: 'refined' | 'legacy' } }
+let rootAnswer: { settings: { featureFlags: { helpCenter?: boolean } } }
 let adminAnswer: { principal: { role: string }; permissions: PermissionKey[] }
 
-const renders = { permission: 0, permissions: 0, hasPermission: 0, theme: 0 }
+const renders = { permission: 0, permissions: 0, hasPermission: 0, flag: 0 }
 const seen = {
   permission: false,
   permissions: [] as PermissionKey[],
   hasPermission: false,
-  refined: false,
+  flag: false,
 }
 
 function PermissionProbe() {
@@ -57,9 +57,9 @@ function HasPermissionProbe() {
   return null
 }
 
-function ThemeProbe() {
-  renders.theme++
-  seen.refined = useRefinedTheme()
+function FlagProbe() {
+  renders.flag++
+  seen.flag = useFeatureFlag('helpCenter')
   return null
 }
 
@@ -77,7 +77,7 @@ function buildRouter() {
         <PermissionProbe />
         <PermissionsProbe />
         <HasPermissionProbe />
-        <ThemeProbe />
+        <FlagProbe />
         <Outlet />
       </>
     ),
@@ -110,7 +110,7 @@ async function mount() {
 
 describe('route context hooks', () => {
   it('do not render their callers again for navigations that leave the answer alone', async () => {
-    rootAnswer = { settings: { visualTheme: 'refined' } }
+    rootAnswer = { settings: { featureFlags: { helpCenter: true } } }
     adminAnswer = {
       principal: { role: 'member' },
       permissions: [PERMISSIONS.ASSISTANT_MANAGE, PERMISSIONS.WORKFLOW_MANAGE],
@@ -128,12 +128,12 @@ describe('route context hooks', () => {
       permission: true,
       permissions: [PERMISSIONS.ASSISTANT_MANAGE, PERMISSIONS.WORKFLOW_MANAGE],
       hasPermission: true,
-      refined: true,
+      flag: true,
     })
   })
 
   it('render their callers again with the new answer when the permissions change', async () => {
-    rootAnswer = { settings: { visualTheme: 'legacy' } }
+    rootAnswer = { settings: { featureFlags: { helpCenter: false } } }
     adminAnswer = {
       principal: { role: 'member' },
       permissions: [PERMISSIONS.ASSISTANT_MANAGE, PERMISSIONS.WORKFLOW_MANAGE],
@@ -141,18 +141,18 @@ describe('route context hooks', () => {
     const router = await mount()
     expect(seen.permission).toBe(true)
     expect(seen.hasPermission).toBe(true)
-    expect(seen.refined).toBe(false)
+    expect(seen.flag).toBe(false)
 
     // A role change: the next guard answer holds a narrower set.
     adminAnswer = { principal: { role: 'member' }, permissions: [PERMISSIONS.ASSISTANT_MANAGE] }
-    rootAnswer = { settings: { visualTheme: 'refined' } }
+    rootAnswer = { settings: { featureFlags: { helpCenter: true } } }
     await act(() => router.invalidate())
 
     expect(seen).toEqual({
       permission: true,
       permissions: [PERMISSIONS.ASSISTANT_MANAGE],
       hasPermission: false,
-      refined: true,
+      flag: true,
     })
   })
 })

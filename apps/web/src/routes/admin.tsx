@@ -2,8 +2,10 @@ import { useEffect, type ComponentProps } from 'react'
 import { createFileRoute, Outlet, redirect, useRouterState } from '@tanstack/react-router'
 import { IntlProvider } from 'react-intl'
 import { useAdminPresence } from '@/lib/client/hooks/use-admin-presence'
-import { DEFAULT_LOCALE, loadMessages } from '@/lib/shared/i18n'
+import { DEFAULT_LOCALE, loadMessages, withoutViewerMessages } from '@/lib/shared/i18n'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
+import { adminQueries } from '@/lib/client/queries/admin'
+import { isProductEnabled } from '@/lib/shared/types/settings'
 import { unreadCountQuery } from '@/lib/client/hooks/use-notifications-queries'
 import { getLatestVersion, isNewerVersion } from '@/lib/server/functions/version'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
@@ -13,6 +15,7 @@ import { UpdateBanner } from '@/components/admin/update-banner'
 import { PlanNoticeBanner } from '@/components/admin/plan-notice-banner'
 import { getPlanNotice } from '@/lib/server/functions/plan-notice'
 import { CloudQuackbackWidget } from '@/components/shared/cloud-quackback-widget'
+import { FileViewerProvider, scrollToMessage } from '@/components/shared/files/file-viewer-context'
 import { useHasPermission } from '@/lib/client/use-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { createRouteContextMemo } from '@/lib/client/route-context-memo'
@@ -100,7 +103,7 @@ export const Route = createFileRoute('/admin')({
         currentUser: null,
         planNotice: null,
         locale: DEFAULT_LOCALE,
-        messages: await loadMessages(DEFAULT_LOCALE),
+        messages: withoutViewerMessages(await loadMessages(DEFAULT_LOCALE)),
       }
     }
 
@@ -109,6 +112,10 @@ export const Route = createFileRoute('/admin')({
       user: NonNullable<typeof context.user>
       principal: NonNullable<typeof context.principal>
     }
+    // The rail's review badge is only asked for by viewers who can act on it.
+    const warmModeration =
+      isProductEnabled(context.settings?.featureFlags, 'feedback') &&
+      (context.permissions ?? []).includes(PERMISSIONS.POST_APPROVE)
 
     const locale = context.acceptLanguageLocale ?? DEFAULT_LOCALE
     const [avatarData, latestRelease, planNotice, messages] = await Promise.all([
@@ -117,10 +124,14 @@ export const Route = createFileRoute('/admin')({
       }),
       getLatestVersion(),
       getPlanNotice(),
-      loadMessages(locale),
+      loadMessages(locale).then(withoutViewerMessages),
       // The rail's unread badge rides the document rather than a request of
       // its own after hydration. Unreadable now, it is left to the bell.
       context.queryClient.ensureQueryData(unreadCountQuery()).catch(() => null),
+      // The same goes for the count of posts waiting for review.
+      warmModeration
+        ? context.queryClient.ensureQueryData(adminQueries.moderationStatus()).catch(() => null)
+        : null,
     ])
 
     const latestVersion =
@@ -247,12 +258,12 @@ function AdminLayout() {
           <AdminSidebar initialUserData={initialUserData} latestVersion={latestVersion} />
           <main
             data-admin-shell=""
-            className="flex-1 min-w-0 overflow-hidden sm:h-screen sm:py-2 sm:pr-2 sm:pl-1 p-0"
+            className="flex-1 min-w-0 overflow-hidden bg-chrome p-0 sm:h-screen sm:py-2 sm:pe-2"
           >
             {/* Mobile: Add padding for fixed header */}
             <div
               data-admin-canvas=""
-              className="h-full sm:pt-0 pt-14 sm:rounded-lg sm:border sm:border-border overflow-hidden flex flex-col"
+              className="h-full sm:pt-0 pt-14 overflow-hidden flex flex-col bg-background text-foreground sm:rounded-[14px] sm:border sm:border-chrome-hairline sm:shadow-chrome-canvas"
             >
               <PlanNoticeBanner notice={planNotice} />
               <UpdateBanner
@@ -260,7 +271,9 @@ function AdminLayout() {
                 dismissedVersion={updateBannerDismissedVersion}
               />
               <div className="flex-1 min-h-0 overflow-hidden">
-                <Outlet />
+                <FileViewerProvider onJumpToMessage={scrollToMessage}>
+                  <Outlet />
+                </FileViewerProvider>
               </div>
             </div>
           </main>

@@ -260,7 +260,7 @@ export function VotersAvatarStack({
                       className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-[13px] text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
                     >
                       <PlusIcon className="size-4" />
-                      Create new user
+                      New user
                     </button>
                   </div>
                 )}

@@ -40,9 +40,9 @@ export function channelColor(channel: string, index: number): string {
 
 /** Compact duration for response-time stat values and tooltip rows
  *  ("45m", "2h 15m", "1.5d"). null (nothing answered in the period) renders
- *  as an em dash. */
+ *  as a hyphen. */
 export function formatResponseTime(minutes: number | null): string {
-  if (minutes == null) return '—'
+  if (minutes == null) return '-'
   if (minutes < 1) return '<1m'
   if (minutes < 60) return `${Math.round(minutes)}m`
   if (minutes < 1440) {
@@ -51,4 +51,17 @@ export function formatResponseTime(minutes: number | null): string {
     return m === 0 ? `${h}h` : `${h}h ${m}m`
   }
   return `${(minutes / 1440).toFixed(1)}d`
+}
+
+const BUCKET_DAY = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  timeZone: 'UTC',
+})
+
+/** A daily bucket's label, e.g. "Oct 1". The server buckets by UTC day
+ *  ("2026-10-01"), so the label is formatted in UTC: it names the bucket it
+ *  covers, the same on the server and in every browser. */
+export function formatBucketDay(day: string): string {
+  return BUCKET_DAY.format(new Date(`${day}T00:00:00Z`))
 }

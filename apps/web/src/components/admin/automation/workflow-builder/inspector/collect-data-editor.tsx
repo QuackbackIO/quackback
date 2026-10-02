@@ -8,8 +8,9 @@
  * change what the customer was asked — same "snapshot, not a live join"
  * rationale as WorkflowBlockAttributeOption's own doc comment.
  */
-import { Label } from '@/components/ui/label'
+import { useId } from 'react'
 import { Switch } from '@/components/ui/switch'
+import { SettingRow } from '@/components/admin/settings/setting-row'
 import { useWorkflowEntities } from '../entities'
 import { BlockBodyField } from './block-body-field'
 import { EntitySelect, Field } from './shared'
@@ -28,6 +29,7 @@ export function CollectDataEditor({
   onChange: (step: TreeStep) => void
 }) {
   const { attributes } = useWorkflowEntities()
+  const requiredId = useId()
   // The type predicate (not just a boolean filter) narrows fieldType to
   // CollectFieldType here, so every reader below (onChange, the JSX) gets it
   // for free instead of re-deriving it from the wider AttributeFieldType.
@@ -64,29 +66,31 @@ export function CollectDataEditor({
           }}
         />
         {step.attributeKey && !isNeedsSetupRef(step.attributeKey) && !selectedDef && (
-          <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-500">
+          <p className="mt-1 text-[11px] text-warning">
             This attribute no longer supports collect_data (its field type changed or it was
-            archived) — choose another.
+            archived). Choose another.
           </p>
         )}
         {supported.length === 0 && (
           <p className="mt-1 text-[11px] text-muted-foreground">
-            No text, number, select, or date attributes yet — add one under Settings → Conversation
-            data.
+            No text, number, select, or date attributes yet. Add one under Settings → Conversations.
           </p>
         )}
       </Field>
 
-      <div className="flex items-center justify-between rounded-md border p-2.5">
-        <div>
-          <Label className="text-xs">Required</Label>
-          <p className="text-[11px] text-muted-foreground">The customer must answer to continue.</p>
-        </div>
-        <Switch
-          checked={step.required}
-          onCheckedChange={(required) => onChange({ ...step, required })}
-        />
-      </div>
+      <SettingRow
+        label="Required"
+        description="The customer must answer to continue."
+        htmlFor={requiredId}
+        className="py-2"
+        control={
+          <Switch
+            id={requiredId}
+            checked={step.required}
+            onCheckedChange={(required) => onChange({ ...step, required })}
+          />
+        }
+      />
     </div>
   )
 }

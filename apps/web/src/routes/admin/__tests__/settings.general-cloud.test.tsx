@@ -17,14 +17,13 @@ describe('cloud workspace identity on General', () => {
     render(
       <WorkspaceIdentityCard
         workspaceName="Untitled workspace"
-        saving={false}
         managed={false}
         onWorkspaceNameChange={vi.fn()}
         maxLength={80}
       />
     )
 
-    expect(screen.getByLabelText('Workspace Name')).toBeInTheDocument()
+    expect(screen.getByLabelText('Workspace name')).toBeInTheDocument()
     expect(screen.queryByLabelText('Workspace URL')).not.toBeInTheDocument()
     expect(screen.queryByText(/Preview:/)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /save/i })).not.toBeInTheDocument()

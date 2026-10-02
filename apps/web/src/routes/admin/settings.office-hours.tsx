@@ -3,7 +3,6 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useMutation, useQueryClient, useSuspenseQuery, queryOptions } from '@tanstack/react-query'
-import { ClockIcon } from '@heroicons/react/24/solid'
 import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import {
@@ -17,9 +16,10 @@ import {
   type OfficeHoursInterval,
   type OfficeHoursHoliday,
 } from '@/lib/shared/office-hours'
+import { AUTOSAVE } from '@/lib/client/autosave'
 import { fetchOfficeHoursFn, updateOfficeHoursFn } from '@/lib/server/functions/settings'
-import { BackLink } from '@/components/ui/back-link'
-import { PageHeader } from '@/components/shared/page-header'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
+import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Combobox } from '@/components/ui/combobox'
 import { Switch } from '@/components/ui/switch'
@@ -27,6 +27,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 
 const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
@@ -95,6 +96,7 @@ function OfficeHoursPage() {
 
   const mutation = useMutation({
     mutationFn: (next: OfficeHoursSchedule) => updateOfficeHoursFn({ data: next }),
+    meta: AUTOSAVE,
     onSuccess: (saved) => {
       setSchedule(saved)
       queryClient.setQueryData(officeHoursQuery.queryKey, saved)
@@ -128,6 +130,10 @@ function OfficeHoursPage() {
   }, [schedule.timezone])
 
   const isBusy = mutation.isPending
+  const [pendingRemoval, setPendingRemoval] = useState<{
+    kind: 'window' | 'holiday'
+    index: number
+  } | null>(null)
 
   function onToggleEnabled(checked: boolean) {
     apply({
@@ -204,37 +210,24 @@ function OfficeHoursPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      <div className="lg:hidden">
-        <BackLink to="/admin/settings/support">Support</BackLink>
-      </div>
-      <PageHeader
-        icon={ClockIcon}
-        title="Office Hours"
-        description="One weekly schedule for your team's availability. Customers only see it once a human is involved; the assistant handles things first."
-      />
-
-      <SettingsCard
-        title="Availability"
-        description="Off means you're available 24/7. Turn it on to define the hours your team is around."
-      >
+    <SettingsPage page="/admin/settings/office-hours">
+      <SettingsCard title="Availability" description="Off means available 24/7.">
         <div className="space-y-5">
-          <div className="flex items-center justify-between py-1">
-            <div className="pr-4">
-              <Label htmlFor="office-hours-enabled" className="text-sm font-medium cursor-pointer">
-                Set office hours
-              </Label>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                When enabled, consumers see when you&apos;ll be back outside these windows.
-              </p>
-            </div>
-            <Switch
-              id="office-hours-enabled"
-              checked={schedule.enabled}
-              onCheckedChange={onToggleEnabled}
-              disabled={isBusy}
+          <SettingRows>
+            <SettingRow
+              label="Set office hours"
+              description="Customers see when you'll be back."
+              htmlFor="office-hours-enabled"
+              control={
+                <Switch
+                  id="office-hours-enabled"
+                  checked={schedule.enabled}
+                  onCheckedChange={onToggleEnabled}
+                  disabled={isBusy}
+                />
+              }
             />
-          </div>
+          </SettingRows>
 
           {schedule.enabled && (
             <>
@@ -319,7 +312,7 @@ function OfficeHoursPage() {
                             />
                             <button
                               type="button"
-                              onClick={() => removeInterval(index)}
+                              onClick={() => setPendingRemoval({ kind: 'window', index })}
                               disabled={isBusy}
                               className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-destructive transition-colors"
                               aria-label={`Remove ${label} window`}
@@ -343,8 +336,8 @@ function OfficeHoursPage() {
                 <div className="space-y-1">
                   <Label>Holidays</Label>
                   <p className="text-xs text-muted-foreground">
-                    Days you&apos;re closed on top of the weekly windows — SLA clocks pause and
-                    reply expectations don&apos;t fire. Dates are read in the schedule timezone.
+                    Days you&apos;re closed on top of the weekly windows. SLA clocks pause and reply
+                    expectations don&apos;t fire. Dates are read in the schedule timezone.
                   </p>
                 </div>
 
@@ -389,7 +382,7 @@ function OfficeHoursPage() {
                         </label>
                         <button
                           type="button"
-                          onClick={() => removeHoliday(index)}
+                          onClick={() => setPendingRemoval({ kind: 'holiday', index })}
                           disabled={isBusy}
                           className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-destructive transition-colors"
                           aria-label={`Remove holiday ${index + 1}`}
@@ -419,7 +412,24 @@ function OfficeHoursPage() {
           )}
         </div>
       </SettingsCard>
-    </div>
+      <ConfirmDialog
+        open={pendingRemoval !== null}
+        onOpenChange={(open) => !open && setPendingRemoval(null)}
+        title={pendingRemoval?.kind === 'holiday' ? 'Delete holiday?' : 'Delete window?'}
+        description={
+          pendingRemoval?.kind === 'holiday'
+            ? 'That day no longer counts as closed.'
+            : 'That window no longer counts as open.'
+        }
+        confirmLabel={pendingRemoval?.kind === 'holiday' ? 'Delete holiday' : 'Delete window'}
+        variant="destructive"
+        onConfirm={() => {
+          if (pendingRemoval?.kind === 'holiday') removeHoliday(pendingRemoval.index)
+          else if (pendingRemoval) removeInterval(pendingRemoval.index)
+          setPendingRemoval(null)
+        }}
+      />
+    </SettingsPage>
   )
 }
 
@@ -453,7 +463,7 @@ function OfficeHoursPreview({ schedule }: { schedule: OfficeHoursSchedule }) {
     <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-sm">
       <span
         className={
-          open ? 'size-2 rounded-full bg-emerald-500' : 'size-2 rounded-full bg-muted-foreground/40'
+          open ? 'size-2 rounded-full bg-success' : 'size-2 rounded-full bg-muted-foreground/40'
         }
         aria-hidden
       />

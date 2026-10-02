@@ -220,6 +220,9 @@ export type AssistantSnippetId = TypeId<'assistant_snippet'>
 /** Assistant knowledge document ID - e.g., assistant_document_01h455vb4pex5vsknk084sn02q */
 export type AssistantDocumentId = TypeId<'assistant_document'>
 
+/** Uploaded file ID - e.g., file_01h455vb4pex5vsknk084sn02q */
+export type FileId = TypeId<'file'>
+
 /** Assistant web source ID - e.g., assistant_web_source_01h455vb4pex5vsknk084sn02q */
 export type AssistantWebSourceId = TypeId<'assistant_web_source'>
 
@@ -453,6 +456,7 @@ export interface EntityIdMap {
   assistant_tool_call: AssistantToolCallId
   assistant_snippet: AssistantSnippetId
   assistant_document: AssistantDocumentId
+  file: FileId
   assistant_web_source: AssistantWebSourceId
   assistant_event: AssistantEventId
   ticket: TicketId

@@ -154,7 +154,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
             required: true,
           },
           { id: 'convert_bug', type: 'action', action: { type: 'convert_to_ticket' } },
-          { id: 'bug_ack', type: 'message', body: body("Thanks — we've logged the details.") },
+          { id: 'bug_ack', type: 'message', body: body("Thanks, we've logged the details.") },
           {
             id: 'set_priority_bug',
             type: 'action',
@@ -308,7 +308,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
             id: 'hours_message',
             type: 'message',
             body: body(
-              "Thanks for writing in — the team is away right now. We'll pick this up when we're back."
+              "Thanks for writing in. The team is away right now. We'll pick this up when we're back."
             ),
           },
           { id: 'show_reply_time', type: 'show_reply_time' },
@@ -430,7 +430,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   {
     id: 'ai-first-support',
     title: 'AI-first support with honest escalation',
-    benefit: 'Let Quinn try first — CSAT-checked, honestly escalated.',
+    benefit: 'Let Quinn try first, CSAT-checked and honestly escalated.',
     categories: ['customer_facing'],
     icon: SparklesIcon,
     iconClassName: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
@@ -453,7 +453,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
           {
             id: 'apology_low_1',
             type: 'message',
-            body: body("We're sorry that didn't help — a teammate is picking this up."),
+            body: body("We're sorry that didn't help. A teammate is picking this up."),
           },
           { id: 'reopen_low_1', type: 'action', action: { type: 'reopen' } },
           {
@@ -465,7 +465,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
           {
             id: 'apology_low_2',
             type: 'message',
-            body: body("We're sorry that didn't help — a teammate is picking this up."),
+            body: body("We're sorry that didn't help. A teammate is picking this up."),
           },
           { id: 'reopen_low_2', type: 'action', action: { type: 'reopen' } },
           {
@@ -477,17 +477,17 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
           {
             id: 'thanks_3',
             type: 'message',
-            body: body('Glad that helped — thanks for the rating!'),
+            body: body('Glad that helped, thanks for the rating!'),
           },
           {
             id: 'thanks_4',
             type: 'message',
-            body: body('Glad that helped — thanks for the rating!'),
+            body: body('Glad that helped, thanks for the rating!'),
           },
           {
             id: 'thanks_5',
             type: 'message',
-            body: body('Glad that helped — thanks for the rating!'),
+            body: body('Glad that helped, thanks for the rating!'),
           },
           {
             id: 'branch_sentiment',
@@ -581,7 +581,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
             id: 'concierge_message',
             type: 'message',
             body: body(
-              "Hi {first_name|there} — you've reached our priority line. A specialist is on it."
+              "Hi {first_name|there}, you've reached our priority line. A specialist is on it."
             ),
           },
         ],
@@ -641,7 +641,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   {
     id: 'prioritize-by-ai-urgency',
     title: 'Prioritize by AI urgency',
-    benefit: 'React when Quinn marks a conversation urgent — the signal that exists at intake.',
+    benefit: 'React when Quinn marks a conversation urgent, the signal that exists at intake.',
     categories: ['sla'],
     icon: SparklesIcon,
     iconClassName: 'bg-orange-500/10 text-orange-600 dark:text-orange-400',

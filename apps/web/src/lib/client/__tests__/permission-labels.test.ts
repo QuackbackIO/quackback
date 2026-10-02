@@ -22,4 +22,14 @@ describe('CATEGORY_LABELS', () => {
       expect(known.has(key), `stale label '${key}'`).toBe(true)
     }
   })
+
+  it('gives every category its own label', () => {
+    const labels = Object.values(CATEGORY_LABELS)
+    expect(new Set(labels).size).toBe(labels.length)
+  })
+
+  it('uses the glossary words for the users and conversations groups', () => {
+    expect(CATEGORY_LABELS.people).toBe('Users')
+    expect(CATEGORY_LABELS.conversation).toBe('Conversations')
+  })
 })

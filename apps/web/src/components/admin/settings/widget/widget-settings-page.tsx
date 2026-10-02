@@ -1,44 +1,22 @@
 import { useRouter, useHydrated, Link, Outlet, useChildMatches } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { useState, useTransition, useMemo, type ReactNode } from 'react'
+import { useState, useTransition, useMemo } from 'react'
 import { useTheme } from 'next-themes'
-import {
-  ChatBubbleLeftRightIcon,
-  SparklesIcon,
-  SunIcon,
-  MoonIcon,
-  TrashIcon,
-  PlusIcon,
-  ArrowRightIcon,
-  PhotoIcon,
-  Bars3Icon,
-} from '@heroicons/react/24/solid'
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core'
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
+import { SparklesIcon, TrashIcon, ArrowRightIcon, PhotoIcon } from '@heroicons/react/24/solid'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/shared/utils'
-import { BackLink } from '@/components/ui/back-link'
-import { PageHeader } from '@/components/shared/page-header'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
+import { StateBadge } from '@/components/shared/state-badge'
+import { SettingsList, SettingsListRow, RowIcon } from '@/components/admin/settings/settings-list'
+import {
+  WidgetConnectionRow,
+  type WidgetConnectionStatus,
+} from '@/components/admin/settings/widget/widget-connection-row'
+import { HomeCardsList } from '@/components/admin/settings/widget/home-cards-list'
 import { WidgetPreview } from '@/components/admin/settings/widget/widget-preview'
-import { WidgetLastDetected } from '@/components/admin/settings/widget/widget-last-detected'
 import { PreviewToggleButton } from '@/components/admin/settings/preview-toggle'
-import { InlineSpinner } from '@/components/admin/settings/inline-spinner'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -57,18 +35,8 @@ import {
   useUploadWidgetHeroImage,
   useDeleteWidgetHeroImage,
 } from '@/lib/client/mutations/settings'
-import type {
-  FeatureFlags,
-  WidgetHomeCard,
-  WidgetHomeCardType,
-  WidgetCardAudience,
-  WidgetHomeConfig,
-} from '@/lib/shared/types/settings'
+import type { FeatureFlags, WidgetHomeCard, WidgetHomeConfig } from '@/lib/shared/types/settings'
 import { widgetInstallPresence } from '@/lib/shared/widget/widget-origin'
-import {
-  widgetConnectedStatusLabel,
-  widgetSdkUpdateDescription,
-} from '@/lib/shared/widget/sdk-version'
 import { DEFAULT_WIDGET_HOME_CARDS } from '@/lib/shared/types/settings'
 import { WIDGET_HERO_PATTERNS, heroBackdropStyle } from '@/lib/shared/widget/hero-style'
 import { ColorPickerGrid, ColorHexInput } from '@/components/shared/color-picker'
@@ -116,20 +84,11 @@ function WidgetSettingsPage() {
   const previewRefreshKey = useMemo(() => JSON.stringify(config), [config])
 
   return (
-    <div className="space-y-6">
-      <div className="lg:hidden">
-        <BackLink to="/admin/settings">Settings</BackLink>
-      </div>
-      <PageHeader
-        icon={ChatBubbleLeftRightIcon}
-        title="Widget"
-        description="Embed the messenger widget in your product — feedback, conversations, help, and updates"
-      />
-
+    <SettingsPage page="/admin/settings/widget" width="wide">
       {/* Full-screen editor: controls left, live preview right (sticky). */}
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)] gap-6 items-start">
         <div className="space-y-4 min-w-0">
-          <WidgetSiteCard initialEnabled={config.enabled} status={onboardingQuery.data} />
+          <VisibilityCard initialEnabled={config.enabled} status={onboardingQuery.data} />
 
           <TabsCard
             config={config}
@@ -167,7 +126,7 @@ function WidgetSettingsPage() {
           refreshKey={previewRefreshKey}
         />
       </div>
-    </div>
+    </SettingsPage>
   )
 }
 
@@ -204,20 +163,15 @@ function WidgetPreviewColumn({
     <div className="xl:sticky xl:top-6 min-w-0 xl:h-[calc(100vh-7.5rem)] flex flex-col">
       <div className="mb-3 flex items-center gap-3">
         <span className="text-sm font-medium">Live preview</span>
-        <span className="hidden sm:inline text-xs text-muted-foreground">
-          the real widget — content and actions are real
-        </span>
         <div className="ms-auto flex items-center gap-1 rounded-lg border border-border p-0.5">
           <PreviewToggleButton
             active={previewTheme === 'light'}
             onClick={() => setPreviewThemeOverride('light')}
-            icon={SunIcon}
             label="Light"
           />
           <PreviewToggleButton
             active={previewTheme === 'dark'}
             onClick={() => setPreviewThemeOverride('dark')}
-            icon={MoonIcon}
             label="Dark"
           />
         </div>
@@ -237,19 +191,12 @@ function WidgetPreviewColumn({
   )
 }
 
-function WidgetSiteCard({
+function VisibilityCard({
   initialEnabled,
   status,
 }: {
   initialEnabled: boolean
-  status: {
-    hasWidgetInstalled?: boolean
-    widgetOriginHost?: string | null
-    widgetLastDetectedAt?: string | null
-    widgetSdkVersion?: string | null
-    currentWidgetSdkVersion?: string
-    widgetSdkNeedsUpdate?: boolean
-  }
+  status: WidgetConnectionStatus
 }) {
   const router = useRouter()
   const updateWidgetConfig = useUpdateWidgetConfig()
@@ -261,17 +208,7 @@ function WidgetSiteCard({
     enabled,
     originHost: status.widgetOriginHost,
   })
-  const needsUpdate = Boolean(status.hasWidgetInstalled && status.widgetSdkNeedsUpdate)
-  const statusTitle = needsUpdate
-    ? widgetConnectedStatusLabel({
-        hasWidgetInstalled: true,
-        widgetSdkNeedsUpdate: true,
-      })
-    : presence.title
-  const statusDescription = needsUpdate
-    ? widgetSdkUpdateDescription(status.widgetSdkVersion, status.currentWidgetSdkVersion)
-    : presence.description
-  const statusTone = needsUpdate ? 'detected' : presence.tone
+  const idle = presence.tone === 'idle'
 
   async function handleToggle(checked: boolean) {
     const previous = enabled
@@ -289,68 +226,32 @@ function WidgetSiteCard({
 
   return (
     <SettingsCard
-      title="Add to your site"
-      description="Show Quackback on your product so customers can send feedback and messages"
+      title="Visibility"
+      action={
+        <Button asChild size="sm" variant={idle ? 'default' : 'outline'} className="shrink-0">
+          <Link to="/admin/settings/widget/install">
+            {idle ? 'Set it up' : 'View installation'}
+            <ArrowRightIcon className="h-3.5 w-3.5" />
+          </Link>
+        </Button>
+      }
     >
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-border/50 px-3 py-2.5">
-          <div className="min-w-0 pe-3">
-            <Label htmlFor="widget-toggle" className="text-xs font-medium cursor-pointer">
-              Show on your website
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              Visitors see the launcher on pages you added it to
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <InlineSpinner visible={saving || isPending} />
+      <SettingRows>
+        <SettingRow
+          label="Show on your website"
+          description="Visitors see the launcher on pages where you added it."
+          htmlFor="widget-toggle"
+          control={
             <Switch
               id="widget-toggle"
               checked={enabled}
               onCheckedChange={handleToggle}
               disabled={saving || isPending}
-              aria-label="Widget"
             />
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-border/50 px-3 py-2.5">
-          <div className="flex items-center justify-between gap-3">
-            <p className="flex min-w-0 items-center gap-2 text-xs font-medium">
-              <span
-                className={cn(
-                  'h-2 w-2 shrink-0 rounded-full',
-                  statusTone === 'live'
-                    ? 'bg-emerald-500'
-                    : statusTone === 'detected'
-                      ? 'bg-amber-500'
-                      : 'bg-muted-foreground/40'
-                )}
-              />
-              {statusTitle}
-            </p>
-            <Button
-              asChild
-              size="sm"
-              variant={presence.tone === 'idle' ? 'default' : 'ghost'}
-              className="shrink-0"
-            >
-              <Link to="/admin/settings/widget/install">
-                {presence.tone === 'idle' ? 'Set it up' : 'View installation'}
-                <ArrowRightIcon className="h-3.5 w-3.5" />
-              </Link>
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground mt-0.5">{statusDescription}</p>
-          {presence.tone === 'idle' && (
-            <p className="text-xs text-muted-foreground mt-1">
-              The launcher on this page is only a preview. Visitors see it after you add it to your
-              site.
-            </p>
-          )}
-          {status.hasWidgetInstalled && <WidgetLastDetected at={status.widgetLastDetectedAt} />}
-        </div>
-      </div>
+          }
+        />
+        <WidgetConnectionRow label="Install status" status={status} enabled={enabled} />
+      </SettingRows>
     </SettingsCard>
   )
 }
@@ -413,7 +314,7 @@ export function TabsCard({
   const lockChangelogOff =
     tabs.changelog && (bothContentProductsOn ? !tabs.feedback : lastSectionLock)
   const pairLockHint = (other: string) =>
-    `At least one of Feedback or Changelog stays on — enable ${other} to turn this off.`
+    `At least one of Feedback or Changelog stays on. Turn on ${other} to turn this off.`
   const lastSectionHint = 'The widget needs at least one section.'
 
   const isBusy = saving || isPending
@@ -448,14 +349,13 @@ export function TabsCard({
       title="Tabs"
       description="Choose which tabs the widget shows. The tab bar hides with a single section."
     >
-      <div className="space-y-3">
+      <SettingRows>
         <TabRow
           id="tab-home"
           label="Home"
-          description="Overview tab that greets users and links to your sections. Only appears when two or more sections are enabled."
+          description="Greets users and links to your sections. Appears when two or more sections are on."
           checked={tabs.home}
           disabled={isBusy}
-          saving={saving}
           onChange={(checked) => void saveTab('home', checked)}
         />
 
@@ -467,7 +367,6 @@ export function TabsCard({
             checked={tabs.messenger}
             disabled={isBusy || (tabs.messenger && lastSectionLock)}
             disabledHint={lastSectionHint}
-            saving={saving}
             onChange={(checked) => {
               if (!checked && lastSectionLock) return
               void saveTab('messenger', checked)
@@ -483,7 +382,6 @@ export function TabsCard({
             checked={tabs.tickets}
             disabled={isBusy || (tabs.tickets && lastSectionLock)}
             disabledHint={lastSectionHint}
-            saving={saving}
             onChange={(checked) => {
               if (!checked && lastSectionLock) return
               void saveTab('tickets', checked)
@@ -495,11 +393,10 @@ export function TabsCard({
           <TabRow
             id="tab-feedback"
             label="Feedback"
-            description="Search, vote, and submit ideas"
+            description="Search, vote and submit ideas"
             checked={tabs.feedback}
             disabled={isBusy || lockFeedbackOff}
             disabledHint={bothContentProductsOn ? pairLockHint('Changelog') : lastSectionHint}
-            saving={saving}
             onChange={(checked) => {
               if (!checked && lockFeedbackOff) return
               void saveTab('feedback', checked)
@@ -511,11 +408,10 @@ export function TabsCard({
           <TabRow
             id="tab-help"
             label="Help"
-            description="Browse and search help center articles"
+            description="Browse and search Help Center articles"
             checked={tabs.help}
             disabled={isBusy || (tabs.help && lastSectionLock)}
             disabledHint={lastSectionHint}
-            saving={saving}
             onChange={(checked) => {
               if (!checked && lastSectionLock) return
               void saveTab('help', checked)
@@ -531,18 +427,17 @@ export function TabsCard({
             checked={tabs.changelog}
             disabled={isBusy || lockChangelogOff}
             disabledHint={bothContentProductsOn ? pairLockHint('Feedback') : lastSectionHint}
-            saving={saving}
             onChange={(checked) => {
               if (!checked && lockChangelogOff) return
               void saveTab('changelog', checked)
             }}
           />
         )}
-      </div>
+      </SettingRows>
 
       {feedbackFlagEnabled && (
-        <div className="mt-4 space-y-2">
-          <Label className="text-xs text-muted-foreground">Default board</Label>
+        <div className="mt-4 space-y-2 border-t border-border/50 pt-4">
+          <Label className="text-[13px] font-medium">Default board</Label>
           <Select
             value={defaultBoard || ''}
             onValueChange={(val) => {
@@ -572,8 +467,8 @@ export function TabsCard({
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">
-            Which board new posts from the widget default to
+          <p className="text-[13px] text-muted-foreground">
+            Which board new posts from the widget default to.
           </p>
         </div>
       )}
@@ -620,10 +515,10 @@ export function LayoutCard({
   return (
     <SettingsCard
       title="Layout"
-      description="Where the launcher sits and what it says on the host page"
+      description="Where the launcher sits and what it says on your site."
     >
       <div className="space-y-2">
-        <Label htmlFor="widget-position" className="text-xs text-muted-foreground">
+        <Label htmlFor="widget-position" className="text-[13px] font-medium">
           Button position
         </Label>
         <Select
@@ -638,14 +533,14 @@ export function LayoutCard({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="bottom-right">Bottom Right</SelectItem>
-            <SelectItem value="bottom-left">Bottom Left</SelectItem>
+            <SelectItem value="bottom-right">Bottom right</SelectItem>
+            <SelectItem value="bottom-left">Bottom left</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
       <div className="mt-4 space-y-2">
-        <Label htmlFor="launcher-label" className="text-xs text-muted-foreground">
+        <Label htmlFor="launcher-label" className="text-[13px] font-medium">
           Button label
         </Label>
         <Input
@@ -661,13 +556,13 @@ export function LayoutCard({
             void save({ launcherLabel: value })
           }}
         />
-        <p className="text-[11px] text-muted-foreground/70">
+        <p className="text-[13px] text-muted-foreground">
           Text next to the icon on the launcher button. Leave blank for the icon-only circle.
         </p>
       </div>
 
       <div className="mt-4 space-y-2">
-        <Label htmlFor="launcher-greeting" className="text-xs text-muted-foreground">
+        <Label htmlFor="launcher-greeting" className="text-[13px] font-medium">
           Launcher greeting
         </Label>
         <Input
@@ -683,7 +578,7 @@ export function LayoutCard({
             void save({ launcherGreeting: value })
           }}
         />
-        <p className="text-[11px] text-muted-foreground/70">
+        <p className="text-[13px] text-muted-foreground">
           Shown in a bubble beside the launcher to invite a chat. Leave blank for none.
         </p>
       </div>
@@ -698,7 +593,6 @@ function TabRow({
   checked,
   disabled,
   disabledHint,
-  saving,
   onChange,
 }: {
   id: string
@@ -709,7 +603,6 @@ function TabRow({
   /** Why the switch is locked, shown as a tooltip so an inert control never
    *  reads as broken. */
   disabledHint?: string
-  saving: boolean
   onChange: (checked: boolean) => void
 }) {
   const showHint = disabled && !!disabledHint
@@ -726,16 +619,12 @@ function TabRow({
     />
   )
   return (
-    <div className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2.5">
-      <div className="pe-3">
-        <Label htmlFor={id} className="text-xs font-medium cursor-pointer">
-          {label}
-        </Label>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </div>
-      <div className="flex items-center gap-2">
-        <InlineSpinner visible={saving} />
-        {showHint ? (
+    <SettingRow
+      label={label}
+      description={description}
+      htmlFor={id}
+      control={
+        showHint ? (
           <TooltipProvider delay={200}>
             <Tooltip>
               {/* span trigger so the tooltip works over a disabled control */}
@@ -749,9 +638,9 @@ function TabRow({
           </TooltipProvider>
         ) : (
           switchControl
-        )}
-      </div>
-    </div>
+        )
+      }
+    />
   )
 }
 
@@ -799,14 +688,6 @@ function HeroColorSwatch({
   )
 }
 
-const CARD_TYPE_LABEL: Record<WidgetHomeCardType, string> = {
-  feedback: 'Feedback',
-  new_conversation: 'New conversation',
-  article_search: 'Article search',
-  latest_updates: 'Latest updates',
-  link: 'Link',
-}
-
 function HomeCustomizationCard({
   home,
   heroImageUrl,
@@ -826,10 +707,6 @@ function HomeCustomizationCard({
 
   const isBusy = saving || isPending || uploadHero.isPending || deleteHero.isPending
   const cards = home.cards?.length ? home.cards : DEFAULT_WIDGET_HOME_CARDS
-  const cardSensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  )
 
   async function handleHeroFile(file: File | undefined) {
     if (!file) return
@@ -871,28 +748,11 @@ function HomeCustomizationCard({
     commit({ cards: next })
   }
 
-  function handleCardDragEnd(event: DragEndEvent) {
-    const { active, over } = event
-    if (!over || active.id === over.id) return
-    const oldIndex = cards.findIndex((c) => c.id === active.id)
-    const newIndex = cards.findIndex((c) => c.id === over.id)
-    if (oldIndex < 0 || newIndex < 0) return
-    commitCards(arrayMove(cards, oldIndex, newIndex))
-  }
-
-  function updateCard(index: number, patch: Partial<WidgetHomeCard>) {
-    const next = cards.map((c, i) => (i === index ? { ...c, ...patch } : c))
-    commitCards(next)
-  }
-
   return (
-    <SettingsCard
-      title="Home"
-      description="Customise the greeting, header, and the cards shown on the Home tab"
-    >
+    <SettingsCard title="Home" description="The greeting, header and cards shown on the Home tab.">
       <div className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="home-greeting" className="text-xs text-muted-foreground">
+          <Label htmlFor="home-greeting" className="text-[13px] font-medium">
             Greeting
           </Label>
           <Input
@@ -909,12 +769,12 @@ function HomeCustomizationCard({
           />
           <p className="text-xs text-muted-foreground">
             Use <code className="text-[11px]">{'{name}'}</code> to greet signed-in users by first
-            name
+            name.
           </p>
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="home-subtitle" className="text-xs text-muted-foreground">
+          <Label htmlFor="home-subtitle" className="text-[13px] font-medium">
             Subtitle
           </Label>
           <Input
@@ -932,15 +792,11 @@ function HomeCustomizationCard({
         </div>
 
         <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">Background</Label>
+          <Label className="text-[13px] font-medium">Background</Label>
           {/* Visual radio tiles: every style is visible at a glance (no
               dropdown to open), and the options panel below reads as attached
               to the selected tile: one bordered group, morphing per choice. */}
-          <div
-            className="rounded-lg border border-border/50 p-2"
-            role="radiogroup"
-            aria-label="Home background style"
-          >
+          <div role="radiogroup" aria-label="Home background style">
             <div className="grid grid-cols-4 gap-2">
               {(
                 [
@@ -998,8 +854,8 @@ function HomeCustomizationCard({
             </div>
 
             {home.headerStyle === 'pattern' && (
-              <div className="mt-2 space-y-1.5 border-t border-border/50 pt-2.5">
-                <Label className="text-xs text-muted-foreground">Pattern</Label>
+              <div className="mt-3 space-y-1.5">
+                <Label className="text-[13px] font-medium">Pattern</Label>
                 <div className="grid grid-cols-4 gap-2">
                   {WIDGET_HERO_PATTERNS.map((preset) => {
                     const active = (home.pattern ?? 'mesh') === preset.id
@@ -1036,8 +892,8 @@ function HomeCustomizationCard({
             )}
 
             {(home.headerStyle === 'gradient' || home.headerStyle === 'pattern') && (
-              <div className="mt-2 space-y-1.5 border-t border-border/50 pt-2.5">
-                <Label className="text-xs text-muted-foreground">Colors</Label>
+              <div className="mt-3 space-y-1.5">
+                <Label className="text-[13px] font-medium">Colors</Label>
                 <div className="flex items-center gap-2">
                   <HeroColorSwatch
                     label="From"
@@ -1063,15 +919,11 @@ function HomeCustomizationCard({
                     </Button>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Empty swatches follow your theme&apos;s primary color
-                </p>
               </div>
             )}
           </div>
           <p className="text-xs text-muted-foreground">
-            A backdrop for the Home tab. It fills the widget panel, including the header, and fades
-            into the background
+            A backdrop for the Home tab that fades into the background.
           </p>
         </div>
 
@@ -1103,8 +955,8 @@ function HomeCustomizationCard({
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Upload an image to fill the open widget (recommended ~800×1400px, portrait — it
-                covers the full panel).
+                Upload an image to fill the open widget (recommended ~800×1400px, portrait). It
+                covers the full panel.
               </p>
             )}
             <label className="inline-flex">
@@ -1134,249 +986,68 @@ function HomeCustomizationCard({
           </div>
         )}
 
-        <div className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2.5">
-          <div>
-            <Label htmlFor="home-show-logo" className="text-xs font-medium cursor-pointer">
-              Workspace logo
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              Show your logo in the Home header (set it under General)
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <InlineSpinner visible={saving} />
-            <Switch
-              id="home-show-logo"
-              checked={home.showLogo ?? true}
-              onCheckedChange={(checked) => commit({ showLogo: checked })}
-              disabled={isBusy}
-              aria-label="Workspace logo"
-            />
-          </div>
-        </div>
+        <SettingRows className="border-t border-border/50 pt-4">
+          <SettingRow
+            label="Workspace logo"
+            description="Show your logo in the Home header (set under General)."
+            htmlFor="home-show-logo"
+            control={
+              <Switch
+                id="home-show-logo"
+                checked={home.showLogo ?? true}
+                onCheckedChange={(checked) => commit({ showLogo: checked })}
+                disabled={isBusy}
+              />
+            }
+          />
+          <SettingRow
+            label="Team avatars"
+            description="Show teammate faces in the Home header."
+            htmlFor="home-team-avatars"
+            control={
+              <Switch
+                id="home-team-avatars"
+                checked={home.showTeamAvatars ?? true}
+                onCheckedChange={(checked) => commit({ showTeamAvatars: checked })}
+                disabled={isBusy}
+              />
+            }
+          />
+        </SettingRows>
 
-        <div className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2.5">
-          <div>
-            <Label htmlFor="home-team-avatars" className="text-xs font-medium cursor-pointer">
-              Team avatars
-            </Label>
-            <p className="text-xs text-muted-foreground">Show teammate faces in the Home header</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <InlineSpinner visible={saving} />
-            <Switch
-              id="home-team-avatars"
-              checked={home.showTeamAvatars ?? true}
-              onCheckedChange={(checked) => commit({ showTeamAvatars: checked })}
-              disabled={isBusy}
-              aria-label="Team avatars"
-            />
-          </div>
-        </div>
-
-        {/* Ordered card list */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label className="text-xs text-muted-foreground">Home cards</Label>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs"
-              disabled={isBusy || cards.length >= 8}
-              onClick={() => {
-                commitCards([
-                  ...cards,
-                  { id: crypto.randomUUID(), type: 'link', title: '', url: '' },
-                ])
-              }}
-            >
-              <PlusIcon className="h-3 w-3 mr-1" />
-              Add link card
-            </Button>
-          </div>
-
-          <DndContext
-            sensors={cardSensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleCardDragEnd}
-          >
-            <SortableContext items={cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
-              <div className="space-y-2">
-                {cards.map((card, index) => (
-                  <SortableHomeCardShell key={card.id} id={card.id}>
-                    {(dragHandle) => (
-                      <div className="rounded-lg border border-border/50 p-3 space-y-2 bg-card">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            {dragHandle}
-                            <span className="text-xs font-medium text-foreground truncate">
-                              {CARD_TYPE_LABEL[card.type] ?? card.type}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {card.type === 'link' ? (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 text-destructive"
-                                disabled={isBusy}
-                                onClick={() => commitCards(cards.filter((_, i) => i !== index))}
-                                aria-label="Remove card"
-                              >
-                                <TrashIcon className="h-3 w-3" />
-                              </Button>
-                            ) : (
-                              <Switch
-                                checked={card.enabled !== false}
-                                onCheckedChange={(checked) =>
-                                  updateCard(index, { enabled: checked })
-                                }
-                                disabled={isBusy}
-                                aria-label={`${CARD_TYPE_LABEL[card.type]} card`}
-                                className="ms-1"
-                              />
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2">
-                          <Input
-                            defaultValue={card.title ?? ''}
-                            maxLength={80}
-                            placeholder="Title (default)"
-                            className="h-8 text-xs"
-                            onBlur={(e) => {
-                              const value = e.target.value.trim()
-                              if (value === (card.title ?? '')) return
-                              updateCard(index, { title: value || undefined })
-                            }}
-                            disabled={isBusy}
-                          />
-                          <Input
-                            defaultValue={card.subtitle ?? ''}
-                            maxLength={160}
-                            placeholder="Subtitle (default)"
-                            className="h-8 text-xs"
-                            onBlur={(e) => {
-                              const value = e.target.value.trim()
-                              if (value === (card.subtitle ?? '')) return
-                              updateCard(index, { subtitle: value || undefined })
-                            }}
-                            disabled={isBusy}
-                          />
-                        </div>
-
-                        {card.type === 'link' && (
-                          <Input
-                            defaultValue={card.url ?? ''}
-                            maxLength={2000}
-                            placeholder="https://example.com"
-                            className="h-8 text-xs"
-                            onBlur={(e) => {
-                              const value = e.target.value.trim()
-                              if (value === (card.url ?? '')) return
-                              updateCard(index, { url: value })
-                            }}
-                            disabled={isBusy}
-                          />
-                        )}
-
-                        <Select
-                          value={card.audience ?? 'everyone'}
-                          onValueChange={(val: WidgetCardAudience) =>
-                            updateCard(index, { audience: val === 'everyone' ? undefined : val })
-                          }
-                          disabled={isBusy}
-                        >
-                          <SelectTrigger size="sm">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="everyone">Show to everyone</SelectItem>
-                            <SelectItem value="anonymous">Signed-out visitors only</SelectItem>
-                            <SelectItem value="identified">Signed-in users only</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                  </SortableHomeCardShell>
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
-          <p className="text-xs text-muted-foreground">
-            Drag to reorder. Built-in cards hide automatically when their section is disabled.
-            Custom titles override the defaults; leave blank to keep them.
-          </p>
-        </div>
+        <HomeCardsList cards={cards} onChange={commitCards} disabled={isBusy} />
       </div>
     </SettingsCard>
   )
 }
 
-/**
- * Sortable wrapper for one Home card editor block. Render-prop hands the drag
- * handle in so the card keeps its own layout; keyboard reorder works via the
- * handle (dnd-kit KeyboardSensor).
- */
-function SortableHomeCardShell({
-  id,
-  children,
-}: {
-  id: string
-  children: (dragHandle: ReactNode) => ReactNode
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id,
-  })
-  const dragHandle = (
-    <button
-      type="button"
-      className="cursor-grab touch-none p-0.5 text-muted-foreground/60 hover:text-muted-foreground"
-      aria-label="Reorder card"
-      {...attributes}
-      {...listeners}
-    >
-      <Bars3Icon className="size-3.5" />
-    </button>
-  )
-  return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn(isDragging && 'relative z-10 opacity-60')}
-    >
-      {children(dragHandle)}
-    </div>
-  )
-}
-
-function AssistantLinkCard({
+export function AssistantLinkCard({
   assistant,
 }: {
-  assistant?: { enabled?: boolean; name?: string } | undefined
+  assistant?: { enabled?: boolean; respond?: boolean; name?: string } | undefined
 }) {
+  const off = assistant?.enabled === false
+  // Paused: switched on but not replying (the Agent page's Pause control).
+  const paused = !off && assistant?.respond === false
   return (
-    <SettingsCard title="AI Assistant" description="The assistant that fronts new conversations">
-      <Link
-        to="/admin/automation/agent"
-        className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-3 transition-colors hover:bg-muted/40"
-      >
-        <span className="flex items-center gap-2.5">
-          <span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <SparklesIcon className="h-4 w-4" />
-          </span>
-          <span>
-            <span className="block text-sm font-medium text-foreground">
-              {assistant?.enabled === false ? 'Assistant off' : assistant?.name?.trim() || 'Quinn'}
-            </span>
-            <span className="block text-xs text-muted-foreground">
-              Configure identity in AI &amp; Automation
-            </span>
-          </span>
-        </span>
-        <ArrowRightIcon className="h-4 w-4 text-muted-foreground/50" />
-      </Link>
+    <SettingsCard flush>
+      <SettingsList>
+        <SettingsListRow
+          to="/admin/settings/agent"
+          leading={<RowIcon icon={SparklesIcon} />}
+          title="Quinn"
+          badges={
+            off ? <StateBadge state="off" /> : paused ? <StateBadge state="paused" /> : undefined
+          }
+          meta={
+            off
+              ? 'Turn it on in AI & Automation'
+              : paused
+                ? 'Resume it in AI & Automation'
+                : 'Configure in AI & Automation'
+          }
+        />
+      </SettingsList>
     </SettingsCard>
   )
 }

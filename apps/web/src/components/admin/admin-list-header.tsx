@@ -1,5 +1,5 @@
 import { SearchInput } from '@/components/shared/search-input'
-import { cn } from '@/lib/shared/utils'
+import { SortMenu } from '@/components/shared/sort-menu'
 
 interface SortOption {
   value: string
@@ -13,7 +13,9 @@ interface AdminListHeaderProps {
   sortOptions?: SortOption[]
   activeSort?: string
   onSortChange?: (value: string) => void
-  /** Slot for action buttons (e.g., create button) placed after sort pills */
+  /** Filter controls placed after the sort menu */
+  filters?: React.ReactNode
+  /** Slot for the primary action (e.g., NewButton), on the right */
   action?: React.ReactNode
   /** Additional rows below the search bar (e.g., active filters bar) */
   children?: React.ReactNode
@@ -26,38 +28,30 @@ export function AdminListHeader({
   sortOptions,
   activeSort,
   onSortChange,
+  filters,
   action,
   children,
 }: AdminListHeaderProps) {
   return (
     <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-3 py-2.5">
-      <div className="flex items-center gap-2">
-        <SearchInput
-          value={searchValue}
-          onChange={onSearchChange}
-          placeholder={searchPlaceholder}
-          data-search-input
-        />
-        {sortOptions && onSortChange && (
-          <div className="flex items-center gap-1">
-            {sortOptions.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                className={cn(
-                  'px-2.5 py-1 rounded-full text-[13px] transition-colors cursor-pointer whitespace-nowrap',
-                  activeSort === opt.value
-                    ? 'bg-muted text-foreground font-medium'
-                    : 'text-muted-foreground hover:bg-muted/50'
-                )}
-                onClick={() => onSortChange(opt.value)}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <div data-slot="admin-list-search" className="flex min-w-[160px] max-w-[360px] flex-1">
+          <SearchInput
+            value={searchValue}
+            onChange={onSearchChange}
+            placeholder={searchPlaceholder}
+            data-search-input
+          />
+        </div>
+        {sortOptions && sortOptions.length > 0 && onSortChange && (
+          <SortMenu
+            options={sortOptions}
+            value={activeSort ?? sortOptions[0].value}
+            onChange={onSortChange}
+          />
         )}
-        {action}
+        {filters}
+        {action && <div className="ml-auto flex items-center gap-2">{action}</div>}
       </div>
       {children}
     </div>

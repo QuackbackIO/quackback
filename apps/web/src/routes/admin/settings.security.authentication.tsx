@@ -5,9 +5,7 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
-import { ShieldCheckIcon } from '@heroicons/react/24/solid'
-import { BackLink } from '@/components/ui/back-link'
-import { PageHeader } from '@/components/shared/page-header'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { AuthSettings, type AuthTab } from '@/components/admin/settings/security/auth-settings'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { warmQuery } from '@/lib/client/queries/warm-query'
@@ -77,15 +75,10 @@ function AuthenticationPage() {
   const { ssoEntitled, auditEntitled } = Route.useLoaderData()
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      <div className="lg:hidden">
-        <BackLink to="/admin/settings">Settings</BackLink>
-      </div>
-      <PageHeader
-        icon={ShieldCheckIcon}
-        title="Access & Security"
-        description="Who can reach the portal, how everyone signs in, and what admins changed."
-      />
+    <SettingsPage
+      page="/admin/settings/security/authentication"
+      width={tab === 'audit-log' ? 'wide' : 'form'}
+    >
       <AuthSettings
         tab={tab}
         teamAuthConfig={authConfigQuery.data}
@@ -94,6 +87,6 @@ function AuthenticationPage() {
         customOidcProviderTier={ssoEntitled}
         auditEntitled={auditEntitled}
       />
-    </div>
+    </SettingsPage>
   )
 }

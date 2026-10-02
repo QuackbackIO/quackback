@@ -42,9 +42,6 @@ vi.mock('@/lib/server/domains/principals/principal.factory', () => ({
 vi.mock('@/lib/server/domains/settings/settings.helpers', () => ({
   invalidateSettingsCache: hoisted.invalidateSettingsCache,
 }))
-vi.mock('@/lib/server/domains/settings/settings.labs', () => ({
-  ensureNewWorkspaceLabs: vi.fn(async () => {}),
-}))
 vi.mock('@/lib/server/domains/settings', () => ({
   DEFAULT_AUTH_CONFIG: { openSignup: false },
   DEFAULT_PORTAL_CONFIG: {},

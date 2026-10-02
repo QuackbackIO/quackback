@@ -1,12 +1,14 @@
 import { useNavigate } from '@tanstack/react-router'
 import { Route } from '@/routes/admin/changelog'
 import { useMemo, useCallback } from 'react'
+import type { ChangelogSort } from './changelog-filters'
 
 export type ChangelogStatusFilter = 'all' | 'draft' | 'scheduled' | 'published'
 
 export interface ChangelogFilters {
   status: ChangelogStatusFilter
   search?: string
+  sort: ChangelogSort
 }
 
 export function useChangelogFilters() {
@@ -17,8 +19,9 @@ export function useChangelogFilters() {
     () => ({
       status: search.status ?? 'all',
       search: search.search,
+      sort: search.sort ?? 'newest',
     }),
-    [search.status, search.search]
+    [search.status, search.search, search.sort]
   )
 
   const setFilters = useCallback(
@@ -32,6 +35,9 @@ export function useChangelogFilters() {
           }),
           ...('search' in updates && {
             search: updates.search || undefined,
+          }),
+          ...('sort' in updates && {
+            sort: updates.sort === 'newest' ? undefined : updates.sort,
           }),
         },
         replace: true,

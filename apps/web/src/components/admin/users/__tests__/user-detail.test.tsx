@@ -170,7 +170,7 @@ describe('UserDetail', () => {
         currentMemberRole="admin"
       />
     )
-    const dashes = screen.getAllByText('—')
+    const dashes = screen.getAllByText('-')
     expect(dashes.length).toBeGreaterThanOrEqual(2)
   })
 

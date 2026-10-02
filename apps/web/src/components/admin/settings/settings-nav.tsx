@@ -1,475 +1,150 @@
-import { memo, useMemo, useState, type ComponentType } from 'react'
+import { memo, useContext, useMemo, type ComponentType, type ReactNode } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
-import {
-  Cog6ToothIcon,
-  UsersIcon,
-  UserGroupIcon,
-  PuzzlePieceIcon,
-  ChatBubbleLeftRightIcon,
-  ChatBubbleLeftIcon,
-  CommandLineIcon,
-  ShieldCheckIcon,
-  ArrowDownTrayIcon,
-  ChevronDownIcon,
-  BellIcon,
-  BuildingOfficeIcon,
-  CreditCardIcon,
-  GlobeAltIcon,
-  BeakerIcon,
-} from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
-import { NAV_ICON_CLASS, NAV_ITEM_CLASS, NAV_SECTION_CLASS } from '@/components/shared/nav-tokens'
+import { NAV_ICON_CLASS, NAV_ITEM_CLASS } from '@/components/shared/nav-tokens'
 import { FilterSection } from '@/components/shared/filter-section'
 import { usePermissions } from '@/lib/client/use-permissions'
-import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
-import { isProductEnabled, type FeatureFlags } from '@/lib/shared/types'
+import { AUTOMATION_PAGE_ICONS, SETTINGS_PAGE_ICONS } from './settings-page-icons'
 import {
-  buildSettingsModules,
-  settingsModuleActivePaths,
-  settingsModuleLandingPath,
-} from './settings-modules'
+  buildNavSections,
+  isNavModule,
+  navSectionsFor,
+  pathIsUnder,
+  type NavItem,
+  type NavModule,
+} from './settings-nav-sections'
+import { SettingsNavContext } from './settings-page'
 import {
   useBillingEnabled,
   useCloudEnabled,
   useFeatureFlags,
-  useRefinedTheme,
 } from '@/lib/client/hooks/use-root-context'
 
-interface NavItem {
-  label: string
-  to: string
-  icon: ComponentType<{ className?: string }>
-  /** Highlight only on this path, not nested child pages. */
-  exact?: boolean
-  /** Extra prefixes that also count as active (a module covering several pages). */
-  activeFor?: string[]
-  /** The permission the page checks when it opens; the nav offers it only to holders. */
-  permission?: PermissionKey
+type IconComponent = ComponentType<{ className?: string }>
+
+const ICONS: Record<string, IconComponent> = { ...SETTINGS_PAGE_ICONS, ...AUTOMATION_PAGE_ICONS }
+
+/** The icon of a row or module, keyed by its page path. */
+function iconFor(path: string): IconComponent {
+  return ICONS[path]!
 }
 
-/** Nested nav group. Modules no longer use this; kept for other sections. */
-interface NavGroup {
-  label: string
-  icon: ComponentType<{ className?: string }>
-  /** When set, the group label is also a page (Channels hub). */
-  to?: string
-  kids: NavEntry[]
-}
-
-type NavEntry = NavItem | NavGroup
-
-interface NavSection {
-  label: string
-  items: NavEntry[]
-}
-
-export function isNavGroup(entry: NavEntry): entry is NavGroup {
-  return 'kids' in entry
-}
-
-/**
- * The settings IA (SETTINGS-IA-SPEC Option B): three stable sections. Flags hide
- * ITEMS (or whole product accordions), never sections, so the sidebar layout
- * does not reflow when a flag flips. AI & Automation lives outside settings
- * entirely, as its own main-nav area at /admin/automation (M5).
- *
- * @param billingEnabled Whether this workspace has a valid billing projection
- *   configured. Not a feature flag — a flag answers "has the admin turned it
- *   on", and this answers "does this deployment sell anything". False on
- *   every self-hosted install, which is why the Billing row is absent there.
- */
-export function buildNavSections(
-  flags?: Partial<FeatureFlags>,
-  billingEnabled = false,
-  cloudEnabled = false
-): NavSection[] {
-  const products: NavEntry[] = buildSettingsModules(flags).map((module) => ({
-    label: module.label,
-    to: settingsModuleLandingPath(module),
-    icon: module.icon,
-    activeFor: settingsModuleActivePaths(module),
-  }))
-
-  return [
-    { label: 'Modules', items: products },
-    {
-      label: 'Workspace',
-      items: [
-        {
-          label: 'General',
-          to: '/admin/settings/general',
-          icon: Cog6ToothIcon,
-          permission: PERMISSIONS.SETTINGS_MANAGE,
-        },
-        ...(cloudEnabled
-          ? [
-              {
-                label: 'Domains',
-                to: '/admin/settings/domains',
-                icon: GlobeAltIcon,
-                permission: PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
-              },
-            ]
-          : []),
-        { label: 'Notifications', to: '/admin/settings/notifications', icon: BellIcon },
-        {
-          label: 'Portal',
-          to: '/admin/settings/portal',
-          icon: GlobeAltIcon,
-          permission: PERMISSIONS.SETTINGS_BRANDING,
-        },
-        {
-          label: 'Widget',
-          to: '/admin/settings/widget',
-          icon: ChatBubbleLeftRightIcon,
-          permission: PERMISSIONS.SETTINGS_MANAGE,
-        },
-        {
-          label: 'Members & Teams',
-          to: '/admin/settings/members',
-          icon: UsersIcon,
-          permission: PERMISSIONS.MEMBER_VIEW,
-        },
-        {
-          label: 'Access & Security',
-          to: '/admin/settings/security/authentication',
-          icon: ShieldCheckIcon,
-          permission: PERMISSIONS.AUTH_MANAGE,
-        },
-        {
-          label: 'Developers',
-          to: '/admin/settings/developers',
-          icon: CommandLineIcon,
-          permission: PERMISSIONS.API_KEY_MANAGE,
-        },
-        {
-          label: 'Labs',
-          to: '/admin/settings/labs',
-          icon: BeakerIcon,
-          permission: PERMISSIONS.SETTINGS_MANAGE,
-        },
-        {
-          label: 'Integrations',
-          to: '/admin/settings/integrations',
-          icon: PuzzlePieceIcon,
-          permission: PERMISSIONS.INTEGRATION_VIEW,
-        },
-        ...(billingEnabled
-          ? [
-              {
-                label: 'Plan & billing',
-                to: '/admin/settings/billing',
-                icon: CreditCardIcon,
-                permission: PERMISSIONS.BILLING_MANAGE,
-              },
-            ]
-          : []),
-      ],
-    },
-    {
-      label: 'Data',
-      items: [
-        {
-          label: 'People',
-          to: '/admin/settings/people',
-          icon: UserGroupIcon,
-          permission: PERMISSIONS.USER_ATTRIBUTE_VIEW,
-        },
-        {
-          label: 'Companies',
-          to: '/admin/settings/companies',
-          icon: BuildingOfficeIcon,
-          permission: PERMISSIONS.COMPANY_VIEW,
-        },
-        ...(isProductEnabled(flags, 'support')
-          ? [
-              {
-                label: 'Conversations',
-                to: '/admin/settings/conversation-data',
-                icon: ChatBubbleLeftIcon,
-                permission: PERMISSIONS.CONVERSATION_MANAGE,
-              },
-            ]
-          : []),
-        {
-          label: 'Imports & exports',
-          to: '/admin/settings/imports',
-          icon: ArrowDownTrayIcon,
-          permission: PERMISSIONS.SETTINGS_MANAGE,
-        },
-      ],
-    },
-  ]
-}
-
-/**
- * The sections as a viewer with these permissions sees them: a page whose
- * route would answer Access denied is left out, and a section left with no
- * pages goes with it.
- */
-export function navSectionsFor(
-  sections: NavSection[],
-  permissions: ReadonlySet<PermissionKey>
-): NavSection[] {
-  const visible = (entry: NavEntry): NavEntry | null => {
-    if (!isNavGroup(entry)) {
-      return !entry.permission || permissions.has(entry.permission) ? entry : null
-    }
-    const kids = entry.kids.map(visible).filter((kid): kid is NavEntry => kid !== null)
-    return entry.to || kids.length > 0 ? { ...entry, kids } : null
-  }
-  return sections
-    .map((section) => ({
-      ...section,
-      items: section.items.map(visible).filter((entry): entry is NavEntry => entry !== null),
-    }))
-    .filter((section) => section.items.length > 0)
-}
-
-function settingsRowClass(active: boolean, refined: boolean) {
+function settingsRowClass(active: boolean) {
   return cn(
     NAV_ITEM_CLASS,
-    refined && 'w-full',
+    'w-full',
     active
-      ? refined
-        ? 'bg-muted text-foreground font-medium'
-        : 'bg-primary/10 text-foreground font-medium'
-      : refined
-        ? 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-        : 'text-muted-foreground hover:text-foreground hover:bg-foreground/[0.04]'
+      ? 'bg-muted text-foreground font-medium'
+      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
   )
 }
 
 /**
- * The nav stays mounted across settings pages. Each row follows the location
- * on its own, and the nav selects the context parts it builds the rows from,
- * so a navigation renders only the rows whose highlight moved.
+ * Builds the settings nav for the current viewer once, for the nav and for the
+ * module tabs on the page. It selects the context parts the nav is made from,
+ * so a navigation that leaves them alone renders neither it nor the nav.
  */
-export function SettingsNav() {
+export function SettingsNavProvider({ children }: { children: ReactNode }) {
   const flags = useFeatureFlags()
   const billingEnabled = useBillingEnabled()
   const cloudEnabled = useCloudEnabled()
   const permissions = usePermissions()
-  const refined = useRefinedTheme()
 
   const navSections = useMemo(
     () => navSectionsFor(buildNavSections(flags, billingEnabled, cloudEnabled), permissions),
     [flags, billingEnabled, cloudEnabled, permissions]
   )
 
+  return <SettingsNavContext.Provider value={navSections}>{children}</SettingsNavContext.Provider>
+}
+
+/**
+ * The nav stays mounted across settings pages. Each row follows the location
+ * on its own, so a navigation renders only the rows whose highlight moved.
+ */
+export function SettingsNav() {
+  const navSections = useContext(SettingsNavContext)
+  if (!navSections) throw new Error('SettingsNav renders inside SettingsNavProvider')
+
   return (
-    <div className={refined ? undefined : 'space-y-2'}>
+    <div>
       {navSections.map((section) => (
-        <NavCard key={section.label} section={section} refined={refined} />
+        <FilterSection key={section.label} title={section.label}>
+          <div className="space-y-0.5">
+            {section.items.map((entry) =>
+              isNavModule(entry) ? (
+                <ModuleNavLink key={entry.id} module={entry} />
+              ) : (
+                <NavLink key={entry.to} item={entry} />
+              )
+            )}
+          </div>
+        </FilterSection>
       ))}
     </div>
   )
 }
 
-function NavEntries({
-  entries,
-  refined,
-  parentOpen = true,
-}: {
-  entries: NavEntry[]
-  refined: boolean
-  parentOpen?: boolean
-}) {
-  return entries.map((entry) => {
-    if (isNavGroup(entry)) {
-      return (
-        <NavGroupRows key={entry.label} group={entry} parentOpen={parentOpen} refined={refined} />
-      )
-    }
-    const Row = entry.activeFor ? ModuleNavLink : NavLink
-    return <Row key={entry.to} item={entry} tabbable={parentOpen} refined={refined} />
-  })
-}
-
-function NavCard({ section, refined }: { section: NavSection; refined: boolean }) {
-  if (refined) {
-    return (
-      <FilterSection title={section.label}>
-        <div className="space-y-0.5">
-          <NavEntries entries={section.items} refined />
-        </div>
-      </FilterSection>
-    )
-  }
-
-  return (
-    <div className="overflow-hidden rounded-xl border border-border/50 bg-muted/20 bg-gradient-to-b from-foreground/[0.04] to-transparent">
-      <div className="px-3 py-2.5">
-        <span className={NAV_SECTION_CLASS}>{section.label}</span>
-      </div>
-      <div className="space-y-0.5 px-1.5 pb-2">
-        <NavEntries entries={section.items} refined={false} />
-      </div>
-    </div>
-  )
-}
-
-function entryIsInPath(entry: NavEntry, pathname: string): boolean {
-  if (isNavGroup(entry)) {
-    if (entry.to && (pathname === entry.to || pathname.startsWith(`${entry.to}/`))) return true
-    return entry.kids.some((kid) => entryIsInPath(kid, pathname))
-  }
-  return pathname === entry.to || pathname.startsWith(`${entry.to}/`)
-}
-
-/** A product accordion: a toggle row plus its indented child links. */
-function NavGroupRows({
-  group,
-  parentOpen,
-  refined,
-}: {
-  group: NavGroup
-  parentOpen: boolean
-  refined: boolean
-}) {
-  const hasActiveKid = useRouterState({
-    select: (s) => group.kids.some((kid) => entryIsInPath(kid, s.location.pathname)),
-  })
-  const groupPageActive = useRouterState({
-    select: (s) => !!group.to && s.location.pathname === group.to,
-  })
-  const inGroup = groupPageActive || hasActiveKid
-  // Groups with the active page start open; others start collapsed to keep
-  // the Modules section scannable. A linked group (Channels) always shows
-  // its child pages — those are breadcrumb children, not a second accordion.
-  const [open, setOpen] = useState(inGroup)
-  const showKids = !!group.to || open
-  const Icon = group.icon
-
-  return (
-    <div>
-      {group.to ? (
-        <NavLink
-          item={{ label: group.label, to: group.to, icon: group.icon, exact: true }}
-          tabbable={parentOpen}
-          refined={refined}
-        />
-      ) : (
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          tabIndex={parentOpen ? undefined : -1}
-          data-active={inGroup || undefined}
-          className={
-            refined
-              ? settingsRowClass(inGroup, true)
-              : cn(
-                  NAV_ITEM_CLASS,
-                  'w-full font-medium',
-                  inGroup ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
-                )
-          }
-        >
-          <Icon className={cn(NAV_ICON_CLASS, inGroup && !refined && 'text-primary')} />
-          <span className="truncate flex-1 text-left">{group.label}</span>
-          <ChevronDownIcon
-            className={cn(
-              'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 ease-out',
-              !open && '-rotate-90'
-            )}
-          />
-        </button>
-      )}
-      {showKids && (
-        <div
-          className={
-            refined ? 'space-y-0.5 pl-3' : 'ml-4 space-y-0.5 border-l border-border/50 pl-1.5'
-          }
-        >
-          <NavEntries entries={group.kids} parentOpen={parentOpen} refined={refined} />
-        </div>
-      )}
-    </div>
-  )
-}
-
-function pathIsUnder(pathname: string, to: string): boolean {
-  return pathname === to || pathname.startsWith(`${to}/`)
-}
-
-interface NavLinkProps {
-  item: NavItem
-  tabbable: boolean
-  refined: boolean
-}
-
-const sameTargets = (a: string[] | undefined, b: string[] | undefined) =>
-  a === b || (!!a && !!b && a.length === b.length && a.every((to, i) => to === b[i]))
-
 const PREFIX_ACTIVE = { includeSearch: false }
 const EXACT_ACTIVE = { exact: true, includeSearch: false }
 
-const rowStateProps = (refined: boolean) => ({
-  activeProps: { className: settingsRowClass(true, refined), 'data-active': 'true' },
-  inactiveProps: { className: settingsRowClass(false, refined) },
-})
+const rowStateProps = {
+  activeProps: { className: settingsRowClass(true), 'data-active': 'true' },
+  inactiveProps: { className: settingsRowClass(false) },
+}
 
-function rowContent(item: NavItem, refined: boolean, isActive: boolean) {
-  const Icon = item.icon
+function rowContent(label: string, iconPath: string) {
+  const Icon = iconFor(iconPath)
   return (
     <>
-      <Icon className={cn(NAV_ICON_CLASS, isActive && !refined && 'text-primary')} />
-      <span className="truncate flex-1">{item.label}</span>
+      <Icon className={NAV_ICON_CLASS} />
+      <span className="truncate flex-1">{label}</span>
     </>
   )
 }
 
-/** Rows are memoized on what they show. */
-const sameRow = (prev: NavLinkProps, next: NavLinkProps) =>
-  prev.tabbable === next.tabbable &&
-  prev.refined === next.refined &&
-  prev.item.to === next.item.to &&
-  prev.item.label === next.item.label &&
-  prev.item.icon === next.item.icon &&
-  prev.item.exact === next.item.exact &&
-  sameTargets(prev.item.activeFor, next.item.activeFor)
-
 /**
  * One nav row. The Link tracks whether its page is the current one and renders
- * again only when that changes, and then only itself. Its contents for either
- * state are made once, so a render of the Link that leaves the state alone
- * (hydration) reuses them, and a navigation renders the contents of only the
- * rows it activates or deactivates.
+ * again only when that changes, and then only itself. Its contents are the same
+ * in either state and made once, so a navigation renders no row contents.
  */
-const NavLink = memo(function NavLink({ item, tabbable, refined }: NavLinkProps) {
-  const content = useMemo(
-    () => [rowContent(item, refined, false), rowContent(item, refined, true)] as const,
-    [item, refined]
-  )
-  return (
-    <Link
-      to={item.to}
-      tabIndex={tabbable ? undefined : -1}
-      activeOptions={item.exact ? EXACT_ACTIVE : PREFIX_ACTIVE}
-      {...rowStateProps(refined)}
-    >
-      {({ isActive }) => content[isActive ? 1 : 0]}
-    </Link>
-  )
-}, sameRow)
+const NavLink = memo(
+  function NavLink({ item }: { item: NavItem }) {
+    const content = useMemo(() => rowContent(item.label, item.to), [item.label, item.to])
+    return (
+      <Link
+        to={item.to}
+        activeOptions={item.exact ? EXACT_ACTIVE : PREFIX_ACTIVE}
+        {...rowStateProps}
+      >
+        {content}
+      </Link>
+    )
+  },
+  (prev, next) =>
+    prev.item.to === next.item.to &&
+    prev.item.label === next.item.label &&
+    prev.item.exact === next.item.exact
+)
 
 /**
- * A module's row stays active on every page of the module, which spans
- * several prefixes (activeFor), so it selects that answer from the location
- * itself.
+ * A module's row. It opens the module's first page and stays highlighted on
+ * every page of the module and the pages under them, rendering again only
+ * when the location moves into or out of the module.
  */
-const ModuleNavLink = memo(function ModuleNavLink({ item, tabbable, refined }: NavLinkProps) {
-  const isActive = useRouterState({
-    select: (s) => !!item.activeFor?.some((to) => pathIsUnder(s.location.pathname, to)),
+const ModuleNavLink = memo(function ModuleNavLink({ module }: { module: NavModule }) {
+  const active = useRouterState({
+    select: (s) => module.pages.some((page) => pathIsUnder(s.location.pathname, page.to)),
   })
+  const content = useMemo(() => rowContent(module.label, module.id), [module.label, module.id])
   return (
     <Link
-      to={item.to}
-      tabIndex={tabbable ? undefined : -1}
-      data-active={isActive || undefined}
-      className={settingsRowClass(isActive, refined)}
+      to={module.pages[0]!.to}
+      className={settingsRowClass(active)}
+      data-active={active ? 'true' : undefined}
+      aria-current={active ? 'page' : undefined}
     >
-      {rowContent(item, refined, isActive)}
+      {content}
     </Link>
   )
-}, sameRow)
+})

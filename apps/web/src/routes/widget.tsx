@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { generateWorkspaceThemeCSS, readFontSans } from '@/lib/shared/theme'
 import { resolveLocale, loadWidgetMessages } from '@/lib/shared/i18n'
 import { WidgetAuthProvider } from '@/components/widget/widget-auth-provider'
+import { FileViewerProvider } from '@/components/shared/files/file-viewer-context'
 import { extractSessionTokenFromCookie } from '@/lib/server/functions/portal-session-token'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
@@ -70,8 +71,7 @@ export const Route = createFileRoute('/widget')({
     const customCss = settings.customCss ?? ''
     const themeMode = brandingConfig.themeMode ?? 'user'
 
-    const visualTheme = settings.visualTheme === 'refined' ? 'refined' : 'legacy'
-    const themeStyles = generateWorkspaceThemeCSS(brandingConfig, visualTheme)
+    const themeStyles = generateWorkspaceThemeCSS(brandingConfig)
 
     // If user is logged into the portal (same-origin), extract the signed
     // session cookie so the widget can reuse it directly as a Bearer token.
@@ -198,7 +198,9 @@ function WidgetLayout() {
           `,
         }}
       />
-      <Outlet />
+      <FileViewerProvider compact>
+        <Outlet />
+      </FileViewerProvider>
     </WidgetAuthProvider>
   )
 }

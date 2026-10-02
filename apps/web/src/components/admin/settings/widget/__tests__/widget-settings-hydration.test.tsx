@@ -11,6 +11,7 @@ import { render } from '@testing-library/react'
 import { hydrateRoot } from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { IntlProvider } from 'react-intl'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const { cardRenders, previewRenders, fetchOnboardingStatus } = vi.hoisted(() => ({
@@ -100,9 +101,11 @@ describe('widget settings page hydration', () => {
   it('renders each settings card once and mounts the preview after hydrating', async () => {
     const serverClient = seededClient()
     const html = renderToString(
-      <QueryClientProvider client={serverClient}>
-        <WidgetSettingsGate />
-      </QueryClientProvider>
+      <IntlProvider locale="en" defaultLocale="en">
+        <QueryClientProvider client={serverClient}>
+          <WidgetSettingsGate />
+        </QueryClientProvider>
+      </IntlProvider>
     )
     expect(html).not.toContain('widget-preview')
 
@@ -115,9 +118,11 @@ describe('widget settings page hydration', () => {
     await act(async () => {
       hydrateRoot(
         container,
-        <QueryClientProvider client={client}>
-          <WidgetSettingsGate />
-        </QueryClientProvider>
+        <IntlProvider locale="en" defaultLocale="en">
+          <QueryClientProvider client={client}>
+            <WidgetSettingsGate />
+          </QueryClientProvider>
+        </IntlProvider>
       )
     })
 
@@ -135,9 +140,11 @@ describe('widget settings page hydration', () => {
   it('keeps the install status it was delivered with when hydration takes a moment', async () => {
     // Two seconds between the document's read and the page mounting.
     render(
-      <QueryClientProvider client={seededClient(2_000)}>
-        <WidgetSettingsGate />
-      </QueryClientProvider>
+      <IntlProvider locale="en" defaultLocale="en">
+        <QueryClientProvider client={seededClient(2_000)}>
+          <WidgetSettingsGate />
+        </QueryClientProvider>
+      </IntlProvider>
     )
     await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
     expect(fetchOnboardingStatus).not.toHaveBeenCalled()

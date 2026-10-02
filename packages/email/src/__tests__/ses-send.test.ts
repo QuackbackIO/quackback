@@ -345,6 +345,57 @@ describe('configuration that cannot send', () => {
   })
 })
 
+describe('sendViaSes attachments', () => {
+  it('carries real files on the Simple content Attachments list', async () => {
+    const { client, commands } = acceptingClient('ses-assigned-1')
+    const content = new TextEncoder().encode('%PDF-1.4 fake')
+    await sendViaSes(
+      {
+        from: 'hi@platform.test',
+        to: 'a@b.test',
+        subject: 's',
+        html: '<p>hi</p>',
+        attachments: [{ filename: 'invoice.pdf', contentType: 'application/pdf', content }],
+      },
+      DEPS(client)
+    )
+
+    expect(sentSimple(commands)?.Attachments).toEqual([
+      {
+        RawContent: content,
+        FileName: 'invoice.pdf',
+        ContentType: 'application/pdf',
+        ContentDisposition: 'ATTACHMENT',
+      },
+    ])
+  })
+
+  it('omits the Attachments field entirely when there are none', async () => {
+    const { client, commands } = acceptingClient('ses-assigned-1')
+    await sendViaSes({ from: 'hi@platform.test', to: 'a@b.test', subject: 's' }, DEPS(client))
+    expect(sentSimple(commands)).not.toHaveProperty('Attachments')
+  })
+
+  it('carries more than one attachment, in order', async () => {
+    const { client, commands } = acceptingClient('ses-assigned-1')
+    const a = new TextEncoder().encode('aaa')
+    const b = new TextEncoder().encode('bbbbb')
+    await sendViaSes(
+      {
+        from: 'hi@platform.test',
+        to: 'a@b.test',
+        subject: 's',
+        attachments: [
+          { filename: 'a.txt', contentType: 'text/plain', content: a },
+          { filename: 'b.txt', contentType: 'text/plain', content: b },
+        ],
+      },
+      DEPS(client)
+    )
+    expect(sentSimple(commands)?.Attachments?.map((x) => x.FileName)).toEqual(['a.txt', 'b.txt'])
+  })
+})
+
 describe('sendViaSes', () => {
   it('builds the SES wire shape', async () => {
     const { client, commands } = acceptingClient('ses-assigned-1')
@@ -900,6 +951,51 @@ describe('dispatch on the ses rung', () => {
     expect(command.input.Content?.Simple?.Body?.Html?.Data).toContain('I checked the invoice.')
     expect(command.input.Content?.Simple?.Body?.Html?.Data).not.toContain('New reply from Acme')
     expect(command.input.Content?.Simple?.Body?.Html?.Data).not.toContain('Unsubscribe')
+  })
+
+  it('carries attachments all the way from sendRawEmail to the SES wire shape', async () => {
+    const content = new TextEncoder().encode('id,name\n1,ada')
+    await sendRawEmail({
+      from: sendingAs('Support <support@platform.test>'),
+      to: 'customer@example.test',
+      subject: 's',
+      html: '<p>see attached</p>',
+      attachments: [{ filename: 'export.csv', contentType: 'text/csv', content }],
+    })
+    const command = sdkSend.mock.calls[0][0] as SendEmailCommand
+    expect(command.input.Content?.Simple?.Attachments).toEqual([
+      {
+        RawContent: content,
+        FileName: 'export.csv',
+        ContentType: 'text/csv',
+        ContentDisposition: 'ATTACHMENT',
+      },
+    ])
+  })
+
+  it('carries attachments through sendConversationMessageEmail as well', async () => {
+    process.env.EMAIL_FROM = 'notifications@platform.test'
+    const content = new TextEncoder().encode('fake-bytes')
+    await sendConversationMessageEmail({
+      to: 'customer@example.test',
+      direction: 'agent_reply',
+      senderName: 'Alex',
+      messagePreview: 'see attached',
+      bodyHtml: '<p>see attached</p>',
+      ctaUrl: 'https://acme.example/c',
+      workspaceName: 'Acme',
+      channel: 'email',
+      attachments: [{ filename: 'photo.png', contentType: 'image/png', content }],
+    })
+    const command = sdkSend.mock.calls[0][0] as SendEmailCommand
+    expect(command.input.Content?.Simple?.Attachments).toEqual([
+      {
+        RawContent: content,
+        FileName: 'photo.png',
+        ContentType: 'image/png',
+        ContentDisposition: 'ATTACHMENT',
+      },
+    ])
   })
 
   it('still refuses a synthetic anonymous recipient before any request', async () => {

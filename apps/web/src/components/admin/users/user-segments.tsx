@@ -95,7 +95,7 @@ export function UserSegmentBadges({
               {
                 onSuccess: () => onSegmentsChange?.(),
                 onError: () =>
-                  toast.error(`Failed to undo — ${segment?.name ?? 'segment'} was not restored`),
+                  toast.error(`Failed to undo: ${segment?.name ?? 'segment'} was not restored`),
               }
             )
           },

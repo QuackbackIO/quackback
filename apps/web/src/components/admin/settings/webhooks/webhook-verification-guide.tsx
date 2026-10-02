@@ -1,3 +1,4 @@
+import { INLINE_LINK } from '@/components/admin/settings/inline-link'
 import { useState, useMemo } from 'react'
 import { ClipboardDocumentIcon, CheckIcon } from '@heroicons/react/24/solid'
 import {
@@ -11,6 +12,7 @@ import {
   GoIcon,
   PHPIcon,
 } from '@/components/admin/settings/lang-icons'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/shared/utils'
 import { useCopyToClipboard } from '@/lib/client/hooks/use-copy-to-clipboard'
 
@@ -200,10 +202,10 @@ const FRAMEWORK_ICONS: Record<string, (props: { className?: string }) => React.R
 }
 
 const WEBHOOK_EVENTS = [
-  { id: 'post.created', label: 'New Post' },
-  { id: 'post.status_changed', label: 'Status Changed' },
-  { id: 'comment.created', label: 'New Comment' },
-  { id: 'changelog.published', label: 'Changelog Published' },
+  { id: 'post.created', label: 'New post' },
+  { id: 'post.status_changed', label: 'Status changed' },
+  { id: 'comment.created', label: 'New comment' },
+  { id: 'changelog.published', label: 'Changelog published' },
 ] as const
 
 const WEBHOOK_HEADERS = [
@@ -216,7 +218,23 @@ const WEBHOOK_HEADERS = [
 // Component
 // ——————————————————————————————————————————————————
 
+/** The guide is documentation: a quiet link opens it, so it never competes with the list. */
 export function WebhookVerificationGuide() {
+  return (
+    <Collapsible>
+      <CollapsibleTrigger className={`${INLINE_LINK} text-[13px]`}>
+        How to verify signatures
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="pt-3">
+          <VerificationCard />
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+function VerificationCard() {
   const [selectedFramework, setSelectedFramework] = useState('node')
   const { copied: copiedCode, copy: copyCode } = useCopyToClipboard()
 
@@ -231,14 +249,14 @@ export function WebhookVerificationGuide() {
   return (
     <div
       data-settings-card=""
-      className="rounded-xl border border-border bg-card overflow-hidden flex flex-col min-h-[420px]"
+      className="rounded-xl border border-border bg-card overflow-hidden flex flex-col"
     >
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] flex-1">
+      <div className="grid grid-cols-1 flex-1">
         {/* ─── Left: Configuration ─── */}
-        <div className="flex flex-col border-b lg:border-b-0 lg:border-r border-border divide-y divide-border">
+        <div className="flex flex-col border-b border-border divide-y divide-border">
           {/* Header */}
           <div className="p-5">
-            <h3 className="text-sm font-semibold text-foreground">Signature Verification</h3>
+            <h3 className="text-sm font-semibold text-foreground">Signature verification</h3>
             <p className="text-xs text-muted-foreground mt-0.5">
               Verify webhook deliveries are authentic
             </p>
@@ -259,7 +277,10 @@ export function WebhookVerificationGuide() {
               </p>
               <div className="space-y-1">
                 {WEBHOOK_HEADERS.map((header) => (
-                  <div key={header.name} className="flex items-baseline gap-2">
+                  <div
+                    key={header.name}
+                    className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5"
+                  >
                     <code className="text-xs font-mono text-foreground bg-muted/30 border border-border/50 rounded px-1.5 py-0.5 shrink-0">
                       {header.name}
                     </code>
@@ -343,7 +364,7 @@ export function WebhookVerificationGuide() {
         </div>
 
         {/* ─── Right: Code Panel ─── */}
-        <div className="flex flex-col">
+        <div className="flex min-w-0 flex-col">
           {/* File tab header */}
           <div
             className="flex items-center justify-between shrink-0 px-1"
@@ -361,8 +382,8 @@ export function WebhookVerificationGuide() {
             >
               {copiedCode ? (
                 <>
-                  <CheckIcon className="h-3 w-3 text-green-400" />
-                  <span className="text-green-400">Copied</span>
+                  <CheckIcon className="h-3 w-3 text-success" />
+                  <span className="text-success">Copied</span>
                 </>
               ) : (
                 <>

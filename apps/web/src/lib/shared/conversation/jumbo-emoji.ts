@@ -6,14 +6,7 @@ const MAX_JUMBO_EMOJI = 6
 
 /** Rich nodes that mean the message carries more than emoji, so it must NOT be
  *  collapsed to a large plain-text render (we'd drop the image/embed). */
-const MEDIA_NODES = new Set([
-  'chatImage',
-  'quackbackEmbed',
-  'image',
-  'resizableImage',
-  'youtube',
-  'video',
-])
+const MEDIA_NODES = new Set(['quackbackEmbed', 'image', 'resizableImage', 'youtube', 'video'])
 
 interface JsonNode {
   type?: string

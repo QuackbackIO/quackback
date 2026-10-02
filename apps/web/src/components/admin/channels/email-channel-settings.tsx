@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query'
 import { TrashIcon } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { emailChannelConfigQuery } from '@/lib/client/queries/channel-accounts'
 import {
   useCreateInboundRoute,
@@ -94,6 +95,7 @@ function InboundRouteSection({
 }) {
   const [value, setValue] = useState('')
   const [editing, setEditing] = useState(false)
+  const [confirmClear, setConfirmClear] = useState(false)
   const create = useCreateInboundRoute()
   const clear = useClearInboundForwarding()
   const trust = useUpdateInboundTrust()
@@ -106,8 +108,9 @@ function InboundRouteSection({
       description="Forward your support inbox here so replies become conversations."
     >
       {platformAddress && (
-        <p className="text-sm">
-          Email to <span className="font-medium">{platformAddress}</span> becomes a conversation.
+        <p className="mb-4 text-[13px] text-muted-foreground">
+          Email to <span className="font-medium text-foreground">{platformAddress}</span> becomes a
+          conversation.
         </p>
       )}
       {forwardingTarget && !editing ? (
@@ -135,11 +138,7 @@ function InboundRouteSection({
               size="sm"
               variant="ghost"
               disabled={clear.isPending}
-              onClick={() =>
-                clear.mutate(undefined, {
-                  onError: reason('Could not remove the route'),
-                })
-              }
+              onClick={() => setConfirmClear(true)}
             >
               Remove
             </Button>
@@ -158,6 +157,7 @@ function InboundRouteSection({
             />
           </div>
           <Button
+            variant="outline"
             disabled={!value.trim() || create.isPending}
             onClick={() =>
               create.mutate(value.trim(), {
@@ -208,6 +208,19 @@ function InboundRouteSection({
           ))}
         </div>
       </div>
+      <ConfirmDialog
+        open={confirmClear}
+        onOpenChange={setConfirmClear}
+        title="Delete inbound route?"
+        description="Forwarded email stops becoming conversations until you set a route again."
+        confirmLabel="Delete route"
+        variant="destructive"
+        isPending={clear.isPending}
+        onConfirm={() => {
+          clear.mutate(undefined, { onError: reason('Could not remove the route') })
+          setConfirmClear(false)
+        }}
+      />
     </SettingsCard>
   )
 }
@@ -230,6 +243,7 @@ function SendingAddressesSection({
     address: string
     smtp?: { host?: string; port?: number; secure?: boolean; user?: string }
   } | null>(null)
+  const [removeTarget, setRemoveTarget] = useState<string | null>(null)
   const create = useCreateSendingAddress()
   const del = useDeleteChannelAccount()
 
@@ -274,7 +288,7 @@ function SendingAddressesSection({
                 variant="ghost"
                 size="icon"
                 aria-label="Remove address"
-                onClick={() => del.mutate(a.id, { onError: fail('Could not remove') })}
+                onClick={() => setRemoveTarget(a.id)}
               >
                 <TrashIcon className="size-4" />
               </Button>
@@ -306,6 +320,7 @@ function SendingAddressesSection({
           </SelectContent>
         </Select>
         <Button
+          variant="outline"
           disabled={!address.trim() || create.isPending}
           onClick={() =>
             create.mutate(
@@ -318,6 +333,19 @@ function SendingAddressesSection({
         </Button>
       </div>
       <SmtpOverrideDialog target={smtpFor} onClose={() => setSmtpFor(null)} />
+      <ConfirmDialog
+        open={removeTarget !== null}
+        onOpenChange={(open) => !open && setRemoveTarget(null)}
+        title="Delete address?"
+        description="Replies can no longer be sent from this address."
+        confirmLabel="Delete address"
+        variant="destructive"
+        isPending={del.isPending}
+        onConfirm={() => {
+          if (removeTarget) del.mutate(removeTarget, { onError: fail('Could not remove') })
+          setRemoveTarget(null)
+        }}
+      />
     </SettingsCard>
   )
 }
@@ -491,6 +519,7 @@ function SendingDomainsSection({
   }[]
 }) {
   const [domain, setDomain] = useState('')
+  const [removeTarget, setRemoveTarget] = useState<{ id: string; domain: string } | null>(null)
   const create = useCreateSendingDomain()
   const verify = useVerifySendingDomain()
   const remove = useDeleteSendingDomain()
@@ -526,7 +555,7 @@ function SendingDomainsSection({
                 variant="ghost"
                 aria-label={`Remove ${d.domain}`}
                 disabled={remove.isPending}
-                onClick={() => remove.mutate(d.id, { onError: reason('Could not remove it') })}
+                onClick={() => setRemoveTarget({ id: d.id, domain: d.domain })}
               >
                 Delete
               </Button>
@@ -563,6 +592,7 @@ function SendingDomainsSection({
           />
         </div>
         <Button
+          variant="outline"
           disabled={!domain.trim() || create.isPending}
           onClick={() =>
             create.mutate(domain.trim(), {
@@ -574,6 +604,25 @@ function SendingDomainsSection({
           Add domain
         </Button>
       </div>
+      <ConfirmDialog
+        open={removeTarget !== null}
+        onOpenChange={(open) => !open && setRemoveTarget(null)}
+        title="Delete domain?"
+        description={
+          removeTarget
+            ? `Mail can no longer be sent from ${removeTarget.domain} until you add it again.`
+            : undefined
+        }
+        confirmLabel="Delete domain"
+        variant="destructive"
+        isPending={remove.isPending}
+        onConfirm={() => {
+          if (removeTarget) {
+            remove.mutate(removeTarget.id, { onError: reason('Could not remove it') })
+          }
+          setRemoveTarget(null)
+        }}
+      />
     </SettingsCard>
   )
 }

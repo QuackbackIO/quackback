@@ -266,7 +266,7 @@ describe('RuleGroupBuilder — OR of groups', () => {
 
     expect(screen.getByText('OR')).toBeInTheDocument()
     expect(
-      screen.getByText("No rules in this group — it's ignored until you add one.")
+      screen.getByText("No rules in this group. It's ignored until you add one.")
     ).toBeInTheDocument()
     expect(screen.queryByText('No rules yet, so everything matches.')).not.toBeInTheDocument()
 

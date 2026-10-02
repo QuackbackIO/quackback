@@ -1,25 +1,21 @@
-import { createFileRoute, Link, redirect } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
 import { adminQueries } from '@/lib/client/queries/admin'
-import { Squares2X2Icon, ChatBubbleLeftIcon, LockClosedIcon } from '@heroicons/react/24/solid'
+import { ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
 import { EmptyState } from '@/components/shared/empty-state'
-import { PageHeader } from '@/components/shared/page-header'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
-import { BackLink } from '@/components/ui/back-link'
-import { Badge } from '@/components/ui/badge'
+import { BoardsList } from '@/components/admin/settings/boards/boards-list'
+import { boardTabSearch } from '@/components/admin/settings/boards/board-tabs'
 import { CreateBoardDialog } from '@/components/admin/settings/boards/create-board-dialog'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { isProductEnabled } from '@/lib/shared/types/settings'
-import { normalizeBoardAccess, presetForAccess } from '@/lib/shared/schemas/boards'
-import type { BoardAccess } from '@/lib/shared/db-types'
-
-const BOARD_TABS = ['general', 'access', 'moderation', 'import', 'export'] as const
 
 const searchSchema = z.object({
   board: z.string().optional(),
-  tab: z.enum(BOARD_TABS).optional(),
+  tab: boardTabSearch,
 })
 
 export const Route = createFileRoute('/admin/settings/boards/')({
@@ -47,92 +43,24 @@ export const Route = createFileRoute('/admin/settings/boards/')({
 function BoardsSettingsPage() {
   const { data: boards } = useSuspenseQuery(adminQueries.boardsWithCounts())
 
-  if (boards.length === 0) {
-    return <EmptyBoardsState />
-  }
-
   return (
-    <div className="space-y-6 max-w-3xl">
-      <div className="lg:hidden">
-        <BackLink to="/admin/settings/feedback">Feedback & Roadmaps</BackLink>
-      </div>
-      <PageHeader
-        icon={Squares2X2Icon}
-        title="Boards"
-        description="Where feedback is collected and organized."
-        action={<CreateBoardDialog />}
-      />
-
-      <SettingsCard contentClassName="p-0 sm:p-0">
-        <div data-settings-list="" className="divide-y divide-border">
-          {boards.map((board) => (
-            <Link
-              key={board.id}
-              to="/admin/settings/boards/$slug"
-              params={{ slug: board.slug }}
-              className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40"
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                <ChatBubbleLeftIcon className="size-4 shrink-0 text-muted-foreground" />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">{board.name}</p>
-                  {board.description ? (
-                    <p className="text-xs text-muted-foreground truncate">{board.description}</p>
-                  ) : null}
-                </div>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <BoardAccessBadge access={board.access} />
-                <span className="text-xs text-muted-foreground tabular-nums">
-                  {board.postCount === 1 ? '1 post' : `${board.postCount} posts`}
-                </span>
-              </div>
-            </Link>
-          ))}
-        </div>
+    <SettingsPage
+      page="/admin/settings/boards"
+      actions={boards.length > 0 ? <CreateBoardDialog /> : undefined}
+    >
+      <SettingsCard flush>
+        {boards.length === 0 ? (
+          <EmptyState
+            size="compact"
+            icon={ChatBubbleLeftIcon}
+            title="No boards yet"
+            description="Create a board to start collecting feedback."
+            action={<CreateBoardDialog />}
+          />
+        ) : (
+          <BoardsList boards={boards} />
+        )}
       </SettingsCard>
-    </div>
-  )
-}
-
-function BoardAccessBadge({ access }: { access: BoardAccess }) {
-  const preset = presetForAccess(normalizeBoardAccess(access))
-  if (preset === 'public') return null
-  return (
-    <Badge size="sm" shape="pill" variant="secondary">
-      {preset === 'private' ? (
-        <>
-          <LockClosedIcon />
-          Team only
-        </>
-      ) : (
-        'Custom'
-      )}
-    </Badge>
-  )
-}
-
-function EmptyBoardsState() {
-  return (
-    <div className="space-y-6 max-w-3xl">
-      <div className="lg:hidden">
-        <BackLink to="/admin/settings/feedback">Feedback & Roadmaps</BackLink>
-      </div>
-      <PageHeader
-        icon={Squares2X2Icon}
-        title="Boards"
-        description="Where feedback is collected and organized."
-      />
-
-      <SettingsCard>
-        <EmptyState
-          icon={ChatBubbleLeftIcon}
-          title="No boards yet"
-          description="Create your first feedback board to start collecting ideas from your users"
-          action={<CreateBoardDialog />}
-          className="py-8"
-        />
-      </SettingsCard>
-    </div>
+    </SettingsPage>
   )
 }

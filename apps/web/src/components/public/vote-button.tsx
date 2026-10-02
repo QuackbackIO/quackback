@@ -85,7 +85,7 @@ export function VoteButton({
     isInteractive && 'group transition-colors duration-200 cursor-pointer',
     isInteractive &&
       (hasVoted
-        ? 'border-post-card-voted/60 bg-post-card-voted/15 text-post-card-voted'
+        ? 'border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding text-post-card-voted'
         : 'border-border/50 hover:border-border hover:bg-muted/60 hover:text-foreground/80'),
     (readonly || disabled) && 'border-border/50',
     isInteractive && isPending && 'opacity-70 cursor-wait',

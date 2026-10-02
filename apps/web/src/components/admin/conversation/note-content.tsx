@@ -1,14 +1,14 @@
 import { RichTextContent } from '@/components/ui/rich-text-content'
 import { MentionHoverCardOverlay } from '@/components/ui/mention-hover-card-overlay'
 import { EmbedHydration } from '@/components/shared/embed-hydration'
-import { cn } from '@/lib/shared/utils'
+import { MessageMarkdown } from '@/components/shared/conversation/message-markdown'
 import type { TiptapContent } from '@/lib/shared/db-types'
 
 interface NoteContentProps {
   content: string
   /** TipTap doc for the note; when present we render mention chips + formatting
-   *  the same way feedback comments do. Plain notes (and legacy rows) fall back
-   *  to whitespace-preserving text. */
+   *  the same way feedback comments do. Markdown-only notes use the shared
+   *  conversation renderer. */
   contentJson?: TiptapContent | null
   className?: string
 }
@@ -28,5 +28,5 @@ export function NoteContent({ content, contentJson, className }: NoteContentProp
       </MentionHoverCardOverlay>
     )
   }
-  return <p className={cn('whitespace-pre-wrap break-words', className)}>{content}</p>
+  return <MessageMarkdown text={content} className={className} />
 }

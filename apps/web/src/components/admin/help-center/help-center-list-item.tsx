@@ -72,11 +72,11 @@ export function HelpCenterListItem({
           <span className="text-muted-foreground/70">
             {isPublished ? (
               <>
-                Published <TimeAgo date={publishedAt!} />
+                Published <TimeAgo date={publishedAt!} locale="en" />
               </>
             ) : (
               <>
-                Created <TimeAgo date={createdAt} />
+                Created <TimeAgo date={createdAt} locale="en" />
               </>
             )}
           </span>

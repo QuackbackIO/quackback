@@ -1,13 +1,11 @@
 // @vitest-environment happy-dom
 /**
- * AssistantAnswer / CitationDot: pins the existing (non-internal) citation
- * rendering byte-for-byte, then covers the additive internal-source styling
- * the Copilot leak gate relies on (COPILOT-SIDEBAR-UX.md B.4) — an amber tint
- * + lock badge on the pill, and an "Internal" hovercard tag in place of a URL
- * host when the citation carries no public url.
+ * Citation dots retain public/internal styling and show source details and
+ * freshness in a viewport-aware tooltip on hover.
  */
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { AssistantAnswer, type RenderableCitation } from '../assistant-turn'
 import type { ConversationMessageCitation } from '@/lib/shared/conversation/types'
 
@@ -49,34 +47,37 @@ describe('<AssistantAnswer> citations', () => {
     )
 
     const dot = container.querySelector(
-      'a[aria-label="Internal source 1: Refund policy (internal)"]'
+      'span[aria-label="Internal source 1: Refund policy (internal)"]'
     )
     expect(dot).not.toBeNull()
     expect(dot?.className).toMatch(/amber/)
     expect(container.querySelector('.bg-amber-500')).toBeInTheDocument()
   })
 
-  it("shows an 'Internal' hovercard tag instead of a URL host when an internal citation has no url", () => {
+  it("shows an 'Internal' hovercard tag instead of a URL host when an internal citation has no url", async () => {
     render(<AssistantAnswer text="Refunds go here [1]." citations={[internalCitation]} />)
 
-    expect(screen.getByText('Internal')).toBeInTheDocument()
+    await userEvent.hover(screen.getByLabelText('Internal source 1: Refund policy (internal)'))
+    expect(await screen.findByText('Internal')).toBeInTheDocument()
   })
 
-  it('keeps showing the URL host in the hovercard for a public (non-internal) citation', () => {
+  it('keeps showing the URL host in the hovercard for a public (non-internal) citation', async () => {
     render(<AssistantAnswer text="Reset it here [1]." citations={[publicCitation]} />)
 
-    expect(screen.getByText('help.example.com')).toBeInTheDocument()
+    await userEvent.hover(screen.getByLabelText('Source 1: Resetting your password'))
+    expect(await screen.findByText('help.example.com')).toBeInTheDocument()
     expect(screen.queryByText('Internal')).not.toBeInTheDocument()
   })
 
-  it('an internal citation that DOES carry a url still shows the host, not the Internal tag', () => {
+  it('an internal citation that DOES carry a url still shows the host, not the Internal tag', async () => {
     const internalWithUrl: RenderableCitation = {
       ...internalCitation,
       url: 'https://internal.example.com/doc',
     }
     render(<AssistantAnswer text="See here [1]." citations={[internalWithUrl]} />)
 
-    expect(screen.getByText('internal.example.com')).toBeInTheDocument()
+    await userEvent.hover(screen.getByLabelText('Internal source 1: Refund policy (internal)'))
+    expect(await screen.findByText('internal.example.com')).toBeInTheDocument()
     expect(screen.queryByText('Internal')).not.toBeInTheDocument()
   })
 })
@@ -84,35 +85,37 @@ describe('<AssistantAnswer> citations', () => {
 describe('<AssistantAnswer> hovercard freshness line', () => {
   const EIGHT_DAYS_AGO = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString()
 
-  it('renders "Updated … ago" when the citation carries updatedAt', () => {
+  it('renders "Updated … ago" when the citation carries updatedAt', async () => {
     const cited: RenderableCitation = { ...publicCitation, updatedAt: EIGHT_DAYS_AGO }
-    const { container } = render(<AssistantAnswer text="Reset it here [1]." citations={[cited]} />)
+    render(<AssistantAnswer text="Reset it here [1]." citations={[cited]} />)
 
-    expect(container.textContent).toMatch(/Updated 8 days ago/)
+    await userEvent.hover(screen.getByLabelText(/source 1:/i))
+    expect(await screen.findByText('Updated 8 days ago')).toBeInTheDocument()
   })
 
-  it('renders no freshness line when updatedAt is absent (exactly as before)', () => {
-    const { container } = render(
-      <AssistantAnswer text="Reset it here [1]." citations={[publicCitation]} />
-    )
+  it('renders no freshness line when updatedAt is absent', async () => {
+    render(<AssistantAnswer text="Reset it here [1]." citations={[publicCitation]} />)
 
-    expect(container.textContent).not.toMatch(/Updated/)
+    await userEvent.hover(screen.getByLabelText(/source 1:/i))
+    expect(await screen.findByText('help.example.com')).toBeInTheDocument()
+    expect(screen.queryByText(/Updated/)).not.toBeInTheDocument()
   })
 
-  it('renders no freshness line for an unparseable updatedAt', () => {
+  it('renders no freshness line for an unparseable updatedAt', async () => {
     const cited: RenderableCitation = { ...publicCitation, updatedAt: 'not-a-date' }
-    const { container } = render(<AssistantAnswer text="Reset it here [1]." citations={[cited]} />)
+    render(<AssistantAnswer text="Reset it here [1]." citations={[cited]} />)
 
-    expect(container.textContent).not.toMatch(/Updated/)
+    await userEvent.hover(screen.getByLabelText(/source 1:/i))
+    expect(await screen.findByText('help.example.com')).toBeInTheDocument()
+    expect(screen.queryByText(/Updated/)).not.toBeInTheDocument()
   })
 
-  it('still shows the freshness line alongside the Internal tag on an internal citation', () => {
+  it('still shows the freshness line alongside the Internal tag on an internal citation', async () => {
     const cited: RenderableCitation = { ...internalCitation, updatedAt: EIGHT_DAYS_AGO }
-    const { container } = render(
-      <AssistantAnswer text="Refunds go here [1]." citations={[cited]} />
-    )
+    render(<AssistantAnswer text="Refunds go here [1]." citations={[cited]} />)
 
-    expect(screen.getByText('Internal')).toBeInTheDocument()
-    expect(container.textContent).toMatch(/Updated 8 days ago/)
+    await userEvent.hover(screen.getByLabelText('Internal source 1: Refund policy (internal)'))
+    expect(await screen.findByText('Internal')).toBeInTheDocument()
+    expect(await screen.findByText('Updated 8 days ago')).toBeInTheDocument()
   })
 })

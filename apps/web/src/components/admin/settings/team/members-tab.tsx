@@ -14,7 +14,7 @@ import { settingsQueries } from '@/lib/client/queries/settings'
 import { EnvelopeIcon, PlusIcon } from '@heroicons/react/24/solid'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import { cn } from '@/lib/shared/utils'
+import { NUMERIC_DATE_TIME, useLocalDateFormatter } from '@/components/ui/local-date'
 import {
   Table,
   TableBody,
@@ -32,14 +32,13 @@ import { InviteMemberDialog } from '@/components/auth/invite-member-dialog'
 import {
   type PendingInvitation,
   getExpiryText,
-  formatInviteDate,
+  InviteDate,
   InvitationActions,
   InviteLinkRow,
 } from '@/components/admin/settings/team/pending-invitations'
 import { MemberActions } from '@/components/admin/settings/team/member-actions'
 import { CloudOwnershipActions } from '@/components/admin/settings/team/cloud-ownership-actions'
 import { seatInviteBlocked } from '@/components/admin/settings/team/seat-usage'
-import { CUSTOM_ROLE_BADGE } from '@/components/admin/settings/team/role-ui'
 import type { UserId, PrincipalId } from '@quackback/ids'
 import { isAdmin } from '@/lib/shared/roles'
 import { useSessionContext } from '@/lib/client/hooks/use-root-context'
@@ -83,25 +82,14 @@ const features = tableFeatures({
 /**
  * One badge for both layouts: the resolved workspace assignment's name when
  * one exists (presets show Owner/Manager etc., matching the roles tab), the
- * legacy role text otherwise. Custom roles get the amber treatment.
+ * legacy role text otherwise.
  */
 function roleBadge(r: TeamRow, role: string, extra = '') {
   const assigned = r.type === 'member' ? r.assignedRole : null
   const inviteRoleName = r.type === 'invitation' ? r.roleName : null
-  const isCustom = (assigned && !assigned.isSystem) || Boolean(inviteRoleName)
   const label = assigned?.name ?? inviteRoleName ?? role
   return (
-    <Badge
-      variant="outline"
-      className={cn(
-        isCustom
-          ? CUSTOM_ROLE_BADGE
-          : isAdmin(role)
-            ? 'bg-primary/10 text-primary border-primary/30'
-            : 'bg-muted/50',
-        extra
-      )}
-    >
+    <Badge variant="secondary" className={extra}>
       {label}
     </Badge>
   )
@@ -118,13 +106,47 @@ const teamFilterFn: FilterFn<typeof features, TeamRow> = (row, _columnId, filter
   )
 }
 
+/**
+ * A member's last sign-in as days ago, or the date once it is a month old.
+ * The date formats in this leaf, so the switch from the first-render format to
+ * the viewer's after hydration re-renders only these labels, not the table.
+ */
+function SignInLabel({
+  at,
+  prefix = '',
+  withTitle = false,
+}: {
+  at: string
+  prefix?: string
+  withTitle?: boolean
+}) {
+  const formatDate = useLocalDateFormatter()
+  const date = new Date(at)
+  // Days-ago is enough granularity for a team list; the audit
+  // log has the timestamp if anyone needs the exact moment.
+  const daysAgo = Math.floor((Date.now() - date.getTime()) / (24 * 60 * 60 * 1000))
+  const label =
+    daysAgo === 0
+      ? 'Today'
+      : daysAgo === 1
+        ? 'Yesterday'
+        : daysAgo < 30
+          ? `${daysAgo}d ago`
+          : formatDate(date)
+  return (
+    <span title={withTitle ? formatDate(date, NUMERIC_DATE_TIME) : undefined}>
+      {prefix}
+      {label}
+    </span>
+  )
+}
+
 interface MembersTabProps {
-  workspaceName: string
   currentMember: { id: PrincipalId; role: 'admin' | 'member'; userId: UserId }
 }
 
 /** The teammate roster + pending invitations (the Members tab of Members & Teams). */
-export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
+export function MembersTab({ currentMember }: MembersTabProps) {
   const session = useSessionContext()
   const teamDataQuery = useSuspenseQuery(settingsQueries.teamMembersAndInvitations())
   const { members, avatarMap, formattedInvitations, seatUsage } = teamDataQuery.data
@@ -147,7 +169,7 @@ export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
     ? inviteBlocked
       ? `${seatLine}. Upgrade to invite more.`
       : seatLine
-    : `Manage who has access to ${workspaceName}`
+    : null
 
   const adminCount = members.filter((m) => isAdmin(m.role)).length
   const isLastAdmin = adminCount <= 1
@@ -230,16 +252,13 @@ export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
               <div className="min-w-0">
                 <p className="font-medium text-foreground truncate">
                   {r.name || r.email}
-                  <Badge
-                    variant="outline"
-                    className="ml-2 bg-amber-500/10 text-amber-600 border-amber-500/30"
-                  >
+                  <Badge variant="warning" className="ml-2">
                     Invited
                   </Badge>
                 </p>
                 {r.name && <p className="text-sm text-muted-foreground truncate">{r.email}</p>}
                 <p className="text-xs text-muted-foreground">
-                  Sent {formatInviteDate(r.lastSentAt || r.createdAt)}
+                  Sent <InviteDate date={r.lastSentAt || r.createdAt} />
                   <span className="mx-1">&middot;</span>
                   <span className={expiry.className}>{expiry.text}</span>
                 </p>
@@ -268,19 +287,7 @@ export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
           // name; skip the column.
           if (r.type !== 'member') return null
           if (!r.lastSignInAt) return <span className="text-muted-foreground">Never</span>
-          const date = new Date(r.lastSignInAt)
-          // Days-ago is enough granularity for a team list; the audit
-          // log has the timestamp if anyone needs the exact moment.
-          const daysAgo = Math.floor((Date.now() - date.getTime()) / (24 * 60 * 60 * 1000))
-          const label =
-            daysAgo === 0
-              ? 'Today'
-              : daysAgo === 1
-                ? 'Yesterday'
-                : daysAgo < 30
-                  ? `${daysAgo}d ago`
-                  : date.toLocaleDateString()
-          return <span title={date.toLocaleString()}>{label}</span>
+          return <SignInLabel at={r.lastSignInAt} withTitle />
         },
       },
       {
@@ -346,25 +353,24 @@ export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
           .filter((email): email is string => Boolean(email))}
       />
 
-      <SettingsCard
-        title="Members"
-        description={seatDescription}
-        action={
-          <Button size="sm" onClick={() => setShowInviteDialog(true)}>
-            <PlusIcon className="h-4 w-4" />
-            Invite member
-          </Button>
-        }
-        contentClassName="p-0 sm:p-0"
-      >
-        <div className="px-4 pt-4 pb-2 sm:px-6">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="min-w-[220px] flex-1 sm:max-w-md">
           <SearchInput
             value={search}
             onChange={setSearch}
-            placeholder="Search by name, email, or role..."
+            placeholder="Search by name, email or role..."
           />
         </div>
+        {seatDescription && (
+          <span className="text-[13px] text-muted-foreground">{seatDescription}</span>
+        )}
+        <Button size="sm" className="ml-auto" onClick={() => setShowInviteDialog(true)}>
+          <PlusIcon className="h-4 w-4" />
+          Invite member
+        </Button>
+      </div>
 
+      <SettingsCard flush>
         {/* md+: standard table */}
         <div className="hidden md:block">
           <Table>
@@ -449,10 +455,7 @@ export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
                               <span className="ml-2 text-xs text-muted-foreground">(you)</span>
                             )}
                             {r.type === 'invitation' && (
-                              <Badge
-                                variant="outline"
-                                className="ml-2 bg-amber-500/10 text-amber-600 border-amber-500/30"
-                              >
+                              <Badge variant="warning" className="ml-2">
                                 Invited
                               </Badge>
                             )}
@@ -468,28 +471,16 @@ export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
                     {/* Secondary: last sign-in or invite expiry */}
                     {r.type === 'member' && (
                       <p className="text-xs text-muted-foreground">
-                        {r.lastSignInAt
-                          ? (() => {
-                              const date = new Date(r.lastSignInAt)
-                              const daysAgo = Math.floor(
-                                (Date.now() - date.getTime()) / (24 * 60 * 60 * 1000)
-                              )
-                              const label =
-                                daysAgo === 0
-                                  ? 'Today'
-                                  : daysAgo === 1
-                                    ? 'Yesterday'
-                                    : daysAgo < 30
-                                      ? `${daysAgo}d ago`
-                                      : date.toLocaleDateString()
-                              return `Last sign-in: ${label}`
-                            })()
-                          : 'Never signed in'}
+                        {r.lastSignInAt ? (
+                          <SignInLabel at={r.lastSignInAt} prefix="Last sign-in: " />
+                        ) : (
+                          'Never signed in'
+                        )}
                       </p>
                     )}
                     {r.type === 'invitation' && (
                       <p className="text-xs text-muted-foreground">
-                        Sent {formatInviteDate(r.lastSentAt || r.createdAt)}
+                        Sent <InviteDate date={r.lastSentAt || r.createdAt} />
                         <span className="mx-1">&middot;</span>
                         <span className={getExpiryText(r.expiresAt).className}>
                           {getExpiryText(r.expiresAt).text}

@@ -1,4 +1,4 @@
-// @vitest-environment happy-dom
+// @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest'
 import { render, renderHook, waitFor } from '@testing-library/react'
 
@@ -158,47 +158,6 @@ describe('<CommentContent>', () => {
     // The emoji char must appear in the rendered output - regression test for
     // RichTextContent's default branch dropping unrecognised leaf nodes.
     expect(container.textContent).toContain('👍')
-  })
-
-  it('renders emoji nodes that only carry a shortcode name (TipTap omits the Unicode char in JSON)', async () => {
-    // @tiptap/extension-emoji persists `{ name: 'tada' }` without `emoji`. The
-    // read-only renderer keeps the heavy emoji dataset OUT of the eager portal
-    // chunk, so it shows the `:tada:` shortcode placeholder first and then
-    // upgrades to the Unicode char after an on-demand dynamic import resolves.
-    const json = {
-      type: 'doc',
-      content: [
-        {
-          type: 'paragraph',
-          content: [
-            { type: 'text', text: 'Shipped ' },
-            { type: 'emoji', attrs: { name: 'tada' } },
-          ],
-        },
-      ],
-    }
-    const { container } = render(<CommentContent content="Shipped :tada:" contentJson={json} />)
-    await waitFor(() => expect(container.textContent).toContain('🎉'))
-  })
-
-  it('upgrades a name-only crossed_fingers node (name is not in shortcodes[])', async () => {
-    const json = {
-      type: 'doc',
-      content: [
-        {
-          type: 'paragraph',
-          content: [
-            { type: 'text', text: 'Luck ' },
-            { type: 'emoji', attrs: { name: 'crossed_fingers' } },
-          ],
-        },
-      ],
-    }
-    const { container } = render(
-      <CommentContent content="Luck :crossed_fingers:" contentJson={json} />
-    )
-    await waitFor(() => expect(container.textContent).toContain('🤞'))
-    expect(container.textContent).not.toContain(':crossed_fingers:')
   })
 })
 

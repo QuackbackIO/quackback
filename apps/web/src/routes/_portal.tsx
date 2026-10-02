@@ -18,6 +18,7 @@ import type { PermissionKey } from '@/lib/shared/permissions'
 import { PortalHeader } from '@/components/public/portal-header'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
 import { AuthDialog } from '@/components/auth/auth-dialog'
+import { FileViewerProvider, scrollToMessage } from '@/components/shared/files/file-viewer-context'
 import { buildPortalAuthDialogConfig } from '@/components/auth/portal-auth-dialog-config'
 import type { PortalAccessGateError } from '@/lib/shared/types/portal-gate-error'
 import { generateWorkspaceThemeCSS, readFontSans } from '@/lib/shared/theme'
@@ -154,7 +155,6 @@ export const Route = createFileRoute('/_portal')({
 
       const brandingData = settings?.brandingData ?? null
       const brandingConfig = settings?.brandingConfig ?? {}
-      const visualTheme = settings?.visualTheme === 'refined' ? 'refined' : 'legacy'
       // Locale so the gate's auth dialog renders under PortalIntlProvider.
       const locale = await getPortalLocaleFn().catch(() => DEFAULT_LOCALE)
       // Instant-SSO: when the workspace's only sign-in method is a single OIDC
@@ -177,7 +177,7 @@ export const Route = createFileRoute('/_portal')({
         reason: accessResult.reason,
         workspaceName: settings?.name ?? '',
         logoUrl: brandingData?.logoUrl ?? null,
-        themeStyles: generateWorkspaceThemeCSS(brandingConfig, visualTheme),
+        themeStyles: generateWorkspaceThemeCSS(brandingConfig),
         customCss: settings?.customCss ?? '',
         configFontSans: readFontSans(brandingConfig.light),
         locale,
@@ -232,8 +232,7 @@ export const Route = createFileRoute('/_portal')({
     const publicPortalConfig = settings?.publicPortalConfig ?? null
 
     const themeMode = brandingConfig.themeMode ?? 'user'
-    const visualTheme = settings?.visualTheme === 'refined' ? 'refined' : 'legacy'
-    const themeStyles = generateWorkspaceThemeCSS(brandingConfig, visualTheme)
+    const themeStyles = generateWorkspaceThemeCSS(brandingConfig)
 
     // Always apply custom CSS on top (cascades over theme styles)
     const customCssToApply = customCss
@@ -393,7 +392,7 @@ function PortalLayout() {
               untouched (and provides no context) outside preview mode. */}
           <PortalPreviewProvider enabled={preview === true}>
             <PortalBrandingFontLoader customCss={customCss} configFontSans={configFontSans} />
-            <div className="min-h-screen bg-background flex flex-col">
+            <div data-portal="" className="min-h-screen bg-background flex flex-col">
               {themeStyles && (
                 <style dangerouslySetInnerHTML={{ __html: escapeInlineStyle(themeStyles) }} />
               )}
@@ -411,7 +410,9 @@ function PortalLayout() {
                 showThemeToggle={themeMode === 'user' && !preview}
               />
               <main className="flex-1 w-full flex flex-col">
-                <Outlet />
+                <FileViewerProvider onJumpToMessage={scrollToMessage}>
+                  <Outlet />
+                </FileViewerProvider>
               </main>
               <AuthDialog authConfig={authConfig} workspaceName={workspaceName} />
             </div>

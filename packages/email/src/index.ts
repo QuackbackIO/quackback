@@ -22,6 +22,9 @@ import { Resend } from 'resend'
 import { createLogger } from '@quackback/logger'
 import { isSyntheticAnonEmail } from './anon'
 import { applyDisplayName, isSesEmailConfigured, sendViaSes } from './ses'
+import type { EmailAttachment } from './attachment'
+export type { EmailAttachment } from './attachment'
+export { MAX_EMAIL_ATTACHMENT_BYTES } from './attachment'
 // Capability-bearing senders declare `to: SecureRecipient` so a contact address
 // cannot be passed to one. See ./recipient for why the classes are shaped this
 // way, and why the guarantee belongs here rather than at the call sites.
@@ -334,6 +337,8 @@ async function dispatch(
     conversationId?: string | null
     ticketId?: string | null
     postId?: string | null
+    /** Real files to carry as MIME attachments, on every rung. */
+    attachments?: EmailAttachment[]
   } & ThreadingOptions
 ): Promise<EmailResult> {
   const threadingHeaders = buildThreadingHeaders(options)
@@ -376,7 +381,16 @@ async function dispatch(
       'no email provider configured: message logged as a preview and not delivered'
     )
     log.debug(
-      { email_type: emailType, to: options.to, ...options.preview },
+      {
+        email_type: emailType,
+        to: options.to,
+        ...options.preview,
+        // Filenames only — never the bytes, and this is the one rung where
+        // nothing is ever actually carried anywhere.
+        ...(options.attachments && options.attachments.length > 0
+          ? { attachments: options.attachments.map((a) => a.filename) }
+          : {}),
+      },
       '[dev] email preview (console provider)'
     )
     recordOutboundLog({
@@ -415,6 +429,9 @@ async function dispatch(
       ...(text !== undefined ? { text } : {}),
       ...(options.replyTo !== undefined ? { replyTo: options.replyTo } : {}),
       ...(Object.keys(threadingHeaders).length > 0 ? { headers: threadingHeaders } : {}),
+      ...(options.attachments && options.attachments.length > 0
+        ? { attachments: options.attachments }
+        : {}),
     })
     // The id as the provider reported it, which is what its delivery events and
     // the threading map both name the message by. A raw inbound header quotes
@@ -448,6 +465,11 @@ async function dispatch(
       inReplyTo: threadingHeaders['In-Reply-To'],
       references: threadingHeaders['References'],
       headers: options.extraHeaders,
+      attachments: options.attachments?.map((attachment) => ({
+        filename: attachment.filename,
+        contentType: attachment.contentType,
+        content: Buffer.from(attachment.content),
+      })),
     })
     log.info({ provider: 'smtp', message_id: result.messageId }, 'email sent')
     recordOutboundLog({
@@ -509,6 +531,7 @@ async function sendEmail(
     conversationId?: string | null
     ticketId?: string | null
     postId?: string | null
+    attachments?: EmailAttachment[]
   } & ThreadingOptions
 ): Promise<EmailResult> {
   const showPoweredBy = await resolveEmailPoweredBy()
@@ -530,6 +553,7 @@ export interface RawEmailOptions extends ThreadingOptions {
   html: string
   text?: string
   replyTo?: string
+  attachments?: EmailAttachment[]
 }
 
 /**
@@ -937,6 +961,8 @@ interface SendConversationMessageEmailParams {
   /** Display name for the From header (`Alex (Acme)`). */
   fromDisplayName?: string
   conversationId?: string | null
+  /** Real files to carry as MIME attachments. */
+  attachments?: EmailAttachment[]
 }
 
 /**
@@ -967,6 +993,7 @@ export async function sendConversationMessageEmail(
     quotedPrevious,
     fromDisplayName,
     conversationId,
+    attachments,
   } = params
 
   const copy = conversationMessageCopy({
@@ -1013,6 +1040,7 @@ export async function sendConversationMessageEmail(
     from,
     fromDisplayName,
     conversationId,
+    attachments,
     emailType: copy.useHumanTemplate ? 'ConversationReplyEmail' : 'ConversationMessageEmail',
     preview: { ctaUrl },
   })

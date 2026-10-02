@@ -1,18 +1,13 @@
 import { useState, useTransition, useRef } from 'react'
 import { Link, useRouter } from '@tanstack/react-router'
-import {
-  ArrowPathIcon,
-  ArrowRightIcon,
-  GlobeAltIcon,
-  LockClosedIcon,
-  PlusIcon,
-  XMarkIcon,
-} from '@heroicons/react/24/solid'
-import { useQuery } from '@tanstack/react-query'
+import { ArrowPathIcon, ArrowRightIcon, PlusIcon, XMarkIcon } from '@heroicons/react/24/solid'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { SettingRow } from '@/components/admin/settings/setting-row'
+import { VisibilityTiles } from '@/components/admin/settings/visibility-tiles'
+import { AUTOSAVE } from '@/lib/client/autosave'
 import { PortalPrivacyDialog } from '@/components/admin/settings/portal-privacy-dialog'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { updatePortalAccessFn } from '@/lib/server/functions/portal-access'
@@ -23,6 +18,7 @@ import { usePortalInvites } from '@/components/admin/users/use-portal-invites'
 import { SegmentMultiSelect } from '@/components/admin/segments/segment-multi-select'
 import { cn } from '@/lib/shared/utils'
 import type { PortalConfig } from '@/lib/shared/types/settings'
+import { INLINE_LINK } from '@/components/admin/settings/inline-link'
 
 interface PortalAuthTabProps {
   portalConfig: PortalConfig
@@ -49,30 +45,23 @@ interface PortalAuthTabProps {
  * access' tab.
  */
 // ---------------------------------------------------------------------------
-// Visibility option descriptors
+// Visibility options
 // ---------------------------------------------------------------------------
 
-interface VisibilityOption {
-  value: 'public' | 'private'
-  label: string
-  description: string
-  icon: typeof LockClosedIcon
-}
+type Visibility = 'public' | 'private'
 
-const VISIBILITY_OPTIONS: VisibilityOption[] = [
+const VISIBILITY_OPTIONS = [
   {
     value: 'public',
-    label: 'Public',
+    title: 'Everyone',
     description: 'Anyone can view your portal without signing in.',
-    icon: GlobeAltIcon,
   },
   {
     value: 'private',
-    label: 'Private',
-    description: 'Only your team and the groups you authorize below.',
-    icon: LockClosedIcon,
+    title: 'Only your team and users you invite',
+    description: 'Everyone else sees a sign-in page.',
   },
-]
+] satisfies { value: Visibility; title: string; description: string }[]
 
 export function PortalAuthTab({ portalConfig, teamOpenSignup }: PortalAuthTabProps) {
   const router = useRouter()
@@ -85,8 +74,8 @@ export function PortalAuthTab({ portalConfig, teamOpenSignup }: PortalAuthTabPro
   // that every call to `applyAccess` reads fresh state regardless of when
   // the closure was created — no stale capture is possible.
 
-  const currentVisibility = (portalConfig.access?.visibility ?? 'public') as 'public' | 'private'
-  const [visibility, setVisibility] = useState<'public' | 'private'>(currentVisibility)
+  const currentVisibility = (portalConfig.access?.visibility ?? 'public') as Visibility
+  const [visibility, setVisibility] = useState<Visibility>(currentVisibility)
   const visibilityRef = useRef(visibility)
   visibilityRef.current = visibility
 
@@ -114,13 +103,10 @@ export function PortalAuthTab({ portalConfig, teamOpenSignup }: PortalAuthTabPro
     staleTime: 60_000,
   })
 
-  const [accessBusy, setAccessBusy] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [pendingVisibility, setPendingVisibility] = useState<'public' | 'private' | null>(null)
+  const [pendingVisibility, setPendingVisibility] = useState<Visibility | null>(null)
   const [domainInput, setDomainInput] = useState('')
   const [domainInputError, setDomainInputError] = useState<string | null>(null)
-
-  const isAccessBusy = accessBusy || isPending
 
   // --- Self-service signup ---
   //
@@ -134,7 +120,6 @@ export function PortalAuthTab({ portalConfig, teamOpenSignup }: PortalAuthTabPro
   // what the portal is doing before deciding to change it. The first save
   // writes an explicit portal answer, and the fallback stops applying.
   const [openSignup, setOpenSignup] = useState<boolean>(portalConfig.openSignup ?? teamOpenSignup)
-  const [signupBusy, setSignupBusy] = useState(false)
 
   // Workspace-wide master switch for anonymous interaction. Collapsed in
   // migration 0084 from the legacy anonymousVoting / Commenting / Posting
@@ -142,39 +127,47 @@ export function PortalAuthTab({ portalConfig, teamOpenSignup }: PortalAuthTabPro
   const [allowAnonymous, setAllowAnonymous] = useState<boolean>(
     portalConfig.features?.allowAnonymous ?? true
   )
-  const [anonBusy, setAnonBusy] = useState(false)
 
-  async function applyAllowAnonymous(next: boolean) {
-    const previous = allowAnonymous
-    setAllowAnonymous(next)
-    setAnonBusy(true)
-    try {
-      await updatePortalConfigFn({ data: { features: { allowAnonymous: next } } })
+  // Each save is an autosave mutation: the header shows its status and a
+  // failure reverts the control and shows the one toast.
+  const anonMutation = useMutation({
+    meta: AUTOSAVE,
+    mutationFn: (next: boolean) =>
+      updatePortalConfigFn({ data: { features: { allowAnonymous: next } } }),
+    onMutate: (next) => {
+      const previous = allowAnonymous
+      setAllowAnonymous(next)
+      return { previous }
+    },
+    onSuccess: () => {
       startTransition(() => {
         router.invalidate()
       })
-    } catch {
-      setAllowAnonymous(previous)
-    } finally {
-      setAnonBusy(false)
-    }
-  }
+    },
+    onError: (_error, _next, context) => {
+      if (context) setAllowAnonymous(context.previous)
+    },
+  })
+  const anonBusy = anonMutation.isPending
 
-  async function applyOpenSignup(next: boolean) {
-    const previous = openSignup
-    setOpenSignup(next)
-    setSignupBusy(true)
-    try {
-      await updatePortalConfigFn({ data: { openSignup: next } })
+  const signupMutation = useMutation({
+    meta: AUTOSAVE,
+    mutationFn: (next: boolean) => updatePortalConfigFn({ data: { openSignup: next } }),
+    onMutate: (next) => {
+      const previous = openSignup
+      setOpenSignup(next)
+      return { previous }
+    },
+    onSuccess: () => {
       startTransition(() => {
         router.invalidate()
       })
-    } catch {
-      setOpenSignup(previous)
-    } finally {
-      setSignupBusy(false)
-    }
-  }
+    },
+    onError: (_error, _next, context) => {
+      if (context) setOpenSignup(context.previous)
+    },
+  })
+  const signupBusy = signupMutation.isPending
 
   /**
    * Single save path for visibility, domain, and widget sign-in changes.
@@ -182,54 +175,64 @@ export function PortalAuthTab({ portalConfig, teamOpenSignup }: PortalAuthTabPro
    * The changed field is supplied explicitly by the caller; all peer fields
    * are read from their refs so stale-closure captures are impossible. This
    * ensures:
-   *  - No two saves overlap (`accessBusy` gates all three controls).
+   *  - No two saves overlap (`accessBusy` gates all the controls).
    *  - No field persists a stale value: the caller owns its field, refs own
    *    the peers.
    */
-  async function applyAccess(
-    nextVisibility: 'public' | 'private',
+  const accessMutation = useMutation({
+    meta: AUTOSAVE,
+    mutationFn: (next: {
+      visibility: Visibility
+      allowedDomains: string[]
+      widgetSignIn: boolean
+      allowedSegmentIds: string[]
+    }) => updatePortalAccessFn({ data: next }),
+    onMutate: (next) => {
+      const previous = {
+        visibility: visibilityRef.current,
+        allowedDomains: allowedDomainsRef.current,
+        widgetSignIn: widgetSignInRef.current,
+        allowedSegmentIds: allowedSegmentIdsRef.current,
+      }
+      // Optimistic update
+      setVisibility(next.visibility)
+      setAllowedDomains(next.allowedDomains)
+      setWidgetSignIn(next.widgetSignIn)
+      setAllowedSegmentIds(next.allowedSegmentIds)
+      return { previous }
+    },
+    onSuccess: () => {
+      startTransition(() => {
+        router.invalidate()
+      })
+    },
+    onError: (_error, _next, context) => {
+      // Revert all fields on error
+      if (!context) return
+      setVisibility(context.previous.visibility)
+      setAllowedDomains(context.previous.allowedDomains)
+      setWidgetSignIn(context.previous.widgetSignIn)
+      setAllowedSegmentIds(context.previous.allowedSegmentIds)
+    },
+  })
+  const accessBusy = accessMutation.isPending
+  const isAccessBusy = accessBusy || isPending
+
+  function applyAccess(
+    nextVisibility: Visibility,
     nextDomains: string[],
     nextWidgetSignIn?: boolean,
     nextSegmentIds?: string[]
   ) {
-    const prevVisibility = visibilityRef.current
-    const prevDomains = allowedDomainsRef.current
-    const prevWidgetSignIn = widgetSignInRef.current
-    const prevSegmentIds = allowedSegmentIdsRef.current
-    const resolvedWidgetSignIn = nextWidgetSignIn ?? prevWidgetSignIn
-    const resolvedSegmentIds = nextSegmentIds ?? prevSegmentIds
-
-    // Optimistic update
-    setVisibility(nextVisibility)
-    setAllowedDomains(nextDomains)
-    setWidgetSignIn(resolvedWidgetSignIn)
-    setAllowedSegmentIds(resolvedSegmentIds)
-    setAccessBusy(true)
-
-    try {
-      await updatePortalAccessFn({
-        data: {
-          visibility: nextVisibility,
-          allowedDomains: nextDomains,
-          widgetSignIn: resolvedWidgetSignIn,
-          allowedSegmentIds: resolvedSegmentIds,
-        },
-      })
-      startTransition(() => {
-        router.invalidate()
-      })
-    } catch {
-      // Revert all fields on error
-      setVisibility(prevVisibility)
-      setAllowedDomains(prevDomains)
-      setWidgetSignIn(prevWidgetSignIn)
-      setAllowedSegmentIds(prevSegmentIds)
-    } finally {
-      setAccessBusy(false)
-    }
+    accessMutation.mutate({
+      visibility: nextVisibility,
+      allowedDomains: nextDomains,
+      widgetSignIn: nextWidgetSignIn ?? widgetSignInRef.current,
+      allowedSegmentIds: nextSegmentIds ?? allowedSegmentIdsRef.current,
+    })
   }
 
-  function handleVisibilitySelect(next: 'public' | 'private') {
+  function handleVisibilitySelect(next: Visibility) {
     if (next === visibilityRef.current || isAccessBusy) return
 
     if (next === 'private') {
@@ -237,7 +240,7 @@ export function PortalAuthTab({ portalConfig, teamOpenSignup }: PortalAuthTabPro
       setDialogOpen(true)
     } else {
       // Changing to public: keep current domains (ref) alongside new visibility
-      void applyAccess('public', allowedDomainsRef.current)
+      applyAccess('public', allowedDomainsRef.current)
     }
   }
 
@@ -246,7 +249,7 @@ export function PortalAuthTab({ portalConfig, teamOpenSignup }: PortalAuthTabPro
     if (pendingVisibility === 'private') {
       setPendingVisibility(null)
       // Changing to private: keep current domains (ref) alongside new visibility
-      void applyAccess('private', allowedDomainsRef.current)
+      applyAccess('private', allowedDomainsRef.current)
     }
   }
 
@@ -275,12 +278,12 @@ export function PortalAuthTab({ portalConfig, teamOpenSignup }: PortalAuthTabPro
     setDomainInputError(null)
     setDomainInput('')
     // Keep current visibility (ref); update domains
-    void applyAccess(visibilityRef.current, [...allowedDomainsRef.current, raw])
+    applyAccess(visibilityRef.current, [...allowedDomainsRef.current, raw])
   }
 
   function handleRemoveDomain(domain: string) {
     // Keep current visibility (ref); update domains
-    void applyAccess(
+    applyAccess(
       visibilityRef.current,
       allowedDomainsRef.current.filter((d) => d !== domain)
     )
@@ -300,96 +303,72 @@ export function PortalAuthTab({ portalConfig, teamOpenSignup }: PortalAuthTabPro
 
   return (
     <div className="space-y-6">
-      {/* Portal visibility — sole purpose is the public/private switch. The
-          four authorization channels each get their own SettingsCard below
-          (only when Private) so each one stands on its own. */}
+      {/* Portal visibility: the who-can-view choice and the anonymous switch.
+          The four authorization channels each get their own SettingsCard below
+          (only when private) so each one stands on its own. */}
       <SettingsCard title="Portal visibility" description="Choose who can view your portal.">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {VISIBILITY_OPTIONS.map((option) => {
-            const isSelected = visibility === option.value
-            const Icon = option.icon
-            return (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => handleVisibilitySelect(option.value)}
-                disabled={isAccessBusy}
-                className={cn(
-                  'relative flex flex-col gap-2 rounded-lg border p-4 text-left transition-colors',
-                  isSelected
-                    ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                    : 'border-border/50 bg-card hover:border-border hover:bg-muted/30',
-                  isAccessBusy && 'cursor-not-allowed opacity-60'
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <Icon
-                    className={cn(
-                      'h-4 w-4 shrink-0',
-                      isSelected ? 'text-primary' : 'text-muted-foreground'
-                    )}
-                  />
-                  <span className="text-sm font-medium">{option.label}</span>
-                  {accessBusy && isSelected && (
-                    <ArrowPathIcon className="ml-auto h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground">{option.description}</p>
-              </button>
-            )
-          })}
-        </div>
-
-        {/* Lives inside the visibility card, directly under the toggles, so
-            the team-always-has-access reassurance appears at the exact moment
-            an admin picks Private — not as a floating note between cards. */}
-        {visibility === 'private' && (
-          <p className="mt-4 text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">Your team always has access.</span> Use
-            the cards below to authorize additional visitors.
-          </p>
-        )}
-
-        <div className="mt-4 flex items-center justify-between border-t border-border/40 pt-4">
-          <div className="pr-4">
-            <Label htmlFor="allow-anonymous" className="text-sm font-medium cursor-pointer">
-              Allow anonymous interaction
-            </Label>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              When off, all boards require sign-in for voting, commenting, and submitting posts.
-            </p>
-          </div>
-          <Switch
-            id="allow-anonymous"
-            checked={allowAnonymous}
-            onCheckedChange={(checked) => void applyAllowAnonymous(checked)}
-            disabled={anonBusy || isPending}
-            aria-label="Allow anonymous interaction"
+        <div className="space-y-4">
+          <VisibilityTiles
+            name="portal-visibility"
+            value={visibility}
+            onChange={handleVisibilitySelect}
+            options={VISIBILITY_OPTIONS}
+            disabled={isAccessBusy}
+            className="sm:grid-cols-2"
           />
+
+          {/* Directly under the tiles, so the team-always-has-access reassurance
+              appears at the exact moment an admin picks the private option. */}
+          {visibility === 'private' && (
+            <p className="text-[13px] text-muted-foreground">
+              <span className="font-medium text-foreground">Your team always has access.</span> Use
+              the cards below to authorize additional visitors.
+            </p>
+          )}
+
+          <div className="border-t border-border/50 pt-1">
+            <SettingRow
+              label="Allow anonymous interaction"
+              description="When off, all boards require sign-in for voting, commenting, and submitting posts."
+              htmlFor="allow-anonymous"
+              className="pb-0"
+              control={
+                <Switch
+                  id="allow-anonymous"
+                  checked={allowAnonymous}
+                  onCheckedChange={(checked) => anonMutation.mutate(checked)}
+                  disabled={anonBusy || isPending}
+                  aria-label="Allow anonymous interaction"
+                />
+              }
+            />
+          </div>
         </div>
       </SettingsCard>
 
       {/* Who may open an account, as opposed to who may look. Kept a peer of
           visibility and shown in both modes: a public portal that anyone can
           read still has to decide whether anyone can join it. */}
-      <SettingsCard
-        title="Account signup"
-        description="Choose whether visitors can create their own account on the portal."
-        action={
-          <Switch
-            id="portal-open-signup-toggle"
-            checked={openSignup}
-            onCheckedChange={(checked) => void applyOpenSignup(checked)}
-            disabled={signupBusy || isPending}
-            aria-label="Allow visitors to create their own portal account"
-          />
-        }
-      >
-        <p className="text-xs text-muted-foreground">
-          {openSignup
-            ? 'Anyone can create an account to post, vote and comment.'
-            : 'Only people you invite, and people already holding an account, can sign in. Everyone else is told the portal is not accepting new accounts.'}
-        </p>
+      <SettingsCard>
+        <SettingRow
+          label="Let visitors create an account"
+          description={
+            openSignup
+              ? 'Anyone can create an account to post, vote and comment.'
+              : 'Only users you invite, and users already holding an account, can sign in.'
+          }
+          htmlFor="portal-open-signup-toggle"
+          className="py-0"
+          control={
+            <Switch
+              id="portal-open-signup-toggle"
+              checked={openSignup}
+              onCheckedChange={(checked) => signupMutation.mutate(checked)}
+              disabled={signupBusy || isPending}
+              aria-label="Let visitors create an account"
+            />
+          }
+        />
       </SettingsCard>
 
       {/* The authorization channels — each a peer card of Portal visibility,
@@ -399,7 +378,7 @@ export function PortalAuthTab({ portalConfig, teamOpenSignup }: PortalAuthTabPro
         <>
           <SettingsCard
             title="Allowed email domains"
-            description="Anyone signed in with a verified email on these domains can view the portal. Users verify their address by clicking the link in the verification email we send on sign-up."
+            description="Anyone signed in with a verified email on these domains can view the portal."
           >
             <div className="space-y-4">
               <div className="flex gap-2">
@@ -432,11 +411,6 @@ export function PortalAuthTab({ portalConfig, teamOpenSignup }: PortalAuthTabPro
                   <PlusIcon className="mr-1 h-3.5 w-3.5" />
                   Add
                 </Button>
-                {accessBusy && (
-                  <div className="flex items-center">
-                    <ArrowPathIcon className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                  </div>
-                )}
               </div>
 
               {allowedDomains.length > 0 ? (
@@ -461,7 +435,7 @@ export function PortalAuthTab({ portalConfig, teamOpenSignup }: PortalAuthTabPro
                 </ul>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  No domains added — add one to grant access to everyone with a verified address at
+                  No domains yet. Add one to grant access to everyone with a verified address at
                   that domain.
                 </p>
               )}
@@ -472,7 +446,7 @@ export function PortalAuthTab({ portalConfig, teamOpenSignup }: PortalAuthTabPro
 
           <SettingsCard
             title="Allowed segments"
-            description="Members of these segments can view the portal. Segments are defined on the People page."
+            description="Members of these segments can view the portal. Segments are defined on the Users page."
           >
             {segmentsQuery.isLoading ? (
               <p className="text-xs text-muted-foreground">Loading segments…</p>
@@ -482,7 +456,7 @@ export function PortalAuthTab({ portalConfig, teamOpenSignup }: PortalAuthTabPro
               </p>
             ) : (segmentsQuery.data ?? []).length === 0 ? (
               <p className="text-xs text-muted-foreground">
-                No segments defined yet. Create segments on the People page.
+                No segments defined yet. Create segments on the Users page.
               </p>
             ) : (
               <div className="space-y-3">
@@ -490,7 +464,7 @@ export function PortalAuthTab({ portalConfig, teamOpenSignup }: PortalAuthTabPro
                   segments={segmentsQuery.data ?? []}
                   value={allowedSegmentIds}
                   onChange={(next) => {
-                    void applyAccess(
+                    applyAccess(
                       visibilityRef.current,
                       allowedDomainsRef.current,
                       widgetSignInRef.current,
@@ -509,26 +483,23 @@ export function PortalAuthTab({ portalConfig, teamOpenSignup }: PortalAuthTabPro
             )}
           </SettingsCard>
 
-          <SettingsCard
-            title="Widget sign-in"
-            description="Allow users authenticated through the widget (in verified-identity mode) to view this portal."
-            action={
-              <Switch
-                id="widget-signin-toggle"
-                checked={widgetSignIn}
-                onCheckedChange={(checked) => {
-                  void applyAccess(visibilityRef.current, allowedDomainsRef.current, checked)
-                }}
-                disabled={isAccessBusy}
-                aria-label="Allow widget-authenticated users to access the portal"
-              />
-            }
-          >
-            <p className="text-xs text-muted-foreground">
-              When enabled, widget users see a &ldquo;Go to portal&rdquo; link to continue in the
-              full portal — useful if you want a single source of truth across the widget and the
-              portal.
-            </p>
+          <SettingsCard>
+            <SettingRow
+              label="Widget sign-in"
+              description="Let users signed in through the widget continue in the full portal."
+              htmlFor="widget-signin-toggle"
+              className="py-0"
+              control={
+                <Switch
+                  id="widget-signin-toggle"
+                  checked={widgetSignIn}
+                  onCheckedChange={(checked) => {
+                    applyAccess(visibilityRef.current, allowedDomainsRef.current, checked)
+                  }}
+                  disabled={isAccessBusy}
+                />
+              }
+            />
           </SettingsCard>
         </>
       )}
@@ -564,11 +535,11 @@ function PortalInvitesSection() {
   return (
     <SettingsCard
       title="Email invites"
-      description="Invite specific people by email. They'll get a magic link to sign in and access the portal."
+      description="Invite users by email. They get a magic link to sign in."
       action={
         <Button type="button" size="sm" variant="outline" onClick={portal.openDialog}>
           <PlusIcon className="mr-1.5 h-3.5 w-3.5" />
-          Invite people
+          Invite users
         </Button>
       }
     >
@@ -582,7 +553,7 @@ function PortalInvitesSection() {
 
         {/* Inline success summary after a send — modal closes, this fades. */}
         {portal.lastSentSummary && (
-          <p className="text-xs text-emerald-700 dark:text-emerald-400" role="status">
+          <p className="text-xs text-success" role="status">
             {portal.lastSentSummary}
           </p>
         )}
@@ -631,7 +602,7 @@ function InviteSummary({
   if (totalCount === 0) {
     return (
       <p className="text-xs text-muted-foreground">
-        No invites sent yet — use Invite people to send the first one.
+        No invites sent yet. Use Invite users to send the first one.
       </p>
     )
   }
@@ -649,7 +620,7 @@ function InviteSummary({
       <Link
         to="/admin/users"
         search={{ invites: 'pending' as const }}
-        className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline underline-offset-4"
+        className={`${INLINE_LINK} inline-flex items-center gap-1 text-xs`}
       >
         Manage invites
         <ArrowRightIcon className="h-3 w-3" />

@@ -9,6 +9,8 @@ export const conversationAttachmentSchema = z.object({
   name: z.string().max(255),
   contentType: z.string().max(128),
   size: z.number().int().nonnegative(),
+  /** A file from the upload pipeline; the server rebuilds the rest from its row. */
+  fileId: z.string().max(64).optional(),
 })
 
 /** Shape only — canonical block-reply validation lives in the conversation service. */

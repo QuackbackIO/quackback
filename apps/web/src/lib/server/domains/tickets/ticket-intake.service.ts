@@ -27,11 +27,12 @@ import {
 } from '@/lib/server/db'
 import {
   validateContent,
-  validateAttachments,
   resolveMessageContent,
   richMessageFallbackLabel,
   preview,
 } from '@/lib/server/messages/message-core'
+import { resolveAttachments, linkFilesToMessage } from '@/lib/server/domains/files/files.service'
+import { canActAsAgent } from '@/lib/server/policy/conversation'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import type { Actor } from '@/lib/server/policy/types'
 import { ValidationError, InternalError } from '@/lib/shared/errors'
@@ -160,11 +161,14 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
   // the doc when the raw description is blank, and let a text-less rich doc
   // (image/embed) satisfy the empty-content guard via its fallback label. Run
   // ahead of the transaction — it's pure validation, no I/O.
-  const openingAttachments = validateAttachments(input.attachments)
   // The description is the requester's own ask when they file the ticket
   // themselves — their inline images may only reference our own storage.
   const filedByRequester =
     !!actor.principalId && actor.principalId === (input.requesterPrincipalId ?? null)
+  const openingAttachments = await resolveAttachments(input.attachments, {
+    principalId: actor.principalId ?? null,
+    canAttachAnyFile: canActAsAgent(actor).allowed,
+  })
   const safeDescriptionJson = input.descriptionJson
     ? sanitizeTiptapContent(input.descriptionJson, {
         restrictImagesToTrustedOrigins: filedByRequester,
@@ -260,17 +264,21 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
       // message, not a reply, so it never stamps first_response_at. PHASE 1b
       // (3/3): skipped when the opening rides the redirect onto the backing
       // conversation instead (see below).
-      await tx.insert(conversationMessages).values({
-        ticketId: ticket.id,
-        principalId: actor.principalId,
-        senderType: filedByRequester ? 'visitor' : 'agent',
-        content: validateContent(
-          resolvedDescription,
-          openingAttachments.length > 0 || !!fallbackLabel
-        ),
-        contentJson: safeDescriptionJson,
-        attachments: openingAttachments.length > 0 ? openingAttachments : null,
-      })
+      const [opening] = await tx
+        .insert(conversationMessages)
+        .values({
+          ticketId: ticket.id,
+          principalId: actor.principalId,
+          senderType: filedByRequester ? 'visitor' : 'agent',
+          content: validateContent(
+            resolvedDescription,
+            openingAttachments.length > 0 || !!fallbackLabel
+          ),
+          contentJson: safeDescriptionJson,
+          attachments: openingAttachments.length > 0 ? openingAttachments : null,
+        })
+        .returning({ id: conversationMessages.id })
+      await linkFilesToMessage(tx, openingAttachments, opening!.id)
     }
 
     // The watcher set from birth, in the same transaction so the first fan-out
@@ -361,17 +369,21 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
             'opening-message redirect failed; falling back to a ticket-parented opening row'
           )
           try {
-            await db.insert(conversationMessages).values({
-              ticketId: created.ticket.id,
-              principalId: actor.principalId,
-              senderType: filedByRequester ? 'visitor' : 'agent',
-              content: validateContent(
-                resolvedDescription,
-                openingAttachments.length > 0 || !!fallbackLabel
-              ),
-              contentJson: safeDescriptionJson,
-              attachments: openingAttachments.length > 0 ? openingAttachments : null,
-            })
+            const [opening] = await db
+              .insert(conversationMessages)
+              .values({
+                ticketId: created.ticket.id,
+                principalId: actor.principalId,
+                senderType: filedByRequester ? 'visitor' : 'agent',
+                content: validateContent(
+                  resolvedDescription,
+                  openingAttachments.length > 0 || !!fallbackLabel
+                ),
+                contentJson: safeDescriptionJson,
+                attachments: openingAttachments.length > 0 ? openingAttachments : null,
+              })
+              .returning({ id: conversationMessages.id })
+            await linkFilesToMessage(db, openingAttachments, opening!.id)
           } catch (fallbackErr) {
             log.error(
               { err: fallbackErr, ticket_id: created.ticket.id },

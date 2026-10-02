@@ -9,6 +9,7 @@
 import type { ReactNode } from 'react'
 import { act, render, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { IntlProvider } from 'react-intl'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const { fetchOnboardingStatus } = vi.hoisted(() => ({
@@ -35,7 +36,6 @@ vi.mock('@tanstack/react-router', async () => {
 
 vi.mock('@/lib/client/mutations/settings', () => ({
   useRegenerateWidgetSecret: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useUpdateWidgetConfig: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useMintWidgetInstallCode: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
@@ -58,9 +58,11 @@ function renderPage(statusAgeMs: number) {
     updatedAt: Date.now() - statusAgeMs,
   })
   return render(
-    <QueryClientProvider client={queryClient}>
-      <WidgetInstallPage />
-    </QueryClientProvider>
+    <IntlProvider locale="en" defaultLocale="en">
+      <QueryClientProvider client={queryClient}>
+        <WidgetInstallPage />
+      </QueryClientProvider>
+    </IntlProvider>
   )
 }
 

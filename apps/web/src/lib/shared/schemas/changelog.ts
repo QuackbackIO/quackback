@@ -71,6 +71,7 @@ export const listChangelogsSchema = z.object({
   status: z.enum(['draft', 'scheduled', 'published', 'all']).optional(),
   cursor: z.string().optional(),
   limit: PageLimitSchema,
+  sort: z.enum(['newest', 'oldest']).optional(),
 })
 
 /**

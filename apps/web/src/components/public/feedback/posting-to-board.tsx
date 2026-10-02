@@ -49,7 +49,7 @@ export function PostingToBoard({
         <Select value={selectedBoardId} onValueChange={onSelect}>
           <SelectTrigger
             size="xs"
-            className="border-0 bg-transparent shadow-none font-medium text-foreground hover:text-foreground/80 focus-visible:ring-0"
+            className="border-0 font-medium text-foreground hover:text-foreground/80 focus-visible:ring-0"
           >
             <SelectValue
               placeholder={intl.formatMessage({
@@ -60,7 +60,7 @@ export function PostingToBoard({
           </SelectTrigger>
           <SelectContent align="start">
             {boards.map((board) => (
-              <SelectItem key={board.id} value={board.id} className="py-1">
+              <SelectItem key={board.id} value={board.id}>
                 {board.name}
               </SelectItem>
             ))}

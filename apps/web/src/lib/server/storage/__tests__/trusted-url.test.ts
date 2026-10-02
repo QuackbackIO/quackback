@@ -14,7 +14,8 @@ const mockConfig = {
 
 vi.mock('@/lib/server/config', () => ({ config: mockConfig }))
 
-const { isTrustedAttachmentUrl } = await import('@/lib/server/storage/trusted-url')
+const { isTrustedAttachmentUrl, namesPipelineFile, PIPELINE_FILES_PREFIX } =
+  await import('@/lib/server/storage/trusted-url')
 const { withWorkspace } = await import('@/lib/server/__tests__/workspace-scope')
 
 beforeEach(() => {
@@ -84,5 +85,29 @@ describe('isTrustedAttachmentUrl — S3_PUBLIC_URL path boundary', () => {
   it('still rejects other hosts when a public URL is configured', () => {
     mockConfig.s3PublicUrl = 'https://minio.example.com/app-bucket'
     expect(isTrustedAttachmentUrl('https://evil.example.com/app-bucket/x.png')).toBe(false)
+  })
+})
+
+describe('namesPipelineFile', () => {
+  it('names the prefix the files domain stores under', async () => {
+    const { FILES_PREFIX } = await import('@/lib/server/domains/files/files.service')
+    expect(PIPELINE_FILES_PREFIX).toBe(FILES_PREFIX)
+  })
+
+  it('matches a pipeline key on the storage route of any host, encoded or not', () => {
+    expect(namesPipelineFile('/api/storage/files/2026/10/a.pdf?read=x&exp=1')).toBe(true)
+    expect(namesPipelineFile('/api/storage/files%2F2026%2F10%2Fa.pdf')).toBe(true)
+    expect(namesPipelineFile('https://old.example.com/api/storage/files/a.pdf')).toBe(true)
+    expect(namesPipelineFile('/api/storage/filesystem/a.pdf')).toBe(false)
+    expect(namesPipelineFile('/api/storage/chat-images/files/a.png')).toBe(false)
+    expect(namesPipelineFile('https://cdn.example.com/files/a.pdf')).toBe(false)
+  })
+
+  it('matches a pipeline key under the public bucket URL', () => {
+    mockConfig.s3PublicUrl = 'https://minio.example.com/app-bucket'
+    expect(namesPipelineFile('https://minio.example.com/app-bucket/files/2026/10/a.pdf')).toBe(true)
+    expect(namesPipelineFile('https://minio.example.com/app-bucket/files%2F2026/a.pdf')).toBe(true)
+    expect(namesPipelineFile('https://minio.example.com/app-bucket/chat-images/a.png')).toBe(false)
+    expect(namesPipelineFile('https://minio.example.com/other-bucket/files/a.pdf')).toBe(false)
   })
 })

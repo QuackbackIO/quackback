@@ -1,12 +1,16 @@
 import { cn } from '@/lib/shared/utils'
+import { LocalDate } from '@/components/ui/local-date'
 
-/** Format an ISO date as e.g. "Jul 3, 2026" for a detail-panel value. */
-export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
+/** The format of a detail-panel date, e.g. "Jul 3, 2026". */
+export const DETAIL_DATE: Intl.DateTimeFormatOptions = {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+}
+
+/** A detail-panel date value, e.g. "Jul 3, 2026", in the viewer's locale once hydrated. */
+export function DetailDate({ date }: { date: string }) {
+  return <LocalDate date={date} options={DETAIL_DATE} />
 }
 
 /**

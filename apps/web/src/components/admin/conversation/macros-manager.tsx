@@ -12,7 +12,7 @@
  */
 import { useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { PlusIcon, TrashIcon, PencilSquareIcon } from '@heroicons/react/24/outline'
+import { DocumentDuplicateIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
 import type { MacroId } from '@quackback/ids'
 import type { MacroAction, MacroScope } from '@/lib/shared/db-types'
@@ -29,6 +29,9 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { EmptyState } from '@/components/shared/empty-state'
+import { SettingsList, SettingsListRow } from '@/components/admin/settings/settings-list'
 import {
   Dialog,
   DialogContent,
@@ -98,68 +101,90 @@ function defaultAction(type: OfferedActionType): MacroAction {
   }
 }
 
-export function MacrosManager() {
+export function MacrosManager({
+  creating,
+  onCreatingChange,
+}: {
+  /** The page header's "New macro" button drives the create dialog. */
+  creating: boolean
+  onCreatingChange: (creating: boolean) => void
+}) {
   const { data } = useQuery(macrosQuery())
   const macros = (data?.macros ?? []) as MacroRow[]
-  const [editing, setEditing] = useState<MacroRow | 'new' | null>(null)
+  const [editing, setEditing] = useState<MacroRow | null>(null)
+  const [deleting, setDeleting] = useState<MacroRow | null>(null)
   const deleteMacro = useDeleteMacro()
 
   return (
-    <div className="space-y-3">
-      {macros.length === 0 && <p className="text-sm text-muted-foreground">No macros yet.</p>}
-      {macros.map((macro) => (
-        <div
-          key={macro.id}
-          className="flex items-start gap-2 rounded-lg border border-border/60 p-2.5"
-        >
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="truncate text-sm font-medium">{macro.name}</span>
-              <Badge variant="secondary" className="shrink-0 text-[11px]">
-                {SCOPE_LABELS[macro.scope]}
-              </Badge>
-              {macro.actions.length > 0 && (
-                <Badge variant="outline" className="shrink-0 text-[11px]">
-                  {macro.actions.length} action{macro.actions.length === 1 ? '' : 's'}
-                </Badge>
-              )}
-            </div>
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">{macro.body}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setEditing(macro)}
-            className="mt-0.5 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted"
-            aria-label="Edit macro"
-          >
-            <PencilSquareIcon className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              deleteMacro.mutate(macro.id, {
-                onSuccess: () => toast.success('Macro deleted'),
-                onError: () => toast.error('Failed to delete macro'),
-              })
-            }}
-            disabled={deleteMacro.isPending}
-            className="mt-0.5 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
-            aria-label="Delete macro"
-          >
-            <TrashIcon className="h-4 w-4" />
-          </button>
-        </div>
-      ))}
-      <Button type="button" variant="outline" size="sm" onClick={() => setEditing('new')}>
-        <PlusIcon className="h-4 w-4" /> Add macro
-      </Button>
-      {editing && (
+    <>
+      {macros.length === 0 ? (
+        <EmptyState
+          size="compact"
+          icon={DocumentDuplicateIcon}
+          title="No macros yet"
+          description="Save a reply you send often, with variables and actions."
+        />
+      ) : (
+        <SettingsList>
+          {macros.map((macro) => (
+            <SettingsListRow
+              key={macro.id}
+              title={macro.name}
+              meta={macro.body}
+              badges={
+                macro.scope !== 'support' && (
+                  <Badge variant="secondary" className="shrink-0 text-[11px]">
+                    {SCOPE_LABELS[macro.scope]}
+                  </Badge>
+                )
+              }
+              trailing={
+                macro.actions.length > 0
+                  ? `${macro.actions.length} action${macro.actions.length === 1 ? '' : 's'}`
+                  : undefined
+              }
+              actions={[
+                { label: 'Edit', onSelect: () => setEditing(macro) },
+                { label: 'Delete', destructive: true, onSelect: () => setDeleting(macro) },
+              ]}
+            />
+          ))}
+        </SettingsList>
+      )}
+      {(creating || editing) && (
         <MacroEditorDialog
-          macro={editing === 'new' ? null : editing}
-          onClose={() => setEditing(null)}
+          macro={editing}
+          onClose={() => {
+            setEditing(null)
+            onCreatingChange(false)
+          }}
         />
       )}
-    </div>
+      <ConfirmDialog
+        open={deleting !== null}
+        onOpenChange={(open) => !open && setDeleting(null)}
+        variant="destructive"
+        title="Delete macro?"
+        description={
+          deleting
+            ? `"${deleting.name}" will be removed from the composer for everyone.`
+            : undefined
+        }
+        confirmLabel="Delete macro"
+        isPending={deleteMacro.isPending}
+        onConfirm={() => {
+          const target = deleting
+          if (!target) return
+          deleteMacro.mutate(target.id, {
+            onSuccess: () => {
+              toast.success('Macro deleted')
+              setDeleting(null)
+            },
+            onError: () => toast.error('Failed to delete macro'),
+          })
+        }}
+      />
+    </>
   )
 }
 

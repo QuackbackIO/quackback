@@ -132,7 +132,8 @@ function typeSelect(): HTMLSelectElement {
 async function openCreateDialog() {
   const user = userEvent.setup()
   renderWithClient(<ConversationAttributesList />)
-  await user.click(await screen.findByRole('button', { name: /new attribute/i }))
+  // The empty registry also offers the action inside the empty state; the header's comes first.
+  await user.click((await screen.findAllByRole('button', { name: /new attribute/i }))[0])
   return user
 }
 
@@ -143,10 +144,9 @@ async function openEditDialogForIssueType() {
   hoisted.listConversationAttributesFn.mockResolvedValue(FIXTURE_ATTRIBUTES)
   const user = userEvent.setup()
   renderWithClient(<ConversationAttributesList />)
-  const issueTypeRow = (await screen.findByText('Issue type')).closest(
-    '.flex.items-center.gap-4'
-  ) as HTMLElement
-  await user.click(within(issueTypeRow).getByTitle('Edit attribute'))
+  await screen.findByText('Issue type')
+  await user.click(screen.getByRole('button', { name: 'Actions for Issue type' }))
+  await user.click(await screen.findByRole('menuitem', { name: 'Edit' }))
   await screen.findByText('Edit attribute')
   return user
 }
@@ -164,14 +164,93 @@ describe('ConversationAttributesList', () => {
     renderWithClient(<ConversationAttributesList />)
 
     const issueTypeRow = (await screen.findByText('Issue type')).closest(
-      '.flex.items-center.gap-4'
+      '[data-slot="settings-list-row"]'
     ) as HTMLElement
     expect(within(issueTypeRow).getByText('AI')).toBeInTheDocument()
 
     const severityRow = screen
       .getByText('Severity')
-      .closest('.flex.items-center.gap-4') as HTMLElement
+      .closest('[data-slot="settings-list-row"]') as HTMLElement
     expect(within(severityRow).queryByText('AI')).not.toBeInTheDocument()
+  })
+
+  it('words a workflow source hint as muted text and an AI source hint as an AI badge', async () => {
+    hoisted.listConversationAttributesFn.mockResolvedValue([
+      { ...FIXTURE_ATTRIBUTES[1], sourceHint: 'workflow' },
+      { ...FIXTURE_ATTRIBUTES[0], sourceHint: 'ai', aiDetect: false },
+    ])
+    renderWithClient(<ConversationAttributesList />)
+    expect(await screen.findByText('Usually set by a workflow')).toBeInTheDocument()
+    expect(screen.queryByText('Usually set by AI')).not.toBeInTheDocument()
+    const aiRow = screen
+      .getByText('Issue type')
+      .closest('[data-slot="settings-list-row"]') as HTMLElement
+    expect(within(aiRow).getByText('AI')).toBeInTheDocument()
+    const workflowRow = screen
+      .getByText('Severity')
+      .closest('[data-slot="settings-list-row"]') as HTMLElement
+    expect(within(workflowRow).queryByText('AI')).not.toBeInTheDocument()
+  })
+
+  it('keeps one AI badge when the source hint is ai and AI detect is on', async () => {
+    hoisted.listConversationAttributesFn.mockResolvedValue([
+      { ...FIXTURE_ATTRIBUTES[0], sourceHint: 'ai', aiDetect: true },
+    ])
+    renderWithClient(<ConversationAttributesList />)
+    const row = (await screen.findByText('Issue type')).closest(
+      '[data-slot="settings-list-row"]'
+    ) as HTMLElement
+    expect(within(row).getAllByText('AI')).toHaveLength(1)
+    expect(within(row).queryByText('Usually set by AI')).not.toBeInTheDocument()
+  })
+
+  it('shows Required to close as a muted badge, not the warning tone', async () => {
+    hoisted.listConversationAttributesFn.mockResolvedValue([
+      { ...FIXTURE_ATTRIBUTES[1], requiredToClose: true },
+    ])
+    renderWithClient(<ConversationAttributesList />)
+    const badge = await screen.findByText('Required to close')
+    expect(badge.className).not.toMatch(/warning/)
+  })
+
+  it('offers Edit and Archive in the row menu, Restore on an archived row', async () => {
+    hoisted.listConversationAttributesFn.mockResolvedValue([
+      FIXTURE_ATTRIBUTES[0],
+      { ...FIXTURE_ATTRIBUTES[1], archivedAt: new Date() },
+    ])
+    const user = userEvent.setup()
+    renderWithClient(<ConversationAttributesList />)
+    await screen.findByText('Issue type')
+
+    await user.click(screen.getByRole('button', { name: 'Actions for Issue type' }))
+    expect(await screen.findByRole('menuitem', { name: 'Edit' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Archive' })).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+
+    await user.click(screen.getByRole('button', { name: 'Actions for Severity' }))
+    expect(await screen.findByRole('menuitem', { name: 'Restore' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Edit' })).not.toBeInTheDocument()
+  })
+
+  it('archives only after the confirmation dialog', async () => {
+    hoisted.listConversationAttributesFn.mockResolvedValue(FIXTURE_ATTRIBUTES)
+    hoisted.archiveConversationAttributeFn.mockResolvedValue({})
+    const user = userEvent.setup()
+    renderWithClient(<ConversationAttributesList />)
+    await screen.findByText('Issue type')
+    await user.click(screen.getByRole('button', { name: 'Actions for Issue type' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Archive' }))
+    expect(hoisted.archiveConversationAttributeFn).not.toHaveBeenCalled()
+    await user.click(await screen.findByRole('button', { name: 'Archive attribute' }))
+    expect(hoisted.archiveConversationAttributeFn).toHaveBeenCalledWith({
+      data: { id: 'conversation_attribute_1' },
+    })
+  })
+
+  it('shows the empty state with a New attribute action when there are none', async () => {
+    hoisted.listConversationAttributesFn.mockResolvedValue([])
+    renderWithClient(<ConversationAttributesList />)
+    expect(await screen.findByText('No attributes yet')).toBeInTheDocument()
   })
 
   it('gates the AI-detect section to select-type attributes in the create dialog', async () => {

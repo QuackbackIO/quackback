@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { format } from 'date-fns'
+import { LocalDate } from '@/components/ui/local-date'
 import { ChevronUpIcon } from '@heroicons/react/24/solid'
 import type { PostId } from '@quackback/ids'
 import { Avatar } from '@/components/ui/avatar'
@@ -58,7 +58,7 @@ function InteractiveVoteBox({
         voteBoxCls,
         'transition-colors',
         hasVoted
-          ? 'border-post-card-voted/60 bg-post-card-voted/15 text-post-card-voted'
+          ? 'border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding text-post-card-voted'
           : 'border-border/50 bg-muted/40 text-muted-foreground hover:bg-muted/60 hover:text-foreground/80',
         isPending && 'cursor-wait opacity-70'
       )}
@@ -362,7 +362,10 @@ export function QuackbackEmbedCard({
       <h3 className="mt-0.5 line-clamp-1 text-sm font-semibold text-foreground">{data.title}</h3>
       {data.publishedAt && (
         <p className="mt-1 text-[11px] text-muted-foreground">
-          {format(new Date(data.publishedAt), 'MMM d, yyyy')}
+          <LocalDate
+            date={data.publishedAt}
+            options={{ month: 'short', day: 'numeric', year: 'numeric' }}
+          />
         </p>
       )}
     </div>

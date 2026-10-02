@@ -45,9 +45,9 @@ export function ProviderMenu({
   const [pending, setPending] = useState(false)
 
   const blockedReason = isOnlyMethod
-    ? 'This is the only enabled sign-in method. Enable another before removing it.'
+    ? 'This is the only enabled sign-in method. Enable another before deleting it.'
     : accountCount > 0
-      ? `${accountCount} ${accountCount === 1 ? 'person signs' : 'people sign'} in through this provider. Disable it instead, or remove those accounts first.`
+      ? `${accountCount} ${accountCount === 1 ? 'user signs' : 'users sign'} in through this provider. Disable it instead, or remove those accounts first.`
       : null
 
   const handleDelete = async () => {
@@ -55,10 +55,10 @@ export function ProviderMenu({
     try {
       await remove({ data: { id: provider.id } })
       await queryClient.invalidateQueries({ queryKey: IDENTITY_PROVIDERS_KEY })
-      toast.success('Identity provider removed.')
+      toast.success('Identity provider deleted.')
       await navigate(SIGN_IN_TAB)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not remove the identity provider.')
+      toast.error(err instanceof Error ? err.message : 'Could not delete the identity provider.')
       setPending(false)
       setConfirmOpen(false)
     }
@@ -80,7 +80,7 @@ export function ProviderMenu({
             className="gap-2"
           >
             <TrashIcon className="h-4 w-4" />
-            Remove provider
+            Delete provider
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -88,10 +88,10 @@ export function ProviderMenu({
       <ConfirmDialog
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
-        title={`Remove ${provider.label}?`}
+        title={`Delete ${provider.label}?`}
         description="Sign-in through this provider stops working and its verified domains are released."
         variant="destructive"
-        confirmLabel="Remove"
+        confirmLabel="Delete provider"
         isPending={pending}
         onConfirm={handleDelete}
       />

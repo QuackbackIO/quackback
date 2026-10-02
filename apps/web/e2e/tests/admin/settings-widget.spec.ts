@@ -10,15 +10,10 @@ test.describe('Admin Widget Settings', () => {
     await expect(page.getByRole('heading', { name: 'Widget' }).first()).toBeVisible({
       timeout: 10000,
     })
-    await expect(
-      page.getByText(
-        'Embed the messenger widget in your product — feedback, conversations, help, and updates'
-      )
-    ).toBeVisible({ timeout: 10000 })
   })
 
   test('shows the site-embed toggle', async ({ page }) => {
-    await expect(page.getByText('Add to your site')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Visibility', { exact: true })).toBeVisible({ timeout: 10000 })
     const widgetToggle = page.locator('#widget-toggle')
     await expect(widgetToggle).toBeVisible({ timeout: 10000 })
     await expect(widgetToggle).toBeEnabled()
@@ -31,7 +26,7 @@ test.describe('Admin Widget Settings', () => {
   })
 
   test('shows Feedback tab label with description', async ({ page }) => {
-    await expect(page.getByText('Search, vote, and submit ideas')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Search, vote and submit ideas')).toBeVisible({ timeout: 10000 })
   })
 
   test('shows Changelog tab label with description', async ({ page }) => {
@@ -46,22 +41,22 @@ test.describe('Admin Widget Settings', () => {
     await expect(page.getByText('Default board')).toBeVisible()
   })
 
-  test('shows install status inside Add to your site', async ({ page }) => {
-    await expect(page.getByText('Add to your site')).toBeVisible({ timeout: 10000 })
+  test('shows install status inside Visibility', async ({ page }) => {
+    await expect(page.getByText('Install status')).toBeVisible({ timeout: 10000 })
     await expect(page.getByRole('link', { name: /Set it up|View installation/ })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Installation' })).toHaveCount(0)
   })
 
-  test('install page shows the snippet without an enable-channel step', async ({ page }) => {
+  test('install page shows the prompt and snippet without a second visibility switch', async ({
+    page,
+  }) => {
     await page.goto('/admin/settings/widget/install')
-    await expect(page.getByText('Ask your agent')).toBeVisible({ timeout: 10000 })
-    await expect(page.getByText('Or add the snippet yourself')).toBeVisible()
-    await expect(page.getByText('Verify the connection')).toBeVisible()
-    await expect(page.getByText('Enable the channel')).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Install' })).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('button', { name: 'Copy install prompt' })).toBeVisible()
+    await expect(page.getByText('Install without an agent')).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Widget settings' })).toBeVisible()
     await expect(page.locator('#widget-toggle')).toHaveCount(0)
-    await expect(
-      page.getByRole('button', { name: /Turn on the Messages tab|Enable feedback widget/ })
-    ).toHaveCount(0)
+    await expect(page.locator('#show-on-website')).toHaveCount(0)
   })
 
   test('shows widget preview panel', async ({ page }) => {

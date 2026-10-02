@@ -428,7 +428,7 @@ function ModalBody({
   return (
     <div className="space-y-3">
       {appliedMessage ? (
-        <div className="flex items-center gap-2 rounded-md border border-green-500/30 bg-green-500/10 p-2.5 text-sm font-medium text-green-700">
+        <div className="flex items-center gap-2 rounded-md border border-success/30 bg-success/10 p-2.5 text-sm font-medium text-success">
           <CheckCircleIcon className="h-4 w-4 shrink-0" />
           {appliedMessage}
         </div>
@@ -575,13 +575,13 @@ function StepList({ steps }: { steps: WireResult['steps'] }) {
           {s.severity === 'info' ? (
             <MinusCircleIcon className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
           ) : s.ok ? (
-            <CheckCircleIcon className="h-3.5 w-3.5 text-green-600 mt-0.5 shrink-0" />
+            <CheckCircleIcon className="h-3.5 w-3.5 text-success mt-0.5 shrink-0" />
           ) : (
             <ExclamationTriangleIcon className="h-3.5 w-3.5 text-destructive mt-0.5 shrink-0" />
           )}
           <span className={s.severity === 'info' ? 'text-muted-foreground' : undefined}>
             <span className="font-medium">{s.label}</span>
-            {s.detail && <span className="text-muted-foreground"> — {s.detail}</span>}
+            {s.detail && <span className="text-muted-foreground">: {s.detail}</span>}
           </span>
         </li>
       ))}
@@ -598,8 +598,8 @@ function TestResultPanel({
 }) {
   if (result.ok) {
     return (
-      <div className="rounded-md border border-green-500/30 bg-green-500/5 p-3 space-y-2">
-        <div className="flex items-center gap-2 text-sm font-medium text-green-700">
+      <div className="rounded-md border border-success/30 bg-success/5 p-3 space-y-2">
+        <div className="flex items-center gap-2 text-sm font-medium text-success">
           <CheckCircleIcon className="h-4 w-4" />
           Sign-in works
         </div>

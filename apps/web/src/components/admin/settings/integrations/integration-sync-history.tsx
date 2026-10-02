@@ -43,7 +43,7 @@ const filters: Array<[SyncFilter, string]> = [
   ['successful', 'Successful'],
 ]
 const actionLabels: Record<SyncAction, string> = {
-  retry: 'Retry',
+  retry: 'Try again',
   cancel: 'Cancel',
   reconcile: 'Check result',
   keep_remote: 'Dismiss change',
@@ -138,7 +138,7 @@ export function IntegrationSyncHistory({ provider }: { provider: string }) {
           className="py-8"
         />
       ) : (
-        <div className="divide-y divide-border/50 overflow-hidden rounded-xl border border-border/50 bg-card">
+        <div className="divide-y divide-border/50 overflow-hidden border-y border-t-transparent">
           {history.data.items.map((item) => (
             <div key={item.id}>
               <div className="flex flex-wrap items-start gap-3 p-4">

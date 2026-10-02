@@ -69,7 +69,7 @@ import { cn } from '@/lib/shared/utils'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { assistantWaitMinutes } from '@/lib/shared/workflows/abandoned-auto-close'
 import { useWorkflowEntities } from './entities'
-import { BLOCK_ICONS, ConfirmDeleteDialog, TONE_TILE } from './step-visuals'
+import { BLOCK_ICONS, ConfirmDeleteDialog, RULE_BOX, START_TAG, TONE_TILE } from './step-visuals'
 import type { BuilderSelection } from './types'
 import type {
   FrequencyCap,
@@ -186,17 +186,22 @@ const StepNode = memo(function StepNode({ data }: NodeProps<Node<StepNodeData, '
           data.selected
             ? 'border-transparent shadow-md ring-2 ring-ring'
             : data.warn
-              ? 'border-amber-500/60'
+              ? 'border-warning/60'
               : 'border-border hover:border-foreground/25'
         )}
       >
         {data.startTag && (
-          <span className="absolute -top-[21px] left-3.5 rounded-t-md bg-amber-500/15 px-2.5 py-0.5 text-[10.5px] font-bold tracking-wide text-amber-700 uppercase dark:text-amber-400">
+          <span
+            className={cn(
+              'absolute -top-[21px] left-3.5 rounded-t-md px-2.5 py-0.5 text-[10.5px] font-bold tracking-wide uppercase',
+              START_TAG
+            )}
+          >
             Start
           </span>
         )}
         {data.warn && (
-          <ExclamationTriangleIcon className="absolute top-2.5 right-2.5 size-3.5 text-amber-600 dark:text-amber-500" />
+          <ExclamationTriangleIcon className="absolute top-2.5 right-2.5 size-3.5 text-warning" />
         )}
         <div className="flex items-center gap-2.5 p-3">
           <span
@@ -275,12 +280,22 @@ const RuleNode = memo(function RuleNode({ data }: NodeProps<Node<RuleNodeData, '
   return (
     <div className="relative w-[300px]">
       <div className="mb-2 flex items-center gap-1.5 text-[11.5px] font-semibold text-muted-foreground">
-        <span className="flex size-5 items-center justify-center rounded-md bg-violet-500/10 text-[11px] font-bold text-violet-700 dark:text-violet-300">
+        <span
+          className={cn(
+            'flex size-5 items-center justify-center rounded-md text-[11px] font-bold',
+            TONE_TILE.violet
+          )}
+        >
           {data.badge}
         </span>
         {data.name}
       </div>
-      <div className="rounded-[10px] border border-dashed border-violet-500/40 bg-violet-500/10 px-3 py-2 text-center text-[12.5px] text-violet-700 dark:text-violet-300">
+      <div
+        className={cn(
+          'rounded-[10px] border border-dashed px-3 py-2 text-center text-[12.5px]',
+          RULE_BOX
+        )}
+      >
         {data.parts.map((part, i) =>
           part.bold ? (
             <b key={i} className="font-bold">

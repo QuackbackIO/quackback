@@ -81,6 +81,17 @@ describe('settings config mutations cache invalidation', () => {
     expect(result).toBeInstanceOf(Promise)
   })
 
+  it('useSaveBrandingTheme leaves plan refusals to the page and names other reasons', async () => {
+    const { useSaveBrandingTheme } = await import('../settings')
+    const { meta } = useSaveBrandingTheme() as unknown as {
+      meta: { autosave?: boolean; showServerMessage?: boolean; ownsError?: (e: unknown) => boolean }
+    }
+    expect(meta.autosave).toBe(true)
+    expect(meta.showServerMessage).toBe(true)
+    expect(meta.ownsError?.(Object.assign(new Error('x'), { statusCode: 402 }))).toBe(true)
+    expect(meta.ownsError?.(new Error('Custom CSS is too long.'))).toBe(false)
+  })
+
   it('useSaveBrandingTheme persist/clear/rewrite customCss writes', async () => {
     const { useSaveBrandingTheme } = await import('../settings')
     const mutation = useSaveBrandingTheme() as unknown as {

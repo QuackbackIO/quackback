@@ -1,4 +1,4 @@
-import { Label } from '@/components/ui/label'
+import { SettingRow } from '@/components/admin/settings/setting-row'
 import { Switch } from '@/components/ui/switch'
 import { useUpdateIntegration } from '@/lib/client/mutations'
 
@@ -12,22 +12,19 @@ export function CustomerContextConfig({
   const update = useUpdateIntegration()
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <Label htmlFor={`context-${integrationId}`} className="text-base font-medium">
-            Customer context
-          </Label>
-          <p className="text-xs text-muted-foreground">
-            Look up customer details by email when you open customer context.
-          </p>
-        </div>
-        <Switch
-          id={`context-${integrationId}`}
-          checked={enabled}
-          disabled={update.isPending}
-          onCheckedChange={(checked) => update.mutate({ id: integrationId, enabled: checked })}
-        />
-      </div>
+      <SettingRow
+        label="Customer context"
+        htmlFor={`context-${integrationId}`}
+        description="Look up customer details by email when you open customer context."
+        control={
+          <Switch
+            id={`context-${integrationId}`}
+            checked={enabled}
+            disabled={update.isPending}
+            onCheckedChange={(checked) => update.mutate({ id: integrationId, enabled: checked })}
+          />
+        }
+      />
       {update.isError && (
         <p role="alert" className="text-sm text-destructive">
           {update.error.message || 'Failed to save changes'}

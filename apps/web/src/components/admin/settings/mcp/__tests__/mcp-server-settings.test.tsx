@@ -28,15 +28,15 @@ describe('McpServerSettings enable lock', () => {
         initialDynamicRegistrationEnabled
       />
     )
-    fireEvent.click(screen.getByLabelText('Enable MCP Server'))
+    fireEvent.click(screen.getByLabelText('MCP server'))
     expect(screen.getByText(/The MCP server is a Pro feature/)).toBeTruthy()
     expect(save).not.toHaveBeenCalled()
-    expect(screen.getByLabelText('Enable MCP Server')).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByLabelText('MCP server')).toHaveAttribute('aria-checked', 'false')
   })
 
   it('saves when the plan includes MCP', async () => {
     render(<McpServerSettings entitled initialEnabled={false} initialDynamicRegistrationEnabled />)
-    fireEvent.click(screen.getByLabelText('Enable MCP Server'))
+    fireEvent.click(screen.getByLabelText('MCP server'))
     await waitFor(() => {
       expect(save).toHaveBeenCalledWith({ data: { mcpEnabled: true } })
     })
@@ -45,7 +45,7 @@ describe('McpServerSettings enable lock', () => {
 
   it('still allows turning MCP off when locked', async () => {
     render(<McpServerSettings entitled={false} initialEnabled initialDynamicRegistrationEnabled />)
-    fireEvent.click(screen.getByLabelText('Enable MCP Server'))
+    fireEvent.click(screen.getByLabelText('MCP server'))
     await waitFor(() => {
       expect(save).toHaveBeenCalledWith({ data: { mcpEnabled: false } })
     })

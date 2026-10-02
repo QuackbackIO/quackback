@@ -11,6 +11,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useState } from 'react'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
 
+vi.mock('@/lib/client/hooks/use-permission', () => ({ usePermission: () => true }))
+
 let sectionRenders = 0
 vi.mock('@/components/shared/filter-section', () => ({
   FilterSection: ({ title }: { title: string }) => {

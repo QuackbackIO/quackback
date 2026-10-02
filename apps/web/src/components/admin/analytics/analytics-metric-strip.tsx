@@ -1,4 +1,5 @@
 import { cn } from '@/lib/shared/utils'
+import { useFormatNumber } from '@/components/ui/format-number'
 import { TrendDelta } from './analytics-trend'
 
 export interface MetricStripItem {
@@ -26,6 +27,7 @@ export function AnalyticsMetricStrip({
   onChange,
   gridClassName,
 }: AnalyticsMetricStripProps) {
+  const formatNumber = useFormatNumber()
   return (
     <div className={cn('grid divide-border/50', gridClassName)}>
       {items.map(({ key, label, color, value, delta }) => {
@@ -46,16 +48,18 @@ export function AnalyticsMetricStrip({
             }
           >
             <p
-              className="mb-2 text-xs uppercase tracking-wider text-muted-foreground"
-              style={isActive ? { color } : undefined}
+              className={cn(
+                'mb-2 text-[13px] text-muted-foreground',
+                isActive && 'font-medium text-foreground'
+              )}
             >
               {label}
             </p>
             <p className="text-2xl sm:text-3xl leading-none font-bold tabular-nums tracking-tight">
-              {value.toLocaleString()}
+              {formatNumber(value)}
             </p>
             {delta !== null && <TrendDelta value={delta} className="mt-1.5" />}
-            {/* Active indicator — full-strength metric color, clearly visible */}
+            {/* Active indicator in the series colour */}
             <div
               className={cn(
                 'absolute inset-x-0 bottom-0 h-[3px] transition-opacity duration-150',

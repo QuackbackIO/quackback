@@ -160,6 +160,119 @@ describe('buildThreadModelMessages', () => {
       { role: 'assistant', content: 'hello' },
     ])
   })
+
+  describe('unsupported image types', () => {
+    it('sends a HEIC attachment’s rendition (a JPEG) instead of its own bytes', () => {
+      const [msg] = buildThreadModelMessages(
+        [
+          {
+            sender: 'customer',
+            content: 'see this',
+            attachments: [
+              {
+                url: '/api/storage/abc/photo.heic',
+                name: 'photo.heic',
+                contentType: 'image/heic',
+                size: 10,
+                preview: { renditionUrl: '/api/storage/abc/photo.heic.jpg' },
+              },
+            ],
+          },
+        ],
+        { visionCapable: true }
+      )
+      const parts = msg.content as Array<{
+        type: string
+        source?: { value: string; mimeType?: string }
+      }>
+      expect(parts[1]).toEqual({
+        type: 'image',
+        source: {
+          type: 'url',
+          value: 'https://app.example.com/api/storage/abc/photo.heic.jpg',
+          mimeType: 'image/jpeg',
+        },
+      })
+    })
+
+    it('degrades a HEIC attachment with no rendition to a text note, never sending it to the model', () => {
+      const [msg] = buildThreadModelMessages(
+        [
+          {
+            sender: 'customer',
+            content: 'look',
+            attachments: [
+              {
+                url: '/api/storage/abc/photo.heic',
+                name: 'photo.heic',
+                contentType: 'image/heic',
+                size: 10,
+              },
+            ],
+          },
+        ],
+        { visionCapable: true }
+      )
+      expect(typeof msg.content).toBe('string')
+      expect(msg.content).toBe('look\n[image attached: photo.heic]')
+    })
+
+    it('drops an SVG attachment with no rendition, keeping a supported image on the same turn', () => {
+      const [msg] = buildThreadModelMessages(
+        [
+          {
+            sender: 'customer',
+            content: 'see these',
+            attachments: [
+              png('shot.png', '/api/storage/abc/shot.png'),
+              {
+                url: '/api/storage/abc/diagram.svg',
+                name: 'diagram.svg',
+                contentType: 'image/svg+xml',
+                size: 10,
+              },
+            ],
+          },
+        ],
+        { visionCapable: true }
+      )
+      const parts = msg.content as Array<{
+        type: string
+        content?: string
+        source?: { value: string; mimeType?: string }
+      }>
+      expect(parts).toHaveLength(2)
+      expect(parts[0]).toEqual({
+        type: 'text',
+        content: 'see these\n[image attached: diagram.svg]',
+      })
+      expect(parts[1]).toEqual({
+        type: 'image',
+        source: {
+          type: 'url',
+          value: 'https://app.example.com/api/storage/abc/shot.png',
+          mimeType: 'image/png',
+        },
+      })
+    })
+
+    it('never sends TIFF/BMP/AVIF image bytes directly to the model', () => {
+      for (const contentType of ['image/tiff', 'image/bmp', 'image/avif']) {
+        const [msg] = buildThreadModelMessages(
+          [
+            {
+              sender: 'customer',
+              content: '',
+              attachments: [{ url: '/x', name: `shot.${contentType}`, contentType, size: 10 }],
+            },
+          ],
+          { visionCapable: true }
+        )
+        expect(typeof msg.content).toBe('string')
+        expect(msg.content).toContain('image attached')
+      }
+    })
+  })
 })
 
 describe('mapRowsToThreadMessages — attachments', () => {

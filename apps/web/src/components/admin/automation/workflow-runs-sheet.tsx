@@ -27,27 +27,28 @@ import {
 } from '@/lib/client/queries/workflow-reporting'
 import type { WorkflowRunRow, WorkflowRunEventRow } from '@/lib/server/functions/workflow-reporting'
 import { ACTION_LABELS } from './workflow-graph'
+import { INLINE_LINK } from '@/components/admin/settings/inline-link'
 
 const RUN_STATE_META: Record<string, { label: string; dotClass: string; textClass: string }> = {
   running: {
     label: 'Running',
-    dotClass: 'bg-blue-500',
-    textClass: 'text-blue-600 dark:text-blue-400',
+    dotClass: 'bg-primary',
+    textClass: 'text-primary',
   },
   waiting: {
     label: 'Waiting',
-    dotClass: 'bg-amber-500',
-    textClass: 'text-amber-600 dark:text-amber-400',
+    dotClass: 'bg-warning',
+    textClass: 'text-warning',
   },
   done: {
     label: 'Done',
-    dotClass: 'bg-emerald-500',
-    textClass: 'text-emerald-600 dark:text-emerald-400',
+    dotClass: 'bg-success',
+    textClass: 'text-success',
   },
   interrupted: {
     label: 'Interrupted',
-    dotClass: 'bg-rose-500',
-    textClass: 'text-rose-600 dark:text-rose-400',
+    dotClass: 'bg-destructive',
+    textClass: 'text-destructive',
   },
 }
 
@@ -99,7 +100,7 @@ function RunStateBadge({ state }: { state: string }) {
     textClass: 'text-muted-foreground',
   }
   return (
-    <Badge variant="outline" size="sm" shape="pill" className={cn('gap-1', meta.textClass)}>
+    <Badge variant="outline" size="sm" className={cn('gap-1', meta.textClass)}>
       <span className={cn('size-1.5 rounded-full', meta.dotClass)} />
       {meta.label}
     </Badge>
@@ -136,7 +137,7 @@ function RunRow({
             to="/admin/inbox"
             search={{ i: run.conversationId }}
             onClick={(e) => e.stopPropagation()}
-            className="inline-flex w-fit items-center gap-1 text-xs font-medium text-primary hover:underline"
+            className={`${INLINE_LINK} inline-flex w-fit items-center gap-1 text-xs`}
           >
             Open conversation
             <ArrowTopRightOnSquareIcon className="size-3" />

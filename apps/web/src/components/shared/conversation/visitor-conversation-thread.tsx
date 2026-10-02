@@ -19,7 +19,7 @@ import {
   BlockReplyTimeCaption,
 } from './block-affordance'
 import { BlockTicketForm } from './block-ticket-form'
-import { ConversationPresenceBadge } from './conversation-presence-badge'
+import { BackAtTime, ConversationPresenceBadge, hasBackAtTime } from './conversation-presence-badge'
 import { ConversationThreadSkeleton } from './conversation-thread-skeleton'
 import { SystemEventNotice } from './system-event-notice'
 import { conversationAvailable } from '@/lib/shared/conversation/presence'
@@ -33,8 +33,15 @@ import { personalizeMessage, firstNameOf } from '@/lib/shared/conversation/perso
 import { useConversationStream } from '@/lib/client/hooks/use-conversation-stream'
 import { useConversationTyping } from '@/lib/client/hooks/use-conversation-typing'
 import { useAssistantTurn } from '@/lib/client/hooks/use-assistant-turn'
-import { useConversationComposerAttachments } from '@/lib/client/hooks/use-conversation-composer-attachments'
+import {
+  useConversationComposerAttachments,
+  type ComposerUploadFn,
+} from '@/lib/client/hooks/use-conversation-composer-attachments'
 import { ComposerAttachmentTray } from '@/components/shared/composer-attachment-tray'
+import {
+  ConversationGalleryContext,
+  useGalleryValue,
+} from '@/components/shared/files/conversation-gallery'
 import { VISITOR_CONVERSATION_FEATURES } from '@/components/conversation/conversation-editor-features'
 import { VisitorMessageBubble } from '@/components/conversation/message-bubble'
 import {
@@ -64,11 +71,11 @@ import type { BlockReplyMetadata } from '@/lib/shared/db-types'
 import { useVisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
 import { getWidgetCapabilitiesFn } from '@/lib/server/functions/widget-capabilities'
 import { TicketHeaderCard } from './ticket-header-card'
+import { useLocalDateFormatter } from '@/components/ui/local-date'
 import type { RequesterTicketDTO } from '@/lib/server/domains/tickets'
 
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-}
+/** A message's time of day, e.g. "3:04 PM". */
+const TIME_LABEL: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' }
 
 const NO_HEADERS = (): Record<string, string> => ({})
 const ALWAYS_READY = async (): Promise<boolean> => true
@@ -133,9 +140,10 @@ export interface VisitorConversationThreadProps {
   sessionVersion?: number | string
   /** The visitor's own identity, for their bubbles' name/avatar. */
   currentUser?: { name?: string | null; avatarUrl?: string | null } | null
-  /** Upload one image file, resolving to its public URL. Rejections surface as
-   *  inline composer errors. */
-  uploadImage: (file: File) => Promise<string>
+  /** Upload one attached file, resolving to its stored UploadedFile. Carries
+   *  the surface's own endpoint/headers/session-minting; failures surface on
+   *  the tile that failed. */
+  uploadFile: ComposerUploadFn
   /** Team availability (online agents / office hours), owned by the surface so
    *  every sibling view shares one poll. */
   presence: VisitorConversationThreadPresence
@@ -163,11 +171,15 @@ export interface VisitorConversationThreadProps {
    * would cover the thread) does not.
    */
   autofocusComposer?: boolean
+  /** The widget's messenger is narrow — attachment cards render as compact
+   *  rows there. The portal Support tab is wide and leaves this at its
+   *  default. */
+  compact?: boolean
 }
 
 /**
  * The visitor side of a conversation: virtualized thread, live SSE updates,
- * composer (rich text + image attachments + emoji), pre-chat email capture,
+ * composer (rich text + file attachments + emoji), pre-chat email capture,
  * presence strip, offline hints, and the post-conversation CSAT prompt.
  *
  * Shared by the widget messenger tab and the portal Support tab — every
@@ -183,7 +195,7 @@ export function VisitorConversationThread({
   ensureSession = ALWAYS_READY,
   sessionVersion = 0,
   currentUser,
-  uploadImage,
+  uploadFile,
   presence,
   onAgentActivity,
   helpSearch,
@@ -191,8 +203,10 @@ export function VisitorConversationThread({
   showHeader = true,
   onConversationStarted,
   autofocusComposer = false,
+  compact = false,
 }: VisitorConversationThreadProps) {
   const intl = useIntl()
+  const formatDate = useLocalDateFormatter()
   const queryClient = useQueryClient()
   const rpc = useVisitorSurfaceRpc()
   const firstName = firstNameOf(currentUser?.name)
@@ -254,6 +268,7 @@ export function VisitorConversationThread({
     staleTime: Infinity,
   })
   const messages = thread?.messages ?? EMPTY_MESSAGES
+  const gallery = useGalleryValue(messages)
   const hasMoreOlder = thread?.hasMore ?? false
   const agentReadAt = thread?.agentLastReadAt ?? null
   const conversationStatus = thread?.status ?? null
@@ -279,53 +294,19 @@ export function VisitorConversationThread({
     clearAssistantTurn,
   } = useAssistantTurn()
 
-  // No toast on visitor surfaces, so upload failures render as inline composer
-  // text. uploadImage rejects on failure; the wrapper records the message.
-  const [uploadError, setUploadError] = useState<string | null>(null)
-  const upload = useCallback(
-    async (file: File): Promise<string> => {
-      try {
-        return await uploadImage(file)
-      } catch (err) {
-        setUploadError(err instanceof Error ? err.message : 'Upload failed')
-        throw err
-      }
-    },
-    [uploadImage]
-  )
-  // Image attachments use the shared tray (thumbnails + zoom) — same as admin.
+  // Every attached file stages its own tray tile with its own progress/error
+  // (no toast on visitor surfaces) — uploadFile already carries the surface's
+  // endpoint/headers/session-minting (the widget's flavour mints an anonymous
+  // session on first use, GH #464).
   const {
-    pending: pendingAttachments,
+    items: attachmentItems,
+    attachments: pendingAttachments,
     addFiles,
     remove: removeAttachment,
+    retry: retryAttachment,
     clear: clearAttachments,
     uploading,
-  } = useConversationComposerAttachments(upload)
-  // Attaching/pasting an image fires before the visitor has ever sent a message,
-  // so there may be no session yet — mint one first (anonymous is fine) or the
-  // upload goes out with no Bearer and 401s silently.
-  const handleAddFiles = useCallback(
-    async (files: FileList | File[]) => {
-      // Snapshot to a real array NOW: the file <input>'s live FileList is emptied
-      // by `e.target.value = ''` synchronously after this call, before the
-      // ensureSession() await below resolves — so reading it later loses the pick.
-      const list = Array.from(files)
-      if (list.length === 0) return
-      setUploadError(null)
-      const ready = await ensureSession()
-      if (!ready) {
-        setUploadError(
-          intl.formatMessage({
-            id: 'widget.messenger.upload.failed',
-            defaultMessage: "Couldn't upload that image. Please try again.",
-          })
-        )
-        return
-      }
-      await addFiles(list)
-    },
-    [ensureSession, addFiles, intl]
-  )
+  } = useConversationComposerAttachments(uploadFile)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const composerPlaceholder = intl.formatMessage({
     id: 'widget.messenger.placeholder',
@@ -344,31 +325,28 @@ export function VisitorConversationThread({
     [composer.draft, onLocalInput]
   )
 
-  // Pasting/dropping an image routes to the attachment tray, matching the
+  // Pasting/dropping a file routes to the attachment tray, matching the
   // paperclip button — RichTextEditor has no onImageUpload wired for visitors
-  // (images stay tray-only here, never inlined), so this replicates what the
-  // old composer's own paste/drop interception did.
+  // (files stay tray-only here, never inlined), so this replicates what the
+  // old composer's own paste/drop interception did. Paste still works for an
+  // image from the clipboard; drop/paste now accept any file.
   const handleComposerPaste = useCallback(
     (e: React.ClipboardEvent<HTMLDivElement>) => {
-      const images = Array.from(e.clipboardData?.files ?? []).filter((f) =>
-        f.type.startsWith('image/')
-      )
-      if (images.length === 0) return
+      const files = Array.from(e.clipboardData?.files ?? [])
+      if (files.length === 0) return
       e.preventDefault()
-      void handleAddFiles(images)
+      void addFiles(files)
     },
-    [handleAddFiles]
+    [addFiles]
   )
   const handleComposerDrop = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
-      const images = Array.from(e.dataTransfer?.files ?? []).filter((f) =>
-        f.type.startsWith('image/')
-      )
-      if (images.length === 0) return
+      const files = Array.from(e.dataTransfer?.files ?? [])
+      if (files.length === 0) return
       e.preventDefault()
-      void handleAddFiles(images)
+      void addFiles(files)
     },
-    [handleAddFiles]
+    [addFiles]
   )
 
   // Initial load — resumes an existing conversation for the current principal
@@ -728,18 +706,6 @@ export function VisitorConversationThread({
   // when office hours are configured, the schedule also marks us available.
   const available = conversationAvailable(presence.agentsOnline, presence.withinOfficeHours)
 
-  // "Back at" time for the away state, formatted in the visitor's own locale.
-  const reopenLabel = useMemo(() => {
-    if (!presence.nextOpenAt) return null
-    const at = new Date(presence.nextOpenAt)
-    if (Number.isNaN(at.getTime())) return null
-    return new Intl.DateTimeFormat(intl.locale, {
-      weekday: 'long',
-      hour: 'numeric',
-      minute: '2-digit',
-    }).format(at)
-  }, [presence.nextOpenAt, intl.locale])
-
   // Show the offline hint when the team is away. When we can email a reply, only
   // echo the admin's message if one is set; when we can't, always show the
   // neutral "we'll reply here" note instead of a false email promise. With the
@@ -913,7 +879,6 @@ export function VisitorConversationThread({
       // Clear the composer only on success — the resetSignal bump empties the editor.
       clearComposer()
       clearAttachments()
-      setUploadError(null)
     } catch {
       // Leave the composer content intact for a retry.
     } finally {
@@ -998,8 +963,11 @@ export function VisitorConversationThread({
             content={m.content}
             contentJson={m.contentJson}
             attachments={m.attachments}
+            messageId={m.id}
+            sentAt={m.createdAt}
+            compact={compact}
             citations={m.citations}
-            time={formatTime(m.createdAt)}
+            time={formatDate(m.createdAt, TIME_LABEL)}
             editedLabel={
               m.editedAt
                 ? intl.formatMessage({ id: 'widget.messenger.edited', defaultMessage: '(edited)' })
@@ -1216,15 +1184,22 @@ export function VisitorConversationThread({
       {linkedTicket && <TicketHeaderCard ticket={linkedTicket} getAuthHeaders={getAuthHeaders} />}
 
       <div className="relative flex-1 min-h-0">
-        <ThreadViewport
-          virtualizer={virtualizer}
-          rows={rows}
-          renderRow={renderRow}
-          viewportRef={scrollViewportRef}
-          scrollBarClassName="w-1.5"
-          className="h-full"
-          rowClassName="px-3 py-1.5"
-        />
+        {/* Every attachment in the loaded thread, in message order — lets a
+            card's click open the viewer on the whole conversation, not just
+            its own message. Visitor-facing, so internal notes are never
+            included (they should never reach this DTO in the first place;
+            this is belt-and-suspenders). */}
+        <ConversationGalleryContext.Provider value={gallery}>
+          <ThreadViewport
+            virtualizer={virtualizer}
+            rows={rows}
+            renderRow={renderRow}
+            viewportRef={scrollViewportRef}
+            scrollBarClassName="w-1.5"
+            className="h-full"
+            rowClassName="px-3 py-1.5"
+          />
+        </ConversationGalleryContext.Provider>
 
         {/* First load: the viewport has no rows yet (the greeting/empty row
             is withheld until we know which thread this is), so bubble-shaped
@@ -1296,12 +1271,12 @@ export function VisitorConversationThread({
               />
             )}
           </p>
-          {reopenLabel && (
+          {hasBackAtTime(presence.nextOpenAt) && (
             <p className="mt-0.5">
               <FormattedMessage
                 id="widget.messenger.offline.backAt"
                 defaultMessage="Back {when}"
-                values={{ when: reopenLabel }}
+                values={{ when: <BackAtTime at={presence.nextOpenAt} /> }}
               />
             </p>
           )}
@@ -1341,13 +1316,12 @@ export function VisitorConversationThread({
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
             multiple
             className="hidden"
             onChange={(e) => {
-              // Attach via the shared tray (thumbnails + zoom), same as admin.
+              // Attach via the shared tray, same as admin.
               const files = e.target.files
-              if (files && files.length > 0) void handleAddFiles(files)
+              if (files && files.length > 0) void addFiles(files)
               e.target.value = ''
             }}
           />
@@ -1398,8 +1372,11 @@ export function VisitorConversationThread({
               </Suspense>
             )}
           </ScrollArea>
-          <ComposerAttachmentTray attachments={pendingAttachments} onRemove={removeAttachment} />
-          {uploadError && <p className="px-1 pt-1 text-[11px] text-destructive">{uploadError}</p>}
+          <ComposerAttachmentTray
+            items={attachmentItems}
+            onRemove={removeAttachment}
+            onRetry={retryAttachment}
+          />
           {/* Live link unfurl while composing (Slack-style), gated by the flag. */}
           {linkPreviews && (
             <ComposerLinkPreviews draft={composerDraft} getAuthHeaders={getAuthHeaders} />
@@ -1412,7 +1389,7 @@ export function VisitorConversationThread({
               className="shrink-0 flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-muted disabled:opacity-40 transition-colors"
               aria-label={intl.formatMessage({
                 id: 'widget.messenger.attach',
-                defaultMessage: 'Attach image',
+                defaultMessage: 'Attach files',
               })}
             >
               <PaperClipIcon className="w-5 h-5" />

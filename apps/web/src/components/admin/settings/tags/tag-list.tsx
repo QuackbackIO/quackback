@@ -1,14 +1,8 @@
 import { useState, useEffect, useTransition, type ReactNode } from 'react'
 import { useRouter } from '@tanstack/react-router'
+import { useMutation } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import {
-  PlusIcon,
-  TrashIcon,
-  PencilSquareIcon,
-  ArrowPathIcon,
-  EyeSlashIcon,
-  GlobeAltIcon,
-} from '@heroicons/react/24/solid'
+import { EyeSlashIcon, GlobeAltIcon, TagIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -27,8 +21,15 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { ColorPickerGrid, ColorHexInput, randomColor } from '@/components/shared/color-picker'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
+import { RowDot, SettingsList, SettingsListRow } from '@/components/admin/settings/settings-list'
+import { AiBackfillCard } from '@/components/admin/settings/tags/ai-backfill-card'
+import { EmptyState } from '@/components/shared/empty-state'
+import { NewButton } from '@/components/shared/new-button'
+import { Badge } from '@/components/ui/badge'
+import { AUTOSAVE } from '@/lib/client/autosave'
 import { cn } from '@/lib/shared/utils'
-import type { PostTag } from '@/lib/shared/db-types'
+import type { Board, PostTag } from '@/lib/shared/db-types'
 import { createPostTagFn, updatePostTagFn, deletePostTagFn } from '@/lib/server/functions/post-tags'
 
 function ColorPickerPopover({
@@ -278,34 +279,35 @@ function VisibilityCard({
 // PostTag List (main export)
 // ============================================================================
 
-interface TagListProps {
+interface TagsSettingsPageProps {
   initialTags: PostTag[]
+  boards: Board[]
 }
 
-export function TagList({ initialTags }: TagListProps) {
+export function TagsSettingsPage({ initialTags, boards }: TagsSettingsPageProps) {
   const router = useRouter()
   const [, startTransition] = useTransition()
   const [tags, setTags] = useState(initialTags)
-  const [savingField, setSavingField] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingTag, setEditingTag] = useState<PostTag | null>(null)
   const [deletingTag, setDeletingTag] = useState<PostTag | null>(null)
 
-  // Change color inline — save immediately
-  const handleColorChange = async (tag: PostTag, color: string) => {
-    const previousColor = tag.color
-    setSavingField(`color-${tag.id}`)
-    setTags((prev) => prev.map((t) => (t.id === tag.id ? { ...t, color } : t)))
+  // Colour changes save on change; a failure reverts the dot and the autosave
+  // handler shows the one toast.
+  const colorMutation = useMutation({
+    mutationFn: (input: { id: string; color: string; previousColor: string }) =>
+      updatePostTagFn({ data: { id: input.id, color: input.color } }),
+    meta: AUTOSAVE,
+    onSuccess: () => startTransition(() => router.invalidate()),
+    onError: (_error, input) =>
+      setTags((prev) =>
+        prev.map((t) => (t.id === input.id ? { ...t, color: input.previousColor } : t))
+      ),
+  })
 
-    try {
-      await updatePostTagFn({ data: { id: tag.id, color } })
-      startTransition(() => router.invalidate())
-    } catch {
-      toast.error('Failed to update color')
-      setTags((prev) => prev.map((t) => (t.id === tag.id ? { ...t, color: previousColor } : t)))
-    } finally {
-      setSavingField(null)
-    }
+  function handleColorChange(tag: PostTag, color: string) {
+    setTags((prev) => prev.map((t) => (t.id === tag.id ? { ...t, color } : t)))
+    colorMutation.mutate({ id: tag.id, color, previousColor: tag.color })
   }
 
   function handleTagSaved(saved: PostTag) {
@@ -341,98 +343,59 @@ export function TagList({ initialTags }: TagListProps) {
   }
 
   return (
-    <div className="space-y-8">
-      <SettingsCard
-        title="Tags"
-        description="Label posts across boards for filtering and organization. Tags appear as colored badges throughout the app, and on the public portal unless marked internal."
-        contentClassName="p-4"
-      >
-        <div className="space-y-1">
-          {tags.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              No tags yet. Create your first tag to get started.
-            </p>
-          )}
-
-          {tags.map((tag) => (
-            <div
-              key={tag.id}
-              className="flex items-center gap-2 sm:gap-3 py-1.5 px-2 rounded-md hover:bg-muted/50 group min-w-0"
-            >
-              <div className="min-w-0 max-w-[8rem] sm:w-40 sm:max-w-none sm:shrink-0">
-                <ColorPickerPopover
-                  color={tag.color}
-                  onColorChange={(c) => handleColorChange(tag, c)}
-                  trigger={
-                    <button
-                      type="button"
-                      className="inline-flex items-center px-2 py-0.5 rounded-md text-sm font-medium max-w-full truncate hover:ring-2 hover:ring-offset-1 hover:ring-muted-foreground/40"
-                      style={{ backgroundColor: tag.color + '20', color: tag.color }}
-                      title="Change color"
-                    >
-                      {tag.name}
-                    </button>
-                  }
-                />
-              </div>
-
-              <span
-                className="inline-flex items-center gap-1 text-xs text-muted-foreground shrink-0 w-[4.75rem]"
-                title={
-                  tag.isPublic ? 'Shown on the public portal' : 'Hidden from the public portal'
+    <SettingsPage
+      page="/admin/settings/tags"
+      actions={tags.length > 0 ? <NewButton noun="tag" onClick={openCreate} /> : undefined}
+    >
+      <SettingsCard flush>
+        {tags.length === 0 ? (
+          <EmptyState
+            size="compact"
+            icon={TagIcon}
+            title="No tags yet"
+            description="Tags label posts for filtering."
+            action={<NewButton noun="tag" onClick={openCreate} />}
+          />
+        ) : (
+          <SettingsList>
+            {tags.map((tag) => (
+              <SettingsListRow
+                key={tag.id}
+                leading={
+                  <ColorPickerPopover
+                    color={tag.color}
+                    onColorChange={(c) => handleColorChange(tag, c)}
+                    trigger={
+                      <button
+                        type="button"
+                        aria-label={`Change colour of ${tag.name}`}
+                        className="flex cursor-pointer rounded-full hover:ring-2 hover:ring-muted-foreground/40 hover:ring-offset-1"
+                      >
+                        <RowDot color={tag.color} />
+                      </button>
+                    }
+                  />
                 }
-              >
-                {tag.isPublic ? (
-                  <GlobeAltIcon className="h-3 w-3" />
-                ) : (
-                  <EyeSlashIcon className="h-3 w-3" />
-                )}
-                {tag.isPublic ? 'Portal' : 'Internal'}
-              </span>
-
-              <span className="hidden sm:block text-xs text-muted-foreground truncate flex-1 min-w-0">
-                {tag.description ?? ''}
-              </span>
-
-              {/* Saving spinner */}
-              {savingField === `color-${tag.id}` && (
-                <ArrowPathIcon className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-              )}
-
-              {/* Edit button */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 shrink-0 text-muted-foreground opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                onClick={() => openEdit(tag)}
-                title="Edit tag"
-              >
-                <PencilSquareIcon className="h-3.5 w-3.5" />
-              </Button>
-
-              {/* Delete button */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                onClick={() => setDeletingTag(tag)}
-                title="Delete tag"
-              >
-                <TrashIcon className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          ))}
-
-          {/* Add new tag button */}
-          <button
-            className="flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-muted/50 w-full text-muted-foreground"
-            onClick={openCreate}
-          >
-            <PlusIcon className="h-3 w-3" />
-            <span className="text-sm">Add new tag</span>
-          </button>
-        </div>
+                title={tag.name}
+                badges={
+                  !tag.isPublic ? (
+                    <Badge size="sm" variant="secondary">
+                      Internal
+                    </Badge>
+                  ) : undefined
+                }
+                meta={tag.description || undefined}
+                actions={[
+                  { label: 'Edit', onSelect: () => openEdit(tag) },
+                  { label: 'Delete', onSelect: () => setDeletingTag(tag), destructive: true },
+                ]}
+              />
+            ))}
+          </SettingsList>
+        )}
       </SettingsCard>
+
+      <AiBackfillCard tags={tags} boards={boards} />
 
       {/* Create/Edit dialog */}
       <TagDialog
@@ -446,12 +409,12 @@ export function TagList({ initialTags }: TagListProps) {
       <ConfirmDialog
         open={!!deletingTag}
         onOpenChange={() => setDeletingTag(null)}
-        title="Delete tag"
-        description={`Are you sure you want to delete "${deletingTag?.name}"? This will remove it from all posts.`}
-        confirmLabel="Delete"
+        title="Delete tag?"
+        description={`"${deletingTag?.name}" will be removed from all posts. This cannot be undone.`}
+        confirmLabel="Delete tag"
         variant="destructive"
         onConfirm={handleDelete}
       />
-    </div>
+    </SettingsPage>
   )
 }

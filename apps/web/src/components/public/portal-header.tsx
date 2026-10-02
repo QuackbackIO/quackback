@@ -246,7 +246,7 @@ export function PortalHeader({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel className="font-normal">
+            <DropdownMenuLabel>
               <div className="flex flex-col space-y-1">
                 <p className="text-sm font-medium">{name}</p>
                 <p className="text-xs text-muted-foreground">{email}</p>

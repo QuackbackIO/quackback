@@ -8,9 +8,7 @@ test.describe('Admin Portal Settings', () => {
 
   test('page loads and shows portal settings', async ({ page }) => {
     await expect(page.getByRole('heading', { name: 'Portal' })).toBeVisible({ timeout: 10000 })
-    await expect(
-      page.getByText('Everything visitors see on your portal — theme, navigation, and content')
-    ).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Appearance').first()).toBeVisible({ timeout: 10000 })
   })
 
   test('/admin/settings/branding redirects to portal', async ({ page }) => {
@@ -26,10 +24,11 @@ test.describe('Admin Portal Settings', () => {
     await expect(page.getByText('Welcome message').first()).toBeVisible()
   })
 
-  test('shows Theme mode select', async ({ page }) => {
+  test('shows Theme mode tiles', async ({ page }) => {
     await expect(page.getByText('Theme mode')).toBeVisible({ timeout: 10000 })
-    const themeModeSelect = page.getByRole('combobox').first()
-    await expect(themeModeSelect).toBeVisible()
+    await expect(page.getByRole('radio', { name: 'Light' })).toBeVisible()
+    await expect(page.getByRole('radio', { name: 'Dark' })).toBeVisible()
+    await expect(page.getByRole('radio', { name: 'Visitor chooses' })).toBeVisible()
   })
 
   test('shows theme preset swatches', async ({ page }) => {
@@ -41,7 +40,7 @@ test.describe('Admin Portal Settings', () => {
 
   test('shows font and corner roundness controls', async ({ page }) => {
     await expect(page.getByText('Font').first()).toBeVisible()
-    await expect(page.getByText('Corner Roundness')).toBeVisible()
+    await expect(page.getByText('Corner roundness')).toBeVisible()
     await expect(page.getByRole('slider')).toBeVisible()
   })
 
@@ -58,15 +57,12 @@ test.describe('Admin Portal Settings', () => {
   })
 
   test('can switch theme mode options', async ({ page }) => {
-    const themeModeSelect = page.getByRole('combobox').first()
-    await expect(themeModeSelect).toBeVisible({ timeout: 5000 })
-    await themeModeSelect.click()
-    await expect(page.getByRole('option', { name: 'User choice (allow toggle)' })).toBeVisible({
-      timeout: 5000,
-    })
-    await expect(page.getByRole('option', { name: 'Light only' })).toBeVisible()
-    await expect(page.getByRole('option', { name: 'Dark only' })).toBeVisible()
-    await page.keyboard.press('Escape')
+    const visitorChooses = page.getByRole('radio', { name: 'Visitor chooses' })
+    await expect(visitorChooses).toBeVisible({ timeout: 5000 })
+    await page.getByRole('radio', { name: 'Dark' }).click()
+    await expect(page.getByRole('radio', { name: 'Dark' })).toBeChecked()
+    await visitorChooses.click()
+    await expect(visitorChooses).toBeChecked()
   })
 
   test('Feedback nav row is always on', async ({ page }) => {

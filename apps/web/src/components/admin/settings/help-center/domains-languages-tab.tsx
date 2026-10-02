@@ -1,7 +1,12 @@
-import { useState } from 'react'
+import { INLINE_LINK } from '@/components/admin/settings/inline-link'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { TrashIcon, XCircleIcon } from '@heroicons/react/24/solid'
+import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { Badge } from '@/components/ui/badge'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { InlineSpinner } from '@/components/admin/settings/inline-spinner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -44,6 +49,71 @@ const LOCALE_LABELS: Record<string, string> = {
   'zh-cn': '简体中文',
   'zh-tw': '繁體中文',
   nl: 'Nederlands',
+  pl: 'Polski',
+}
+
+const HOSTNAME_PATTERN =
+  /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+([a-z]{2,63}|xn--[a-z0-9-]{1,59})$/
+
+/**
+ * The stored form of a hostname: trimmed, one trailing dot dropped, IDN labels
+ * as punycode, lower case. Null when the value is not a bare hostname. The
+ * server canonicalises the same way, so the two agree on what is already saved.
+ */
+export function normalizeHelpCenterDomain(value: string): string | null {
+  const trimmed = value.trim().replace(/\.$/, '')
+  if (!trimmed || /[\s/:@?#\\]/.test(trimmed)) return null
+  let ascii: string
+  try {
+    ascii = new URL(`http://${trimmed}`).hostname
+  } catch {
+    return null
+  }
+  const lower = ascii.toLowerCase()
+  return HOSTNAME_PATTERN.test(lower) ? lower : null
+}
+
+/** An empty value clears the domain; anything else must be a bare hostname. */
+export function isValidHelpCenterDomain(value: string): boolean {
+  return value.trim() === '' || normalizeHelpCenterDomain(value) !== null
+}
+
+const MAX_PROTECTED_TERMS = 100
+const MAX_TERM_LENGTH = 100
+
+export function parseProtectedTerms(text: string): string[] {
+  return text
+    .split('\n')
+    .map((t) => t.trim())
+    .filter(Boolean)
+}
+
+/** The reason the terms cannot be saved, or null when they can. */
+export function protectedTermsError(terms: string[]): string | null {
+  if (terms.length > MAX_PROTECTED_TERMS) return `Use at most ${MAX_PROTECTED_TERMS} terms.`
+  if (terms.some((t) => t.length > MAX_TERM_LENGTH)) {
+    return `Each term can be up to ${MAX_TERM_LENGTH} characters.`
+  }
+  return null
+}
+
+interface LocaleChromeValues {
+  homepageTitle: string
+  homepageDescription: string
+  searchPlaceholder: string
+}
+
+/** The reason the texts cannot be saved, or null when they can. */
+export function localeChromeError(values: LocaleChromeValues): string | null {
+  if (!values.homepageTitle.trim()) return 'Add a homepage title.'
+  if (values.homepageTitle.length > 200) return 'The homepage title can be up to 200 characters.'
+  if (values.homepageDescription.length > 500) {
+    return 'The homepage description can be up to 500 characters.'
+  }
+  if (values.searchPlaceholder.length > 200) {
+    return 'The search placeholder can be up to 200 characters.'
+  }
+  return null
 }
 
 interface DomainsLanguagesTabProps {
@@ -69,6 +139,8 @@ export function DomainsLanguagesTab({ config }: DomainsLanguagesTabProps) {
 
 function DomainCard({ domain }: { domain: HelpCenterConfig['domain'] }) {
   const [value, setValue] = useState(domain.domain ?? '')
+  const [savedDomain, setSavedDomain] = useState(domain.domain ?? '')
+  const [invalid, setInvalid] = useState(false)
   const updateDomain = useUpdateHelpCenterDomain()
   const verifyDomain = useVerifyHelpCenterDomain()
   const statusQuery = useQuery({
@@ -76,40 +148,51 @@ function DomainCard({ domain }: { domain: HelpCenterConfig['domain'] }) {
     enabled: !!domain.domain,
   })
 
-  const dirty = value.trim() !== (domain.domain ?? '')
-  const busy = updateDomain.isPending || verifyDomain.isPending
+  const busy = verifyDomain.isPending
+  const verifyDisabled = busy
+
+  useEffect(() => {
+    setSavedDomain(domain.domain ?? '')
+  }, [domain.domain])
+
+  function save() {
+    const next = normalizeHelpCenterDomain(value) ?? ''
+    if (value.trim() !== '' && next === '') {
+      setInvalid(true)
+      return
+    }
+    setInvalid(false)
+    if (next === savedDomain) return
+    updateDomain.mutate(next || null, {
+      onSuccess: () => {
+        setSavedDomain(next)
+        setValue(next)
+      },
+    })
+  }
 
   return (
-    <SettingsCard
-      title="Custom domain"
-      description="Serve the help center on your own subdomain instead of the default host"
-    >
+    <SettingsCard title="Custom domain" description="Serve the help center on your own subdomain.">
       <div className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="hc-domain" className="text-sm font-medium">
             Domain
           </Label>
-          <div className="flex gap-2">
-            <Input
-              id="hc-domain"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              placeholder="help.acme.com"
-              disabled={busy}
-            />
-            <Button
-              variant="outline"
-              disabled={!dirty || busy}
-              onClick={() => updateDomain.mutate(value.trim() || null)}
-            >
-              Save
-            </Button>
-          </div>
-          {updateDomain.isError && (
-            <p className="text-xs text-destructive">
-              {updateDomain.error instanceof Error
-                ? updateDomain.error.message
-                : 'Could not save the domain'}
+          <Input
+            id="hc-domain"
+            value={value}
+            onChange={(e) => {
+              setValue(e.target.value)
+              setInvalid(false)
+            }}
+            onBlur={save}
+            placeholder="help.acme.com"
+            disabled={busy}
+            aria-invalid={invalid || undefined}
+          />
+          {invalid && (
+            <p role="alert" className="text-xs text-destructive">
+              Enter a hostname like help.acme.com, without https:// or a path.
             </p>
           )}
         </div>
@@ -122,14 +205,14 @@ function DomainCard({ domain }: { domain: HelpCenterConfig['domain'] }) {
                 <span className="text-xs text-muted-foreground">
                   {!statusQuery.data.dnsResolved
                     ? 'DNS has not propagated yet'
-                    : "the domain doesn't reach this instance yet"}
+                    : "The domain doesn't reach this instance yet"}
                 </span>
               )}
             </div>
             <Button
               variant="outline"
               size="sm"
-              disabled={busy}
+              disabled={verifyDisabled}
               onClick={() => verifyDomain.mutate()}
             >
               <InlineSpinner visible={verifyDomain.isPending} />
@@ -138,38 +221,45 @@ function DomainCard({ domain }: { domain: HelpCenterConfig['domain'] }) {
           </div>
         )}
 
-        <div className="space-y-1.5 rounded-lg bg-muted/30 p-4 text-xs text-muted-foreground">
-          <p>
-            Point a CNAME for your domain at this instance. TLS terminates at your own reverse proxy
-            (Caddy, nginx, Traefik) -- Quackback does not issue certificates.
-          </p>
-          <p>
-            Article content stores absolute image URLs. Changing the domain does not rewrite
-            existing article images, so keep the old host reachable or re-upload affected images.
-          </p>
-          <p>
-            If you self-host branding fonts, keep doing so on the new domain too -- never link a
-            Google Fonts stylesheet from the help center.
-          </p>
-          <p>Once verified, /hc pages on the default host redirect to this domain automatically.</p>
-        </div>
+        <Collapsible>
+          <CollapsibleTrigger className={`${INLINE_LINK} text-[13px]`}>
+            DNS setup
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="mt-2 space-y-1.5 text-[13px] text-muted-foreground">
+              <p>
+                Point a CNAME for your domain at this instance. TLS terminates at your own reverse
+                proxy (Caddy, nginx, Traefik). Quackback does not issue certificates.
+              </p>
+              <p>
+                Article content stores absolute image URLs. Changing the domain does not rewrite
+                existing article images, so keep the old host reachable or re-upload affected
+                images.
+              </p>
+              <p>
+                If you self-host branding fonts, keep doing so on the new domain too. Never link a
+                Google Fonts stylesheet from the help center.
+              </p>
+              <p>
+                Once verified, /hc pages on the default host redirect to this domain automatically.
+              </p>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       </div>
     </SettingsCard>
   )
 }
 
 function VerifiedChip({ verifiedAt }: { verifiedAt: string | null }) {
-  if (verifiedAt) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded border border-green-500/30 bg-green-500/10 px-1.5 py-0.5 text-[11px] font-medium text-green-700 dark:text-green-400">
-        Verified
-      </span>
-    )
-  }
-  return (
-    <span className="inline-flex items-center gap-1 rounded border border-border/50 bg-muted/40 px-1.5 py-0.5 text-[11px] text-muted-foreground">
+  return verifiedAt ? (
+    <Badge variant="success" size="sm">
+      Verified
+    </Badge>
+  ) : (
+    <Badge variant="warning" size="sm">
       Not verified
-    </span>
+    </Badge>
   )
 }
 
@@ -180,26 +270,22 @@ function VerifiedChip({ verifiedAt }: { verifiedAt: string | null }) {
 function RedirectRulesCard() {
   const rulesQuery = useQuery(settingsQueries.helpCenterRedirectRules())
   const deleteRule = useDeleteHelpCenterRedirectRule()
+  const [deletingRuleId, setDeletingRuleId] = useState<string | null>(null)
 
   return (
     <SettingsCard
       title="Redirect rules"
-      description="301 an old /hc path to a published article or category"
+      description="Redirect an old /hc path to a published article or category."
     >
-      <div className="space-y-4">
-        <CreateRedirectRuleForm />
-
+      <div className="space-y-3">
         {rulesQuery.isLoading ? (
           <div className="flex justify-center py-2">
             <InlineSpinner visible />
           </div>
         ) : rulesQuery.data && rulesQuery.data.length > 0 ? (
-          <ul className="space-y-2">
+          <ul className="divide-y divide-border/50">
             {rulesQuery.data.map((rule) => (
-              <li
-                key={rule.id}
-                className="flex items-center justify-between gap-3 rounded-lg border border-border/50 p-3"
-              >
+              <li key={rule.id} className="flex items-center justify-between gap-3 py-2.5">
                 <div className="min-w-0">
                   <code className="text-xs font-medium">{rule.path}</code>
                   <p className="mt-0.5 truncate text-xs text-muted-foreground">
@@ -212,7 +298,7 @@ function RedirectRulesCard() {
                   size="icon-sm"
                   aria-label="Delete redirect rule"
                   disabled={deleteRule.isPending}
-                  onClick={() => deleteRule.mutate(rule.id)}
+                  onClick={() => setDeletingRuleId(rule.id)}
                 >
                   <TrashIcon className="h-3.5 w-3.5" />
                 </Button>
@@ -220,9 +306,23 @@ function RedirectRulesCard() {
             ))}
           </ul>
         ) : (
-          <p className="text-xs text-muted-foreground">No redirect rules yet.</p>
+          <p className="text-[13px] text-muted-foreground">No redirect rules yet.</p>
         )}
+        <CreateRedirectRuleForm />
       </div>
+      <ConfirmDialog
+        open={deletingRuleId !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeletingRuleId(null)
+        }}
+        variant="destructive"
+        title="Delete redirect rule?"
+        description="Visitors to the old path will get a not found page instead of being redirected."
+        confirmLabel="Delete redirect rule"
+        onConfirm={() => {
+          if (deletingRuleId) deleteRule.mutate(deletingRuleId)
+        }}
+      />
     </SettingsCard>
   )
 }
@@ -265,8 +365,8 @@ function CreateRedirectRuleForm() {
   }
 
   return (
-    <div className="space-y-2 rounded-lg border border-border/50 p-3">
-      <div className="grid gap-2 sm:grid-cols-[1fr_auto_1fr]">
+    <div className="space-y-2 border-t border-border/50 pt-3">
+      <div className="grid gap-2 sm:grid-cols-[1fr_auto_1fr_auto]">
         <Input
           value={path}
           onChange={(e) => setPath(e.target.value)}
@@ -300,6 +400,15 @@ function CreateRedirectRuleForm() {
             ))}
           </SelectContent>
         </Select>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!canSubmit || createRule.isPending}
+          onClick={handleSubmit}
+        >
+          <InlineSpinner visible={createRule.isPending} />
+          Add rule
+        </Button>
       </div>
       {createRule.isError && (
         <p className="flex items-center gap-1 text-xs text-destructive">
@@ -307,10 +416,6 @@ function CreateRedirectRuleForm() {
           {createRule.error instanceof Error ? createRule.error.message : 'Could not create rule'}
         </p>
       )}
-      <Button size="sm" disabled={!canSubmit || createRule.isPending} onClick={handleSubmit}>
-        <InlineSpinner visible={createRule.isPending} />
-        Add rule
-      </Button>
     </div>
   )
 }
@@ -325,31 +430,19 @@ function IndexingCard({ indexable }: { indexable: boolean }) {
 
   function handleChange(next: boolean) {
     setChecked(next)
-    updateSeo.mutate({ indexable: next })
+    updateSeo.mutate({ indexable: next }, { onError: () => setChecked(!next) })
   }
 
   return (
-    <SettingsCard title="Indexing" description="Control whether search engines can crawl /hc">
-      <div className="flex items-center justify-between rounded-lg border border-border/50 p-4">
-        <div>
-          <Label htmlFor="hc-indexable" className="text-sm font-medium cursor-pointer">
-            Allow search engines to index the help center
-          </Label>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Off adds a noindex tag to every /hc page and removes it from the sitemap and robots.txt
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <InlineSpinner visible={updateSeo.isPending} />
-          <Switch
-            id="hc-indexable"
-            checked={checked}
-            onCheckedChange={handleChange}
-            disabled={updateSeo.isPending}
-            aria-label="Allow search engines to index the help center"
-          />
-        </div>
-      </div>
+    <SettingsCard title="Indexing" description="Control whether search engines can crawl /hc.">
+      <SettingRows>
+        <SettingRow
+          label="Allow search engines to index the help center"
+          htmlFor="hc-indexable"
+          description="Off adds a noindex tag to every /hc page and removes it from the sitemap and robots.txt"
+          control={<Switch id="hc-indexable" checked={checked} onCheckedChange={handleChange} />}
+        />
+      </SettingRows>
     </SettingsCard>
   )
 }
@@ -369,15 +462,15 @@ function LocalesCard({ locales }: { locales: HelpCenterConfig['locales'] }) {
   return (
     <SettingsCard
       title="Languages"
-      description="Add a locale to translate articles and categories into it"
+      description="Add a locale to translate articles and categories into it."
     >
       <div className="space-y-4">
-        <ul className="space-y-2">
-          <li className="flex items-center justify-between rounded-lg border border-border/50 p-3">
+        <ul className="divide-y divide-border/50">
+          <li className="flex items-center justify-between py-3">
             <span className="text-sm font-medium">
               {LOCALE_LABELS[locales.default] ?? locales.default}
             </span>
-            <span className="text-xs text-muted-foreground">Default</span>
+            <span className="text-[13px] text-muted-foreground">Default</span>
           </li>
           {locales.additional.map((locale) => (
             <LocaleRow
@@ -459,16 +552,44 @@ function LocaleRow({
   const [homepageDescription, setHomepageDescription] = useState(chrome?.homepageDescription ?? '')
   const [searchPlaceholder, setSearchPlaceholder] = useState(chrome?.searchPlaceholder ?? '')
   const updateChrome = useUpdateHelpCenterLocaleChrome()
+  const [invalid, setInvalid] = useState<string | null>(null)
+
+  function save() {
+    const next = { homepageTitle, homepageDescription, searchPlaceholder }
+    const saved = {
+      homepageTitle: chrome?.homepageTitle ?? '',
+      homepageDescription: chrome?.homepageDescription ?? '',
+      searchPlaceholder: chrome?.searchPlaceholder ?? '',
+    }
+    if (
+      next.homepageTitle === saved.homepageTitle &&
+      next.homepageDescription === saved.homepageDescription &&
+      next.searchPlaceholder === saved.searchPlaceholder
+    ) {
+      setInvalid(null)
+      return
+    }
+    const error = localeChromeError(next)
+    setInvalid(error)
+    if (error) return
+    updateChrome.mutate({ locale: locale as SupportedLocale, chrome: next })
+  }
 
   return (
-    <li className="rounded-lg border border-border/50 p-3">
+    <li className="py-3">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">{LOCALE_LABELS[locale] ?? locale}</span>
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => setEditing((v) => !v)}>
-            {editing ? 'Close' : 'Edit chrome'}
+            {editing ? 'Close' : 'Edit texts'}
           </Button>
-          <Button variant="ghost" size="sm" disabled={disabling} onClick={onDisable}>
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={`Remove ${LOCALE_LABELS[locale] ?? locale}`}
+            disabled={disabling}
+            onClick={onDisable}
+          >
             <TrashIcon className="h-3.5 w-3.5" />
           </Button>
         </div>
@@ -478,31 +599,29 @@ function LocaleRow({
           <Input
             value={homepageTitle}
             onChange={(e) => setHomepageTitle(e.target.value)}
+            onBlur={save}
             placeholder="Homepage title"
+            aria-label="Homepage title"
           />
           <Input
             value={homepageDescription}
             onChange={(e) => setHomepageDescription(e.target.value)}
+            onBlur={save}
             placeholder="Homepage description"
+            aria-label="Homepage description"
           />
           <Input
             value={searchPlaceholder}
             onChange={(e) => setSearchPlaceholder(e.target.value)}
+            onBlur={save}
             placeholder="Search placeholder"
+            aria-label="Search placeholder"
           />
-          <Button
-            size="sm"
-            disabled={updateChrome.isPending || !homepageTitle.trim()}
-            onClick={() =>
-              updateChrome.mutate({
-                locale: locale as SupportedLocale,
-                chrome: { homepageTitle, homepageDescription, searchPlaceholder },
-              })
-            }
-          >
-            <InlineSpinner visible={updateChrome.isPending} />
-            Save
-          </Button>
+          {invalid && (
+            <p role="alert" className="text-xs text-destructive">
+              {invalid}
+            </p>
+          )}
         </div>
       )}
     </li>
@@ -523,46 +642,41 @@ function AutoTranslateCard({
   const [protectedTermsText, setProtectedTermsText] = useState(
     autoTranslate.protectedTerms.join('\n')
   )
+  const [termsError, setTermsError] = useState<string | null>(null)
 
   function handleToggle(next: boolean) {
     setEnabled(next)
-    updateAutoTranslate.mutate({ enabled: next })
+    updateAutoTranslate.mutate({ enabled: next }, { onError: () => setEnabled(!next) })
   }
 
   function handleSaveTerms() {
-    const terms = protectedTermsText
-      .split('\n')
-      .map((t) => t.trim())
-      .filter(Boolean)
+    const terms = parseProtectedTerms(protectedTermsText)
+    if (terms.join('\n') === autoTranslate.protectedTerms.join('\n')) {
+      setTermsError(null)
+      return
+    }
+    const error = protectedTermsError(terms)
+    setTermsError(error)
+    if (error) return
     updateAutoTranslate.mutate({ protectedTerms: terms })
   }
 
   return (
     <SettingsCard
       title="Auto-translate"
-      description="Queue an AI translation draft for each enabled language when you publish an article"
+      description="Queue an AI translation draft for each enabled language when you publish an article."
     >
       <div className="space-y-4">
-        <div className="flex items-center justify-between rounded-lg border border-border/50 p-4">
-          <div>
-            <Label htmlFor="hc-auto-translate" className="text-sm font-medium cursor-pointer">
-              Auto-translate on publish
-            </Label>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Writes a draft translation per enabled language -- never auto-published
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <InlineSpinner visible={updateAutoTranslate.isPending} />
-            <Switch
-              id="hc-auto-translate"
-              checked={enabled}
-              onCheckedChange={handleToggle}
-              disabled={updateAutoTranslate.isPending}
-              aria-label="Auto-translate on publish"
-            />
-          </div>
-        </div>
+        <SettingRows>
+          <SettingRow
+            label="Auto-translate on publish"
+            htmlFor="hc-auto-translate"
+            description="Writes a draft translation per enabled language, never auto-published"
+            control={
+              <Switch id="hc-auto-translate" checked={enabled} onCheckedChange={handleToggle} />
+            }
+          />
+        </SettingRows>
 
         <div className="space-y-1.5">
           <Label htmlFor="hc-protected-terms">Protected terms</Label>
@@ -572,14 +686,20 @@ function AutoTranslateCard({
           <Textarea
             id="hc-protected-terms"
             value={protectedTermsText}
-            onChange={(e) => setProtectedTermsText(e.target.value)}
+            onChange={(e) => {
+              setProtectedTermsText(e.target.value)
+              setTermsError(null)
+            }}
+            onBlur={handleSaveTerms}
             rows={4}
             placeholder="Quackback&#10;API&#10;webhook"
+            aria-invalid={termsError ? true : undefined}
           />
-          <Button size="sm" disabled={updateAutoTranslate.isPending} onClick={handleSaveTerms}>
-            <InlineSpinner visible={updateAutoTranslate.isPending} />
-            Save
-          </Button>
+          {termsError && (
+            <p role="alert" className="text-xs text-destructive">
+              {termsError}
+            </p>
+          )}
         </div>
       </div>
     </SettingsCard>

@@ -111,7 +111,7 @@ function AttachMemberButton({ companyId }: { companyId: CompanyId }) {
       setOpen(false)
       setQuery('')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to attach person')
+      toast.error(error instanceof Error ? error.message : 'Failed to attach user')
     } finally {
       setBusy(false)
     }
@@ -122,20 +122,20 @@ function AttachMemberButton({ companyId }: { companyId: CompanyId }) {
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
           <PlusIcon className="h-3 w-3" />
-          Add person
+          Add user
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-72 p-2" align="end" sideOffset={4}>
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search people..."
+          placeholder="Search users..."
           className="mb-2 h-8 text-sm"
           autoFocus
         />
         <div className="max-h-56 space-y-0.5 overflow-y-auto">
           {candidates.length === 0 ? (
-            <p className="px-2 py-1.5 text-[13px] text-muted-foreground">No people found</p>
+            <p className="px-2 py-1.5 text-[13px] text-muted-foreground">No users found</p>
           ) : (
             candidates.map((person) => (
               <button
@@ -186,7 +186,7 @@ function MembersSection({ companyId, canManage }: { companyId: CompanyId; canMan
         queryClient.invalidateQueries({ queryKey: ['admin', 'company', 'for-principal'] }),
       ])
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to remove person')
+      toast.error(error instanceof Error ? error.message : 'Failed to remove user')
     } finally {
       setDetaching(null)
     }
@@ -195,20 +195,20 @@ function MembersSection({ companyId, canManage }: { companyId: CompanyId; canMan
   return (
     <div className="border-t border-border/50 pt-4">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-medium">People{members ? ` (${members.length})` : ''}</h3>
+        <h3 className="text-sm font-medium">Users{members ? ` (${members.length})` : ''}</h3>
         {canManage && <AttachMemberButton companyId={companyId} />}
       </div>
       {isLoading ? (
         <Skeleton className="h-16 w-full rounded-lg" />
       ) : !members || members.length === 0 ? (
-        <p className="py-4 text-center text-sm text-muted-foreground">No people linked yet</p>
+        <p className="py-4 text-center text-sm text-muted-foreground">No users linked yet</p>
       ) : (
         <div className="divide-y divide-border/50 overflow-hidden rounded-lg border border-border/50">
           {members.map((member) => (
             <div key={member.principalId} className="flex items-center gap-2.5 px-3 py-2">
               <Avatar
                 src={member.avatarUrl}
-                name={member.displayName ?? 'Person'}
+                name={member.displayName ?? 'User'}
                 className="size-7 text-xs"
               />
               <div className="min-w-0 flex-1">
@@ -666,7 +666,7 @@ export function CompanyDetail({ companyId, onClose, canManage }: CompanyDetailPr
             <p className="mt-0.5 flex items-center gap-2 text-sm text-muted-foreground">
               <span className="min-w-0 truncate">
                 {company.domain ?? 'No domain'} · Created{' '}
-                <TimeAgo date={new Date(company.createdAt)} />
+                <TimeAgo date={new Date(company.createdAt)} locale="en" />
               </span>
               <SourceBadge source={company.source} />
             </p>
@@ -768,7 +768,7 @@ export function CompanyDetail({ companyId, onClose, canManage }: CompanyDetailPr
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         title={`Delete "${company.name}"?`}
-        description="People linked to this company will be detached. This cannot be undone."
+        description="Users linked to this company will be detached. This cannot be undone."
         confirmLabel="Delete"
         variant="destructive"
         onConfirm={handleDelete}

@@ -110,14 +110,14 @@ export type {
 } from './types'
 export { CORE_THEME_VARIABLES } from './types'
 
-export type { MinimalThemeVariables, MinimalThemeConfig, ThemeBaseline } from './expand'
+export type { MinimalThemeVariables, MinimalThemeConfig } from './expand'
 export {
   expandTheme,
   extractMinimal,
   unbrandedTheme,
   DEFAULT_FONT_SANS,
-  REFINED_DARK_BASE,
-  REFINED_LIGHT_BASE,
+  DEFAULT_DARK_BASE,
+  DEFAULT_LIGHT_BASE,
   parseOklch,
   formatOklch,
   adjustHue,

@@ -1,15 +1,16 @@
 import type { ReactNode } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
 import { useIntl } from 'react-intl'
-import { SparklesIcon } from '@heroicons/react/24/outline'
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { WHO_REPLIES_FIRST } from '@/lib/shared/assistant/who-replies-first'
+import { SettingsCard } from '@/components/admin/settings/settings-card'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { INLINE_LINK } from '@/components/admin/settings/inline-link'
 
 /**
- * The rule the server now enforces: the agent answers first, and a live
+ * The rule the server enforces: the agent answers first, and a live
  * assistant.handed_off workflow owns routing on handoff. Permission-aware
  * links so a workflows-only admin is not sent to Access denied.
  */
@@ -21,10 +22,9 @@ export function WhoRepliesFirstCard() {
   const canOfficeHours = usePermission(PERMISSIONS.OFFICE_HOURS_MANAGE)
   const settings = useWorkspaceSettings()
   const flags = settings?.featureFlags as FeatureFlags | undefined
-  const onAgentPage = pathname === '/admin/automation/agent'
+  const onAgentPage = pathname === '/admin/settings/agent'
   const onWorkflowsPage =
-    pathname === '/admin/automation/workflows' ||
-    pathname.startsWith('/admin/automation/workflows/')
+    pathname === '/admin/settings/workflows' || pathname.startsWith('/admin/settings/workflows/')
   const showManageQuinn = canAgent && !onAgentPage
   const showManageWorkflows = canWorkflows && Boolean(flags?.supportInbox) && !onWorkflowsPage
   const showOfficeHours = canOfficeHours && Boolean(flags?.supportInbox)
@@ -44,14 +44,12 @@ export function WhoRepliesFirstCard() {
   }
 
   return (
-    <section className="rounded-xl border border-violet-500/25 bg-violet-500/[0.04] px-[18px] py-3.5">
-      <div className="mb-1.5 flex items-center gap-2 text-[13px] font-semibold">
-        <SparklesIcon className="size-[15px] text-violet-600 dark:text-violet-400" aria-hidden />
-        {intl.formatMessage({
-          id: WHO_REPLIES_FIRST.titleId,
-          defaultMessage: WHO_REPLIES_FIRST.title,
-        })}
-      </div>
+    <SettingsCard
+      title={intl.formatMessage({
+        id: WHO_REPLIES_FIRST.titleId,
+        defaultMessage: WHO_REPLIES_FIRST.title,
+      })}
+    >
       <ol className="list-decimal space-y-0.5 pl-[18px] text-xs leading-[1.7] text-muted-foreground">
         {WHO_REPLIES_FIRST.steps.map((step) => (
           <li key={step.id}>
@@ -63,8 +61,8 @@ export function WhoRepliesFirstCard() {
         <div className="mt-2 flex flex-wrap gap-3.5 text-xs">
           {showManageQuinn && (
             <Link
-              to="/admin/automation/agent"
-              className="font-semibold text-primary hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              to="/admin/settings/agent"
+              className={`${INLINE_LINK} focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50`}
             >
               {intl.formatMessage({
                 id: 'automation.whoRepliesFirst.manageQuinn',
@@ -74,8 +72,8 @@ export function WhoRepliesFirstCard() {
           )}
           {showManageWorkflows && (
             <Link
-              to="/admin/automation/workflows"
-              className="font-semibold text-primary hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              to="/admin/settings/workflows"
+              className={`${INLINE_LINK} focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50`}
             >
               {intl.formatMessage({
                 id: 'automation.whoRepliesFirst.manageWorkflows',
@@ -86,7 +84,7 @@ export function WhoRepliesFirstCard() {
           {showOfficeHours && (
             <Link
               to="/admin/settings/office-hours"
-              className="font-semibold text-primary hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              className={`${INLINE_LINK} focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50`}
             >
               {intl.formatMessage({
                 id: 'automation.whoRepliesFirst.officeHoursLink',
@@ -96,6 +94,6 @@ export function WhoRepliesFirstCard() {
           )}
         </div>
       )}
-    </section>
+    </SettingsCard>
   )
 }

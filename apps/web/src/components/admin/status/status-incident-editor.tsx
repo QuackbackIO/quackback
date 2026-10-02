@@ -21,6 +21,7 @@ import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
 import { DateTimePicker } from '@/components/ui/datetime-picker'
 import { TimeAgo } from '@/components/ui/time-ago'
+import { useFormatNumber } from '@/components/ui/format-number'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { ModalHeader } from '@/components/shared/modal-header'
 import { ModalFooter } from '@/components/shared/modal-footer'
@@ -277,7 +278,7 @@ function StatusIncidentEditorContent({
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 placeholder="What's the latest? This appears on the public status page."
-                className="min-h-24 border-0 shadow-none rounded-none focus-visible:ring-0 resize-y"
+                className="min-h-24 border-0 focus-visible:ring-0 resize-y"
               />
               <div className="flex items-center gap-2 px-3 py-2 border-t border-border/40 bg-muted/30">
                 <TemplatePickerButton
@@ -523,6 +524,7 @@ function EditorSidebarContent({
 // ─── Timeline ───────────────────────────────────────────────────────────
 
 function IncidentTimeline({ incident }: { incident: StatusIncidentAdminDetail }) {
+  const formatNumber = useFormatNumber()
   const updates = useMemo(
     () =>
       [...incident.updates].sort(
@@ -563,7 +565,7 @@ function IncidentTimeline({ incident }: { incident: StatusIncidentAdminDetail })
                   Published
                   {typeof incident.notifiedSubscriberCount === 'number' &&
                     incident.notifiedSubscriberCount > 0 &&
-                    ` · emailed ~${incident.notifiedSubscriberCount.toLocaleString()} subscribers`}
+                    ` · emailed ~${formatNumber(incident.notifiedSubscriberCount)} subscribers`}
                 </span>
               )}
               {isPublishRow && incident.backfilled && (

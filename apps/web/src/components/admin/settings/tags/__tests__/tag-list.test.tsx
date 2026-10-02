@@ -8,6 +8,10 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { IntlProvider } from 'react-intl'
+import type { ReactNode } from 'react'
 import type { PostTag } from '@/lib/shared/db-types'
 
 const mockCreate = vi.fn()
@@ -20,11 +24,26 @@ vi.mock('@/lib/server/functions/post-tags', () => ({
 
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ invalidate: vi.fn() }),
+  Link: ({ to, children, className }: { to: string; children: ReactNode; className?: string }) => (
+    <a href={to} className={className}>
+      {children}
+    </a>
+  ),
 }))
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
-import { TagList } from '../tag-list'
+import { TagsSettingsPage } from '../tag-list'
+
+function TagList({ initialTags }: { initialTags: PostTag[] }) {
+  return (
+    <IntlProvider locale="en" defaultLocale="en">
+      <QueryClientProvider client={new QueryClient()}>
+        <TagsSettingsPage initialTags={initialTags} boards={[]} />
+      </QueryClientProvider>
+    </IntlProvider>
+  )
+}
 
 const PUBLIC_TAG = {
   id: 'post_tag_public',
@@ -64,24 +83,36 @@ function internalRadio() {
 }
 
 describe('<TagList> — portal visibility', () => {
-  it('renders each tag as a colored chip and labels Portal vs Internal', () => {
+  it('shows the full tag name and marks only internal tags', () => {
     render(<TagList initialTags={[PUBLIC_TAG, INTERNAL_TAG]} />)
 
-    const publicRow = screen.getByRole('button', { name: 'Bug' }).closest('.group') as HTMLElement
-    expect(within(publicRow).getByText('Portal')).toBeTruthy()
-    expect(within(publicRow).queryByText('Internal')).toBeNull()
+    expect(screen.getByText('Bug')).toBeTruthy()
+    expect(screen.getByText('Churn risk')).toBeTruthy()
+    expect(screen.getAllByText('Internal')).toHaveLength(1)
+    expect(screen.queryByText('Portal')).toBeNull()
+    const internalRow = screen.getByText('Churn risk').closest('[data-slot="settings-list-row"]')!
+    expect(within(internalRow as HTMLElement).getByText('Internal')).toBeTruthy()
+  })
 
-    const internalRow = screen
-      .getByRole('button', { name: 'Churn risk' })
-      .closest('.group') as HTMLElement
-    expect(within(internalRow).getByText('Internal')).toBeTruthy()
-    expect(within(internalRow).queryByText('Portal')).toBeNull()
+  it('is the Tags page with no breadcrumb of its own, and has a single card with no header', () => {
+    render(<TagList initialTags={[PUBLIC_TAG]} />)
+    expect(screen.getByRole('heading', { level: 1, name: 'Tags' })).toBeTruthy()
+    // The settings layout titles it with its module and shows the module's tabs.
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull()
+    expect(screen.queryByRole('heading', { level: 2, name: 'Tags' })).toBeNull()
+    expect(screen.queryByText('Add new tag')).toBeNull()
+  })
+
+  it('shows an empty state with a New tag action when there are no tags', () => {
+    render(<TagList initialTags={[]} />)
+    expect(screen.getByText('No tags yet')).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: /^new tag$/i })).toHaveLength(1)
   })
 
   it('defaults a new tag to public and sends isPublic on create', async () => {
     render(<TagList initialTags={[]} />)
 
-    fireEvent.click(screen.getByRole('button', { name: /add new tag/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^new tag$/i }))
     expect(portalRadio()).toHaveAttribute('aria-checked', 'true')
     expect(internalRadio()).toHaveAttribute('aria-checked', 'false')
 
@@ -98,7 +129,7 @@ describe('<TagList> — portal visibility', () => {
   it('lets an admin create an internal tag by choosing Internal', async () => {
     render(<TagList initialTags={[]} />)
 
-    fireEvent.click(screen.getByRole('button', { name: /add new tag/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^new tag$/i }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Churn risk' } })
     fireEvent.click(internalRadio())
     expect(internalRadio()).toHaveAttribute('aria-checked', 'true')
@@ -116,7 +147,9 @@ describe('<TagList> — portal visibility', () => {
   it('reflects the saved flag when editing and sends the toggled value', async () => {
     render(<TagList initialTags={[INTERNAL_TAG]} />)
 
-    fireEvent.click(screen.getByRole('button', { name: /edit tag/i }))
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Actions for Churn risk' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Edit' }))
     expect(internalRadio()).toHaveAttribute('aria-checked', 'true')
 
     fireEvent.click(portalRadio())
@@ -134,7 +167,7 @@ describe('<TagList> — create dialog layout', () => {
   it('keeps Create tag disabled until a name is entered', () => {
     render(<TagList initialTags={[]} />)
 
-    fireEvent.click(screen.getByRole('button', { name: /add new tag/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^new tag$/i }))
     expect(screen.getByRole('button', { name: /create tag/i })).toBeDisabled()
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Design' } })
@@ -144,15 +177,27 @@ describe('<TagList> — create dialog layout', () => {
   it('does not leak the PostTag type name as a placeholder', () => {
     render(<TagList initialTags={[]} />)
 
-    fireEvent.click(screen.getByRole('button', { name: /add new tag/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^new tag$/i }))
     expect(screen.queryByText('PostTag name')).toBeNull()
   })
 
   it('opens the color palette from a single swatch', () => {
     render(<TagList initialTags={[]} />)
 
-    fireEvent.click(screen.getByRole('button', { name: /add new tag/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^new tag$/i }))
     fireEvent.click(screen.getByRole('button', { name: /^color$/i }))
     expect(screen.getByPlaceholderText('#000000')).toBeTruthy()
+  })
+})
+
+describe('<TagList> row menu', () => {
+  it('confirms a delete with Delete tag', async () => {
+    const user = userEvent.setup()
+    render(<TagList initialTags={[PUBLIC_TAG]} />)
+    await user.click(screen.getByRole('button', { name: 'Actions for Bug' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+    const dialog = screen.getByRole('alertdialog')
+    expect(within(dialog).getByText('Delete tag?')).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Delete tag' })).toBeTruthy()
   })
 })

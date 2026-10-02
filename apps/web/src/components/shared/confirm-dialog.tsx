@@ -24,6 +24,8 @@ interface ConfirmDialogProps {
   cancelLabel?: string
   variant?: 'default' | 'destructive'
   isPending?: boolean
+  /** Holds the confirm action back until `children` (a typed name, say) is satisfied. */
+  confirmDisabled?: boolean
   onConfirm: () => void | Promise<void>
   children?: React.ReactNode
 }
@@ -38,6 +40,7 @@ export function ConfirmDialog({
   cancelLabel = 'Cancel',
   variant = 'default',
   isPending,
+  confirmDisabled,
   onConfirm,
   children,
 }: ConfirmDialogProps) {
@@ -107,7 +110,7 @@ export function ConfirmDialog({
                 void result.catch(() => undefined).finally(resetStarted)
               }
             }}
-            disabled={busy}
+            disabled={busy || confirmDisabled}
             className={cn(variant === 'destructive' && buttonVariants({ variant: 'destructive' }))}
           >
             {confirmLabel}

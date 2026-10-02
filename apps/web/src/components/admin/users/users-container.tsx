@@ -144,7 +144,7 @@ export function UsersContainer({ currentMemberRole }: UsersContainerProps) {
 
   // Segment dialog state
   const [createOpen, setCreateOpen] = useState(false)
-  // "New person" (ad-hoc contact) dialog state
+  // "New user" (ad-hoc contact) dialog state
   const [newPersonOpen, setNewPersonOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<SegmentListItem | null>(null)
   // Each dialog mounts on its first open and stays mounted, so closing it
@@ -343,7 +343,7 @@ export function UsersContainer({ currentMemberRole }: UsersContainerProps) {
         )}
       </UsersLayout>
 
-      {/* New person (ad-hoc contact) dialog */}
+      {/* New user (ad-hoc contact) dialog */}
       {newPersonOpened && (
         <Suspense fallback={null}>
           <NewPersonDialog

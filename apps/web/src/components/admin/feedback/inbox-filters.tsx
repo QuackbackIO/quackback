@@ -1,9 +1,21 @@
 import { memo } from 'react'
+import { Link } from '@tanstack/react-router'
+import { useQuery } from '@tanstack/react-query'
+import {
+  CheckIcon,
+  ClockIcon,
+  ShieldCheckIcon,
+  TagIcon,
+  TrashIcon,
+} from '@heroicons/react/16/solid'
+import { adminQueries } from '@/lib/client/queries/admin'
 import { FilterList, StatusFilterList, BoardFilterList } from './single-select-filter-list'
 import { toggleItem } from '@/components/shared/filter-utils'
 import { FilterSection } from '@/components/shared/filter-section'
-import { MENU_ROW } from '@/components/ui/menu'
+import { MENU_ICON, MENU_ROW } from '@/components/ui/menu'
 import { cn } from '@/lib/shared/utils'
+import { usePermission } from '@/lib/client/hooks/use-permission'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { useInboxFacetCounts } from '@/lib/client/hooks/use-inbox-query'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
 import type { InboxFilterCounts } from '@/lib/shared/types'
@@ -17,6 +29,8 @@ interface InboxFiltersProps {
   tags: PostTag[]
   statuses: PostStatusEntity[]
   segments?: SegmentListItem[]
+  /** The moderation queue page is showing rather than the post list */
+  moderationActive?: boolean
 }
 
 function countFor(counts: Record<string, number> | undefined, id: string): number | undefined {
@@ -36,8 +50,11 @@ export const InboxFiltersPanel = memo(function InboxFiltersPanel({
   tags,
   statuses,
   segments,
+  moderationActive,
 }: InboxFiltersProps) {
   const { data: facetCounts } = useInboxFacetCounts(filters)
+  // The queue and its count are read with post.approve.
+  const canModerate = usePermission(PERMISSIONS.POST_APPROVE)
 
   // Handle filter selection with multi-select support
   // - Regular click: select only this item (replace), or clear if already the only one selected
@@ -62,7 +79,7 @@ export const InboxFiltersPanel = memo(function InboxFiltersPanel({
   const handleBoardSelect = (id: string, addToSelection: boolean) =>
     handleFilterSelect('board', filters.board, id, addToSelection)
 
-  // Tags remain simple toggle (they're already visually distinct as chips)
+  // Tags toggle on click; Ctrl/Cmd is not needed to combine them
   const handleTagToggle = (tagId: string) => {
     const newTags = toggleItem(filters.tags, tagId)
     onFiltersChange({ tags: newTags })
@@ -76,6 +93,12 @@ export const InboxFiltersPanel = memo(function InboxFiltersPanel({
 
   return (
     <div className="space-y-0">
+      {canModerate && (
+        <FilterSection title="Review">
+          <ModerationRow active={moderationActive} />
+        </FilterSection>
+      )}
+
       {/* Status Filter */}
       <FilterSection title="Status">
         <StatusFilterList
@@ -101,30 +124,12 @@ export const InboxFiltersPanel = memo(function InboxFiltersPanel({
       {/* Tags Filter */}
       {tags.length > 0 && (
         <FilterSection title="Tags">
-          <div className="flex flex-wrap gap-1.5">
-            {tags.map((tag) => {
-              const isSelected = filters.tags?.includes(tag.id)
-              const count = countFor(facetCounts?.tags, tag.id)
-              return (
-                <button
-                  key={tag.id}
-                  type="button"
-                  onClick={() => handleTagToggle(tag.id)}
-                  aria-label={count == null ? tag.name : `${tag.name}, ${count}`}
-                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors ${
-                    isSelected
-                      ? 'bg-foreground text-background'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                  }`}
-                >
-                  {tag.name}
-                  {count != null && (
-                    <span className="ml-1 text-[11px] tabular-nums opacity-70">{count}</span>
-                  )}
-                </button>
-              )
-            })}
-          </div>
+          <FilterList
+            items={tags.map((tag) => ({ id: tag.id, name: tag.name, icon: TagIcon }))}
+            selectedIds={filters.tags ?? []}
+            onSelect={handleTagToggle}
+            counts={facetCounts?.tags}
+          />
         </FilterSection>
       )}
 
@@ -170,8 +175,8 @@ export const InboxFiltersPanel = memo(function InboxFiltersPanel({
       <FilterSection title="Team response">
         <FilterList
           items={[
-            { id: 'responded', name: 'Responded' },
-            { id: 'unresponded', name: 'Unresponded' },
+            { id: 'responded', name: 'Responded', icon: CheckIcon },
+            { id: 'unresponded', name: 'Unresponded', icon: ClockIcon },
           ]}
           selectedIds={filters.responded && filters.responded !== 'all' ? [filters.responded] : []}
           onSelect={(id) => {
@@ -187,7 +192,7 @@ export const InboxFiltersPanel = memo(function InboxFiltersPanel({
       {/* Other Filters */}
       <FilterSection title="Other">
         <FilterList
-          items={[{ id: 'deleted', name: 'Deleted posts' }]}
+          items={[{ id: 'deleted', name: 'Deleted posts', icon: TrashIcon }]}
           selectedIds={filters.showDeleted ? ['deleted'] : []}
           onSelect={() => {
             onFiltersChange({ showDeleted: !filters.showDeleted || undefined })
@@ -198,6 +203,30 @@ export const InboxFiltersPanel = memo(function InboxFiltersPanel({
     </div>
   )
 })
+
+/** Opens the moderation queue, with the number of items waiting. */
+function ModerationRow({ active }: { active?: boolean }) {
+  const { data } = useQuery(adminQueries.moderationStatus())
+  return (
+    <Link
+      to="/admin/feedback/moderation"
+      data-active={active || undefined}
+      className={cn(
+        MENU_ROW,
+        'w-full',
+        active
+          ? 'bg-muted text-foreground font-medium'
+          : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+      )}
+    >
+      <ShieldCheckIcon className={MENU_ICON} aria-hidden="true" />
+      <span className="min-w-0 flex-1 truncate text-left">Moderation</span>
+      <span className="ml-auto shrink-0 text-[11px] tabular-nums text-muted-foreground">
+        {data?.pendingCount ?? 0}
+      </span>
+    </Link>
+  )
+}
 
 function respondedCountMap(
   counts: InboxFilterCounts | undefined

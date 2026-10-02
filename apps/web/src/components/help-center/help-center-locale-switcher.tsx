@@ -20,6 +20,7 @@ const LOCALE_LABELS: Record<string, string> = {
   'zh-cn': '简体中文',
   'zh-tw': '繁體中文',
   nl: 'Nederlands',
+  pl: 'Polski',
 }
 
 interface HelpCenterLocaleSwitcherProps {
@@ -57,7 +58,7 @@ export function HelpCenterLocaleSwitcher({
 
   return (
     <Select value={currentLocale} onValueChange={handleChange}>
-      <SelectTrigger size="sm" className="h-8 gap-1.5 rounded-full text-xs" aria-label="Language">
+      <SelectTrigger size="sm" className="h-8 gap-1.5 text-xs" aria-label="Language">
         <GlobeAltIcon className="h-3.5 w-3.5" />
         <SelectValue>{LOCALE_LABELS[currentLocale] ?? currentLocale}</SelectValue>
       </SelectTrigger>

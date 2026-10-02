@@ -3,10 +3,8 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { useMutation } from '@tanstack/react-query'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { GlobeAltIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
-import { BackLink } from '@/components/ui/back-link'
-import { PageHeader } from '@/components/shared/page-header'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
 import {
   getCloudCustomDomainsFn,
   getCloudIdentityFn,
@@ -112,15 +110,10 @@ function DomainsSettingsPage() {
   })
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <div className="lg:hidden">
-        <BackLink to="/admin/settings">Settings</BackLink>
-      </div>
-      <PageHeader
-        icon={GlobeAltIcon}
-        title="Domains"
-        description="Your own hostname for this workspace"
-      />
+    <SettingsPage
+      page="/admin/settings/domains"
+      description="Your own hostname for this workspace."
+    >
       {!cloudEnabled || !allowed ? (
         <p className="text-sm text-muted-foreground">
           Custom domains are available only in a Quackback Cloud workspace.
@@ -151,6 +144,6 @@ function DomainsSettingsPage() {
           />
         </>
       )}
-    </div>
+    </SettingsPage>
   )
 }

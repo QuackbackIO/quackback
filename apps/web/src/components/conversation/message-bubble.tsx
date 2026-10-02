@@ -33,12 +33,13 @@ import {
 } from '@heroicons/react/24/solid'
 import { BookmarkIcon, PencilIcon, SparklesIcon } from '@heroicons/react/24/outline'
 import { Avatar } from '@/components/ui/avatar'
-import { ConversationAttachmentList } from '@/components/shared/conversation-attachments'
+import { AttachmentList } from '@/components/shared/files/attachment-list'
 import { ReactionChip } from '@/components/shared/reaction-chip'
 import { NoteContent } from '@/components/admin/conversation/note-content'
 import { isJumboEmojiMessage, JUMBO_EMOJI_CLASS } from '@/lib/shared/conversation/jumbo-emoji'
 import { RichTextContent } from '@/components/ui/rich-text-content'
 import { EmbedHydration } from '@/components/shared/embed-hydration'
+import { MessageMarkdown } from '@/components/shared/conversation/message-markdown'
 import type { EmbedOpenMode } from '@/components/shared/quackback-embed-card'
 import { LinkPreviews } from '@/components/shared/link-preview-card'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -74,9 +75,24 @@ import {
   CONVERSATION_NOTE_FEATURES,
 } from '@/components/conversation/conversation-editor-features'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
+import { useLocalDateFormatter } from '@/components/ui/local-date'
 
-function timeLabel(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+/** A message's time of day, e.g. "3:04 PM". */
+const TIME_LABEL: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' }
+
+/**
+ * A message's time of day. The format switches after hydration, so it lives in
+ * a leaf and a bubble does not re-render for it.
+ */
+function MessageTime({ iso }: { iso: string }) {
+  const formatDate = useLocalDateFormatter()
+  return <span>{formatDate(iso, TIME_LABEL)}</span>
+}
+
+/** The "(edited)" mark, titled with the time of the edit. */
+function EditedAt({ iso }: { iso: string }) {
+  const formatDate = useLocalDateFormatter()
+  return <EditedMark title={`Edited ${formatDate(iso, TIME_LABEL)}`} />
 }
 
 /** Small grey "(edited)" beside the timestamp, the same mark Slack uses. */
@@ -173,13 +189,7 @@ function AgentBlockSummary({ block, state }: { block: WorkflowBlockPayload; stat
           aria-hidden
         >
           {block.options.map((o) => (
-            <Badge
-              key={o.key}
-              variant="outline"
-              size="sm"
-              shape="pill"
-              className="bg-background/60"
-            >
+            <Badge key={o.key} variant="outline" size="sm" className="bg-background/60">
               {o.label}
             </Badge>
           ))}
@@ -256,9 +266,15 @@ export function bubbleContentTextClass(
   side: BubbleSide,
   opts: { note?: boolean; agentSelf?: boolean } = {}
 ): string {
-  if (opts.note) return 'text-foreground/90'
-  if (side === 'self' && opts.agentSelf) return 'text-foreground/90'
-  return side === 'self' ? 'text-primary-foreground' : 'text-foreground/90'
+  const color =
+    side === 'self' && !opts.note && !opts.agentSelf
+      ? 'text-primary-foreground'
+      : 'text-foreground/90'
+  return cn(
+    color,
+    '[&_p]:text-inherit [&_a]:text-inherit! [&_strong]:text-inherit [&_em]:text-inherit [&_code]:text-inherit [&_pre]:text-inherit [&_blockquote]:text-inherit [&_h1]:text-inherit [&_h2]:text-inherit [&_h3]:text-inherit [&_h4]:text-inherit [&_h5]:text-inherit [&_h6]:text-inherit [&_table]:text-inherit [&_thead]:text-inherit [&_th]:text-inherit [&_td]:text-inherit [&_li::marker]:text-inherit',
+    '[&_code]:bg-foreground/5 [&_pre]:bg-foreground/5'
+  )
 }
 
 /** A thin "New" divider rendered immediately above the first unread message. */
@@ -355,6 +371,12 @@ interface VisitorMessageBubbleProps {
   /** Marks the author as the AI assistant in the attribution line. */
   isAssistant?: boolean
   attachments?: ConversationAttachment[]
+  /** The message's id and raw ISO send time — only read when `attachments`
+   *  is non-empty, to build the file viewer's whole-conversation gallery
+   *  context (`sentAt` is distinct from the already-localized `time` label
+   *  below, which the attribution line renders). */
+  messageId?: string
+  sentAt?: string
   /** KB sources for an AI reply. When present, a collapsed sources trace renders
    *  above the bubble and inline [n] markers in `content` become citation dots. */
   citations?: ConversationMessageCitation[]
@@ -365,6 +387,9 @@ interface VisitorMessageBubbleProps {
   linkPreviews?: boolean
   getAuthHeaders?: () => Record<string, string>
   embedOpenMode?: EmbedOpenMode
+  /** Narrow surfaces (the widget): attachment cards render as compact rows.
+   *  The wide portal support page leaves this at its default. */
+  compact?: boolean
 }
 
 function MessageEditForm({
@@ -617,13 +642,15 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
                 ) : (
                   message.content && (
                     <>
-                      <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-                        {translation
-                          ? translation.showingOriginal
-                            ? translation.originalContent
-                            : translation.translatedContent
-                          : message.content}
-                      </div>
+                      <MessageMarkdown
+                        text={
+                          translation
+                            ? translation.showingOriginal
+                              ? translation.originalContent
+                              : translation.translatedContent
+                            : message.content
+                        }
+                      />
                       {translation && (
                         <button
                           type="button"
@@ -637,9 +664,6 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
                       )}
                     </>
                   )
-                )}
-                {message.attachments.length > 0 && (
-                  <ConversationAttachmentList attachments={message.attachments} />
                 )}
                 {linkPreviews && !isNote && (
                   <LinkPreviews content={message.content} contentJson={message.contentJson} />
@@ -758,6 +782,17 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
           )}
         </div>
 
+        {/* Attachments render BELOW the bubble fill, not inside it, so a card
+            reads the same on a gold visitor bubble as on a grey agent one. */}
+        {message.attachments.length > 0 && (
+          <AttachmentList
+            attachments={message.attachments}
+            context={{ senderName: authorName, sentAt: message.createdAt, messageId: message.id }}
+            align={self ? 'end' : 'start'}
+            note={isNote}
+          />
+        )}
+
         {/* Note-only follow-ups render as their own cards below the bubble
             (they already carry their own border/fill) rather than nested
             inside the note's amber surface. */}
@@ -800,8 +835,7 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
         )}
 
         {/* Attribution below the bubble, matching VisitorMessageBubble: name
-            (assistant messages get a subtle sparkle + "AI" suffix as one
-            cohesive label), Internal-note badge, via-email icon, time, and the
+            (assistant messages get a subtle sparkle before it), Internal-note badge, via-email icon, time, and the
             flagged bookmark glyph — flag state is a meta-line glyph now, not
             a row tint. */}
         <div
@@ -812,10 +846,7 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
         >
           <span className="flex min-w-0 items-center gap-1">
             {message.isAssistant && <SparklesIcon className="h-3 w-3 shrink-0" aria-hidden />}
-            <span className="truncate">
-              {authorName}
-              {message.isAssistant ? ' AI' : ''}
-            </span>
+            <span className="truncate">{authorName}</span>
           </span>
           {isNote && (
             <span className="inline-flex shrink-0 items-center gap-1 rounded bg-amber-400/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
@@ -836,8 +867,8 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
           {ticketProvenance && message.ticketId && !isNote && (
             <span className="shrink-0">· via ticket thread</span>
           )}
-          <span>{timeLabel(message.createdAt)}</span>
-          {message.editedAt && <EditedMark title={`Edited ${timeLabel(message.editedAt)}`} />}
+          <MessageTime iso={message.createdAt} />
+          {message.editedAt && <EditedAt iso={message.editedAt} />}
           {isAgent && !isNote && message.channelDelivery ? (
             <ChannelDeliveryTicks
               delivery={message.channelDelivery}
@@ -878,21 +909,29 @@ export function VisitorMessageBubble({
   selfLabel,
   isAssistant = false,
   attachments,
+  messageId,
+  sentAt,
   citations,
   time,
   editedLabel,
   linkPreviews = false,
   getAuthHeaders,
   embedOpenMode = 'newTab',
+  compact = false,
 }: VisitorMessageBubbleProps) {
   const self = side === 'self'
   const jumbo = isJumboEmojiMessage(content, contentJson)
-  // Quinn's turns render as markdown-lite (the prompt encourages lists/bold), with
+  // Quinn's turns render as Markdown, with
   // inline citation dots + a sources trace only when the answer was grounded.
   const isAiReply = !self && isAssistant
   const cited = isAiReply && citations && citations.length > 0 ? citations : null
   return (
-    <div className={self ? 'flex flex-col items-end' : 'flex flex-col items-start'}>
+    <div
+      // The scroll/flash target for "jump to message" deep-links, matching
+      // the admin thread's AgentMessageBubble root.
+      data-message-id={messageId}
+      className={self ? 'flex flex-col items-end' : 'flex flex-col items-start'}
+    >
       {cited && <AssistantSourcesTrace citations={cited} />}
       <div className={jumbo ? 'max-w-[85%]' : bubbleClasses(side)}>
         {jumbo ? (
@@ -914,11 +953,8 @@ export function VisitorMessageBubble({
           (isAiReply ? (
             <AssistantAnswer text={content} citations={cited ?? []} />
           ) : (
-            <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">{content}</div>
+            <MessageMarkdown text={content} />
           ))
-        )}
-        {attachments && attachments.length > 0 && (
-          <ConversationAttachmentList attachments={attachments} />
         )}
         {linkPreviews && (
           <LinkPreviews
@@ -928,6 +964,19 @@ export function VisitorMessageBubble({
           />
         )}
       </div>
+
+      {/* Attachments render BELOW the bubble fill, not inside it — same rule
+          as the admin thread's AgentMessageBubble, so a file card reads the
+          same on the visitor's own gold bubble as on a peer's grey one. */}
+      {attachments && attachments.length > 0 && (
+        <AttachmentList
+          attachments={attachments}
+          context={{ senderName: authorName, sentAt, messageId }}
+          compact={compact}
+          align={self ? 'end' : 'start'}
+        />
+      )}
+
       {/* Attribution below the bubble. Peer (team/assistant) shows name · time;
           the assistant's name gets a subtle sparkle + "AI" suffix as one
           cohesive label. Self (the visitor) shows "You · time" only when a

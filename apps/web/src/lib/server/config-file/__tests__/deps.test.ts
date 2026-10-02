@@ -15,7 +15,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const hoisted = vi.hoisted(() => ({
   insertValuesCalls: [] as Array<Record<string, unknown>>,
   mockOnConflictDoNothing: vi.fn(),
-  ensureNewWorkspaceLabs: vi.fn(async (_settingsId: string, _executor?: unknown) => {}),
 }))
 
 const mockValues = vi.fn((vals: Record<string, unknown>) => {
@@ -67,11 +66,6 @@ vi.mock('../report-status', () => ({
   makeReportStatus: () => vi.fn(),
 }))
 
-vi.mock('@/lib/server/domains/settings/settings.labs', () => ({
-  ensureNewWorkspaceLabs: (settingsId: string, executor?: unknown) =>
-    hoisted.ensureNewWorkspaceLabs(settingsId, executor),
-}))
-
 const { makeReconcileDeps } = await import('../deps')
 
 beforeEach(() => {
@@ -104,10 +98,6 @@ describe('createSettings', () => {
       supportTickets: false,
       statusPage: false,
     })
-    expect(hoisted.ensureNewWorkspaceLabs).toHaveBeenCalledWith(
-      'ws_test',
-      expect.objectContaining({ insert: expect.any(Function) })
-    )
   })
 
   it('enables Help Center as a product when the stamped goal is help_center', async () => {

@@ -74,7 +74,7 @@ export function AddConnectorDialog({
         onOpenChange(false)
         reset()
         void navigate({
-          to: '/admin/automation/connectors/$connectorId',
+          to: '/admin/settings/connectors/$connectorId',
           params: { connectorId: row.id },
         })
       },

@@ -1,10 +1,10 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
-import { DocumentDuplicateIcon } from '@heroicons/react/24/solid'
 import { isProductEnabled } from '@/lib/shared/types/settings'
-import { BackLink } from '@/components/ui/back-link'
-import { PageHeader } from '@/components/shared/page-header'
+import { useState } from 'react'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
+import { NewButton } from '@/components/shared/new-button'
 import { MacrosSettingsBody } from '@/components/admin/settings/macros-settings-body'
 import { warmQuery } from '@/lib/client/queries/warm-query'
 
@@ -37,17 +37,20 @@ export const Route = createFileRoute('/admin/settings/macros')({
 
 function MacrosSettingsPage() {
   const { macrosEntitled } = Route.useLoaderData()
+  const [creating, setCreating] = useState(false)
   return (
-    <div className="space-y-6 max-w-3xl">
-      <div className="lg:hidden">
-        <BackLink to="/admin/settings/support">Support</BackLink>
-      </div>
-      <PageHeader
-        icon={DocumentDuplicateIcon}
-        title="Macros"
-        description="Reusable replies with variables and bundled actions"
+    <SettingsPage
+      page="/admin/settings/macros"
+      description="Reusable replies with variables and bundled actions."
+      actions={
+        macrosEntitled ? <NewButton noun="macro" onClick={() => setCreating(true)} /> : undefined
+      }
+    >
+      <MacrosSettingsBody
+        entitled={macrosEntitled}
+        creating={creating}
+        onCreatingChange={setCreating}
       />
-      <MacrosSettingsBody entitled={macrosEntitled} />
-    </div>
+    </SettingsPage>
   )
 }

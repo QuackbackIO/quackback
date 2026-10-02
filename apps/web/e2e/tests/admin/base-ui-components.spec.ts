@@ -97,7 +97,7 @@ test.describe('Base UI component usability', () => {
     await expect(general).not.toHaveAttribute('data-active')
 
     await page.goto('/admin/settings/tags')
-    const addTag = page.getByText('Add new tag')
+    const addTag = page.getByRole('button', { name: 'New tag', exact: true })
     await waitForHydration(addTag)
     await addTag.click()
     const tagDialog = page.getByRole('dialog')
@@ -111,9 +111,9 @@ test.describe('Base UI component usability', () => {
     await expect(tagDialog).toBeHidden()
 
     await page.goto('/admin/settings/office-hours')
-    await expect(page.getByRole('heading', { name: 'Office Hours' })).toBeVisible({
-      timeout: 15_000,
-    })
+    await expect(
+      page.getByRole('navigation', { name: 'Support' }).getByRole('link', { name: 'Office hours' })
+    ).toHaveAttribute('aria-current', 'page', { timeout: 15_000 })
     await expect(page.locator('#office-hours-enabled')).toBeVisible()
     if ((await page.getByRole('checkbox').count()) > 0) {
       await expect(page.getByRole('checkbox').first()).toBeEnabled()

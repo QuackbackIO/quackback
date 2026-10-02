@@ -12,6 +12,12 @@ import {
 } from '@/components/ui/table'
 import { EmptyState } from '@/components/shared/empty-state'
 import { TimeAgo } from '@/components/ui/time-ago'
+import {
+  formatNumberIn,
+  useFormatNumber,
+  type NumberFormatter,
+} from '@/components/ui/format-number'
+import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import { ArchiveBoxIcon } from '@heroicons/react/24/solid'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import type { ExportRunListItem } from '@/lib/server/functions/data-runs'
@@ -27,11 +33,11 @@ const STATUS_LABEL: Record<ExportRunListItem['status'], string> = {
 
 const STATUS_VARIANT: Record<
   ExportRunListItem['status'],
-  'secondary' | 'default' | 'destructive' | 'outline'
+  'secondary' | 'default' | 'destructive' | 'success'
 > = {
   pending: 'secondary',
   running: 'default',
-  completed: 'outline',
+  completed: 'secondary',
   failed: 'destructive',
 }
 
@@ -42,12 +48,15 @@ export function formatBytes(bytes: number): string {
 }
 
 /** "1,204 posts · 86 companies · 5,632 votes +4 more" */
-export function summarizeEntityCounts(counts: Record<string, number>): string {
+export function summarizeEntityCounts(
+  counts: Record<string, number>,
+  formatNumber: NumberFormatter = (n) => formatNumberIn(DEFAULT_LOCALE, n)
+): string {
   const entries = Object.entries(counts)
-  if (entries.length === 0) return '—'
+  if (entries.length === 0) return '-'
   const shown = entries
     .slice(0, 3)
-    .map(([key, count]) => `${count.toLocaleString()} ${key.replace(/_/g, ' ')}`)
+    .map(([key, count]) => `${formatNumber(count)} ${key.replace(/_/g, ' ')}`)
   const rest = entries.length - shown.length
   return rest > 0 ? `${shown.join(' · ')} +${rest} more` : shown.join(' · ')
 }
@@ -57,6 +66,7 @@ function isExpired(run: ExportRunListItem): boolean {
 }
 
 export function ExportHistoryList() {
+  const formatNumber = useFormatNumber()
   const { data: runs, isLoading } = useQuery({
     ...settingsQueries.exportRuns(),
     refetchInterval: (query) => {
@@ -99,22 +109,27 @@ export function ExportHistoryList() {
                 <TimeAgo date={run.createdAt} />
               </TableCell>
               <TableCell className="text-sm text-muted-foreground">
-                {run.sizeBytes != null ? formatBytes(run.sizeBytes) : '—'}
+                {run.sizeBytes != null ? formatBytes(run.sizeBytes) : '-'}
               </TableCell>
               <TableCell
                 className="max-w-[260px] truncate text-sm text-muted-foreground"
                 title={
-                  run.error ?? (run.entityCounts ? summarizeEntityCounts(run.entityCounts) : '')
+                  run.error ??
+                  (run.entityCounts ? summarizeEntityCounts(run.entityCounts, formatNumber) : '')
                 }
               >
                 {run.status === 'failed'
                   ? (run.error ?? 'Export failed')
                   : run.entityCounts
-                    ? summarizeEntityCounts(run.entityCounts)
-                    : '—'}
+                    ? summarizeEntityCounts(run.entityCounts, formatNumber)
+                    : '-'}
               </TableCell>
               <TableCell>
-                <Badge variant={STATUS_VARIANT[run.status]}>{STATUS_LABEL[run.status]}</Badge>
+                {run.status === 'completed' ? (
+                  <span className="text-sm text-muted-foreground">{STATUS_LABEL[run.status]}</span>
+                ) : (
+                  <Badge variant={STATUS_VARIANT[run.status]}>{STATUS_LABEL[run.status]}</Badge>
+                )}
               </TableCell>
               <TableCell className="text-right">
                 {run.status === 'completed' && !isExpired(run) ? (
@@ -127,7 +142,7 @@ export function ExportHistoryList() {
                 ) : run.status === 'completed' && isExpired(run) ? (
                   <span className="text-sm text-muted-foreground">Expired</span>
                 ) : (
-                  <span className="text-sm text-muted-foreground">—</span>
+                  <span className="text-sm text-muted-foreground">-</span>
                 )}
               </TableCell>
             </TableRow>

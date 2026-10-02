@@ -15,6 +15,7 @@ import {
   lte,
   gt,
   or,
+  asc,
   desc,
   inArray,
   sql,
@@ -39,8 +40,12 @@ import type {
  * @returns Paginated list of changelog entries
  */
 export async function listChangelogs(params: ListChangelogParams): Promise<ChangelogListResult> {
-  const { status = 'all', cursor, limit = 20 } = params
+  const { status = 'all', cursor, limit = 20, sort = 'newest' } = params
+  const oldestFirst = sort === 'oldest'
   const now = new Date()
+
+  const after = oldestFirst ? gt : lt
+  const direction = oldestFirst ? asc : desc
 
   // Build where conditions - always exclude soft-deleted entries
   const conditions: SQL<unknown>[] = [isNull(changelogEntries.deletedAt)]
@@ -56,7 +61,8 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
     conditions.push(lte(changelogEntries.publishedAt, now))
   }
 
-  // Cursor-based pagination (cursor is the last entry ID)
+  // Cursor-based pagination (cursor is the last entry ID); the keyset walks
+  // the same (createdAt, id) order the page is sorted by, in either direction.
   if (cursor) {
     const cursorEntry = await db.query.changelogEntries.findFirst({
       where: eq(changelogEntries.id, cursor as ChangelogId),
@@ -65,10 +71,10 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
     if (cursorEntry) {
       conditions.push(
         or(
-          lt(changelogEntries.createdAt, cursorEntry.createdAt),
+          after(changelogEntries.createdAt, cursorEntry.createdAt),
           and(
             eq(changelogEntries.createdAt, cursorEntry.createdAt),
-            lt(changelogEntries.id, cursor as ChangelogId)
+            after(changelogEntries.id, cursor as ChangelogId)
           )
         )!
       )
@@ -78,7 +84,7 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
   // Fetch entries
   const entries = await db.query.changelogEntries.findMany({
     where: and(...conditions),
-    orderBy: [desc(changelogEntries.createdAt), desc(changelogEntries.id)],
+    orderBy: [direction(changelogEntries.createdAt), direction(changelogEntries.id)],
     limit: limit + 1, // Fetch one extra to check hasMore
   })
 

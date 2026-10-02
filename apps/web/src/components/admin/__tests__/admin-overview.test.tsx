@@ -115,17 +115,14 @@ vi.mock('@tanstack/react-router', () => ({
 import { OverviewDashboard } from '../admin-overview'
 
 describe('OverviewDashboard', () => {
-  it('renders each count with a two-line item description', () => {
+  it('renders each count under a single-line label', () => {
     const { container } = render(<OverviewDashboard />)
 
     expect(screen.getByText('3')).toBeInTheDocument()
-    expect(screen.getByText('conversations')).toBeInTheDocument()
-    expect(screen.getByText('waiting for reply')).toBeInTheDocument()
-    expect(screen.getAllByText('feedback posts')).toHaveLength(2)
-    expect(screen.getByText('to review')).toBeInTheDocument()
-    expect(screen.getByText('with no changelog')).toBeInTheDocument()
-    expect(screen.getByText('help center articles')).toBeInTheDocument()
-    expect(screen.getByText('in draft')).toBeInTheDocument()
+    expect(screen.getByText('Conversations waiting for reply')).toBeInTheDocument()
+    expect(screen.getByText('Feedback posts to review')).toBeInTheDocument()
+    expect(screen.getByText('Feedback posts with no changelog')).toBeInTheDocument()
+    expect(screen.getByText('Help center articles in draft')).toBeInTheDocument()
     expect(screen.getByText('Support')).toBeInTheDocument()
     expect(screen.getByText('Feedback')).toBeInTheDocument()
 
@@ -300,7 +297,36 @@ describe('OverviewDashboard', () => {
       screen.getByText('Hello! I have just created my boards in a new cloud workspace')
     ).toBeInTheDocument()
     expect(screen.getByText('Couldn’t load this section.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
-    expect(screen.queryByText('You’re all caught up.')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(screen.queryByText('Nothing to review')).not.toBeInTheDocument()
+  })
+
+  it('is titled Home with the standard page header', () => {
+    const { container } = render(<OverviewDashboard />)
+    expect(screen.getByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument()
+    expect(container.querySelector('[data-page-header]')).not.toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Overview' })).not.toBeInTheDocument()
+  })
+
+  it('filters the list with standard line tabs', () => {
+    render(<OverviewDashboard />)
+    expect(screen.getByRole('tab', { name: 'All' }).closest('[data-variant="line"]')).not.toBeNull()
+    expect(screen.getByRole('tab', { name: 'Support' })).toBeInTheDocument()
+  })
+
+  it('says Nothing to review when the list is empty', () => {
+    state.data = {
+      ...state.data,
+      attention: [],
+      sections: {
+        support: { enabled: true, error: null },
+        feedback: { enabled: true, error: null },
+        changelog: { enabled: true, error: null },
+        helpCenter: { enabled: true, error: null },
+      },
+    }
+    render(<OverviewDashboard />)
+    expect(screen.getByText('Nothing to review')).toBeInTheDocument()
+    expect(screen.queryByText(/caught up/i)).not.toBeInTheDocument()
   })
 })

@@ -191,7 +191,7 @@ export function PortalModerationSection({
             <FormattedMessage id="portal.moderation.banner.review" defaultMessage="Review here" />
           </button>
           <Link
-            to="/admin/moderation"
+            to="/admin/feedback/moderation"
             search={{}}
             className="inline-flex items-center gap-1 font-medium text-amber-700 underline-offset-2 hover:underline dark:text-amber-300"
           >

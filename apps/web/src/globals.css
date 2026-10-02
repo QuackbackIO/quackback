@@ -33,154 +33,195 @@
    ============================================== */
 
   :root {
-    /* Light mode - Modern Zinc & Gold */
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
+    /* Light mode */
+    --background: #ffffff;
+    --foreground: #0a0a0a;
+    --card: #ffffff;
+    --card-foreground: #0a0a0a;
+    --popover: #ffffff;
+    --popover-foreground: #0a0a0a;
     --primary: oklch(0.886 0.176 86);
-    --primary-foreground: oklch(0.145 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.145 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.45 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.145 0 0);
+    --primary-foreground: #0a0a0a;
+    --secondary: #f5f5f5;
+    --secondary-foreground: #0a0a0a;
+    --muted: #f5f5f5;
+    --muted-foreground: #525252;
+    --accent: #f5f5f5;
+    --accent-foreground: #0a0a0a;
     /* Same gold as --primary, one step darker so type/icons stay yellow on white. */
     --accent-ink: oklch(0.72 0.176 86);
     --destructive: oklch(0.577 0.245 27);
     --destructive-foreground: oklch(0.577 0.245 27);
-    --success: oklch(0.62 0.149 163);
+    /* Success and warning colour text too, so both read at AA on white and on a 15% tint. */
+    --success: oklch(0.49 0.115 165.6);
     --success-foreground: oklch(0.985 0 0);
-    --border: oklch(0.87 0 0);
-    --input: oklch(0.87 0 0);
+    --warning: oklch(0.52 0.125 55);
+    --warning-foreground: oklch(0.985 0 0);
+    --border: #d4d4d4;
+    --input: #d4d4d4;
     --ring: var(--accent-ink);
     --chart-1: oklch(0.646 0.222 41);
     --chart-2: oklch(0.6 0.118 184);
     --chart-3: oklch(0.398 0.07 227);
     --chart-4: oklch(0.828 0.189 84);
     --chart-5: oklch(0.769 0.188 70);
-    /* Analytics metric palette — readable on white, cohesive with zinc & gold */
-    --metric-posts: oklch(0.55 0.15 250);
-    --metric-votes: oklch(0.66 0.14 75);
-    --metric-comments: oklch(0.58 0.11 195);
-    --metric-users: oklch(0.55 0.15 295);
-    --metric-visitors: oklch(0.55 0.13 170);
-    --metric-pageviews: oklch(0.52 0.13 230);
-    --metric-visits: oklch(0.6 0.14 45);
+    /* Analytics series colour: one gold, readable on the surface */
+    --metric-posts: oklch(0.72 0.16 85);
+    --metric-votes: oklch(0.72 0.16 85);
+    --metric-comments: oklch(0.72 0.16 85);
+    --metric-users: oklch(0.72 0.16 85);
+    --metric-visitors: oklch(0.72 0.16 85);
+    --metric-pageviews: oklch(0.72 0.16 85);
+    --metric-visits: oklch(0.72 0.16 85);
     /* Conversation arrival channels (support volume chart) */
     --metric-widget: oklch(0.55 0.15 250);
     --metric-email: oklch(0.58 0.11 195);
     --metric-ticket-form: oklch(0.6 0.14 45);
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
+    --sidebar: #ffffff;
+    --sidebar-foreground: #0a0a0a;
     --sidebar-primary: var(--accent-ink);
     --sidebar-primary-foreground: oklch(0.145 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.145 0 0);
-    --sidebar-border: oklch(0.87 0 0);
+    --sidebar-accent: #f5f5f5;
+    --sidebar-accent-foreground: #0a0a0a;
+    --sidebar-border: #e5e5e5;
     --sidebar-ring: var(--accent-ink);
     --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
     --font-serif: ui-serif, Georgia, Cambria, serif;
     --font-mono: ui-monospace, SFMono-Regular, monospace;
-    --radius: 0.625rem;
+    --radius: 0.5rem;
     --letter-spacing: 0em;
     /* Shadows - light mode (subtle) */
-    --shadow-2xs: 0 1px oklch(0 0 0 / 0.05);
-    --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 0.05);
-    --shadow-sm: 0 1px 3px 0 oklch(0 0 0 / 0.1), 0 1px 2px -1px oklch(0 0 0 / 0.1);
-    --shadow: 0 1px 3px 0 oklch(0 0 0 / 0.1), 0 1px 2px -1px oklch(0 0 0 / 0.1);
-    --shadow-md: 0 4px 6px -1px oklch(0 0 0 / 0.1), 0 2px 4px -2px oklch(0 0 0 / 0.1);
-    --shadow-lg: 0 10px 15px -3px oklch(0 0 0 / 0.1), 0 4px 6px -4px oklch(0 0 0 / 0.1);
-    --shadow-xl: 0 20px 25px -5px oklch(0 0 0 / 0.1), 0 8px 10px -6px oklch(0 0 0 / 0.1);
-    --shadow-2xl: 0 25px 50px -12px oklch(0 0 0 / 0.25);
+    --shadow-2xs: 0 0 0 0 transparent;
+    --shadow-xs: 0 0 0 0 transparent;
+    --shadow-sm: 0 0 0 1px #e5e5e5;
+    --shadow: 0 0 0 1px #e5e5e5;
+    --shadow-md: 0 8px 24px oklch(0 0 0 / 0.08);
+    --shadow-lg: 0 12px 32px oklch(0 0 0 / 0.1);
+    --shadow-xl: 0 16px 40px oklch(0 0 0 / 0.12);
+    --shadow-2xl: 0 20px 48px oklch(0 0 0 / 0.16);
     /* Portal component variables (fallback to global values) */
-    --header-background: var(--card);
-    --header-foreground: var(--foreground);
-    --header-border: var(--border);
+    --header-background: #ffffff;
+    --header-foreground: #0a0a0a;
+    --header-border: #e5e5e5;
     --post-card-background: var(--card);
-    --post-card-border: var(--border);
+    --post-card-border: #e5e5e5;
     --post-card-voted-color: var(--primary);
-    --nav-active-background: var(--muted);
-    --nav-active-foreground: var(--foreground);
-    --nav-inactive-color: var(--muted-foreground);
+    --nav-active-background: #f5f5f5;
+    --nav-active-foreground: #0a0a0a;
+    --nav-inactive-color: #525252;
     --portal-button-background: var(--primary);
     --portal-button-foreground: var(--primary-foreground);
+    --elevated: #f5f5f5;
+    --radius-item: 999px;
+    --radius-field: 0.5rem;
+    --radius-panel: 0.75rem;
+    /* Two-tone admin chrome: the rail sits on a tinted field and the page is a sheet on it. */
+    --chrome-background: #f4f4f5;
+    --chrome-hairline: #e4e4e7;
+    --chrome-canvas-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    --chrome-rail-text: #52525b;
+    --chrome-pane-text: #3f3f46;
+    --chrome-icon: #8b8b93;
+    --chrome-label: #5f5f68;
+    --chrome-hover: rgba(0, 0, 0, 0.04);
+    --chrome-active-background: #e4e4e7;
+    --chrome-active-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+    --chrome-active-text: #09090b;
+    --chrome-active-icon: #9a6c00;
+    --chrome-pane-active-background: #f4f4f5;
+    --chrome-focus: #9a6c00;
   }
 
   .dark {
-    /* Dark mode - Deep Zinc & Gold */
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.17 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.17 0 0);
-    --popover-foreground: oklch(0.985 0 0);
+    /* Dark mode */
+    --background: #0a0a0a;
+    --foreground: #fafafa;
+    /* Cards sit a step above the page and controls on them a step higher, so portal and widget surfaces read as raised. */
+    --card: #0f0f0f;
+    --card-foreground: #fafafa;
+    --popover: #101010;
+    --popover-foreground: #fafafa;
     --primary: oklch(0.886 0.176 86);
-    --primary-foreground: oklch(0.145 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
+    --primary-foreground: #0a0a0a;
+    --secondary: #222222;
+    --secondary-foreground: #fafafa;
+    --muted: #222222;
+    --muted-foreground: #a1a1a1;
+    --accent: #222222;
+    --accent-foreground: #fafafa;
     /* Same hue as light destructive; lifted to sit next to --success on near-black. */
     --destructive: oklch(0.70 0.19 25);
-    --destructive-foreground: oklch(0.145 0 0);
+    --destructive-foreground: #0a0a0a;
     --accent-ink: oklch(0.886 0.176 86);
     --success: oklch(0.696 0.149 163);
     --success-foreground: oklch(0.985 0 0);
-    --border: oklch(0.269 0 0);
-    --input: oklch(0.269 0 0);
-    --ring: oklch(0.556 0 0);
+    --warning: oklch(0.78 0.14 75);
+    --warning-foreground: oklch(0.145 0 0);
+    --border: #262626;
+    --input: #262626;
+    --ring: oklch(0.886 0.176 86);
     --chart-1: oklch(0.488 0.243 264);
     --chart-2: oklch(0.696 0.17 162);
     --chart-3: oklch(0.769 0.188 70);
     --chart-4: oklch(0.627 0.265 303);
     --chart-5: oklch(0.645 0.246 16);
     /* Analytics metric palette — lifted lightness for legibility on near-black */
-    --metric-posts: oklch(0.7 0.14 250);
-    --metric-votes: oklch(0.8 0.14 80);
-    --metric-comments: oklch(0.72 0.11 195);
-    --metric-users: oklch(0.7 0.15 295);
-    --metric-visitors: oklch(0.7 0.13 170);
-    --metric-pageviews: oklch(0.7 0.13 230);
-    --metric-visits: oklch(0.75 0.13 50);
+    --metric-posts: oklch(0.82 0.16 88);
+    --metric-votes: oklch(0.82 0.16 88);
+    --metric-comments: oklch(0.82 0.16 88);
+    --metric-users: oklch(0.82 0.16 88);
+    --metric-visitors: oklch(0.82 0.16 88);
+    --metric-pageviews: oklch(0.82 0.16 88);
+    --metric-visits: oklch(0.82 0.16 88);
     /* Conversation arrival channels (support volume chart) */
     --metric-widget: oklch(0.7 0.14 250);
     --metric-email: oklch(0.72 0.11 195);
     --metric-ticket-form: oklch(0.75 0.13 50);
-    --sidebar: oklch(0.145 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar: #0a0a0a;
+    --sidebar-foreground: #fafafa;
     --sidebar-primary: oklch(0.886 0.176 86);
     --sidebar-primary-foreground: oklch(0.145 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(0.269 0 0);
+    --sidebar-accent: #222222;
+    --sidebar-accent-foreground: #fafafa;
+    --sidebar-border: #262626;
     --sidebar-ring: oklch(0.556 0 0);
     /* Shadows - dark mode (more pronounced) */
-    --shadow-2xs: 0 1px oklch(0 0 0 / 0.15);
-    --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 0.15);
-    --shadow-sm: 0 1px 3px 0 oklch(0 0 0 / 0.25), 0 1px 2px -1px oklch(0 0 0 / 0.25);
-    --shadow: 0 1px 3px 0 oklch(0 0 0 / 0.25), 0 1px 2px -1px oklch(0 0 0 / 0.25);
-    --shadow-md: 0 4px 6px -1px oklch(0 0 0 / 0.25), 0 2px 4px -2px oklch(0 0 0 / 0.25);
-    --shadow-lg: 0 10px 15px -3px oklch(0 0 0 / 0.25), 0 4px 6px -4px oklch(0 0 0 / 0.25);
-    --shadow-xl: 0 20px 25px -5px oklch(0 0 0 / 0.25), 0 8px 10px -6px oklch(0 0 0 / 0.25);
-    --shadow-2xl: 0 25px 50px -12px oklch(0 0 0 / 0.5);
+    --shadow-2xs: 0 0 0 0 transparent;
+    --shadow-xs: 0 0 0 0 transparent;
+    --shadow-sm: 0 0 0 1px #262626;
+    --shadow: 0 0 0 1px #262626;
+    --shadow-md: 0 8px 24px oklch(0 0 0 / 0.4);
+    --shadow-lg: 0 12px 32px oklch(0 0 0 / 0.5);
+    --shadow-xl: 0 16px 40px oklch(0 0 0 / 0.55);
+    --shadow-2xl: 0 20px 48px oklch(0 0 0 / 0.6);
     /* Portal component variables (fallback to global values) */
-    --header-background: var(--card);
-    --header-foreground: var(--foreground);
-    --header-border: var(--border);
+    --header-background: #0a0a0a;
+    --header-foreground: #fafafa;
+    --header-border: #262626;
     --post-card-background: var(--card);
-    --post-card-border: var(--border);
+    --post-card-border: #262626;
     --post-card-voted-color: var(--primary);
-    --nav-active-background: var(--muted);
-    --nav-active-foreground: var(--foreground);
-    --nav-inactive-color: var(--muted-foreground);
+    --nav-active-background: #222222;
+    --nav-active-foreground: #fafafa;
+    --nav-inactive-color: #a1a1a1;
     --portal-button-background: var(--primary);
     --portal-button-foreground: var(--primary-foreground);
+    --elevated: #101010;
+    /* Two-tone admin chrome, dark: the rail recedes and the page sheet is raised. */
+    --chrome-background: #09090b;
+    --chrome-hairline: #232327;
+    --chrome-canvas-shadow: none;
+    --chrome-rail-text: #a1a1aa;
+    --chrome-pane-text: #d4d4d8;
+    --chrome-icon: #71717a;
+    --chrome-label: #8b8b94;
+    --chrome-hover: rgba(255, 255, 255, 0.04);
+    --chrome-active-background: #18181b;
+    --chrome-active-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
+    --chrome-active-text: #fafafa;
+    --chrome-active-icon: #ffcf20;
+    --chrome-pane-active-background: #1f1f23;
+    --chrome-focus: #ffcf20;
   }
 
   @theme inline {
@@ -204,8 +245,25 @@
     --color-destructive-foreground: var(--destructive-foreground);
     --color-success: var(--success);
     --color-success-foreground: var(--success-foreground);
+    --color-warning: var(--warning);
+    --color-warning-foreground: var(--warning-foreground);
     --color-border: var(--border);
     --color-input: var(--input);
+    /* Admin chrome */
+    --color-chrome: var(--chrome-background);
+    --color-chrome-hairline: var(--chrome-hairline);
+    --color-chrome-hover: var(--chrome-hover);
+    --color-chrome-rail-text: var(--chrome-rail-text);
+    --color-chrome-pane-text: var(--chrome-pane-text);
+    --color-chrome-icon: var(--chrome-icon);
+    --color-chrome-label: var(--chrome-label);
+    --color-chrome-active: var(--chrome-active-background);
+    --color-chrome-active-text: var(--chrome-active-text);
+    --color-chrome-active-icon: var(--chrome-active-icon);
+    --color-chrome-pane-active: var(--chrome-pane-active-background);
+    --color-chrome-focus: var(--chrome-focus);
+    --shadow-chrome-active: var(--chrome-active-shadow);
+    --shadow-chrome-canvas: var(--chrome-canvas-shadow);
     --color-ring: var(--ring);
     --color-chart-1: var(--chart-1);
     --color-chart-2: var(--chart-2);
@@ -241,6 +299,9 @@
     --radius-md: calc(var(--radius) * 0.75);
     --radius-lg: var(--radius);
     --radius-xl: calc(var(--radius) * 1.5);
+    --radius-item: var(--radius-item);
+    --radius-field: var(--radius-field);
+    --radius-panel: var(--radius-panel);
 
     /* Shadows (themeable per workspace) */
     --shadow-2xs: var(--shadow-2xs);
@@ -469,3 +530,257 @@ a svg,
   background: var(--color-muted-foreground);
 }
 
+/* ==============================================
+   Theme rules the components cannot carry
+
+   Components style themselves. What stays here is
+   page-wide: the admin dark sheet tokens, heading
+   weights, side-pane rows and in-canvas tabs (the
+   same component looks different inside the admin
+   chrome), the settings-page type scale, the focus
+   colour and reduced motion. Unlayered so these
+   rules beat utility classes.
+   ============================================== */
+
+/* The portal raises its cards with real soft shadows; the admin stays flat on hairlines. */
+[data-portal] {
+  --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 0.04);
+  --shadow-sm: 0 1px 3px 0 oklch(0 0 0 / 0.07), 0 1px 2px -1px oklch(0 0 0 / 0.06);
+  --shadow: 0 1px 3px 0 oklch(0 0 0 / 0.07), 0 1px 2px -1px oklch(0 0 0 / 0.06);
+}
+
+.dark [data-portal] {
+  --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 0.3);
+  --shadow-sm: 0 1px 3px 0 oklch(0 0 0 / 0.4), 0 1px 2px -1px oklch(0 0 0 / 0.4);
+  --shadow: 0 1px 3px 0 oklch(0 0 0 / 0.4), 0 1px 2px -1px oklch(0 0 0 / 0.4);
+}
+
+/*
+ * Dark mode raises the admin page into a sheet. Overlays portal to the body, outside the canvas,
+ * so the same surfaces are set at the document level while an admin shell is mounted. The
+ * public portal and the widget have no admin shell and keep the document-level dark tokens above.
+ */
+.dark:has([data-admin-shell]),
+.dark [data-admin-canvas] {
+  --background: #131316;
+  --card: #18181b;
+  --popover: #18181b;
+  --elevated: #18181b;
+  --muted: #1f1f23;
+  --secondary: #1f1f23;
+  --accent: #1f1f23;
+  --border: #27272a;
+  --input: #3f3f46;
+}
+
+:root {
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.01em;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+[data-page-header] h1 {
+  font-size: 20px;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/*
+ * Admin chrome rows. The shell, canvas, rail and side panes style themselves; rows built
+ * from MENU_ROW read as chrome rows inside a side pane and as plain rows elsewhere.
+ */
+[data-side-pane] .nav-row:focus-visible {
+  outline: 2px solid var(--chrome-focus);
+  outline-offset: 1px;
+}
+
+/* Menu and filter rows outside a pane (popovers, sheets) keep the plain row. */
+.nav-row {
+  border-radius: var(--radius-field);
+  padding: 8px 10px;
+  font-size: 14px;
+}
+
+.nav-row:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+.nav-row.bg-muted,
+.nav-row.bg-primary\/10,
+.nav-row[data-active],
+.nav-row[aria-selected="true"] {
+  background: var(--accent);
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.nav-row .text-primary,
+.nav-row.bg-primary\/10 svg {
+  color: currentColor;
+}
+
+.nav-section {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--foreground);
+}
+
+/* Side pane rows: 32px, 13.5px, a flat fill when active. */
+[data-side-pane] .nav-row {
+  box-sizing: border-box;
+  min-height: 32px;
+  gap: 10px;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-field);
+  font-size: 13.5px;
+  font-weight: 400;
+  color: var(--chrome-pane-text);
+  background: transparent;
+}
+
+[data-side-pane] .nav-row > svg {
+  width: 16px;
+  height: 16px;
+  color: var(--chrome-icon);
+}
+
+[data-side-pane] .nav-row:hover {
+  background: var(--chrome-hover);
+  color: var(--chrome-pane-text);
+}
+
+[data-side-pane] .nav-row.bg-muted,
+[data-side-pane] .nav-row.bg-primary\/10,
+[data-side-pane] .nav-row[data-active],
+[data-side-pane] .nav-row[aria-selected="true"] {
+  background: var(--chrome-pane-active-background);
+  color: var(--chrome-active-text);
+  font-weight: 500;
+}
+
+[data-side-pane] .nav-row.bg-muted > svg,
+[data-side-pane] .nav-row.bg-primary\/10 > svg,
+[data-side-pane] .nav-row[data-active] > svg,
+[data-side-pane] .nav-row[aria-selected="true"] > svg {
+  color: var(--chrome-active-icon);
+}
+
+[data-side-pane] .nav-section {
+  padding: 4px 10px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--chrome-label);
+}
+
+/*
+ * Admin page-section tabs read as the side pane's rows laid flat: no underline, an 8px row with
+ * the pane's flat fill when active. Yellow stays an icon accent. The portal keeps the underline.
+ */
+[data-admin-canvas] [data-slot="tabs"][data-variant="line"] [data-slot="tabs-list"],
+[data-admin-canvas] [data-slot="tabs-list"][data-variant="line"] {
+  height: auto;
+  gap: 2px;
+  border-bottom: 0;
+  box-shadow: none;
+}
+
+[data-admin-canvas] [data-slot="tabs"][data-variant="line"] [data-slot="tabs-trigger"],
+[data-admin-canvas] [data-slot="tabs-trigger"][data-variant="line"] {
+  height: 32px;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-field);
+  font-size: 13.5px;
+  font-weight: 400;
+  color: var(--chrome-pane-text);
+  background: transparent;
+}
+
+[data-admin-canvas] [data-slot="tabs"][data-variant="line"] [data-slot="tabs-trigger"]:hover,
+[data-admin-canvas] [data-slot="tabs-trigger"][data-variant="line"]:hover {
+  background: var(--chrome-hover);
+}
+
+[data-admin-canvas] [data-slot="tabs"][data-variant="line"] [data-slot="tabs-trigger"][data-active],
+[data-admin-canvas] [data-slot="tabs-trigger"][data-variant="line"][data-active] {
+  background: var(--chrome-pane-active-background);
+  color: var(--chrome-active-text);
+  font-weight: 500;
+}
+
+/* Inset, so a tab bar that scrolls sideways does not clip the ring. */
+[data-admin-canvas] [data-slot="tabs"][data-variant="line"] [data-slot="tabs-trigger"]:focus-visible,
+[data-admin-canvas] [data-slot="tabs-trigger"][data-variant="line"]:focus-visible {
+  outline: 2px solid var(--chrome-focus);
+  outline-offset: -2px;
+  box-shadow: none;
+}
+
+/* Settings pages — one type scale and the same panel chrome. */
+[data-settings-page] [data-page-header] p {
+  font-size: 13px;
+  line-height: 1.45;
+  margin-top: 4px;
+}
+
+[data-settings-page] h1 {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+[data-settings-page] h2 {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+[data-settings-page] h3 {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+
+[data-settings-page] [data-slot="label"] {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+/* A setting row's label is the standard 14px medium, not the form-field label style above. */
+[data-settings-page] [data-slot="setting-row"] [data-slot="label"] {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+[data-settings-page] p.text-xs,
+[data-settings-page] .text-xs.text-muted-foreground {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+:focus-visible {
+  outline-color: var(--ring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

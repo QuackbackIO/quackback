@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import type { DragEndEvent } from '@dnd-kit/core'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 
@@ -45,13 +47,29 @@ const rules = [
 ]
 let guidanceCharBudget = 4000
 const createGuidanceRule = vi.fn()
+const reorderGuidanceRules = vi.fn()
+const deleteGuidanceRule = vi.fn()
+
+// Drag gestures need layout, which happy-dom lacks: capture the drag-end handler
+// the card gives the DndContext and call it with a real event shape.
+const dnd = vi.hoisted(() => ({ onDragEnd: null as ((event: DragEndEvent) => void) | null }))
+vi.mock('@dnd-kit/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@dnd-kit/core')>()
+  return {
+    ...actual,
+    DndContext: (props: { onDragEnd?: (event: DragEndEvent) => void; children: never }) => {
+      dnd.onDragEnd = props.onDragEnd ?? null
+      return <actual.DndContext {...props} />
+    },
+  }
+})
 
 vi.mock('@/lib/server/functions/assistant-guidance', () => ({
   listGuidanceRulesFn: vi.fn(async () => ({ rules, charBudget: guidanceCharBudget })),
   createGuidanceRuleFn: (input: { data: unknown }) => createGuidanceRule(input),
   updateGuidanceRuleFn: vi.fn(),
-  deleteGuidanceRuleFn: vi.fn(),
-  reorderGuidanceRulesFn: vi.fn(),
+  deleteGuidanceRuleFn: (input: { data: unknown }) => deleteGuidanceRule(input),
+  reorderGuidanceRulesFn: (input: { data: unknown }) => reorderGuidanceRules(input),
   listAssistantToolsFn: vi.fn(),
 }))
 // Radix Select relies on pointer/layout APIs happy-dom lacks; render it as a
@@ -80,6 +98,7 @@ vi.mock('@/components/ui/select', () => ({
 vi.mock('@/lib/server/functions/assistant-guidance-stats', () => ({
   getGuidanceRuleStatsFn: vi.fn(async () => ({
     assistant_guidance_1: { applied: 12, lastAppliedAt: new Date('2026-07-10T10:00:00Z') },
+    assistant_guidance_2: { applied: 1, lastAppliedAt: new Date('2026-07-11T10:00:00Z') },
   })),
 }))
 
@@ -89,6 +108,9 @@ afterEach(() => {
   cleanup()
   guidanceCharBudget = 4000
   createGuidanceRule.mockReset()
+  reorderGuidanceRules.mockReset()
+  deleteGuidanceRule.mockReset()
+  dnd.onDragEnd = null
 })
 
 function renderCard(agent: 'agent' | 'copilot' = 'agent') {
@@ -140,16 +162,71 @@ describe('GuidanceRulesCard', () => {
     expect(screen.queryByText('Refund policy')).not.toBeInTheDocument()
   })
 
-  it('keeps edit, delete, and move controls visible and filters V2 fields', async () => {
+  it('keeps row actions in a menu and filters V2 fields', async () => {
     renderCard()
     await screen.findByText('Refund policy')
-    expect(screen.getByRole('button', { name: 'Edit Refund policy' })).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Delete Refund policy' })).toBeVisible()
-    fireEvent.change(screen.getByPlaceholderText('Search guidance'), {
+    // No always-visible icon buttons: edit and delete live in the row menu.
+    expect(screen.queryByRole('button', { name: 'Edit Refund policy' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete Refund policy' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Move Refund policy/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Actions for Refund policy' })).toBeInTheDocument()
+    fireEvent.change(screen.getByPlaceholderText('Search guidance...'), {
       target: { value: 'next step' },
     })
     expect(screen.getByText('Always be clear')).toBeInTheDocument()
     expect(screen.queryByText('Refund policy')).not.toBeInTheDocument()
+  })
+
+  it('edits and deletes from the row menu, deleting only after a confirm', async () => {
+    deleteGuidanceRule.mockResolvedValue(undefined)
+    const user = userEvent.setup()
+    renderCard()
+    await screen.findByText('Refund policy')
+    await user.click(screen.getByRole('button', { name: 'Actions for Refund policy' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+    expect(await screen.findByText('Delete guidance?')).toBeInTheDocument()
+    expect(deleteGuidanceRule).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Delete guidance' }))
+    await waitFor(() => expect(deleteGuidanceRule).toHaveBeenCalledTimes(1))
+    expect(deleteGuidanceRule.mock.calls[0][0].data).toEqual({ id: 'assistant_guidance_1' })
+    await waitFor(() => expect(screen.queryByText('Refund policy')).not.toBeInTheDocument())
+  })
+
+  it('reorders by drag within the card’s agent and saves the new order', async () => {
+    reorderGuidanceRules.mockResolvedValue(undefined)
+    renderCard()
+    await screen.findByText('Refund policy')
+    dnd.onDragEnd?.({
+      active: { id: 'assistant_guidance_2' },
+      over: { id: 'assistant_guidance_1' },
+    } as DragEndEvent)
+    await waitFor(() => expect(reorderGuidanceRules).toHaveBeenCalledTimes(1))
+    expect(reorderGuidanceRules.mock.calls[0][0].data).toEqual({
+      ids: ['assistant_guidance_2', 'assistant_guidance_1'],
+    })
+    const names = screen
+      .getAllByText(/^(Refund policy|Always be clear)$/)
+      .map((node) => node.textContent)
+    expect(names).toEqual(['Always be clear', 'Refund policy'])
+  })
+
+  it('does not reorder while a search is active', async () => {
+    renderCard()
+    await screen.findByText('Refund policy')
+    fireEvent.change(screen.getByPlaceholderText('Search guidance...'), { target: { value: 'e' } })
+    dnd.onDragEnd?.({
+      active: { id: 'assistant_guidance_2' },
+      over: { id: 'assistant_guidance_1' },
+    } as DragEndEvent)
+    expect(reorderGuidanceRules).not.toHaveBeenCalled()
+  })
+
+  it('pluralises the applied count and formats the budget with the locale', async () => {
+    renderCard()
+    await screen.findByText('Refund policy')
+    expect(screen.getByText('Applied 12 times')).toBeInTheDocument()
+    expect(screen.getByText('Applied 1 time')).toBeInTheDocument()
+    expect(screen.getByText(/of 4,000 characters/)).toBeInTheDocument()
   })
 
   it('defaults new guidance to the Agent and lets "Applies to" target the Copilot', async () => {
@@ -166,7 +243,7 @@ describe('GuidanceRulesCard', () => {
       updatedAt: new Date('2026-07-14'),
     })
     renderCard()
-    fireEvent.click(await screen.findByRole('button', { name: 'Add guidance' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'New guidance' }))
 
     // Defaults to Agent before any change.
     const appliesTo = screen.getByRole('combobox', { name: 'Applies to' })
@@ -180,7 +257,7 @@ describe('GuidanceRulesCard', () => {
     })
     fireEvent.change(appliesTo, { target: { value: 'copilot' } })
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Add guidance' }).at(-1)!)
+    fireEvent.click(screen.getByRole('button', { name: 'Create guidance' }))
 
     await vi.waitFor(() => expect(createGuidanceRule).toHaveBeenCalledTimes(1))
     expect(createGuidanceRule.mock.calls[0][0].data.agent).toBe('copilot')
@@ -189,7 +266,7 @@ describe('GuidanceRulesCard', () => {
   it('uses list ordering and prevents enabled guidance from exceeding the budget', async () => {
     guidanceCharBudget = 30
     renderCard()
-    fireEvent.click(await screen.findByRole('button', { name: 'Add guidance' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'New guidance' }))
 
     fireEvent.change(screen.getByLabelText('Name this guidance'), {
       target: { value: 'Shipping' },
@@ -199,7 +276,7 @@ describe('GuidanceRulesCard', () => {
     })
 
     expect(screen.queryByLabelText('Priority')).not.toBeInTheDocument()
-    fireEvent.click(screen.getAllByRole('button', { name: 'Add guidance' }).at(-1)!)
+    fireEvent.click(screen.getByRole('button', { name: 'Create guidance' }))
     expect(
       await screen.findByText(
         'Shorten or disable guidance before saving to stay within the budget.'

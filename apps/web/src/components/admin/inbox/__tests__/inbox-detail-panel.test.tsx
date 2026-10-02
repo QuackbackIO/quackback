@@ -12,6 +12,7 @@
  */
 import { describe, expect, it, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ConversationDTO } from '@/lib/shared/conversation/types'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
@@ -49,6 +50,16 @@ vi.mock('@/components/admin/users/block-person-control', () => ({
 vi.mock('@/lib/server/functions/conversation', () => ({
   listConversationsForUserFn: vi.fn().mockResolvedValue({ conversations: [], hasMore: false }),
   getConversationAssistantActivityFn: vi.fn().mockResolvedValue(null),
+}))
+const filesHoisted = vi.hoisted(() => ({
+  listConversationFilesFn: vi.fn().mockResolvedValue([]),
+  openViewer: vi.fn(),
+}))
+vi.mock('@/lib/server/functions/conversation-files', () => ({
+  listConversationFilesFn: filesHoisted.listConversationFilesFn,
+}))
+vi.mock('@/components/shared/files/file-viewer-context', () => ({
+  useFileViewer: () => ({ open: filesHoisted.openViewer }),
 }))
 vi.mock('@/lib/server/functions/admin', () => ({
   getPortalUserFn: vi.fn().mockResolvedValue(null),
@@ -132,19 +143,21 @@ function renderPanel(
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const ui = (props: { openCopilotToken?: number }) => (
-    <QueryClientProvider client={client}>
-      <InboxDetailPanel
-        item={{ kind: 'conversation', id: conversation.id }}
-        conversation={conversation}
-        onChanged={vi.fn()}
-        onSelectItem={vi.fn()}
-        onTrackAsFeedback={vi.fn()}
-        onCreateTicket={vi.fn()}
-        onInsertFromCopilot={vi.fn()}
-        visible={panelShown}
-        {...props}
-      />
-    </QueryClientProvider>
+    <IntlProvider locale="en-US" messages={{}}>
+      <QueryClientProvider client={client}>
+        <InboxDetailPanel
+          item={{ kind: 'conversation', id: conversation.id }}
+          conversation={conversation}
+          onChanged={vi.fn()}
+          onSelectItem={vi.fn()}
+          onTrackAsFeedback={vi.fn()}
+          onCreateTicket={vi.fn()}
+          onInsertFromCopilot={vi.fn()}
+          visible={panelShown}
+          {...props}
+        />
+      </QueryClientProvider>
+    </IntlProvider>
   )
   const result = render(ui(extra))
   return {
@@ -371,5 +384,66 @@ describe('<InboxDetailPanel> contact name', () => {
 
     expect(await screen.findByText('Quiet Otter')).toBeInTheDocument()
     expect(screen.queryByText('Anonymous')).not.toBeInTheDocument()
+  })
+})
+
+describe('<InboxDetailPanel> Files section', () => {
+  afterEach(() => {
+    panelShown = false
+    filesHoisted.listConversationFilesFn.mockReset().mockResolvedValue([])
+    filesHoisted.openViewer.mockClear()
+  })
+
+  it('renders no section at all for a conversation with no files', async () => {
+    routeContextState.principal = undefined
+    panelShown = true
+
+    renderPanel()
+
+    await waitFor(() => expect(filesHoisted.listConversationFilesFn).toHaveBeenCalled())
+    expect(screen.queryByText('Files')).not.toBeInTheDocument()
+  })
+
+  it('lists files newest first with a right-aligned count, and opens the viewer at the clicked row', async () => {
+    routeContextState.principal = undefined
+    panelShown = true
+    filesHoisted.listConversationFilesFn.mockResolvedValue([
+      {
+        attachment: {
+          url: '/f/b.pdf',
+          name: 'b.pdf',
+          contentType: 'application/pdf',
+          size: 10,
+          family: 'pdf',
+        },
+        messageId: 'm2',
+        senderName: 'Dana',
+        sentAt: '2026-01-01T01:00:00.000Z',
+      },
+      {
+        attachment: {
+          url: '/f/a.pdf',
+          name: 'a.pdf',
+          contentType: 'application/pdf',
+          size: 10,
+          family: 'pdf',
+        },
+        messageId: 'm1',
+        senderName: 'Dana',
+        sentAt: '2026-01-01T00:00:00.000Z',
+      },
+    ])
+
+    renderPanel()
+
+    expect(await screen.findByText('Files')).toBeInTheDocument()
+    expect(screen.getByText('2')).toBeInTheDocument()
+    expect(screen.getAllByText(/\.pdf$/).map((el) => el.textContent)).toEqual(['b.pdf', 'a.pdf'])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open b.pdf, PDF, 10 B' }))
+    expect(filesHoisted.openViewer).toHaveBeenCalledTimes(1)
+    const [files, index] = filesHoisted.openViewer.mock.calls[0] as [{ name: string }[], number]
+    expect(files.map((f) => f.name)).toEqual(['b.pdf', 'a.pdf'])
+    expect(index).toBe(0)
   })
 })

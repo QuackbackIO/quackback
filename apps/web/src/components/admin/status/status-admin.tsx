@@ -1,10 +1,17 @@
 import { useQuery } from '@tanstack/react-query'
-import { Link, useNavigate } from '@tanstack/react-router'
-import { SignalIcon } from '@heroicons/react/24/solid'
-import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline'
+import {
+  CalendarIcon,
+  ClockIcon,
+  DocumentTextIcon,
+  EnvelopeIcon,
+  ExclamationTriangleIcon,
+  ServerStackIcon,
+  SignalIcon,
+} from '@heroicons/react/24/solid'
+import { useNavigate } from '@tanstack/react-router'
 import { AdminFilterLayout } from '@/components/admin/admin-filter-layout'
 import { FilterSection } from '@/components/shared/filter-section'
-import { MENU_ROW } from '@/components/ui/menu'
+import { MENU_ICON, MENU_ROW } from '@/components/ui/menu'
 import { cn } from '@/lib/shared/utils'
 import { Route } from '@/routes/admin/status'
 import { listStatusIncidentsAdminFn } from '@/lib/server/functions/status'
@@ -43,11 +50,13 @@ function CountBadge({ count }: { count: number | string | undefined }) {
 function SideItem({
   active,
   onClick,
+  icon: Icon,
   children,
   count,
 }: {
   active: boolean
   onClick: () => void
+  icon: React.ElementType
   children: React.ReactNode
   count?: number | string
 }) {
@@ -64,6 +73,7 @@ function SideItem({
           : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
       )}
     >
+      <Icon className={MENU_ICON} />
       <span className="min-w-0 flex-1 truncate text-left">{children}</span>
       <CountBadge count={count} />
     </button>
@@ -88,24 +98,32 @@ function StatusFilterNav({ view }: { view: StatusAdminView }) {
 
   return (
     <div className="space-y-0 flex flex-col h-full">
-      <div className="space-y-1 pb-4">
-        <SideItem active={view === 'overview'} onClick={() => go('overview')}>
-          Overview
-        </SideItem>
-      </div>
+      <FilterSection title="Status page">
+        <div className="space-y-1">
+          <SideItem active={view === 'overview'} onClick={() => go('overview')} icon={SignalIcon}>
+            Overview
+          </SideItem>
+        </div>
+      </FilterSection>
       <FilterSection title="Incidents">
         <div className="space-y-1">
-          <SideItem active={view === 'open'} onClick={() => go('open')} count={openCount}>
+          <SideItem
+            active={view === 'open'}
+            onClick={() => go('open')}
+            icon={ExclamationTriangleIcon}
+            count={openCount}
+          >
             Open incidents
           </SideItem>
           <SideItem
             active={view === 'maintenance'}
+            icon={CalendarIcon}
             onClick={() => go('maintenance')}
             count={maintenanceCount}
           >
             Scheduled maintenance
           </SideItem>
-          <SideItem active={view === 'all'} onClick={() => go('all')}>
+          <SideItem active={view === 'all'} onClick={() => go('all')} icon={ClockIcon}>
             All incidents
           </SideItem>
         </div>
@@ -115,16 +133,22 @@ function StatusFilterNav({ view }: { view: StatusAdminView }) {
         <div className="space-y-1">
           <SideItem
             active={view === 'components'}
+            icon={ServerStackIcon}
             onClick={() => go('components')}
             count={componentCount}
           >
             Services
           </SideItem>
-          <SideItem active={view === 'templates'} onClick={() => go('templates')}>
+          <SideItem
+            active={view === 'templates'}
+            onClick={() => go('templates')}
+            icon={DocumentTextIcon}
+          >
             Templates
           </SideItem>
           <SideItem
             active={view === 'subscribers'}
+            icon={EnvelopeIcon}
             onClick={() => go('subscribers')}
             count={subscriberCounts.data?.total}
           >
@@ -132,32 +156,6 @@ function StatusFilterNav({ view }: { view: StatusAdminView }) {
           </SideItem>
         </div>
       </FilterSection>
-
-      {/* The status page's two other surfaces, one click away: the page
-          visitors see, and its settings (which live under /admin/settings). */}
-      <div className="mt-2 pt-2 border-t border-border/40 space-y-1">
-        <a
-          href="/status"
-          target="_blank"
-          rel="noreferrer"
-          className={cn(
-            MENU_ROW,
-            'w-full text-muted-foreground hover:text-foreground hover:bg-muted/50'
-          )}
-        >
-          View public page
-          <ArrowTopRightOnSquareIcon className="h-3 w-3" />
-        </a>
-        <Link
-          to="/admin/settings/status"
-          className={cn(
-            MENU_ROW,
-            'w-full text-muted-foreground hover:text-foreground hover:bg-muted/50'
-          )}
-        >
-          Page settings
-        </Link>
-      </div>
     </div>
   )
 }
@@ -168,18 +166,10 @@ export function StatusAdmin() {
 
   return (
     <>
-      <AdminFilterLayout
-        headerIcon={SignalIcon}
-        headerTitle="Status"
-        filters={<StatusFilterNav view={view} />}
-      >
+      <AdminFilterLayout headerTitle="Status" filters={<StatusFilterNav view={view} />}>
         {view === 'overview' && <StatusOverviewView />}
         {view === 'open' && (
-          <StatusIncidentList
-            kind="incident"
-            state="active"
-            emptyMessage="No open incidents. All clear."
-          />
+          <StatusIncidentList kind="incident" state="active" emptyMessage="No open incidents" />
         )}
         {view === 'maintenance' && (
           <StatusIncidentList

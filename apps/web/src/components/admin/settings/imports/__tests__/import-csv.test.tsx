@@ -115,10 +115,32 @@ afterEach(() => {
 })
 
 describe('<ImportCsv>', () => {
-  it('explains how author_email and author_name are applied', () => {
+  it('states the column rules in the dropzone hint', () => {
     renderCsv()
-    expect(screen.getByText(/Every row needs author_email or author_name/)).toBeTruthy()
-    expect(screen.getByText(/name-only contact/)).toBeTruthy()
+    expect(screen.getByText(/Needs title and content columns/)).toBeTruthy()
+    expect(screen.getByText(/Each row needs author_email or author_name/)).toBeTruthy()
+    expect(screen.getByText(/Keep source_id filled/)).toBeTruthy()
+  })
+
+  it('offers a Source choice that keeps every migration path, defaulting to the feedback portal', () => {
+    renderCsv()
+    const source = screen.getByLabelText('Source') as HTMLSelectElement
+    expect(source.value).toBe('feedback_portal')
+    expect(Array.from(source.options).map((o) => o.textContent)).toEqual([
+      'Feedback portal CSV',
+      'Support suite CSV',
+      'Help center CSV',
+    ])
+  })
+
+  it('shows the guidance for the chosen source', () => {
+    renderCsv()
+    expect(
+      screen.getByText('Boards, posts, votes and comments from a feedback portal CSV export.')
+    ).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'help_center' } })
+    expect(screen.getByText('Categories and articles from a help center CSV export.')).toBeTruthy()
+    expect(screen.queryByText(/from a feedback portal CSV export/)).toBeNull()
   })
 
   it('walks upload -> dry-run review -> commit -> done', async () => {

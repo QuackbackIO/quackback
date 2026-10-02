@@ -10,6 +10,7 @@ import type { Role } from '@/lib/shared/roles'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { SettingRow } from '@/components/admin/settings/setting-row'
 import {
   Select,
   SelectContent,
@@ -182,24 +183,23 @@ export function RoleMappingRulesBody({
         </Button>
       </div>
 
-      <label className="flex items-start gap-2 text-sm">
-        <Switch
-          checked={mapping.syncOnEverySignIn ?? false}
-          onCheckedChange={(v) => update({ syncOnEverySignIn: v })}
-          className="mt-0.5"
-          disabled={disabled}
-          aria-label="Reapply roles on every sign-in"
-        />
-        <span>
-          Reapply roles on every sign-in
-          <span className="mt-0.5 block text-muted-foreground">
-            Off, existing people keep their current role.
-            {autoCreateUsers === false
-              ? ' Roles are not applied while account creation is off.'
-              : ''}
-          </span>
-        </span>
-      </label>
+      <SettingRow
+        label="Reapply roles on every sign-in"
+        description={`Off, existing users keep their current role.${
+          autoCreateUsers === false ? ' Roles are not applied while account creation is off.' : ''
+        }`}
+        htmlFor="claim-mapping-sync"
+        disabled={disabled}
+        control={
+          <Switch
+            id="claim-mapping-sync"
+            checked={mapping.syncOnEverySignIn ?? false}
+            onCheckedChange={(v) => update({ syncOnEverySignIn: v })}
+            disabled={disabled}
+            aria-label="Reapply roles on every sign-in"
+          />
+        }
+      />
     </div>
   )
 }

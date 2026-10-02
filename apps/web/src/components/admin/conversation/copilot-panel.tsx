@@ -709,7 +709,7 @@ function CopilotTurnView({
           <div className="space-y-2">
             <p className="text-sm text-destructive">{turn.errorMessage ?? GENERIC_ERROR}</p>
             <Button type="button" variant="outline" size="sm" onClick={onRetry}>
-              Retry
+              Try again
             </Button>
           </div>
         ) : turn.suppressed ? (
@@ -946,7 +946,6 @@ function CopilotAskInput({
               type="button"
               variant="outline"
               size="sm"
-              shape="pill"
               onClick={() => onQuickAction(action.question)}
               disabled={busy}
               className="text-muted-foreground hover:text-foreground"
@@ -966,7 +965,7 @@ function CopilotAskInput({
           rows={2}
           maxLength={MAX_QUESTION_CHARS}
           disabled={busy}
-          className="resize-none border-0 pe-16 shadow-none focus-visible:ring-0"
+          className="resize-none border-0 pe-16 focus-visible:ring-0"
           onKeyDown={(e) => {
             if (e.key !== 'Enter') return
             // Cmd/Ctrl+Enter with a drafted question SUBMITS it (the chat-app

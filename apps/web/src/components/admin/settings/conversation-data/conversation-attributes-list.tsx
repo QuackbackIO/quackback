@@ -1,15 +1,13 @@
 /**
- * Conversation attributes registry manager (Settings > Conversation data >
- * Attributes). Mirrors the person-attributes list idioms: row list inside a
- * SettingsCard, one form dialog reused for create + edit. Registry semantics
- * enforced here in the form: key and field type lock after creation, select
+ * Conversation attributes registry manager (Settings > Conversations >
+ * Attributes). Rows and the card come from the shared AttributeList; one form
+ * dialog is reused for create + edit. Registry semantics enforced here in the form: key and field type lock after creation, select
  * options can be renamed or appended but never removed (values store option
  * ids), lifecycle is archive/restore only.
  */
 import { useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
-import { PlusIcon, PencilIcon, XMarkIcon, SparklesIcon } from '@heroicons/react/24/solid'
-import { ArchiveBoxIcon, ArrowUturnLeftIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, XMarkIcon, SparklesIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
 import type { ConversationAttributeId } from '@quackback/ids'
 import { Button } from '@/components/ui/button'
@@ -32,7 +30,9 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
-import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { AttributeList, type AttributeListItem } from '@/components/admin/settings/attribute-list'
+import { Badge } from '@/components/ui/badge'
+import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
 import {
   createConversationAttributeFn,
   updateConversationAttributeFn,
@@ -45,7 +45,6 @@ import {
   conversationAttributeQueries,
   type ConversationAttributeItem,
 } from '@/lib/client/queries/conversation-attributes'
-import { cn } from '@/lib/shared/utils'
 
 const FIELD_TYPES = [
   { value: 'text', label: 'Text' },
@@ -58,19 +57,10 @@ const FIELD_TYPES = [
 
 type FieldType = (typeof FIELD_TYPES)[number]['value']
 
-const TYPE_BADGE_COLORS: Record<FieldType, string> = {
-  text: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
-  number: 'bg-green-500/10 text-green-500 border-green-500/20',
-  select: 'bg-purple-500/10 text-purple-500 border-purple-500/20',
-  multi_select: 'bg-violet-500/10 text-violet-500 border-violet-500/20',
-  checkbox: 'bg-orange-500/10 text-orange-500 border-orange-500/20',
-  date: 'bg-cyan-500/10 text-cyan-600 border-cyan-500/20',
-}
-
 const SOURCE_HINTS = [
-  { value: 'agent', label: 'Agent' },
-  { value: 'workflow', label: 'Workflow' },
-  { value: 'ai', label: 'AI' },
+  { value: 'agent', label: 'Agent', usually: 'an agent' },
+  { value: 'workflow', label: 'Workflow', usually: 'a workflow' },
+  { value: 'ai', label: 'AI', usually: 'AI' },
 ] as const
 
 const isSelectType = (t: FieldType) => t === 'select' || t === 'multi_select'
@@ -136,10 +126,7 @@ function AttributeValueCountsBreakdown({ attributeKey }: { attributeKey: string 
                   <span className="text-muted-foreground">{c.count}</span>
                 </div>
                 <div className="h-1.5 w-full rounded-full bg-muted">
-                  <div
-                    className="h-1.5 rounded-full bg-indigo-500/70"
-                    style={{ width: `${pct}%` }}
-                  />
+                  <div className="h-1.5 rounded-full bg-primary/70" style={{ width: `${pct}%` }} />
                 </div>
               </div>
             )
@@ -322,7 +309,7 @@ function AttributeFormDialog({
               onChange={(e) => setKey(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
               placeholder="issue_type"
               disabled={isEditing}
-              className={isEditing ? 'bg-muted text-muted-foreground' : ''}
+              className={isEditing ? 'text-muted-foreground' : ''}
               required
             />
             {!isEditing && (
@@ -350,7 +337,7 @@ function AttributeFormDialog({
               onValueChange={(v) => setFieldType(v as FieldType)}
               disabled={isEditing}
             >
-              <SelectTrigger className={isEditing ? 'bg-muted text-muted-foreground' : ''}>
+              <SelectTrigger className={isEditing ? 'text-muted-foreground' : ''}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -407,8 +394,8 @@ function AttributeFormDialog({
                 </Button>
               </div>
               {pendingDraft && (
-                <div className="flex items-center justify-between gap-2 rounded-md border border-amber-500/20 bg-amber-500/10 px-2.5 py-2">
-                  <p className="text-[11px] text-amber-700 dark:text-amber-500">
+                <div className="flex items-center justify-between gap-2 rounded-md border border-warning/20 bg-warning/10 px-2.5 py-2">
+                  <p className="text-[11px] text-warning">
                     This will overwrite existing descriptions.
                   </p>
                   <div className="flex shrink-0 gap-1">
@@ -485,8 +472,8 @@ function AttributeFormDialog({
                 </p>
               )}
               {showOtherHint && (
-                <div className="flex items-start justify-between gap-2 rounded-md border border-amber-500/20 bg-amber-500/10 px-2.5 py-2">
-                  <p className="text-[11px] text-amber-700 dark:text-amber-500">
+                <div className="flex items-start justify-between gap-2 rounded-md border border-warning/20 bg-warning/10 px-2.5 py-2">
+                  <p className="text-[11px] text-warning">
                     Consider adding an &quot;Other&quot; or &quot;Uncategorized&quot; option so
                     classification never comes back empty when nothing else fits.
                   </p>
@@ -494,7 +481,7 @@ function AttributeFormDialog({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-5 shrink-0 px-1 text-amber-700 hover:text-amber-800 dark:text-amber-500"
+                    className="h-5 shrink-0 px-1 text-warning"
                     onClick={() => setOtherHintDismissed(true)}
                     title="Dismiss"
                   >
@@ -506,28 +493,30 @@ function AttributeFormDialog({
           )}
 
           {supportsAiDetect(fieldType) && (
-            <div className="space-y-2 rounded-md border border-border/50 px-3 py-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium">Let AI detect this attribute</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    Quinn classifies conversations it participates in.
-                  </p>
-                </div>
-                <Switch checked={aiDetect} onCheckedChange={setAiDetect} />
-              </div>
+            <SettingRows>
+              <SettingRow
+                label="Let AI detect this attribute"
+                description="Quinn classifies conversations it participates in."
+                htmlFor="attr-ai-detect"
+                control={
+                  <Switch id="attr-ai-detect" checked={aiDetect} onCheckedChange={setAiDetect} />
+                }
+              />
               {aiDetect && (
-                <div className="flex items-center justify-between border-t border-border/50 pt-2">
-                  <div>
-                    <p className="text-sm font-medium">Re-check on close</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      Runs once more when a teammate closes the conversation.
-                    </p>
-                  </div>
-                  <Switch checked={detectOnClose} onCheckedChange={setDetectOnClose} />
-                </div>
+                <SettingRow
+                  label="Re-check on close"
+                  description="Runs once more when a teammate closes the conversation."
+                  htmlFor="attr-detect-on-close"
+                  control={
+                    <Switch
+                      id="attr-detect-on-close"
+                      checked={detectOnClose}
+                      onCheckedChange={setDetectOnClose}
+                    />
+                  }
+                />
               )}
-            </div>
+            </SettingRows>
           )}
 
           {aiDetect && supportsAiDetect(fieldType) && (
@@ -573,15 +562,20 @@ function AttributeFormDialog({
             <AttributeValueCountsBreakdown attributeKey={initialValues.key} />
           )}
 
-          <div className="flex items-center justify-between rounded-md border border-border/50 px-3 py-2">
-            <div>
-              <p className="text-sm font-medium">Required to close</p>
-              <p className="text-[11px] text-muted-foreground">
-                Teammates must fill this before closing a conversation. Automations are exempt.
-              </p>
-            </div>
-            <Switch checked={requiredToClose} onCheckedChange={setRequiredToClose} />
-          </div>
+          <SettingRows>
+            <SettingRow
+              label="Required to close"
+              description="Teammates must fill this before closing a conversation. Automations are exempt."
+              htmlFor="attr-required-to-close"
+              control={
+                <Switch
+                  id="attr-required-to-close"
+                  checked={requiredToClose}
+                  onCheckedChange={setRequiredToClose}
+                />
+              }
+            />
+          </SettingRows>
 
           <div className="space-y-1.5">
             <Label>
@@ -618,112 +612,6 @@ function AttributeFormDialog({
         </form>
       </DialogContent>
     </Dialog>
-  )
-}
-
-function AttributeRow({
-  attribute,
-  onEdit,
-  onArchive,
-  onRestore,
-}: {
-  attribute: ConversationAttributeItem
-  onEdit: () => void
-  onArchive: () => void
-  onRestore: () => void
-}) {
-  const archived = !!attribute.archivedAt
-  const typeInfo = FIELD_TYPES.find((t) => t.value === attribute.fieldType)
-
-  return (
-    <div
-      className={cn(
-        'flex items-center gap-4 py-3 border-b border-border/50 last:border-0',
-        archived && 'opacity-60'
-      )}
-    >
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-medium text-sm text-foreground">{attribute.label}</span>
-          <code className="text-[11px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">
-            {attribute.key}
-          </code>
-          <span
-            className={cn(
-              'inline-flex items-center text-[11px] font-medium px-1.5 py-0.5 rounded border',
-              TYPE_BADGE_COLORS[attribute.fieldType as FieldType]
-            )}
-          >
-            {typeInfo?.label ?? attribute.fieldType}
-          </span>
-          {attribute.sourceHint && (
-            <span className="inline-flex items-center text-[11px] font-medium px-1.5 py-0.5 rounded border bg-muted text-muted-foreground border-border/50 capitalize">
-              {attribute.sourceHint}
-            </span>
-          )}
-          {attribute.aiDetect && (
-            <span
-              className="inline-flex items-center text-[11px] font-medium px-1.5 py-0.5 rounded border bg-indigo-500/10 text-indigo-600 border-indigo-500/20"
-              title={
-                attribute.detectOnClose
-                  ? 'Quinn classifies this attribute and re-checks on close'
-                  : 'Quinn classifies this attribute'
-              }
-            >
-              AI
-            </span>
-          )}
-          {attribute.requiredToClose && (
-            <span className="inline-flex items-center text-[11px] font-medium px-1.5 py-0.5 rounded border bg-amber-500/10 text-amber-600 border-amber-500/20">
-              Required to close
-            </span>
-          )}
-          {archived && (
-            <span className="inline-flex items-center text-[11px] font-medium px-1.5 py-0.5 rounded border bg-muted text-muted-foreground border-border/50">
-              Archived
-            </span>
-          )}
-        </div>
-        {attribute.description && (
-          <p className="text-xs text-muted-foreground mt-0.5 truncate">{attribute.description}</p>
-        )}
-      </div>
-
-      <div className="flex items-center gap-1 shrink-0">
-        {archived ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
-            onClick={onRestore}
-            title="Restore attribute"
-          >
-            <ArrowUturnLeftIcon className="h-3.5 w-3.5" /> Restore
-          </Button>
-        ) : (
-          <>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-muted-foreground hover:text-foreground"
-              onClick={onEdit}
-              title="Edit attribute"
-            >
-              <PencilIcon className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-muted-foreground hover:text-destructive"
-              onClick={onArchive}
-              title="Archive attribute"
-            >
-              <ArchiveBoxIcon className="h-3.5 w-3.5" />
-            </Button>
-          </>
-        )}
-      </div>
-    </div>
   )
 }
 
@@ -816,35 +704,65 @@ export function ConversationAttributesList() {
   const live = attributes.filter((a) => !a.archivedAt)
   const archived = attributes.filter((a) => !!a.archivedAt)
 
-  return (
-    <SettingsCard
-      title="Conversation attributes"
-      description="Custom data attributes on conversations and tickets, editable in the inbox and settable by macros, workflows, and AI."
-      action={
-        <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setCreateOpen(true)}>
-          <PlusIcon className="h-3.5 w-3.5" />
-          New attribute
-        </Button>
-      }
-    >
-      {attributes.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">
-          No attributes yet. Create one to start capturing structured data on conversations.
-        </p>
-      ) : (
-        <div>
-          {[...live, ...archived].map((attr) => (
-            <AttributeRow
-              key={attr.id}
-              attribute={attr}
-              onEdit={() => setEditTarget(attr)}
-              onArchive={() => setArchiveTarget(attr)}
-              onRestore={() => restoreAttr.mutate(attr.id)}
-            />
-          ))}
-        </div>
-      )}
+  const items: AttributeListItem[] = [...live, ...archived].map((attr) => {
+    const isArchived = !!attr.archivedAt
+    return {
+      id: attr.id,
+      label: attr.label,
+      attrKey: attr.key,
+      typeLabel: FIELD_TYPES.find((t) => t.value === attr.fieldType)?.label ?? attr.fieldType,
+      description: attr.description,
+      muted: isArchived,
+      badges: (
+        <>
+          {attr.sourceHint && attr.sourceHint !== 'ai' && (
+            <span className="text-[13px] font-normal text-muted-foreground">
+              Usually set by{' '}
+              {SOURCE_HINTS.find((h) => h.value === attr.sourceHint)?.usually ?? attr.sourceHint}
+            </span>
+          )}
+          {(attr.aiDetect || attr.sourceHint === 'ai') && (
+            <Badge
+              variant="secondary"
+              size="sm"
+              title={
+                !attr.aiDetect
+                  ? 'Usually set by AI'
+                  : attr.detectOnClose
+                    ? 'Quinn classifies this attribute and re-checks on close'
+                    : 'Quinn classifies this attribute'
+              }
+            >
+              AI
+            </Badge>
+          )}
+          {attr.requiredToClose && (
+            <Badge variant="outline" size="sm">
+              Required to close
+            </Badge>
+          )}
+          {isArchived && (
+            <Badge variant="secondary" size="sm">
+              Archived
+            </Badge>
+          )}
+        </>
+      ),
+      actions: isArchived
+        ? [{ label: 'Restore', onSelect: () => restoreAttr.mutate(attr.id) }]
+        : [
+            { label: 'Edit', onSelect: () => setEditTarget(attr) },
+            { label: 'Archive', onSelect: () => setArchiveTarget(attr) },
+          ],
+    }
+  })
 
+  return (
+    <AttributeList
+      items={items}
+      onNew={() => setCreateOpen(true)}
+      emptyDescription="Capture structured data on conversations and tickets."
+    >
       <AttributeFormDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
@@ -884,10 +802,10 @@ export function ConversationAttributesList() {
         onOpenChange={(open) => !open && setArchiveTarget(null)}
         title={`Archive "${archiveTarget?.label}"?`}
         description="Archived attributes disappear from pickers and the inbox editor. Stored values are kept and the key stays reserved. You can restore it at any time."
-        confirmLabel="Archive"
+        confirmLabel="Archive attribute"
         isPending={archiveAttr.isPending}
         onConfirm={handleArchive}
       />
-    </SettingsCard>
+    </AttributeList>
   )
 }

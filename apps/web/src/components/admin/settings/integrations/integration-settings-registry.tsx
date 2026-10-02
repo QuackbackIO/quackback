@@ -4,8 +4,8 @@
  * files. Each entry supplies only what varies per provider: catalog metadata,
  * brand icon, connect/disconnect actions, the not-connected setup copy, and
  * (when connected) a capability configuration panel. Everything
- * shared — the header, platform-credentials dialog, health panel, and setup
- * card chrome — lives in the route itself.
+ * shared (the header, platform-credentials dialog, health panel, and setup
+ * card chrome) lives in the route itself.
  *
  * Config panels and connection actions are `React.lazy` so opening one
  * provider's settings page never pulls the other 24 providers' panels into the
@@ -21,6 +21,7 @@ import { getIntegrationIcon } from './integration-ui'
 
 // Catalogs (metadata: name/description/iconBg/docsUrl/platformCredentialFields/settingsPath).
 import * as catalogs from '@/lib/shared/integration-catalog'
+import { INLINE_LINK } from '@/components/admin/settings/inline-link'
 
 /** The `integration` object returned by `fetchIntegrationByType`. */
 export interface IntegrationSettingsData {
@@ -59,6 +60,11 @@ export interface IntegrationSettingsEntry {
    * so this config can own Connection / Health / product sections.
    */
   bareConfig?: boolean
+  /**
+   * The connect step needs typed input (a URL, key or token), so it renders in
+   * the setup card rather than as a single header button.
+   */
+  connectForm?: boolean
 }
 
 // ── lazy per-provider components ────────────────────────────────────────────
@@ -250,7 +256,7 @@ const ZendeskConnectionActions = lazy(() =>
 )
 
 /** Segment has no icon registered in `INTEGRATION_UI` (it isn't a tracker or a
- * feedback source badge) — its route renders an inline "S" glyph instead of a
+ * feedback source badge) - its route renders an inline "S" glyph instead of a
  * brand icon component. We keep that glyph here as a component so it fits the
  * `Icon: ComponentType<{ className?: string }>` shape the rest of the registry
  * expects. */
@@ -275,8 +281,8 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
         'Connect Asana to create tasks from feedback and review incoming status changes.',
       steps: [
         <p key="1">
-          Click <span className="font-medium text-foreground">Connect</span> to authorize Quackback
-          to create tasks in your Asana workspace.
+          Click <span className="font-medium text-foreground">Connect Asana</span> to authorize
+          Quackback to create tasks in your Asana workspace.
         </p>,
         <p key="2">Select which project new feedback tasks should be created in.</p>,
         <p key="3">
@@ -296,6 +302,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
 
   azure_devops: {
     type: 'azure_devops',
+    connectForm: true,
     catalog: catalogs.azureDevOpsCatalog,
     Icon: getIntegrationIcon('azure_devops')!,
     ConnectionActions: AzureDevOpsConnectionActions,
@@ -310,9 +317,9 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
             href="https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate"
             target="_blank"
             rel="noopener noreferrer"
-            className="font-medium text-primary underline underline-offset-2"
+            className={INLINE_LINK}
           >
-            Personal Access Token
+            Personal access token
           </a>{' '}
           in Azure DevOps with{' '}
           <span className="font-medium text-foreground">Work Items (Read & Write)</span> scope.
@@ -351,8 +358,8 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
         'Connect ClickUp to turn feedback into tasks and track progress directly from your workspace.',
       steps: [
         <p key="1">
-          Click <span className="font-medium text-foreground">Connect</span> to authorize Quackback
-          to create tasks in your ClickUp workspace.
+          Click <span className="font-medium text-foreground">Connect ClickUp</span> to authorize
+          Quackback to create tasks in your ClickUp workspace.
         </p>,
         <p key="2">Select a space and list where new feedback tasks should be created.</p>,
         <p key="3">
@@ -381,8 +388,8 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
         'Connect Discord to receive notifications when users submit feedback, when statuses change, and when comments are added.',
       steps: [
         <p key="1">
-          Click <span className="font-medium text-foreground">Connect</span> to add the Quackback
-          bot to your Discord server.
+          Click <span className="font-medium text-foreground">Connect Discord</span> to add the
+          Quackback bot to your Discord server.
         </p>,
         <p key="2">
           Select which text channel notifications should be posted to. The bot needs access to the
@@ -407,6 +414,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
 
   freshdesk: {
     type: 'freshdesk',
+    connectForm: true,
     catalog: catalogs.freshdeskCatalog,
     Icon: getIntegrationIcon('freshdesk')!,
     ConnectionActions: FreshdeskConnectionActions,
@@ -443,8 +451,8 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
         'Connect GitHub to automatically create issues from user feedback and sync statuses when issues are closed or reopened.',
       steps: [
         <p key="1">
-          Click <span className="font-medium text-foreground">Connect</span> to authorize Quackback
-          to create issues in your GitHub repositories.
+          Click <span className="font-medium text-foreground">Connect GitHub</span> to authorize
+          Quackback to create issues in your GitHub repositories.
         </p>,
         <p key="2">Select which repository new feedback issues should be created in.</p>,
         <p key="3">
@@ -481,9 +489,9 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
           redirect URI shown in the credentials form on your GitLab OAuth application.
         </p>,
         <p key="2">
-          Click <span className="font-medium text-foreground">Connect</span> to authorize Quackback
-          with your GitLab account. You will be sent to GitLab.com or your instance, depending on
-          the URL you configured.
+          Click <span className="font-medium text-foreground">Connect GitLab</span> to authorize
+          Quackback with your GitLab account. You will be sent to GitLab.com or your instance,
+          depending on the URL you configured.
         </p>,
         <p key="3">
           Select a project to create issues in, then choose which events should trigger new issues.
@@ -559,8 +567,8 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
         'Connect Jira to create issues from feedback and review incoming status changes.',
       steps: [
         <p key="1">
-          Click <span className="font-medium text-foreground">Connect</span> to authorize Quackback
-          to create issues in your Jira instance.
+          Click <span className="font-medium text-foreground">Connect Jira</span> to authorize
+          Quackback to create issues in your Jira instance.
         </p>,
         <p key="2">Select which project and issue type to use for new feedback issues.</p>,
         <p key="3">
@@ -589,8 +597,8 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
         'Connect Linear to create issues from feedback and receive verified status updates on linked items.',
       steps: [
         <p key="1">
-          Click <span className="font-medium text-foreground">Connect</span> to authorize Quackback
-          to create issues in your Linear workspace.
+          Click <span className="font-medium text-foreground">Connect Linear</span> to authorize
+          Quackback to create issues in your Linear workspace.
         </p>,
         <p key="2">Select which team new feedback issues should be created in.</p>,
         <p key="3">
@@ -610,6 +618,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
 
   make: {
     type: 'make',
+    connectForm: true,
     catalog: catalogs.makeCatalog,
     Icon: getIntegrationIcon('make')!,
     ConnectionActions: MakeConnectionActions,
@@ -656,8 +665,8 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
           settings.
         </p>,
         <p key="2">
-          Click <span className="font-medium text-foreground">Connect</span> to authorize Quackback
-          with your Monday.com workspace.
+          Click <span className="font-medium text-foreground">Connect Monday.com</span> to authorize
+          Quackback with your Monday.com workspace.
         </p>,
         <p key="3">
           Select a board to create items in, then choose which events should trigger new items.
@@ -676,6 +685,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
 
   n8n: {
     type: 'n8n',
+    connectForm: true,
     catalog: catalogs.n8nCatalog,
     Icon: getIntegrationIcon('n8n')!,
     ConnectionActions: N8nConnectionActions,
@@ -718,8 +728,8 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
         'Connect Notion to automatically create database items when users submit feedback. Link feedback to your product roadmap in Notion.',
       steps: [
         <p key="1">
-          Click <span className="font-medium text-foreground">Connect</span> to authorize Quackback
-          with your Notion workspace.
+          Click <span className="font-medium text-foreground">Connect Notion</span> to authorize
+          Quackback with your Notion workspace.
         </p>,
         <p key="2">
           Select which database new feedback items should be created in. The database must have a
@@ -742,6 +752,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
 
   ntfy: {
     type: 'ntfy',
+    connectForm: true,
     catalog: catalogs.ntfyCatalog,
     Icon: getIntegrationIcon('ntfy')!,
     ConnectionActions: NtfyConnectionActions,
@@ -757,7 +768,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
         </p>,
         <p key="2">
           Paste the topic URL below. If your topic is protected, add an access token too. Click{' '}
-          <span className="font-medium text-foreground">Save</span> — Quackback will send a test
+          <span className="font-medium text-foreground">Save</span>. Quackback will send a test
           notification to verify the channel.
         </p>,
         <p key="3">
@@ -790,8 +801,8 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
           platform settings.
         </p>,
         <p key="2">
-          Click <span className="font-medium text-foreground">Connect</span> to authorize Quackback
-          with your Salesforce org.
+          Click <span className="font-medium text-foreground">Connect Salesforce</span> to authorize
+          Quackback with your Salesforce org.
         </p>,
         <p key="3">Customer details are looked up by email when you open customer context.</p>,
       ],
@@ -804,7 +815,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
   // NOTE: segment's route diverges from the standard shape in three ways,
   // preserved here: (1) no `getIntegrationIcon` entry exists for segment (it's
   // neither a tracker nor a feedback-source badge in integration-ui.tsx), so
-  // its route renders an inline "S" glyph rather than a brand icon — wrapped
+  // its route renders an inline "S" glyph rather than a brand icon - wrapped
   // in `SegmentIcon` above to fit the `Icon` contract; (2) it has no config
   // panel and no `PlatformCredentialsDialog`/credentials button at all, just
   // connect/disconnect actions; (3) "connected" for segment covers both
@@ -812,6 +823,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
   // union elsewhere, so no divergence in the shared route's rendering).
   segment: {
     type: 'segment',
+    connectForm: true,
     catalog: catalogs.segmentCatalog,
     Icon: SegmentIcon,
     ConnectionActions: SegmentConnectionActions,
@@ -831,6 +843,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
 
   shortcut: {
     type: 'shortcut',
+    connectForm: true,
     catalog: catalogs.shortcutCatalog,
     Icon: getIntegrationIcon('shortcut')!,
     ConnectionActions: ShortcutConnectionActions,
@@ -865,13 +878,9 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
     ConnectionActions: SlackConnectionActions,
     setup: {
       title: 'Connect your Slack workspace',
-      description:
-        'Connect Slack to receive notifications when users submit feedback, when statuses change, and when comments are added.',
+      description: 'Post notifications to the Slack channel you choose.',
       steps: [
-        <p key="1">
-          Click <span className="font-medium text-foreground">Connect</span> to authorize Quackback
-          to post messages to your Slack workspace.
-        </p>,
+        <p key="1">Authorize Quackback to post messages to your Slack workspace.</p>,
         <p key="2">
           Select which channel notifications should be posted to. The bot must be added to private
           channels before they appear in the list.
@@ -895,6 +904,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
 
   stripe: {
     type: 'stripe',
+    connectForm: true,
     catalog: catalogs.stripeCatalog,
     Icon: getIntegrationIcon('stripe')!,
     ConnectionActions: StripeConnectionActions,
@@ -935,8 +945,8 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
           Register Quackback in your Azure AD workspace and add the Teams bot permissions.
         </p>,
         <p key="2">
-          Click <span className="font-medium text-foreground">Connect</span> to authorize Quackback
-          to post to your Teams channels.
+          Click <span className="font-medium text-foreground">Connect Teams</span> to authorize
+          Quackback to post to your Teams channels.
         </p>,
         <p key="3">
           Select a team and channel for notifications, then choose which events trigger messages.
@@ -966,8 +976,8 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
           Create a Trello Power-Up in your workspace (optional, only needed for custom branding).
         </p>,
         <p key="2">
-          Click <span className="font-medium text-foreground">Connect</span> to authorize Quackback
-          to access your Trello workspace.
+          Click <span className="font-medium text-foreground">Connect Trello</span> to authorize
+          Quackback to access your Trello workspace.
         </p>,
         <p key="3">Select which board and list new feedback cards should be created in.</p>,
         <p key="4">
@@ -988,6 +998,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
 
   zapier: {
     type: 'zapier',
+    connectForm: true,
     catalog: catalogs.zapierCatalog,
     Icon: getIntegrationIcon('zapier')!,
     ConnectionActions: ZapierConnectionActions,
@@ -1023,6 +1034,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
 
   zendesk: {
     type: 'zendesk',
+    connectForm: true,
     catalog: catalogs.zendeskCatalog,
     Icon: getIntegrationIcon('zendesk')!,
     ConnectionActions: ZendeskConnectionActions,

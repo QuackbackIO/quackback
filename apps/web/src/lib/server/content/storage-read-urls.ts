@@ -11,12 +11,19 @@
  */
 import type { JSONContent } from '@tiptap/core'
 import { resignStoredAssetUrl } from '@/lib/server/storage/s3'
+import { namesPipelineFile } from '@/lib/server/storage/trusted-url'
 
 const IMAGE_NODE_TYPES = new Set(['image', 'resizableImage', 'chatImage'])
 
 export function withCurrentStorageReadTokens(node: JSONContent): JSONContent {
   let next = node
-  if (IMAGE_NODE_TYPES.has(node.type ?? '') && typeof node.attrs?.src === 'string') {
+  // A pipeline file is never inline: content naming one keeps the link it was
+  // written with, which expires, rather than a fresh one per read.
+  if (
+    IMAGE_NODE_TYPES.has(node.type ?? '') &&
+    typeof node.attrs?.src === 'string' &&
+    !namesPipelineFile(node.attrs.src)
+  ) {
     const src = resignStoredAssetUrl(node.attrs.src)
     if (src !== node.attrs.src) {
       next = { ...node, attrs: { ...node.attrs, src } }

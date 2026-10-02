@@ -8,7 +8,7 @@ export interface StatusGroup {
 
 /**
  * Groups posts by their status, maintaining the status order from the statuses array.
- * Posts without a matching status are grouped under a virtual "No Status" group.
+ * Posts without a matching status are grouped under a virtual "No status" group.
  */
 export function groupPostsByStatus(
   posts: PostListItem[],
@@ -34,7 +34,7 @@ export function groupPostsByStatus(
         noneGroup = {
           status: {
             id: 'none' as PostStatusId,
-            name: 'No Status',
+            name: 'No status',
             slug: 'no-status',
             color: '#94a3b8',
             category: 'active',

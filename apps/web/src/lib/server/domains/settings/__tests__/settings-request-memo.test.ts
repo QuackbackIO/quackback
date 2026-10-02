@@ -73,7 +73,6 @@ function cachedSettings(name: string) {
   return {
     name,
     slug: 'ws',
-    visualTheme: 'legacy' as const,
     featureFlags: { feedback: true },
     settings: { id: 'settings_1', name, setupState: COMPLETE_SETUP },
   }

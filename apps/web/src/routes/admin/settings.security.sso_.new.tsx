@@ -1,11 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
-import { BackLink } from '@/components/ui/back-link'
-import { PageHeader } from '@/components/shared/page-header'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { ProviderCreatePage } from '@/components/admin/settings/security/identity-providers/provider-create-page'
 import { UpgradeScreen } from '@/components/admin/upgrade'
-import { SIGN_IN_TAB } from '@/components/admin/settings/security/identity-providers/provider-shared'
+import { SSO_CRUMBS } from '@/components/admin/settings/security/identity-providers/provider-shared'
 
 // The trailing underscore on "sso_" escapes nesting under
 // /admin/settings/security/sso, which is a redirect-only route for stale
@@ -35,13 +34,12 @@ function SsoCreateRoute() {
   const { ssoEntitled, registrationId } = Route.useLoaderData()
   if (ssoEntitled) return <ProviderCreatePage registrationId={registrationId} />
   return (
-    <div className="max-w-3xl space-y-6">
-      <BackLink {...SIGN_IN_TAB}>Sign-in</BackLink>
-      <PageHeader
-        title="Add identity provider"
-        description="Single sign-on is not included on this plan."
-      />
+    <SettingsPage
+      title="New identity provider"
+      description="Single sign-on is not included on this plan."
+      crumbs={SSO_CRUMBS}
+    >
       <UpgradeScreen entitlement="sso" />
-    </div>
+    </SettingsPage>
   )
 }

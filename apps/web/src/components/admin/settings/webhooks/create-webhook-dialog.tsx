@@ -96,9 +96,9 @@ export function CreateWebhookDialog({
       <SecretRevealDialog
         open={open}
         onOpenChange={handleClose}
-        title="Webhook Created"
+        title="Webhook created"
         description="Save your signing secret now. You won't be able to see it again."
-        secretLabel="Signing Secret"
+        secretLabel="Signing secret"
         secretValue={createdSecret}
         confirmLabel="I've saved my secret"
       >
@@ -122,7 +122,7 @@ export function CreateWebhookDialog({
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Create Webhook</DialogTitle>
+          <DialogTitle>Create webhook</DialogTitle>
           <DialogDescription>
             Configure an endpoint to receive event notifications.
           </DialogDescription>
@@ -168,7 +168,7 @@ export function CreateWebhookDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={isPending || !url || selectedEvents.length === 0}>
-              {isPending ? 'Creating...' : 'Create Webhook'}
+              {isPending ? 'Creating...' : 'Create webhook'}
             </Button>
           </DialogFooter>
         </form>

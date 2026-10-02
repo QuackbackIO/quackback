@@ -1,8 +1,7 @@
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
+import { redirectMoved } from '@/lib/shared/moved-route'
 
-/** One-release bookmark redirect. V1 has no route or runtime of its own. */
+/** Retired path: this page lives under Settings. */
 export const Route = createFileRoute('/admin/automation/assistant')({
-  beforeLoad: () => {
-    throw redirect({ to: '/admin/automation/agent' })
-  },
+  beforeLoad: ({ location }) => redirectMoved('/admin/settings/agent', location),
 })

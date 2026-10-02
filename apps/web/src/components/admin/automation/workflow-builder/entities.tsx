@@ -18,6 +18,7 @@ import {
 } from '@/lib/client/queries/conversation-attributes'
 import { useUserAttributes } from '@/lib/client/hooks/use-user-attributes-queries'
 import { useCompanyAttributes } from '@/lib/client/hooks/use-company-attributes-queries'
+import { useLocalDateFormatter } from '@/components/ui/local-date'
 import {
   toAttributeFieldDefs,
   toPersonCompanyAttributeFieldDefs,
@@ -64,6 +65,19 @@ export function useWorkflowEntities(): WorkflowEntities {
   const ctx = useContext(WorkflowEntitiesContext)
   if (!ctx) throw new Error('useWorkflowEntities must be used inside WorkflowEntitiesProvider')
   return ctx
+}
+
+/**
+ * The id -> name lookups plus the date formatter, for the summaries that put a
+ * legacy snooze's wake time into text. The formatter changes identity when
+ * hydration ends, so it joins the labels here, in the few components that
+ * build summaries, rather than in the context value, where the change would
+ * re-render every consumer of the entities.
+ */
+export function useEntityLabels(): EntityLabels {
+  const { labels } = useWorkflowEntities()
+  const formatDate = useLocalDateFormatter()
+  return useMemo(() => ({ ...labels, formatDate }), [labels, formatDate])
 }
 
 const toMap = (items: EntityOption[]) => new Map(items.map((i) => [i.id, i.name]))

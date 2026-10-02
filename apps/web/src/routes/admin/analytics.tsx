@@ -1,8 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { Suspense } from 'react'
+import { sectionSearchValue } from '@/components/admin/analytics/analytics-sections'
 import { AnalyticsPage } from '@/components/admin/analytics/analytics-page'
 
 export const Route = createFileRoute('/admin/analytics')({
+  // The open section lives in the URL so a section can be linked to. An
+  // unknown value is dropped and the page opens on the overview.
+  validateSearch: (raw: Record<string, unknown>) => ({ section: sectionSearchValue(raw.section) }),
   component: AnalyticsRoute,
 })
 
@@ -19,7 +23,7 @@ function AnalyticsPageSkeleton() {
     <div className="flex h-full">
       <div
         data-side-pane=""
-        className="hidden lg:block w-64 xl:w-72 shrink-0 border-r border-border/50 bg-card/30"
+        className="hidden lg:block w-64 xl:w-72 shrink-0 border-e border-chrome-hairline bg-background"
       />
       <div className="flex-1 p-6 flex flex-col gap-6 animate-pulse">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">

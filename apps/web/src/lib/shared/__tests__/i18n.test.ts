@@ -5,6 +5,12 @@ import {
   isRtlLocale,
   SUPPORTED_LOCALES,
   DEFAULT_LOCALE,
+  isViewerMessage,
+  loadMessages,
+  loadPortalMessages,
+  loadViewerMessages,
+  loadWidgetMessages,
+  withoutViewerMessages,
 } from '../i18n'
 
 describe('normalizeLocale', () => {
@@ -73,6 +79,11 @@ describe('normalizeLocale', () => {
     expect(normalizeLocale('nl-BE')).toBe('nl')
     expect(normalizeLocale('NL-nl')).toBe('nl')
   })
+  it('maps Polish tags to pl', () => {
+    expect(normalizeLocale('pl')).toBe('pl')
+    expect(normalizeLocale('pl-PL')).toBe('pl')
+    expect(normalizeLocale('PL-pl')).toBe('pl')
+  })
 })
 
 describe('resolveLocale', () => {
@@ -110,6 +121,11 @@ describe('resolveLocale', () => {
     expect(resolveLocale('nl-BE,fr-BE;q=0.8')).toBe('nl')
     expect(resolveLocale('en', 'nl')).toBe('nl')
   })
+  it('resolves Polish from the header', () => {
+    expect(resolveLocale('pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7')).toBe('pl')
+    expect(resolveLocale('pl,de;q=0.8')).toBe('pl')
+    expect(resolveLocale('en', 'pl')).toBe('pl')
+  })
   it('respects an explicit Chinese locale override', () => {
     expect(resolveLocale('en', 'zh-Hant')).toBe('zh-tw')
     expect(resolveLocale('en', 'zh-CN')).toBe('zh-cn')
@@ -144,7 +160,31 @@ describe('SUPPORTED_LOCALES', () => {
   it('includes nl', () => {
     expect(SUPPORTED_LOCALES).toContain('nl')
   })
+  it('includes pl', () => {
+    expect(SUPPORTED_LOCALES).toContain('pl')
+  })
   it('DEFAULT_LOCALE is en', () => {
     expect(DEFAULT_LOCALE).toBe('en')
+  })
+})
+
+describe('viewer strings', () => {
+  it('are left out of the catalogs pages seed and kept for the viewer', async () => {
+    const [all, widget, portal, viewer] = await Promise.all([
+      loadMessages('de'),
+      loadWidgetMessages('de'),
+      loadPortalMessages('de'),
+      loadViewerMessages('de'),
+    ])
+    for (const seeded of [widget, portal, withoutViewerMessages(all)]) {
+      expect(Object.keys(seeded).filter(isViewerMessage)).toEqual([])
+      expect(seeded['files.download']).toBe(all['files.download'])
+    }
+    expect(viewer['files.viewer.close']).toBe('Schließen')
+    expect(Object.keys(viewer).length).toBeGreaterThan(0)
+    expect(Object.keys(viewer).every(isViewerMessage)).toBe(true)
+    expect(Object.keys(viewer).length + Object.keys(withoutViewerMessages(all)).length).toBe(
+      Object.keys(all).length
+    )
   })
 })

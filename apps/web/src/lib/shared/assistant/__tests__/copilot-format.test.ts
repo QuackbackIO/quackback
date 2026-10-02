@@ -1,168 +1,82 @@
-import { describe, it, expect } from 'vitest'
-import {
-  stripCitationMarkers,
-  parseAnswerMarkdown,
-  answerMarkdownForInsert,
-} from '../copilot-format'
+import { describe, expect, it } from 'vitest'
+import { prepareAnswerMarkdown } from '../copilot-format'
 
-describe('stripCitationMarkers', () => {
-  it('removes a single inline marker without leaving a double space', () => {
-    expect(stripCitationMarkers('The refund window is 30 days [1].')).toBe(
-      'The refund window is 30 days.'
+describe('prepareAnswerMarkdown', () => {
+  it('removes adjacent source markers in prose without altering code or array indices', () => {
+    expect(prepareAnswerMarkdown('Sources [1] [2]. Use `array[1]` and array[1].').markdown).toBe(
+      'Sources. Use `array[1]` and array\\[1].'
     )
   })
 
-  it('removes multiple markers anywhere in the text', () => {
-    expect(stripCitationMarkers('First point [1]. Second point [2].')).toBe(
-      'First point. Second point.'
+  it('preserves literal markers for draft transformations', () => {
+    const { tree } = prepareAnswerMarkdown('Keep [2].', { stripCitations: false })
+    expect(tree.children[0]).toMatchObject({
+      type: 'paragraph',
+      children: [{ type: 'text', value: 'Keep [2].' }],
+    })
+  })
+
+  it('resolves reference links and protects numeric link labels', () => {
+    expect(prepareAnswerMarkdown('[guide [2]][docs] [1].\n\n[docs]: /hc/guide').markdown).toBe(
+      '[guide \\[2\\]](/hc/guide).'
     )
   })
 
-  it('removes adjacent markers with no leftover spacing', () => {
-    expect(stripCitationMarkers('Confirmed by two sources [1] [2].')).toBe(
-      'Confirmed by two sources.'
+  it('normalizes headings, task lists, tables and images to supported chat structures', () => {
+    const { tree, markdown } = prepareAnswerMarkdown(
+      '# Next steps\n\n- [x] Complete\n- [ ] Follow up\n\n| Plan | Cost |\n| --- | --- |\n| Cloud | Paid |\n\n![Screenshot](/uploads/shot.png)'
     )
-  })
-
-  it('removes a marker glued to the preceding word with no space', () => {
-    expect(stripCitationMarkers('See settings[1] for details.')).toBe('See settings for details.')
-  })
-
-  it('removes a marker at the very start of the text', () => {
-    expect(stripCitationMarkers('[1] Refunds are processed within 30 days.')).toBe(
-      'Refunds are processed within 30 days.'
-    )
-  })
-
-  it('leaves text with no markers unchanged (aside from trimming)', () => {
-    expect(stripCitationMarkers('No citations here.')).toBe('No citations here.')
-  })
-
-  it('preserves newlines and list structure', () => {
-    const input = 'Steps to resolve [1]:\n- Reset the password [2]\n- Confirm the email [3]'
-    expect(stripCitationMarkers(input)).toBe(
-      'Steps to resolve:\n- Reset the password\n- Confirm the email'
-    )
-  })
-
-  it('trims surrounding whitespace', () => {
-    expect(stripCitationMarkers('  padded text [1]  ')).toBe('padded text')
-  })
-})
-
-describe('answerMarkdownForInsert', () => {
-  it('strips citation markers, including marker-adjacent punctuation cleanup', () => {
-    expect(answerMarkdownForInsert('The refund window is 30 days [1].')).toBe(
-      'The refund window is 30 days.'
-    )
-  })
-
-  it('keeps mappable markdown (bold, italic, inline code, lists) intact', () => {
-    const input = '**Bold**, *italic*, and `code`.\n\n- one\n- two'
-    expect(answerMarkdownForInsert(input)).toBe(input)
-  })
-
-  it('strips heading markers but keeps the heading text', () => {
-    expect(answerMarkdownForInsert('## Next steps\nDo the thing.')).toBe(
-      'Next steps\nDo the thing.'
-    )
-  })
-
-  it('keeps `[n]` markers when stripCitations is off (the draft-transform path)', () => {
-    expect(
-      answerMarkdownForInsert('See item [2] and run `bun install`.', { stripCitations: false })
-    ).toBe('See item [2] and run `bun install`.')
-  })
-
-  it('keeps a code fence verbatim — no citation/heading stripping inside it', () => {
-    const input = 'Fix it like this:\n\n```\n# not a heading [1]\n* not  a bullet\n```\n\nDone [1].'
-    expect(answerMarkdownForInsert(input)).toBe(
-      'Fix it like this:\n\n```\n# not a heading [1]\n* not  a bullet\n```\n\nDone.'
-    )
-  })
-})
-
-// The markdown-lite grammar itself (bold/lists/paragraph structure) is pinned
-// once in markdown-lite.test.ts; these pin this surface's insert deltas on
-// top of it — citation/heading stripping, fences, and the italic+code grammar
-// — through the two real seams the composer conversion runs
-// (answerMarkdownForInsert then parseAnswerMarkdown, exactly as
-// copilot-insert-content.ts composes them).
-describe('parseAnswerMarkdown (over answerMarkdownForInsert)', () => {
-  const toBlocks = (text: string) => parseAnswerMarkdown(answerMarkdownForInsert(text))
-
-  it('passes plain text through as a single unmarked paragraph span', () => {
-    expect(toBlocks('Just a plain answer.')).toEqual([
-      { kind: 'paragraph', lines: [[{ text: 'Just a plain answer.' }]] },
+    expect(tree.children.map((node) => node.type)).toEqual([
+      'paragraph',
+      'list',
+      'paragraph',
+      'paragraph',
+      'paragraph',
     ])
+    expect(markdown).toContain('- ☑ Complete\n- ☐ Follow up')
+    expect(markdown).toContain('Cloud | Paid')
+    expect(markdown).toContain('[Screenshot](/uploads/shot.png)')
   })
 
-  it('strips citation markers without leaving stray spaces before punctuation', () => {
-    expect(toBlocks('Refunds take 30 days [1], sometimes fewer [2].')).toEqual([
-      { kind: 'paragraph', lines: [[{ text: 'Refunds take 30 days, sometimes fewer.' }]] },
-    ])
+  it('escapes raw HTML in the Markdown mirror and retains it as literal editor text', () => {
+    const { tree, markdown } = prepareAnswerMarkdown('<script>alert(1)</script>')
+    expect(tree.children[0]).toMatchObject({
+      type: 'paragraph',
+      children: [{ type: 'text', value: '<script>alert(1)</script>' }],
+    })
+    expect(markdown).toBe('\\<script>alert(1)\\</script>')
   })
 
-  it('parses *italic* and _italic_ runs into italic spans (this surface enables italic)', () => {
-    expect(toBlocks('A *subtle* hint and an _aside_ too.')).toEqual([
-      {
-        kind: 'paragraph',
-        lines: [
-          [
-            { text: 'A ' },
-            { text: 'subtle', italic: true },
-            { text: ' hint and an ' },
-            { text: 'aside', italic: true },
-            { text: ' too.' },
+  it('keeps code fences verbatim, including headings and source-looking markers', () => {
+    expect(prepareAnswerMarkdown('~~~sh\n# heading [1]\n* not  a bullet\n~~~').markdown).toBe(
+      '```sh\n# heading [1]\n* not  a bullet\n```'
+    )
+  })
+
+  it('retains raw HTML as literal text inside nested blocks', () => {
+    const { tree } = prepareAnswerMarkdown('> <script>quoted</script>\n\n- <div>listed</div>')
+    expect(tree.children[0]).toMatchObject({
+      type: 'blockquote',
+      children: [
+        {
+          type: 'paragraph',
+          children: [{ type: 'text', value: '<script>quoted</script>' }],
+        },
+      ],
+    })
+    expect(tree.children[1]).toMatchObject({
+      type: 'list',
+      children: [
+        {
+          type: 'listItem',
+          children: [
+            {
+              type: 'paragraph',
+              children: [{ type: 'text', value: '<div>listed</div>' }],
+            },
           ],
-        ],
-      },
-    ])
-  })
-
-  it('parses single-backtick runs into code spans (this surface enables code)', () => {
-    expect(toBlocks('Run `bun install` now.')).toEqual([
-      {
-        kind: 'paragraph',
-        lines: [[{ text: 'Run ' }, { text: 'bun install', code: true }, { text: ' now.' }]],
-      },
-    ])
-  })
-
-  it('strips citation markers inside list items while keeping the list structure', () => {
-    expect(toBlocks('- Reset the password [1]\n- **Confirm** the email')).toEqual([
-      {
-        kind: 'list',
-        ordered: false,
-        items: [
-          [{ text: 'Reset the password' }],
-          [{ text: 'Confirm', bold: true }, { text: ' the email' }],
-        ],
-      },
-    ])
-  })
-
-  it('strips heading markers rather than passing them through', () => {
-    expect(toBlocks('## Fix\nRun it now.')).toEqual([
-      { kind: 'paragraph', lines: [[{ text: 'Fix' }], [{ text: 'Run it now.' }]] },
-    ])
-  })
-
-  it('emits a fence as a verbatim codeBlock between the surrounding blocks', () => {
-    expect(toBlocks('Before.\n\n```sh\n* item-looking line\nbun install\n```\n\nAfter.')).toEqual([
-      { kind: 'paragraph', lines: [[{ text: 'Before.' }]] },
-      { kind: 'codeBlock', text: '* item-looking line\nbun install' },
-      { kind: 'paragraph', lines: [[{ text: 'After.' }]] },
-    ])
-  })
-
-  it('keeps `[n]` markers as literal text on the stripCitations-off path', () => {
-    expect(
-      parseAnswerMarkdown(answerMarkdownForInsert('Keep [2] here.', { stripCitations: false }))
-    ).toEqual([{ kind: 'paragraph', lines: [[{ text: 'Keep [2] here.' }]] }])
-  })
-
-  it('returns no blocks for an answer that is only citation markers', () => {
-    expect(toBlocks(' [1] [2] ')).toEqual([])
+        },
+      ],
+    })
   })
 })

@@ -13,6 +13,7 @@ export interface LaunchPermissions {
   brandingManage: boolean
   integrationManage: boolean
   helpCenterManage: boolean
+  assistantManage: boolean
 }
 
 export interface LaunchStatus {
@@ -35,6 +36,8 @@ export interface LaunchStatus {
   widgetSdkNeedsUpdate?: boolean
   hasWidgetEnabled?: boolean
   hasMessengerEnabled?: boolean
+  /** The Agent is on and set to answer customers. */
+  hasAgentAnswering?: boolean
   hasHelpArticle?: boolean
   hasPublishedChangelog?: boolean
   hasStatusComponent?: boolean
@@ -50,6 +53,8 @@ export interface LaunchStatus {
     statusPage: boolean
     integrations: boolean
     changelog?: boolean
+    /** Quinn can answer: the plan includes the AI assistant and an AI model is configured. */
+    assistant?: boolean
   }
 }
 
@@ -59,6 +64,7 @@ export type LaunchTaskHref =
   | '/admin/settings/portal'
   | '/admin/settings/widget/install'
   | '/admin/settings/integrations'
+  | '/admin/settings/agent'
   | '/admin/help-center'
   | '/admin/feedback'
   | '/admin/inbox'
@@ -147,6 +153,7 @@ const ALLOW_ALL: LaunchPermissions = {
   brandingManage: true,
   integrationManage: true,
   helpCenterManage: true,
+  assistantManage: true,
 }
 
 function resolvedFeatures(features?: LaunchStatus['features']) {
@@ -156,6 +163,7 @@ function resolvedFeatures(features?: LaunchStatus['features']) {
     statusPage: features?.statusPage ?? false,
     integrations: features?.integrations ?? true,
     changelog: features?.changelog ?? true,
+    assistant: features?.assistant ?? true,
   }
 }
 
@@ -262,6 +270,17 @@ export function buildLaunchTasks(
     actionLabel: 'Connect Messenger',
     completedLabel: 'View installation',
   }
+  const setUpQuinn: LaunchTaskInput = {
+    id: 'set-up-quinn',
+    title: 'Set up Quinn',
+    description: 'Quinn answers customers in Messenger. Check its name, voice and knowledge.',
+    completed: status.hasAgentAnswering === true,
+    canAct: permissions.assistantManage,
+    classification: 'prerequisite',
+    href: '/admin/settings/agent',
+    actionLabel: 'Set up Quinn',
+    completedLabel: 'Open Agent',
+  }
   const helpDraft: LaunchTaskInput = {
     id: 'help-article',
     title: 'Write your first article',
@@ -343,6 +362,7 @@ export function buildLaunchTasks(
   if (status.hasPublicBoard) inputs.push(distributeFeedback)
   if (features.changelog) inputs.push(publishChangelog)
   if (features.supportInbox) inputs.push(connectMessenger)
+  if (features.supportInbox && features.assistant) inputs.push(setUpQuinn)
   if (features.helpCenter) inputs.push(helpDraft)
   if (features.statusPage) inputs.push(addStatusService)
   inputs.push(invite, branding, integration, firstWin)

@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 714 surfaces
+### Server functions (`requireAuth`) — 715 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -351,6 +351,9 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/conversation-attributes.ts`::previewAttributeDetectionFn | conversation.manage |
 | `lib/server/functions/conversation-attributes.ts`::draftAttributeDescriptionsFn | conversation.manage |
 | `lib/server/functions/conversation-attributes.ts`::attributeValueCountsFn | conversation.view |
+| `lib/server/functions/conversation-files.ts`::listConversationFilesFn | conversation.view |
+| `lib/server/functions/conversation-files.ts`::listConversationFilesFn | TEAM-ONLY (~conversation.view) |
+| `lib/server/functions/conversation-files.ts`::listConversationFilesFn | ticket.view |
 | `lib/server/functions/conversation-segments.ts`::fetchInboxSegmentsWithCountsFn | conversation.view |
 | `lib/server/functions/conversation-tags.ts`::fetchConversationTagsFn | conversation.view |
 | `lib/server/functions/conversation-tags.ts`::fetchConversationTagsWithCountsFn | conversation.view |
@@ -471,8 +474,6 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/integrations.ts`::addNotificationChannelFn | integration.manage |
 | `lib/server/functions/integrations.ts`::updateNotificationChannelFn | integration.manage |
 | `lib/server/functions/integrations.ts`::removeNotificationChannelFn | integration.manage |
-| `lib/server/functions/labs.ts`::listVisibleLabsExperimentsFn | settings.manage |
-| `lib/server/functions/labs.ts`::setWorkspaceExperimentEnabledFn | settings.manage |
 | `lib/server/functions/link-preview.ts`::unfurlLinkFn | END_USER (any authenticated) |
 | `lib/server/functions/macros.ts`::listMacrosFn | conversation.reply |
 | `lib/server/functions/macros.ts`::createMacroFn | conversation.manage |
@@ -819,7 +820,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/workflows.ts`::runWorkflowManuallyFn | conversation.reply |
 | `lib/server/functions/workspace-wipe.ts`::wipeCloudWorkspaceFn | END_USER (any authenticated) |
 
-### Public REST API (`withApiKeyAuth`) — 125 surfaces
+### Public REST API (`withApiKeyAuth`) — 126 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -860,6 +861,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `routes/api/v1/conversations/$conversationId.tags.ts`::DELETE | conversation.set_tags |
 | `routes/api/v1/conversations/$conversationId.ts`::GET | conversation.view |
 | `routes/api/v1/conversations/index.ts`::GET | conversation.view |
+| `routes/api/v1/files/index.ts`::POST | conversation.reply |
 | `routes/api/v1/help-center/articles/$articleId.feedback.ts`::POST | PUBLIC (any valid key) |
 | `routes/api/v1/help-center/articles/$articleId.ts`::GET | PUBLIC (any valid key) |
 | `routes/api/v1/help-center/articles/$articleId.ts`::PATCH | help_center.manage |
@@ -969,7 +971,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 3. MCP tools
 
-39 tools. "Team" = requires an admin/member role in addition to the scope.
+40 tools. "Team" = requires an admin/member role in addition to the scope.
 
 | Tool | Scope(s) | Team |
 | --- | --- | :---: |
@@ -1010,6 +1012,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | update_article | write:article | ✓ |
 | update_changelog | write:changelog | ✓ |
 | update_comment | write:feedback | · |
+| upload_file | write:chat | ✓ |
 | vote_post | write:feedback | · |
 | widget_install_status | read:feedback | ✓ |
 
@@ -1025,7 +1028,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-219 of 1043 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+224 of 1048 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1178,6 +1181,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/api/export/runs.$runId.ts`::GET | route |
 | `routes/api/export/runs.ts`::GET | route |
 | `routes/api/export/workspace.ts`::POST | route |
+| `routes/api/files/opened.ts`::POST | route |
 | `routes/api/health.live.ts`::GET | route |
 | `routes/api/health.ready.ts`::GET | route |
 | `routes/api/health.ts`::GET | route |
@@ -1193,11 +1197,14 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/api/mcp.ts`::DELETE | route |
 | `routes/api/mcp.ts`::GET | route |
 | `routes/api/mcp.ts`::POST | route |
+| `routes/api/portal/files.ts`::POST | route |
 | `routes/api/portal/upload.ts`::POST | route |
 | `routes/api/storage/$.ts`::GET | route |
+| `routes/api/storage/$.ts`::OPTIONS | route |
 | `routes/api/storage/$.ts`::PUT | route |
 | `routes/api/track.ts`::OPTIONS | route |
 | `routes/api/track.ts`::POST | route |
+| `routes/api/upload/file.ts`::POST | route |
 | `routes/api/upload/image.ts`::POST | route |
 | `routes/api/user/avatar.$userId.ts`::GET | route |
 | `routes/api/user/profile.ts`::DELETE | route |
@@ -1226,6 +1233,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/api/widget-sso.ts`::GET | route |
 | `routes/api/widget/config[.]json.ts`::GET | route |
 | `routes/api/widget/device.ts`::POST | route |
+| `routes/api/widget/files.ts`::POST | route |
 | `routes/api/widget/identify.ts`::POST | route |
 | `routes/api/widget/install-context.ts`::POST | route |
 | `routes/api/widget/kb-ask.ts`::GET | route |

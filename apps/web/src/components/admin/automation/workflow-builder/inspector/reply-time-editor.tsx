@@ -6,12 +6,12 @@ export function ReplyTimeEditor() {
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
         Posts a quiet system-style line derived from your office hours, then continues immediately.
-        No configuration — the copy is fixed:
+        No configuration. The copy is fixed:
       </p>
       <div className="space-y-2 rounded-md border bg-muted/30 p-2.5 text-xs">
         <div className="flex items-start gap-1.5">
-          <span className="mt-0.5 size-1.5 shrink-0 rounded-full bg-emerald-500" />
-          <span>We&rsquo;re online — typically replies in under an hour.</span>
+          <span className="mt-0.5 size-1.5 shrink-0 rounded-full bg-success" />
+          <span>We&rsquo;re online, typically replies in under an hour.</span>
         </div>
         <div className="flex items-start gap-1.5">
           <span className="mt-0.5 size-1.5 shrink-0 rounded-full bg-muted-foreground/50" />

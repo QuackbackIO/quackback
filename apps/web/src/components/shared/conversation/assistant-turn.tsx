@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { FormattedMessage } from 'react-intl'
 import { ChevronDownIcon, LockClosedIcon } from '@heroicons/react/24/solid'
 import { MagnifyingGlassIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/shared/utils'
 import { getTimeAgo } from '@/components/ui/time-ago'
-import { parseMarkdownLite, type InlineSpan } from '@/components/help-center/ask-ai-text'
+import { MessageMarkdown } from './message-markdown'
+import { sanitizeUrl } from '@/lib/shared/utils/sanitize'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type {
   AssistantActivityStatus,
   ConversationMessageCitation,
@@ -30,10 +32,8 @@ export type RenderableCitation = ConversationMessageCitation & {
 /**
  * The citation hovercard's "Updated 8 days ago" freshness line, shared by the
  * inline citation dots here and the Copilot source rows (copilot-sources.tsx).
- * Rendered statically (getTimeAgo once per render, no interval): these
- * hovercards are always mounted and CSS-hover revealed, so a live
- * per-instance ticker would accrue dozens of invisible timers per session —
- * and days-granularity freshness needs none. Renders nothing without a
+ * Rendered statically (getTimeAgo once per render, no interval): source
+ * freshness only needs days-granularity updates. Renders nothing without a
  * parseable `updatedAt` (never a dangling "Updated ").
  */
 export function CitationFreshness({
@@ -128,57 +128,63 @@ function CitationDot({
   onOpen?: CitationOpen
 }) {
   const isInternal = citation.internal === true
-  const hasUrl = !!citation.url
+  const url = sanitizeUrl(citation.url)
+  const hasUrl = !!url
   const source = citationHost(citation.url) || citation.title
   const label = isInternal
     ? `Internal source ${n}: ${citation.title}`
     : `Source ${n}: ${citation.title}`
   const dotClass = cn(CITATION_DOT_CLASS, isInternal && CITATION_DOT_INTERNAL_CLASS)
   return (
-    <span className="group relative inline-block align-[1px]">
-      {onOpen ? (
-        <button
-          type="button"
-          onClick={() => onOpen(citation)}
-          aria-label={label}
-          className={cn(dotClass, 'cursor-pointer')}
-        >
-          {n}
-        </button>
-      ) : (
-        <a
-          href={citation.url}
-          target="_blank"
-          rel="noreferrer"
-          aria-label={label}
-          className={dotClass}
-        >
-          {n}
-        </a>
-      )}
-      {isInternal && (
-        <LockClosedIcon
-          aria-hidden
-          className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-amber-500 p-[1.5px] text-white"
-        />
-      )}
-      <span className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-30 w-56 -translate-x-1/2 translate-y-1 rounded-xl border border-border bg-popover p-3 text-left opacity-0 shadow-xl transition-all group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:opacity-100">
-        <span className="mb-1.5 block text-[13px] font-semibold leading-snug text-foreground">
-          {citation.title}
-        </span>
-        {isInternal && !hasUrl ? (
-          <span className="flex items-center gap-1.5 text-[12px] text-amber-700 dark:text-amber-300">
-            <LockClosedIcon className="h-3 w-3 shrink-0" />
-            Internal
-          </span>
-        ) : (
-          <span className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
-            <ArrowTopRightOnSquareIcon className="h-3 w-3 shrink-0" />
-            {source}
-          </span>
+    <span className="relative inline-block align-[1px]">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          {onOpen ? (
+            <button
+              type="button"
+              onClick={() => onOpen(citation)}
+              aria-label={label}
+              className={cn(dotClass, 'cursor-pointer')}
+            >
+              {n}
+            </button>
+          ) : url ? (
+            <a href={url} target="_blank" rel="noreferrer" aria-label={label} className={dotClass}>
+              {n}
+            </a>
+          ) : (
+            <span aria-label={label} className={dotClass} tabIndex={0}>
+              {n}
+            </span>
+          )}
+        </TooltipTrigger>
+        {isInternal && (
+          <LockClosedIcon
+            aria-hidden
+            className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-amber-500 p-[1.5px] text-white"
+          />
         )}
-        <CitationFreshness updatedAt={citation.updatedAt} className="mt-1" />
-      </span>
+        <TooltipContent
+          className="w-56 max-w-[calc(100vw-1rem)] rounded-xl p-3 text-left"
+          sideOffset={8}
+        >
+          <span className="mb-1.5 block text-[13px] font-semibold leading-snug text-foreground">
+            {citation.title}
+          </span>
+          {isInternal && !hasUrl ? (
+            <span className="flex items-center gap-1.5 text-[12px] text-amber-700 dark:text-amber-300">
+              <LockClosedIcon className="h-3 w-3 shrink-0" />
+              Internal
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+              <ArrowTopRightOnSquareIcon className="h-3 w-3 shrink-0" />
+              {source}
+            </span>
+          )}
+          <CitationFreshness updatedAt={citation.updatedAt} className="mt-1" />
+        </TooltipContent>
+      </Tooltip>
     </span>
   )
 }
@@ -193,37 +199,8 @@ function AnswerCaret() {
   )
 }
 
-/** Render one line's inline spans: plain text, **bold**, and [n] citation dots.
- *  A `[n]` with no resolved citation (still streaming) renders as nothing. */
-function InlineSpans({
-  spans,
-  citations,
-  onOpen,
-}: {
-  spans: InlineSpan[]
-  citations: RenderableCitation[]
-  onOpen?: CitationOpen
-}) {
-  return (
-    <>
-      {spans.map((span, k) => {
-        if (span.cite !== undefined) {
-          const citation = citations[span.cite - 1]
-          return citation ? (
-            <CitationDot key={k} n={span.cite} citation={citation} onOpen={onOpen} />
-          ) : null
-        }
-        return span.bold ? <strong key={k}>{span.text}</strong> : <span key={k}>{span.text}</span>
-      })}
-    </>
-  )
-}
-
-/**
- * Quinn's answer rendered as markdown-lite (paragraphs, ordered/bullet lists,
- * bold) with inline `[n]` citation dots — the same parser the Help Center's Ask
- * AI uses, so the two AI surfaces render identically. No raw HTML.
- */
+/** Quinn's Markdown answer, shared by the inbox, widget and Help Center.
+ * Citation dots are added only to prose, after parsing links and code. */
 export function AssistantAnswer({
   text,
   citations,
@@ -236,45 +213,19 @@ export function AssistantAnswer({
   /** When set, citation dots become in-app buttons instead of new-tab links. */
   onCitationOpen?: CitationOpen
 }) {
-  const blocks = useMemo(() => parseMarkdownLite(text), [text])
-  const lastBlock = blocks.length - 1
   return (
-    <div className="space-y-2 text-sm leading-relaxed">
-      {blocks.length === 0 && caret && <AnswerCaret />}
-      {blocks.map((block, i) => {
-        const isLast = i === lastBlock
-        if (block.kind === 'list') {
-          const lastItem = block.items.length - 1
-          const items = block.items.map((item, j) => (
-            <li key={j} className="ps-0.5">
-              <InlineSpans spans={item} citations={citations} onOpen={onCitationOpen} />
-              {caret && isLast && j === lastItem && <AnswerCaret />}
-            </li>
-          ))
-          return block.ordered ? (
-            <ol key={i} className="list-decimal ps-5 space-y-1 marker:text-muted-foreground/60">
-              {items}
-            </ol>
-          ) : (
-            <ul key={i} className="list-disc ps-5 space-y-1 marker:text-muted-foreground/50">
-              {items}
-            </ul>
-          )
-        }
-        const lastLine = block.lines.length - 1
-        return (
-          <p key={i}>
-            {block.lines.map((line, j) => (
-              <span key={j}>
-                {j > 0 && <br />}
-                <InlineSpans spans={line} citations={citations} onOpen={onCitationOpen} />
-                {caret && isLast && j === lastLine && <AnswerCaret />}
-              </span>
-            ))}
-          </p>
+    <MessageMarkdown
+      text={text}
+      trailing={caret ? <AnswerCaret /> : undefined}
+      renderCitation={(n) => {
+        const citation = citations[n - 1]
+        return citation ? (
+          <CitationDot n={n} citation={citation} onOpen={onCitationOpen} />
+        ) : caret ? null : (
+          `[${n}]`
         )
-      })}
-    </div>
+      }}
+    />
   )
 }
 
@@ -311,19 +262,28 @@ export function AssistantSourcesTrace({ citations }: { citations: RenderableCita
       </button>
       {open && (
         <ul className="flex flex-col gap-1 ps-4">
-          {citations.map((c, i) => (
-            <li key={c.id}>
-              <a
-                href={c.url}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-1.5 text-[12px] text-muted-foreground no-underline hover:text-foreground"
-              >
+          {citations.map((c, i) => {
+            const url = sanitizeUrl(c.url)
+            const label = (
+              <>
                 <span className="tabular-nums text-muted-foreground/40">{i + 1}</span>
                 {c.title}
-              </a>
-            </li>
-          ))}
+              </>
+            )
+            const className =
+              'flex items-center gap-1.5 text-[12px] text-muted-foreground no-underline hover:text-foreground'
+            return (
+              <li key={c.id}>
+                {url ? (
+                  <a href={url} target="_blank" rel="noreferrer" className={className}>
+                    {label}
+                  </a>
+                ) : (
+                  <span className={className}>{label}</span>
+                )}
+              </li>
+            )
+          })}
         </ul>
       )}
     </div>

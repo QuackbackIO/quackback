@@ -2,30 +2,31 @@ import { test, expect } from '@playwright/test'
 
 test.describe('Admin Webhooks Settings', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/admin/settings/webhooks')
+    await page.goto('/admin/settings/developers?tab=webhooks')
     await page.waitForLoadState('networkidle')
   })
 
   test('page loads and shows webhooks section', async ({ page }) => {
     await expect(page.getByText('Webhooks').first()).toBeVisible({ timeout: 10000 })
-    await expect(page.getByText('Configured Webhooks').first()).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('heading', { name: 'Webhooks' }).first()).toBeVisible({
+      timeout: 10000,
+    })
   })
 
-  test('shows page description', async ({ page }) => {
+  test('shows card description', async ({ page }) => {
     await expect(
-      page.getByText('Send real-time notifications to external services when events occur')
+      page.getByText('Receive an HTTP POST when events happen in your workspace.')
     ).toBeVisible({ timeout: 10000 })
   })
 
   test('shows create webhook button when webhooks exist', async ({ page }) => {
     await page.waitForLoadState('networkidle')
 
-    const createButton = page.getByRole('button', { name: 'Create Webhook' })
-    const emptyStateButton = page.getByRole('button', { name: 'Create your first webhook' })
+    const createButton = page.getByRole('button', { name: 'New webhook' }).first()
+    const emptyStateButton = page.getByRole('button', { name: 'New webhook' }).last()
 
     // One or the other should be visible depending on whether webhooks exist
-    const hasCreateButton =
-      (await createButton.count()) > 0 || (await emptyStateButton.count()) > 0
+    const hasCreateButton = (await createButton.count()) > 0 || (await emptyStateButton.count()) > 0
     expect(hasCreateButton).toBe(true)
   })
 
@@ -33,10 +34,8 @@ test.describe('Admin Webhooks Settings', () => {
     await page.waitForLoadState('networkidle')
 
     // If empty state is shown, it should have the call-to-action button
-    const emptyStateButton = page.getByRole('button', { name: 'Create your first webhook' })
-    if ((await emptyStateButton.count()) > 0) {
-      await expect(emptyStateButton).toBeVisible()
-      await expect(page.getByText('No webhooks configured')).toBeVisible()
+    if ((await page.getByText('No webhooks yet').count()) > 0) {
+      await expect(page.getByRole('button', { name: 'New webhook' }).last()).toBeVisible()
     }
   })
 
@@ -44,8 +43,8 @@ test.describe('Admin Webhooks Settings', () => {
     await page.waitForLoadState('networkidle')
 
     // Click whichever create button is available
-    const createButton = page.getByRole('button', { name: 'Create Webhook' })
-    const emptyStateButton = page.getByRole('button', { name: 'Create your first webhook' })
+    const createButton = page.getByRole('button', { name: 'New webhook' }).first()
+    const emptyStateButton = page.getByRole('button', { name: 'New webhook' }).last()
 
     if ((await createButton.count()) > 0) {
       await createButton.click()
@@ -56,14 +55,14 @@ test.describe('Admin Webhooks Settings', () => {
     // Dialog should open
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
-    await expect(dialog.getByRole('heading', { name: 'Create Webhook' })).toBeVisible()
+    await expect(dialog.getByRole('heading', { name: 'Create webhook' })).toBeVisible()
   })
 
   test('create webhook dialog has URL input field', async ({ page }) => {
     await page.waitForLoadState('networkidle')
 
-    const createButton = page.getByRole('button', { name: 'Create Webhook' })
-    const emptyStateButton = page.getByRole('button', { name: 'Create your first webhook' })
+    const createButton = page.getByRole('button', { name: 'New webhook' }).first()
+    const emptyStateButton = page.getByRole('button', { name: 'New webhook' }).last()
 
     if ((await createButton.count()) > 0) {
       await createButton.click()
@@ -76,9 +75,7 @@ test.describe('Admin Webhooks Settings', () => {
 
     // Should have endpoint URL label and input
     await expect(dialog.getByLabel('Endpoint URL')).toBeVisible()
-    await expect(
-      dialog.getByPlaceholder('https://example.com/webhook')
-    ).toBeVisible()
+    await expect(dialog.getByPlaceholder('https://example.com/webhook')).toBeVisible()
 
     await page.keyboard.press('Escape')
   })
@@ -86,8 +83,8 @@ test.describe('Admin Webhooks Settings', () => {
   test('create webhook dialog has event type checkboxes', async ({ page }) => {
     await page.waitForLoadState('networkidle')
 
-    const createButton = page.getByRole('button', { name: 'Create Webhook' })
-    const emptyStateButton = page.getByRole('button', { name: 'Create your first webhook' })
+    const createButton = page.getByRole('button', { name: 'New webhook' }).first()
+    const emptyStateButton = page.getByRole('button', { name: 'New webhook' }).last()
 
     if ((await createButton.count()) > 0) {
       await createButton.click()
@@ -111,8 +108,8 @@ test.describe('Admin Webhooks Settings', () => {
   test('create webhook dialog has Cancel and Create Webhook buttons', async ({ page }) => {
     await page.waitForLoadState('networkidle')
 
-    const createButton = page.getByRole('button', { name: 'Create Webhook' })
-    const emptyStateButton = page.getByRole('button', { name: 'Create your first webhook' })
+    const createButton = page.getByRole('button', { name: 'New webhook' }).first()
+    const emptyStateButton = page.getByRole('button', { name: 'New webhook' }).last()
 
     if ((await createButton.count()) > 0) {
       await createButton.click()
@@ -124,7 +121,7 @@ test.describe('Admin Webhooks Settings', () => {
     await expect(dialog).toBeVisible({ timeout: 5000 })
 
     await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeVisible()
-    await expect(dialog.getByRole('button', { name: 'Create Webhook' })).toBeVisible()
+    await expect(dialog.getByRole('button', { name: 'Create webhook' })).toBeVisible()
 
     await page.keyboard.press('Escape')
   })
@@ -132,8 +129,8 @@ test.describe('Admin Webhooks Settings', () => {
   test('create button is disabled until URL and events are filled', async ({ page }) => {
     await page.waitForLoadState('networkidle')
 
-    const createButton = page.getByRole('button', { name: 'Create Webhook' })
-    const emptyStateButton = page.getByRole('button', { name: 'Create your first webhook' })
+    const createButton = page.getByRole('button', { name: 'New webhook' }).first()
+    const emptyStateButton = page.getByRole('button', { name: 'New webhook' }).last()
 
     if ((await createButton.count()) > 0) {
       await createButton.click()
@@ -145,7 +142,7 @@ test.describe('Admin Webhooks Settings', () => {
     await expect(dialog).toBeVisible({ timeout: 5000 })
 
     // Submit button should be disabled with empty form
-    const submitButton = dialog.getByRole('button', { name: 'Create Webhook' })
+    const submitButton = dialog.getByRole('button', { name: 'Create webhook' })
     await expect(submitButton).toBeDisabled()
 
     await page.keyboard.press('Escape')
@@ -154,8 +151,8 @@ test.describe('Admin Webhooks Settings', () => {
   test('shows validation error when submitting without selecting events', async ({ page }) => {
     await page.waitForLoadState('networkidle')
 
-    const createButton = page.getByRole('button', { name: 'Create Webhook' })
-    const emptyStateButton = page.getByRole('button', { name: 'Create your first webhook' })
+    const createButton = page.getByRole('button', { name: 'New webhook' }).first()
+    const emptyStateButton = page.getByRole('button', { name: 'New webhook' }).last()
 
     if ((await createButton.count()) > 0) {
       await createButton.click()
@@ -170,7 +167,7 @@ test.describe('Admin Webhooks Settings', () => {
     await dialog.getByLabel('Endpoint URL').fill('https://example.com/webhook')
 
     // The submit button stays disabled when no events selected
-    const submitButton = dialog.getByRole('button', { name: 'Create Webhook' })
+    const submitButton = dialog.getByRole('button', { name: 'Create webhook' })
     await expect(submitButton).toBeDisabled()
 
     await page.keyboard.press('Escape')
@@ -179,8 +176,8 @@ test.describe('Admin Webhooks Settings', () => {
   test('can close create webhook dialog with Escape', async ({ page }) => {
     await page.waitForLoadState('networkidle')
 
-    const createButton = page.getByRole('button', { name: 'Create Webhook' })
-    const emptyStateButton = page.getByRole('button', { name: 'Create your first webhook' })
+    const createButton = page.getByRole('button', { name: 'New webhook' }).first()
+    const emptyStateButton = page.getByRole('button', { name: 'New webhook' }).last()
 
     if ((await createButton.count()) > 0) {
       await createButton.click()
@@ -198,8 +195,8 @@ test.describe('Admin Webhooks Settings', () => {
   test('can close create webhook dialog with Cancel button', async ({ page }) => {
     await page.waitForLoadState('networkidle')
 
-    const createButton = page.getByRole('button', { name: 'Create Webhook' })
-    const emptyStateButton = page.getByRole('button', { name: 'Create your first webhook' })
+    const createButton = page.getByRole('button', { name: 'New webhook' }).first()
+    const emptyStateButton = page.getByRole('button', { name: 'New webhook' }).last()
 
     if ((await createButton.count()) > 0) {
       await createButton.click()
@@ -214,104 +211,76 @@ test.describe('Admin Webhooks Settings', () => {
     await expect(dialog).toBeHidden({ timeout: 5000 })
   })
 
-  test('existing webhooks show URL and status badge', async ({ page }) => {
+  test('existing webhooks show their URL', async ({ page }) => {
     await page.waitForLoadState('networkidle')
 
     // Only check if webhooks are present (non-empty state)
-    const webhookList = page.locator('.space-y-3')
-    if ((await webhookList.count()) > 0) {
-      const firstWebhook = webhookList.locator('[class*="rounded-lg border"]').first()
-      if ((await firstWebhook.count()) > 0) {
-        // Each webhook card should show a URL
-        await expect(firstWebhook).toBeVisible()
-
-        // Should show a status badge (Active, Disabled, Auto-disabled, etc.)
-        const badge = firstWebhook.locator('[class*="badge"], [data-slot="badge"]')
-        if ((await badge.count()) > 0) {
-          await expect(badge.first()).toBeVisible()
-        }
-      }
+    const rowMenu = page.getByRole('button', { name: /^actions for https?:\/\//i }).first()
+    if ((await rowMenu.count()) > 0) {
+      const name = (await rowMenu.getAttribute('aria-label')) ?? ''
+      const url = name.replace(/^actions for /i, '')
+      await expect(page.getByText(url, { exact: true }).first()).toBeVisible()
     }
   })
 
-  test('existing webhooks show subscribed event types', async ({ page }) => {
+  test('existing webhooks show subscribed event types or their failure state', async ({ page }) => {
     await page.waitForLoadState('networkidle')
 
     // Only check if webhooks are present
-    const webhookList = page.locator('.space-y-3')
-    if ((await webhookList.count()) > 0) {
-      const firstWebhook = webhookList.locator('[class*="rounded-lg border"]').first()
-      if ((await firstWebhook.count()) > 0) {
-        // The events list appears as small text below the URL
-        const eventText = firstWebhook.locator('.text-xs.text-muted-foreground').first()
-        if ((await eventText.count()) > 0) {
-          await expect(eventText).toBeVisible()
-        }
-      }
+    const rowMenu = page.getByRole('button', { name: /^actions for https?:\/\//i }).first()
+    if ((await rowMenu.count()) > 0) {
+      await expect(
+        page
+          .getByText(/New post|Status changed|New comment|Changelog published|failures?|Error:/)
+          .first()
+      ).toBeVisible()
     }
   })
 
-  test('existing webhooks show edit and delete buttons', async ({ page }) => {
+  test('existing webhooks show a row menu with edit and delete', async ({ page }) => {
     await page.waitForLoadState('networkidle')
 
-    const webhookList = page.locator('.space-y-3')
-    if ((await webhookList.count()) > 0) {
-      const firstWebhook = webhookList.locator('[class*="rounded-lg border"]').first()
-      if ((await firstWebhook.count()) > 0) {
-        // Edit and delete buttons are visible on desktop (sm:flex)
-        const editButton = firstWebhook.getByRole('button').filter({ hasText: '' }).first()
-        if ((await editButton.count()) > 0) {
-          await expect(editButton).toBeVisible()
-        }
-      }
+    const rowMenu = page.getByRole('button', { name: /^actions for /i }).first()
+    if ((await rowMenu.count()) > 0) {
+      await rowMenu.click()
+      await expect(page.getByRole('menuitem', { name: 'Edit' })).toBeVisible()
+      await expect(page.getByRole('menuitem', { name: 'Delete' })).toBeVisible()
+      await page.keyboard.press('Escape')
     }
   })
 
   test('can open delete webhook dialog', async ({ page }) => {
     await page.waitForLoadState('networkidle')
 
-    const webhookList = page.locator('.space-y-3')
-    if ((await webhookList.count()) > 0) {
-      const firstWebhook = webhookList.locator('[class*="rounded-lg border"]').first()
-      if ((await firstWebhook.count()) > 0) {
-        // Find delete button by aria-label pattern
-        const deleteButton = firstWebhook.locator('button[aria-label*="Delete webhook"]')
-        if ((await deleteButton.count()) > 0) {
-          await deleteButton.click()
+    const rowMenu = page.getByRole('button', { name: /^actions for /i }).first()
+    if ((await rowMenu.count()) > 0) {
+      await rowMenu.click()
+      await page.getByRole('menuitem', { name: 'Delete' }).click()
 
-          const dialog = page.getByRole('alertdialog')
-          await expect(dialog).toBeVisible({ timeout: 5000 })
-          await expect(dialog.getByRole('heading', { name: 'Delete Webhook' })).toBeVisible()
+      const dialog = page.getByRole('alertdialog')
+      await expect(dialog).toBeVisible({ timeout: 5000 })
+      await expect(dialog.getByRole('heading', { name: 'Delete webhook?' })).toBeVisible()
 
-          await page.keyboard.press('Escape')
-        }
-      }
+      await page.keyboard.press('Escape')
     }
   })
 
   test('delete confirmation dialog has confirm and cancel buttons', async ({ page }) => {
     await page.waitForLoadState('networkidle')
 
-    const webhookList = page.locator('.space-y-3')
-    if ((await webhookList.count()) > 0) {
-      const firstWebhook = webhookList.locator('[class*="rounded-lg border"]').first()
-      if ((await firstWebhook.count()) > 0) {
-        const deleteButton = firstWebhook.locator('button[aria-label*="Delete webhook"]')
-        if ((await deleteButton.count()) > 0) {
-          await deleteButton.click()
+    const rowMenu = page.getByRole('button', { name: /^actions for /i }).first()
+    if ((await rowMenu.count()) > 0) {
+      await rowMenu.click()
+      await page.getByRole('menuitem', { name: 'Delete' }).click()
 
-          const dialog = page.getByRole('alertdialog')
-          await expect(dialog).toBeVisible({ timeout: 5000 })
+      const dialog = page.getByRole('alertdialog')
+      await expect(dialog).toBeVisible({ timeout: 5000 })
 
-          // Should have Cancel and Delete Webhook buttons
-          await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible()
-          await expect(page.getByRole('button', { name: 'Delete Webhook' })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Delete webhook' })).toBeVisible()
 
-          // Close without deleting
-          await page.getByRole('button', { name: 'Cancel' }).click()
-          await expect(dialog).toBeHidden({ timeout: 5000 })
-        }
-      }
+      await page.getByRole('button', { name: 'Cancel' }).click()
+      await expect(dialog).toBeHidden({ timeout: 5000 })
     }
   })
 
@@ -340,13 +309,13 @@ test.describe('Admin Webhooks - Create Webhook Flow', () => {
   test.describe.configure({ mode: 'serial' })
 
   test.beforeEach(async ({ page }) => {
-    await page.goto('/admin/settings/webhooks')
+    await page.goto('/admin/settings/developers?tab=webhooks')
     await page.waitForLoadState('networkidle')
   })
 
   test('can create a webhook with URL and events', async ({ page }) => {
-    const createButton = page.getByRole('button', { name: 'Create Webhook' })
-    const emptyStateButton = page.getByRole('button', { name: 'Create your first webhook' })
+    const createButton = page.getByRole('button', { name: 'New webhook' }).first()
+    const emptyStateButton = page.getByRole('button', { name: 'New webhook' }).last()
 
     if ((await createButton.count()) > 0) {
       await createButton.click()
@@ -370,7 +339,7 @@ test.describe('Admin Webhooks - Create Webhook Flow', () => {
     await expect(checkboxes.first()).toBeChecked()
 
     // Submit button should now be enabled
-    const submitButton = dialog.getByRole('button', { name: 'Create Webhook' })
+    const submitButton = dialog.getByRole('button', { name: 'Create webhook' })
     await expect(submitButton).toBeEnabled()
 
     // Submit

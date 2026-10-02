@@ -22,8 +22,7 @@ import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { BackLink } from '@/components/ui/back-link'
-import { PageHeader } from '@/components/shared/page-header'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { setProviderCredentialsFn, upsertIdentityProviderFn } from '@/lib/server/functions/sso'
 import { IDP_KIND_NAMES } from '../idp-shortcuts'
@@ -38,6 +37,7 @@ import {
   newRegistrationId,
   reportMissingIdpFields,
   SIGN_IN_TAB,
+  SSO_CRUMBS,
 } from './provider-shared'
 import { useBaseUrl } from '@/lib/client/hooks/use-root-context'
 
@@ -105,14 +105,11 @@ export function ProviderCreatePage({
   }
 
   return (
-    <div className="max-w-3xl space-y-6">
-      <BackLink {...SIGN_IN_TAB}>Sign-in</BackLink>
-
-      <PageHeader
-        title="Connect single sign-on"
-        description="Connect an OpenID Connect provider, test it, then enable sign-in."
-      />
-
+    <SettingsPage
+      title="Connect single sign-on"
+      description="Connect an OpenID Connect provider, test it, then enable sign-in."
+      crumbs={SSO_CRUMBS}
+    >
       <SettingsCard contentClassName="space-y-6">
         <ConnectionFields
           draft={draft}
@@ -147,6 +144,6 @@ export function ProviderCreatePage({
           </Button>
         </div>
       </SettingsCard>
-    </div>
+    </SettingsPage>
   )
 }

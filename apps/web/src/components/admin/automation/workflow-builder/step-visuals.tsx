@@ -90,6 +90,21 @@ export const TONE_TILE: Record<Tone, string> = {
   pink: 'bg-pink-500/10 text-pink-700 dark:text-pink-300',
 }
 
+/** The label tab above a flow's first step. */
+export const START_TAG = TONE_TILE.amber
+
+/** The dashed box a branch rule is drawn in on the canvas. */
+export const RULE_BOX = `border-violet-500/40 ${TONE_TILE.violet}`
+
+/** The kind dot beside an outline entry. */
+export const KIND_DOT: Record<string, string> = {
+  trigger: 'bg-amber-500',
+  condition: 'bg-amber-500',
+  branch: 'bg-amber-500',
+  action: 'bg-emerald-500',
+  wait: 'bg-orange-500',
+}
+
 export function ConfirmDeleteDialog({
   open,
   onOpenChange,

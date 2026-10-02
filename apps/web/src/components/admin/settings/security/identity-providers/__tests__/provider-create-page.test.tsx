@@ -14,7 +14,8 @@
  * complete enough to test.
  */
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, within, fireEvent, waitFor } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ProviderCreatePage } from '../provider-create-page'
@@ -47,14 +48,14 @@ vi.mock('@tanstack/react-router', () => ({
   Link: ({
     children,
     to,
-    search: _search,
+    search,
     ...rest
   }: {
     children: React.ReactNode
     to: string
-    search?: unknown
+    search?: Record<string, string>
   }) => (
-    <a href={to} {...rest}>
+    <a href={search ? `${to}?${new URLSearchParams(search).toString()}` : to} {...rest}>
       {children}
     </a>
   ),
@@ -71,9 +72,11 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
-    <QueryClientProvider client={qc}>
-      <ProviderCreatePage />
-    </QueryClientProvider>
+    <IntlProvider locale="en" defaultLocale="en">
+      <QueryClientProvider client={qc}>
+        <ProviderCreatePage />
+      </QueryClientProvider>
+    </IntlProvider>
   )
 }
 
@@ -108,6 +111,15 @@ describe('<ProviderCreatePage>', () => {
     expect(screen.queryByLabelText(/without an email/i)).toBeNull()
     expect(screen.queryByLabelText('New account role')).toBeNull()
     expect(screen.queryByRole('switch')).toBeNull()
+  })
+
+  it('sits under Access & Security in the breadcrumb', () => {
+    renderPage()
+    const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(crumbs).getByRole('link', { name: 'Access & Security' })).toHaveAttribute(
+      'href',
+      '/admin/settings/security/authentication?tab=sign-in'
+    )
   })
 
   it('keeps scopes, prompt, client auth and display name behind Connection options', () => {
@@ -151,9 +163,11 @@ describe('<ProviderCreatePage>', () => {
   it('uses the registrationId the route generated so SSR and hydration show one redirect URI', async () => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(
-      <QueryClientProvider client={qc}>
-        <ProviderCreatePage registrationId="oidc_fromroute" />
-      </QueryClientProvider>
+      <IntlProvider locale="en" defaultLocale="en">
+        <QueryClientProvider client={qc}>
+          <ProviderCreatePage registrationId="oidc_fromroute" />
+        </QueryClientProvider>
+      </IntlProvider>
     )
     expect(screen.getByText(/\/api\/auth\/callback\/oidc_fromroute$/)).toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Client ID'), 'client-123')

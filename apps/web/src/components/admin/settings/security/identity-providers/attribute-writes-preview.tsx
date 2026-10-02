@@ -96,7 +96,7 @@ export function AttributeWritesPreview({
           </div>
         </div>
       )}
-      {hideCaptureChrome && <div className="font-medium">People attributes</div>}
+      {hideCaptureChrome && <div className="font-medium">User attributes</div>}
 
       {plan && (Object.keys(plan.valid).length > 0 || (plan.skips?.length ?? 0) > 0) ? (
         <dl className="grid grid-cols-[6.6em_1fr] gap-x-2.5 gap-y-1 text-[12px]">
@@ -136,12 +136,10 @@ export function AttributeWritesPreview({
       )}
 
       {stale ? (
-        <p className="text-xs text-amber-700 dark:text-amber-400">
-          Configuration changed since capture. Re-test.
-        </p>
+        <p className="text-xs text-warning">Configuration changed since capture. Re-test.</p>
       ) : (
         <p className="text-xs text-muted-foreground">
-          Assumes the person has no attributes yet. With Overwrite off, someone who already has a
+          Assumes the user has no attributes yet. With Overwrite off, someone who already has a
           value keeps it.
         </p>
       )}

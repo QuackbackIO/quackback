@@ -17,7 +17,7 @@ interface OAuthConnectionActionsProps {
   displayName: string
   /** Description for the disconnect dialog */
   disconnectDescription: string
-  /** Connect button label. Defaults to "Connect". */
+  /** Connect button label. Defaults to "Connect {displayName}". */
   connectLabel?: string
 }
 
@@ -28,7 +28,7 @@ export function OAuthConnectionActions({
   getConnectUrl,
   displayName,
   disconnectDescription,
-  connectLabel = 'Connect',
+  connectLabel = `Connect ${displayName}`,
 }: OAuthConnectionActionsProps) {
   const search = useSearch({ strict: false })
   const deleteMutation = useDeleteIntegration()
@@ -80,7 +80,7 @@ export function OAuthConnectionActions({
   return (
     <>
       {showSuccess && (
-        <div className="flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-600 dark:text-green-400">
+        <div className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
           <CheckCircleIcon className="h-4 w-4" />
           <span>Connected successfully!</span>
         </div>
@@ -88,7 +88,7 @@ export function OAuthConnectionActions({
 
       <div className="flex items-center gap-2">
         {!isConnected && (
-          <Button onClick={handleConnect} disabled={connecting}>
+          <Button size="sm" onClick={handleConnect} disabled={connecting}>
             {connecting ? (
               <>
                 <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />

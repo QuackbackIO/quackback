@@ -1,29 +1,33 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render as baseRender, screen, fireEvent, waitFor } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 
-const { onboarding, updateWidgetConfig, mintInstallCode, toast, copyWithFallback } = vi.hoisted(
-  () => ({
-    onboarding: {
-      useCase: 'product_feedback',
-      hasWidgetInstalled: false,
-      hasWidgetEnabled: false,
-      widgetOriginHost: null as string | null,
-      widgetLastDetectedAt: null as string | null,
-      widgetSdkNeedsUpdate: false,
-    },
-    updateWidgetConfig: {
-      mutateAsync: vi.fn(),
-      isPending: false,
-    },
-    mintInstallCode: {
-      mutateAsync: vi.fn(),
-      isPending: false,
-    },
-    toast: { success: vi.fn(), error: vi.fn() },
-    copyWithFallback: vi.fn(),
-  })
-)
+const render = (node: React.ReactElement) =>
+  baseRender(
+    <IntlProvider locale="en" defaultLocale="en">
+      {node}
+    </IntlProvider>
+  )
+
+const { onboarding, mintInstallCode, toast, copyWithFallback } = vi.hoisted(() => ({
+  onboarding: {
+    useCase: 'product_feedback',
+    hasWidgetInstalled: false,
+    hasWidgetEnabled: false,
+    widgetOriginHost: null as string | null,
+    widgetLastDetectedAt: null as string | null,
+    widgetSdkNeedsUpdate: false,
+  },
+  mintInstallCode: {
+    mutateAsync: vi.fn(),
+    isPending: false,
+  },
+  toast: { success: vi.fn(), error: vi.fn() },
+  copyWithFallback: vi.fn(),
+}))
+
+const queryClient = new (await import('@tanstack/react-query')).QueryClient()
 
 vi.mock('@tanstack/react-router', async () => {
   const actual =
@@ -34,24 +38,24 @@ vi.mock('@tanstack/react-router', async () => {
       const context = { baseUrl: 'https://feedback.example.com' }
       return opts?.select ? opts.select(context as never) : context
     },
-    Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
+    Link: ({ children, to }: { children: React.ReactNode; to?: string }) => (
+      <a href={to}>{children}</a>
+    ),
   }
 })
 
-vi.mock('@tanstack/react-query', () => ({
-  useSuspenseQuery: (opts: { queryKey?: string[] }) => {
-    if (opts?.queryKey?.[1] === 'widgetConfig') return { data: { enabled: false } }
-    return { data: 'wgt_testsecret' }
-  },
+vi.mock('@tanstack/react-query', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tanstack/react-query')>()),
+  useSuspenseQuery: () => ({ data: 'wgt_testsecret' }),
   useQuery: () => ({
     data: onboarding,
   }),
+  useQueryClient: () => queryClient,
 }))
 
 vi.mock('@/lib/client/queries/settings', () => ({
   settingsQueries: {
     widgetSecret: () => ({ queryKey: ['settings', 'widgetSecret'] }),
-    widgetConfig: () => ({ queryKey: ['settings', 'widgetConfig'] }),
   },
 }))
 
@@ -66,7 +70,6 @@ vi.mock('@/lib/client/mutations/settings', () => ({
     mutateAsync: vi.fn(),
     isPending: false,
   }),
-  useUpdateWidgetConfig: () => updateWidgetConfig,
   useMintWidgetInstallCode: () => mintInstallCode,
 }))
 
@@ -83,8 +86,6 @@ describe('WidgetInstallPage', () => {
     onboarding.hasWidgetInstalled = false
     onboarding.hasWidgetEnabled = false
     onboarding.widgetOriginHost = null
-    updateWidgetConfig.mutateAsync.mockReset()
-    updateWidgetConfig.mutateAsync.mockResolvedValue({ enabled: true })
     mintInstallCode.mutateAsync.mockReset()
     mintInstallCode.mutateAsync.mockResolvedValue({
       code: 'qbi_pagepairingcode',
@@ -106,9 +107,7 @@ describe('WidgetInstallPage', () => {
     expect(screen.getByText(/Install without an agent/)).toBeInTheDocument()
     expect(screen.getByText(/Skip this unless you are installing by hand/)).toBeInTheDocument()
     expect(screen.queryByText('3. Signing secret')).toBeNull()
-    expect(
-      screen.getByRole('button', { name: 'Copy install prompt for your coding agent' })
-    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Copy install prompt' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /Signing secret/ }))
     expect(screen.getByTestId('signing-secret')).toBeInTheDocument()
@@ -128,18 +127,24 @@ describe('WidgetInstallPage', () => {
     expect(snippet?.textContent).not.toContain('wgt_testsecret')
   })
 
-  it('toasts when Show on your website fails to save', async () => {
-    updateWidgetConfig.mutateAsync.mockRejectedValue(new Error('nope'))
+  it('has no visibility switch and links back to Widget settings', async () => {
     const { WidgetInstallPage } =
       await import('@/components/admin/settings/widget/widget-install-page')
     render(<WidgetInstallPage />)
 
-    fireEvent.click(screen.getByRole('switch', { name: 'Show on your website' }))
+    expect(screen.queryByRole('switch', { name: 'Show on your website' })).toBeNull()
+    expect(screen.getByText('Show on your website')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Widget settings' })).toBeInTheDocument()
+  })
 
-    await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith('Could not update widget visibility')
-    })
-    expect(screen.getByRole('switch', { name: 'Show on your website' })).not.toBeChecked()
+  it('titles the page Install under a Widget breadcrumb', async () => {
+    const { WidgetInstallPage } =
+      await import('@/components/admin/settings/widget/widget-install-page')
+    render(<WidgetInstallPage />)
+
+    expect(screen.getByRole('heading', { name: 'Install' })).toBeInTheDocument()
+    const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    expect(crumbs).toHaveTextContent('Widget')
   })
 
   it('mints a pairing code into the agent prompt and never copies a wgt_ secret', async () => {
@@ -147,9 +152,7 @@ describe('WidgetInstallPage', () => {
       await import('@/components/admin/settings/widget/widget-install-page')
     render(<WidgetInstallPage />)
 
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Copy install prompt for your coding agent' })
-    )
+    fireEvent.click(screen.getByRole('button', { name: 'Copy install prompt' }))
 
     await waitFor(() => {
       expect(mintInstallCode.mutateAsync).toHaveBeenCalled()
@@ -172,21 +175,21 @@ describe('WidgetInstallPage', () => {
       await import('@/components/admin/settings/widget/widget-install-page')
     render(<WidgetInstallPage />)
 
-    expect(screen.getByText('Widget on your site')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Install' })).toBeInTheDocument()
     expect(screen.getByText('Status')).toBeInTheDocument()
     expect(screen.getByText('Add to another site')).toBeInTheDocument()
-    expect(screen.getByText(/Widget connection verified/)).toBeInTheDocument()
+    expect(screen.getByText('Connected')).toBeInTheDocument()
     expect(screen.queryByText('1. Copy the prompt for your agent')).toBeNull()
     expect(screen.getByTestId('signing-secret')).toBeInTheDocument()
   })
 
-  it('points a detected install at the visibility toggle', async () => {
+  it('flags a detected but hidden install as needing attention', async () => {
     onboarding.hasWidgetInstalled = true
     const { WidgetInstallPage } =
       await import('@/components/admin/settings/widget/widget-install-page')
     render(<WidgetInstallPage />)
 
     expect(screen.getByText(/Turn on Show on your website so visitors/)).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Widget settings' })).toBeNull()
+    expect(screen.getByText('Needs attention')).toBeInTheDocument()
   })
 })

@@ -194,7 +194,7 @@ export function ArticleModalContent({ articleId, onClose }: ArticleModalContentP
 
         <ModalFooter
           onCancel={onClose}
-          submitLabel={updateArticleMutation.isPending ? 'Saving...' : 'Save Changes'}
+          submitLabel={updateArticleMutation.isPending ? 'Saving...' : 'Save changes'}
           isPending={updateArticleMutation.isPending}
           submitDisabled={!isDirty}
         >
@@ -207,7 +207,7 @@ export function ArticleModalContent({ articleId, onClose }: ArticleModalContentP
             </SheetTrigger>
             <SheetContent side="bottom" className="h-[70vh]">
               <SheetHeader>
-                <SheetTitle>Article Settings</SheetTitle>
+                <SheetTitle>Article settings</SheetTitle>
               </SheetHeader>
               <div className="overflow-y-auto py-4">
                 <HelpCenterMetadataSidebarContent {...sidebar} />

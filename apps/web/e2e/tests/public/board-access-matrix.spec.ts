@@ -314,7 +314,7 @@ async function feedShowsPost(page: Page, boardSlug: string, title: string): Prom
  *  unique text (a post title, or a comment's body). Posts and comments render as
  *  <li>s in the same queue, each carrying its own Approve/Reject buttons. */
 async function queueRow(adminPage: Page, uniqueText: string) {
-  await adminPage.goto('/admin/moderation')
+  await adminPage.goto('/admin/feedback/moderation')
   await adminPage.waitForLoadState('networkidle')
   return adminPage.locator('li').filter({ hasText: uniqueText }).first()
 }

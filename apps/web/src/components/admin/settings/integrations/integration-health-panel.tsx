@@ -45,7 +45,7 @@ export function IntegrationHealthPanel({
   return (
     <div
       data-settings-card={embedded ? undefined : ''}
-      className={embedded ? undefined : 'rounded-xl border border-border/50 bg-card p-4 shadow-sm'}
+      className={embedded ? undefined : 'rounded-xl border bg-card p-4'}
     >
       <div className="flex items-start justify-between gap-3">
         <h3

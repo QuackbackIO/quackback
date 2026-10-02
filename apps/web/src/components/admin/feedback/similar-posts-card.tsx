@@ -84,7 +84,7 @@ export function SimilarPostsCard({ postId, onNavigateToPost }: SimilarPostsCardP
             className="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-muted/10 transition-colors rounded-t-lg"
           >
             <SparklesIcon className="size-3.5 text-amber-500/80 shrink-0" />
-            <p className="text-xs font-medium text-muted-foreground/70">Similar Posts</p>
+            <p className="text-xs font-medium text-muted-foreground/70">Similar posts</p>
             <span className="text-xs tabular-nums text-muted-foreground/50 font-medium">
               {suggestions.length}
             </span>

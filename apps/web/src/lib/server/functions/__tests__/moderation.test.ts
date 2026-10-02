@@ -292,6 +292,7 @@ function tableNameOf(t: unknown): string {
 
 vi.mock('@/lib/server/db', () => ({
   db: {
+    execute: vi.fn(),
     select: vi.fn((spec: ProjectionSpec) => ({
       from: vi.fn((table: unknown) => {
         const fromName = tableNameOf(table)
@@ -1024,30 +1025,20 @@ describe('listPendingPostsFn — listPendingPosts exclusion + enrichment', () =>
 // getModerationStatus
 // ----------------------------------------------------------------------
 
-// Helper: build a db.select mock that returns the pending counts.
-// getModerationStatus issues THREE count queries (pending posts, pending
-// comments, per-board approval flags), so stub all three. Pass a single
-// number to treat it as the posts count and default comments/approval to 0
-// (preserves the original single-table semantics for existing tests).
+// Helper: build a db.select mock that returns the counts.
+// getModerationStatus reads all three counts (pending posts, pending
+// comments, per-board approval flags) in ONE query, so stub that one row.
+// Pass a single number to treat it as the posts count and default
+// comments/approval to 0.
 import { db } from '@/lib/server/db'
 
 function stubSelectCalls(postsCount: number, commentsCount = 0, approvalCount = 0) {
-  // The count queries join through parent tables (posts→boards, comments→
-  // posts→boards) so the fluent chain may include one or more innerJoin
-  // calls before the terminal where() resolves the promise. Make the chain
-  // self-returning so any number of joins is supported.
-  const makeCountChain = (n: number) => {
-    const chain: Record<string, unknown> = {}
-    chain.innerJoin = vi.fn(() => chain)
-    chain.where = vi.fn(() => Promise.resolve([{ count: n }]))
-    return {
-      from: vi.fn(() => chain),
-    }
-  }
-  vi.mocked(db.select)
-    .mockImplementationOnce(() => makeCountChain(postsCount) as never)
-    .mockImplementationOnce(() => makeCountChain(commentsCount) as never)
-    .mockImplementationOnce(() => makeCountChain(approvalCount) as never)
+  vi.mocked(db.execute).mockImplementationOnce(
+    () =>
+      Promise.resolve([
+        { posts: postsCount, comments: commentsCount, approvals: approvalCount },
+      ]) as never
+  )
 }
 
 describe('getModerationStatus', () => {
@@ -1174,34 +1165,30 @@ describe('getModerationStatus', () => {
     expect(result.pendingCount).toBe(3)
   })
 
-  it('survives a failure on one count query (allSettled) and contributes 0 for the failed branch', async () => {
-    // Use a chain that rejects on .where() for the second query (comments).
-    // The handler must still return a usable status response (posts count
-    // intact) instead of bubbling the rejection up to the caller.
-    const makeOk = (n: number) => {
-      const chain: Record<string, unknown> = {}
-      chain.innerJoin = vi.fn(() => chain)
-      chain.where = vi.fn(() => Promise.resolve([{ count: n }]))
-      return { from: vi.fn(() => chain) }
-    }
-    const makeFail = () => {
-      const chain: Record<string, unknown> = {}
-      chain.innerJoin = vi.fn(() => chain)
-      chain.where = vi.fn(() => Promise.reject(new Error('db down')))
-      return { from: vi.fn(() => chain) }
-    }
-    vi.mocked(db.select)
-      .mockImplementationOnce(() => makeOk(4) as never)
-      .mockImplementationOnce(() => makeFail() as never)
+  it('answers with an empty backlog when the counts cannot be read, and logs it', async () => {
+    // The handler must still return a usable status response instead of
+    // bubbling the rejection up to the caller.
+    vi.mocked(db.execute).mockImplementationOnce(
+      () => Promise.reject(new Error('db down')) as never
+    )
     mockGetPortalConfig.mockResolvedValue({ moderationDefault: { requireApproval: 'all' } })
     hoisted.logSpies.error.mockClear()
     const result = (await getModerationStatusHandler()({ data: {} })) as {
       enabled: boolean
       pendingCount: number
     }
-    expect(result.pendingCount).toBe(4)
-    // The rejected count branch logs the failure via the structured logger.
+    expect(result).toEqual({ enabled: true, pendingCount: 0 })
     expect(hoisted.logSpies.error).toHaveBeenCalled()
+  })
+
+  it('reads every count in one query', async () => {
+    vi.mocked(db.execute).mockClear()
+    vi.mocked(db.select).mockClear()
+    stubSelectCalls(1, 1, 1)
+    mockGetPortalConfig.mockResolvedValue({ moderationDefault: { requireApproval: 'none' } })
+    await getModerationStatusHandler()({ data: {} })
+    expect(db.execute).toHaveBeenCalledTimes(1)
+    expect(db.select).not.toHaveBeenCalled()
   })
 
   it('pendingCount sums pending posts AND pending comments', async () => {

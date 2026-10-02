@@ -10,6 +10,7 @@ import { fireEvent } from '@testing-library/react'
 import { hydrateRoot } from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { IntlProvider } from 'react-intl'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const { cardRenders, previewRenders, rootContext } = vi.hoisted(() => ({
@@ -111,9 +112,11 @@ afterEach(() => {
 describe('portal settings page hydration', () => {
   async function hydratePage() {
     const html = renderToString(
-      <QueryClientProvider client={seededClient()}>
-        <PortalPage />
-      </QueryClientProvider>
+      <IntlProvider locale="en" defaultLocale="en">
+        <QueryClientProvider client={seededClient()}>
+          <PortalPage />
+        </QueryClientProvider>
+      </IntlProvider>
     )
     expect(html).not.toContain('portal-preview')
 
@@ -125,9 +128,11 @@ describe('portal settings page hydration', () => {
     await act(async () => {
       hydrateRoot(
         container,
-        <QueryClientProvider client={seededClient()}>
-          <PortalPage />
-        </QueryClientProvider>
+        <IntlProvider locale="en" defaultLocale="en">
+          <QueryClientProvider client={seededClient()}>
+            <PortalPage />
+          </QueryClientProvider>
+        </IntlProvider>
       )
     })
 
@@ -145,8 +150,7 @@ describe('portal settings page hydration', () => {
       expect({ title, renders }).toEqual({ title, renders: 1 })
     }
     // Nothing is unsaved: the save bar stays hidden.
-    const saveBar = container.querySelector('[role="region"][aria-live="polite"]')!
-    expect(saveBar.className).toContain('invisible')
+    expect(container.querySelector('[data-slot="draft-bar"]')).toBeNull()
   })
 
   it('takes an edit to the welcome message as an unsaved change', async () => {
@@ -154,7 +158,6 @@ describe('portal settings page hydration', () => {
     act(() => {
       fireEvent.click(container.querySelector('[data-testid="rich-text-editor"]')!)
     })
-    const saveBar = container.querySelector('[role="region"][aria-live="polite"]')!
-    expect(saveBar.className).not.toContain('invisible')
+    expect(container.querySelector('[data-slot="draft-bar"]')).toBeTruthy()
   })
 })

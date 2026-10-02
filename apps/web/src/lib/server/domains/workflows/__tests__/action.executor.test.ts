@@ -724,7 +724,7 @@ describe('applyAction', () => {
       getOfficeHoursSchedule.mockResolvedValue({ enabled: true, timezone: 'UTC', intervals: [] })
       buildReplyTimeMessage.mockReturnValue({
         status: 'online',
-        content: "We're online — typically replies in under an hour.",
+        content: "We're online, typically replies in under an hour.",
       })
       const result = await applyAction(
         { type: 'send_block', nodeId: 'n6', block: { kind: 'replyTime' } },
@@ -733,7 +733,7 @@ describe('applyAction', () => {
       expect(result).toMatchObject({ label: 'sent replyTime block' })
       expect(resolveWorkflowVariables).not.toHaveBeenCalled() // no body to interpolate
       const [, content, , opts] = appendAssistantReply.mock.calls[0]!
-      expect(content).toBe("We're online — typically replies in under an hour.")
+      expect(content).toBe("We're online, typically replies in under an hour.")
       expect(opts.contentJson).toBeNull()
       expect(opts.metadata.block).toMatchObject({
         kind: 'replyTime',

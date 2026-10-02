@@ -12,9 +12,9 @@
 import { useState } from 'react'
 import { useIntl } from 'react-intl'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Switch } from '@/components/ui/switch'
-import { Label } from '@/components/ui/label'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import {
   useUpdateWorkflowAbandonedAutoClose,
@@ -59,98 +59,79 @@ export function AbandonedJourneyAutoCloseCard() {
   return (
     <SettingsCard
       title="Abandoned journeys"
-      description="Close conversations whose interactive step (buttons, a question, a rating ask) went unanswered."
+      description="Close conversations whose interactive step went unanswered."
     >
-      <div className="space-y-4">
-        <div className="flex items-center justify-between py-1">
-          <div className="pr-4">
-            <Label
-              htmlFor="abandoned-auto-close-enabled"
-              className="text-sm font-medium cursor-pointer"
-            >
-              Auto-close abandoned journeys
-            </Label>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Off by default. When on, a stalled interactive step ends its run after the wait below.
-            </p>
-          </div>
-          <Switch
-            id="abandoned-auto-close-enabled"
-            checked={settings.enabled}
-            onCheckedChange={(checked) => save({ ...settings, enabled: checked })}
-            disabled={isBusy}
-          />
-        </div>
+      <SettingRows>
+        <SettingRow
+          label="Auto-close abandoned journeys"
+          description="Ends a run when an interactive step stalls"
+          htmlFor="abandoned-auto-close-enabled"
+          control={
+            <Switch
+              id="abandoned-auto-close-enabled"
+              checked={settings.enabled}
+              onCheckedChange={(checked) => save({ ...settings, enabled: checked })}
+              disabled={isBusy}
+            />
+          }
+        />
 
         {settings.enabled && (
           <>
-            <div className="flex items-center justify-between py-1">
-              <div className="pr-4">
-                <Label htmlFor="abandoned-auto-close-wait" className="text-sm font-medium">
-                  Wait before closing
-                </Label>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  How long an interactive step waits for a reply before it's considered abandoned.
-                </p>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <ClampedIntInput
-                  value={settings.waitMinutes}
-                  min={1}
-                  max={60}
-                  onCommit={(waitMinutes) => save({ ...settings, waitMinutes })}
-                  className="h-8 w-20 text-sm"
-                />
-                <span className="text-xs text-muted-foreground">minutes</span>
-              </div>
-            </div>
+            <SettingRow
+              label="Wait before closing"
+              description="How long a step waits for a reply before it counts as abandoned"
+              htmlFor="abandoned-auto-close-wait"
+              control={
+                <>
+                  <ClampedIntInput
+                    value={settings.waitMinutes}
+                    min={1}
+                    max={60}
+                    onCommit={(waitMinutes) => save({ ...settings, waitMinutes })}
+                    className="h-8 w-20 text-sm"
+                  />
+                  <span className="text-xs text-muted-foreground">minutes</span>
+                </>
+              }
+            />
 
-            <div className="flex items-center justify-between py-1">
-              <div className="pr-4">
-                <Label
-                  htmlFor="abandoned-auto-close-keep-email"
-                  className="text-sm font-medium cursor-pointer"
-                >
-                  Keep open if an email was captured
-                </Label>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Leave the conversation open for a human follow-up when there's a contact email to
-                  reach, even though the journey itself stalled.
-                </p>
-              </div>
-              <Switch
-                id="abandoned-auto-close-keep-email"
-                checked={settings.keepIfEmailCaptured}
-                onCheckedChange={(checked) => save({ ...settings, keepIfEmailCaptured: checked })}
-                disabled={isBusy}
-              />
-            </div>
+            <SettingRow
+              label="Keep open if an email was captured"
+              description="Leaves the conversation open for follow-up when there is a contact email"
+              htmlFor="abandoned-auto-close-keep-email"
+              control={
+                <Switch
+                  id="abandoned-auto-close-keep-email"
+                  checked={settings.keepIfEmailCaptured}
+                  onCheckedChange={(checked) => save({ ...settings, keepIfEmailCaptured: checked })}
+                  disabled={isBusy}
+                />
+              }
+            />
           </>
         )}
 
-        <div className="flex items-center justify-between py-1">
-          <div className="pr-4">
-            <Label htmlFor="close-spam-enabled" className="text-sm font-medium cursor-pointer">
-              {intl.formatMessage({
-                id: 'automation.workflows.closeSpam',
-                defaultMessage: 'Close spam',
-              })}
-            </Label>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {intl.formatMessage({
-                id: 'automation.workflows.closeSpamHint',
-                defaultMessage: 'When Quinn classifies a conversation as spam',
-              })}
-            </p>
-          </div>
-          <Switch
-            id="close-spam-enabled"
-            checked={closeSpamEnabled}
-            onCheckedChange={(checked) => updateCloseSpam.mutate({ enabled: checked })}
-            disabled={updateCloseSpam.isPending}
-          />
-        </div>
-      </div>
+        <SettingRow
+          label={intl.formatMessage({
+            id: 'automation.workflows.closeSpam',
+            defaultMessage: 'Close spam',
+          })}
+          description={intl.formatMessage({
+            id: 'automation.workflows.closeSpamHint',
+            defaultMessage: 'When Quinn classifies a conversation as spam',
+          })}
+          htmlFor="close-spam-enabled"
+          control={
+            <Switch
+              id="close-spam-enabled"
+              checked={closeSpamEnabled}
+              onCheckedChange={(checked) => updateCloseSpam.mutate({ enabled: checked })}
+              disabled={updateCloseSpam.isPending}
+            />
+          }
+        />
+      </SettingRows>
     </SettingsCard>
   )
 }

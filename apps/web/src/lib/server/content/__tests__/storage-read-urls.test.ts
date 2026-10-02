@@ -91,6 +91,16 @@ describe('withCurrentStorageReadTokens', () => {
     expect(rewritten?.content?.[0]?.attrs?.src).toBe(minted)
   })
 
+  it('never mints a link for a pipeline file named inline', () => {
+    const src = '/api/storage/files/2026/10/0b1c-report.png?read=old&exp=1'
+    const rewritten = withWorkspace(
+      'workspace-alpha',
+      () => withCurrentStorageReadTokens(doc([{ type: 'chatImage', attrs: { src } }])),
+      { secrets: SHARED_SECRET }
+    )
+    expect(rewritten.content?.[0]?.attrs?.src).toBe(src)
+  })
+
   it('leaves a foreign CDN src untouched', () => {
     const rewritten = withCurrentStorageReadTokens(
       doc([{ type: 'image', attrs: { src: 'https://cdn.example.com/b.png' } }])

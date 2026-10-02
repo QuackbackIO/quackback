@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
+import { TONE_TILE } from './workflow-builder/step-visuals'
 import { cn } from '@/lib/shared/utils'
 import {
   WORKFLOW_TEMPLATE_CATEGORIES,
@@ -117,13 +118,13 @@ export function WorkflowTemplateGallery({
 
 function chipClass(chip: TemplateGalleryChip): string {
   if (chip.kind === 'class' && chip.label === 'Customer facing') {
-    return 'border-transparent bg-pink-500/10 text-pink-700 dark:text-pink-300'
+    return `border-transparent ${TONE_TILE.pink}`
   }
   if (chip.kind === 'prereq') {
-    return 'border-transparent bg-amber-500/10 text-amber-800 dark:text-amber-300'
+    return `border-transparent ${TONE_TILE.amber}`
   }
   if (chip.kind === 'setup') {
-    return 'border-transparent bg-violet-500/10 text-violet-700 dark:text-violet-300'
+    return `border-transparent ${TONE_TILE.violet}`
   }
   return 'border-transparent bg-muted text-muted-foreground'
 }
@@ -165,7 +166,7 @@ function TemplateCard({
             key={`${chip.kind}-${chip.label}`}
             size="sm"
             variant="outline"
-            className={cn('font-medium', chipClass(chip))}
+            className={cn('', chipClass(chip))}
           >
             {chip.label}
           </Badge>

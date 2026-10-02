@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useIntl } from 'react-intl'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Button } from '@/components/ui/button'
@@ -8,32 +8,57 @@ import { Textarea } from '@/components/ui/textarea'
 import { assistantQueries } from '@/lib/client/queries/assistant'
 import { useUpdateAssistantVoice } from '@/lib/client/mutations/assistant'
 import {
-  AssistantSaveFeedback,
-  type AssistantSaveState,
+  AssistantConflictNotice,
   isAssistantFieldManaged,
-  isAssistantRevisionConflict,
   ManagedSettingHint,
+  useAssistantAutosave,
   useUnsavedChanges,
 } from './assistant-form'
 
 const MAX_INSTRUCTIONS = 2_000
+const SAVE_DELAY_MS = 800
 
 export function AdditionalInstructionsCard() {
   const intl = useIntl()
+  const queryClient = useQueryClient()
   const settingsQuery = useQuery(assistantQueries.settings())
   const updateVoice = useUpdateAssistantVoice()
   const [draft, setDraft] = useState<string | null>(null)
+  // The last text the server is known to hold. It is trimmed, so a trailing space is not an unsaved change.
   const [saved, setSaved] = useState<string | null>(null)
-  const [saveState, setSaveState] = useState<AssistantSaveState>('idle')
-  const dirty = draft !== null && saved !== null && draft !== saved
+  const [focused, setFocused] = useState(false)
+  const dirty = draft !== null && saved !== null && draft.trim() !== saved
+  const tooLong = draft !== null && draft.length > MAX_INSTRUCTIONS
   useUnsavedChanges(dirty, 'basics')
 
+  async function save() {
+    const latest = queryClient.getQueryData(assistantQueries.settings().queryKey)
+    if (!latest || draft === null) return
+    const sent = draft.trim()
+    await updateVoice.mutateAsync({
+      expectedRevision: latest.revision,
+      voice: { ...latest.config.agents.agent.voice, additionalInstructions: sent },
+    })
+    setSaved(sent)
+  }
+
+  const { conflict, clearConflict } = useAssistantAutosave({
+    dirty,
+    valid: !tooLong,
+    signature: draft ?? '',
+    delayMs: SAVE_DELAY_MS,
+    save,
+  })
+
+  // The draft is what the person typed. The server's text replaces it only when
+  // it changed elsewhere and the person has nothing pending or in hand.
   useEffect(() => {
-    if (!settingsQuery.data || dirty) return
+    if (!settingsQuery.data || dirty || focused) return
     const instructions = settingsQuery.data.config.agents.agent.voice.additionalInstructions
+    if (draft !== null && instructions === saved) return
     setDraft(instructions)
     setSaved(instructions)
-  }, [settingsQuery.data, dirty])
+  }, [settingsQuery.data, dirty, focused, draft, saved])
 
   if (settingsQuery.isError) {
     return (
@@ -80,7 +105,6 @@ export function AdditionalInstructionsCard() {
     settingsQuery.data.managedFieldPaths,
     'agents.agent.voice.additionalInstructions'
   )
-  const tooLong = draft.length > MAX_INSTRUCTIONS
 
   async function reloadLatest() {
     const result = await settingsQuery.refetch()
@@ -88,29 +112,7 @@ export function AdditionalInstructionsCard() {
     const instructions = result.data.config.agents.agent.voice.additionalInstructions
     setDraft(instructions)
     setSaved(instructions)
-    setSaveState('idle')
-  }
-
-  async function save() {
-    if (!settingsQuery.data || tooLong) return
-    const instructions = draft
-    if (instructions === null) return
-    setSaveState('saving')
-    try {
-      const result = await updateVoice.mutateAsync({
-        expectedRevision: settingsQuery.data.revision,
-        voice: {
-          ...settingsQuery.data.config.agents.agent.voice,
-          additionalInstructions: instructions.trim(),
-        },
-      })
-      const savedInstructions = result.config.agents.agent.voice.additionalInstructions
-      setDraft(savedInstructions)
-      setSaved(savedInstructions)
-      setSaveState('saved')
-    } catch (error) {
-      setSaveState(isAssistantRevisionConflict(error) ? 'conflict' : 'error')
-    }
+    clearConflict()
   }
 
   return (
@@ -118,10 +120,6 @@ export function AdditionalInstructionsCard() {
       title={intl.formatMessage({
         id: 'automation.agent.instructions.title',
         defaultMessage: 'Writing guidelines',
-      })}
-      description={intl.formatMessage({
-        id: 'automation.agent.instructions.description',
-        defaultMessage: 'Set preferred terminology, brand voice, and response conventions.',
       })}
     >
       <div className="space-y-3">
@@ -135,7 +133,7 @@ export function AdditionalInstructionsCard() {
           id="assistant-additional-instructions"
           value={draft}
           rows={6}
-          disabled={managed || saveState === 'saving'}
+          disabled={managed}
           aria-invalid={tooLong}
           aria-describedby="assistant-additional-instructions-help assistant-additional-instructions-count"
           placeholder={intl.formatMessage({
@@ -143,16 +141,14 @@ export function AdditionalInstructionsCard() {
             defaultMessage:
               'For example: Call customers “members”, use UK English, and avoid exclamation marks.',
           })}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           onChange={(event) => {
             setDraft(event.target.value)
-            setSaveState('idle')
           }}
         />
         <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-          <p
-            id="assistant-additional-instructions-help"
-            className="max-w-2xl text-xs text-muted-foreground"
-          >
+          <p id="assistant-additional-instructions-help" className="text-xs text-muted-foreground">
             {intl.formatMessage({
               id: 'automation.agent.instructions.help',
               defaultMessage:
@@ -182,25 +178,7 @@ export function AdditionalInstructionsCard() {
           </p>
         )}
         {managed && <ManagedSettingHint />}
-        <AssistantSaveFeedback state={saveState} onReload={reloadLatest} />
-        <div className="flex justify-end">
-          <Button
-            type="button"
-            className="min-h-11 sm:min-h-9"
-            disabled={!dirty || tooLong || saveState === 'saving'}
-            onClick={() => void save()}
-          >
-            {saveState === 'saving'
-              ? intl.formatMessage({
-                  id: 'automation.agent.save.savingButton',
-                  defaultMessage: 'Saving…',
-                })
-              : intl.formatMessage({
-                  id: 'automation.agent.save.button',
-                  defaultMessage: 'Save changes',
-                })}
-          </Button>
-        </div>
+        {conflict && <AssistantConflictNotice onReload={reloadLatest} />}
       </div>
     </SettingsCard>
   )

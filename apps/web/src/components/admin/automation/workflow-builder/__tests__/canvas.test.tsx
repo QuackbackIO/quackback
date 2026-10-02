@@ -115,6 +115,6 @@ describe('WorkflowBuilderCanvas (React Flow)', () => {
     renderCanvas({ tree, stepIssues: new Map([['act-1', 'Choose a team to assign']]) })
 
     const card = await screen.findByText('Assign to team')
-    expect(card.closest('button')).toHaveClass('border-amber-500/60')
+    expect(card.closest('button')).toHaveClass('border-warning/60')
   })
 })

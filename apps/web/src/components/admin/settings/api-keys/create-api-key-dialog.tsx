@@ -88,7 +88,7 @@ export function CreateApiKeyDialog({ open, onOpenChange, onKeyCreated }: CreateA
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Create API Key</DialogTitle>
+          <DialogTitle>Create API key</DialogTitle>
           <DialogDescription>
             Create a new API key to authenticate with the Quackback API.
           </DialogDescription>
@@ -130,7 +130,7 @@ export function CreateApiKeyDialog({ open, onOpenChange, onKeyCreated }: CreateA
               Cancel
             </Button>
             <Button type="submit" disabled={isPending || !name.trim() || scopes.length === 0}>
-              {isPending ? 'Creating...' : 'Create Key'}
+              {isPending ? 'Creating...' : 'Create API key'}
             </Button>
           </DialogFooter>
         </form>

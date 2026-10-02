@@ -30,7 +30,7 @@ import { useTicketIntakeForm } from '@/components/shared/use-ticket-intake-form'
 import { CONVERSATION_EDITOR_FEATURES } from '@/components/conversation/conversation-editor-features'
 import { ComposerAttachmentTray } from '@/components/shared/composer-attachment-tray'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
-import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { useAgentFileUpload } from '@/lib/client/hooks/use-file-upload'
 import { useConversationComposerAttachments } from '@/lib/client/hooks/use-conversation-composer-attachments'
 import {
   Dialog,
@@ -56,10 +56,6 @@ import {
 // enforced pre-submit with the same toast the dialog already uses for
 // mutation errors.
 const DESCRIPTION_MAX_LENGTH = 4000
-
-function toastImageUploadError(error: Error) {
-  toast.error(error.message)
-}
 
 interface Requester {
   principalId: string
@@ -230,38 +226,35 @@ export function CreateTicketDialog({
   }, [open, candidates, selectedTypeId])
 
   const create = useCreateTicket()
-  const { upload: uploadImage } = useImageUpload({
-    prefix: 'chat-images',
-    onError: toastImageUploadError,
-  })
+  const { upload } = useAgentFileUpload()
   const {
-    pending: pendingAttachments,
+    items,
+    attachments,
     addFiles,
     remove: removeAttachment,
+    retry: retryAttachment,
     clear: clearAttachments,
     uploading,
-  } = useConversationComposerAttachments(uploadImage)
+  } = useConversationComposerAttachments(upload)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Paste still works for an image from the clipboard; drop/paste now accept
+  // any file, same as the paperclip picker.
   const handleComposerPaste = useCallback(
     (e: ClipboardEvent<HTMLDivElement>) => {
-      const images = Array.from(e.clipboardData?.files ?? []).filter((f) =>
-        f.type.startsWith('image/')
-      )
-      if (images.length === 0) return
+      const files = Array.from(e.clipboardData?.files ?? [])
+      if (files.length === 0) return
       e.preventDefault()
-      void addFiles(images)
+      void addFiles(files)
     },
     [addFiles]
   )
   const handleComposerDrop = useCallback(
     (e: DragEvent<HTMLDivElement>) => {
-      const images = Array.from(e.dataTransfer?.files ?? []).filter((f) =>
-        f.type.startsWith('image/')
-      )
-      if (images.length === 0) return
+      const files = Array.from(e.dataTransfer?.files ?? [])
+      if (files.length === 0) return
       e.preventDefault()
-      void addFiles(images)
+      void addFiles(files)
     },
     [addFiles]
   )
@@ -298,7 +291,7 @@ export function CreateTicketDialog({
         // The quiet fallback: retire the affordance for this session and
         // leave the plain Phase-4 form unchanged.
         setAutoFillHidden(true)
-        toast.info('AI suggestions are unavailable — the form is unchanged.')
+        toast.info('AI suggestions are unavailable. The form is unchanged.')
         return
       }
       // Snapshot the pre-suggestion form for "Undo suggestions", then apply.
@@ -317,7 +310,7 @@ export function CreateTicketDialog({
     } catch {
       // An unexpected failure (network, auth): the form stays unchanged and
       // the button stays (a transient error may succeed on retry).
-      toast.info('AI suggestions are unavailable — the form is unchanged.')
+      toast.info('AI suggestions are unavailable. The form is unchanged.')
     } finally {
       setAutoFillLoading(false)
     }
@@ -363,7 +356,7 @@ export function CreateTicketDialog({
         descriptionJson: isEmptyTiptapDoc(descriptionJson as TiptapContent | undefined)
           ? null
           : (descriptionJson as TiptapContent),
-        attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined,
+        attachments: attachments.length > 0 ? attachments : undefined,
         requesterPrincipalId: requester?.principalId as PrincipalId | undefined,
         customAttributes,
         // Lets the create inherit this conversation's assignee (born owned by
@@ -512,13 +505,13 @@ export function CreateTicketDialog({
                 placeholder="Add details (optional). This opens the ticket thread."
               />
               <ComposerAttachmentTray
-                attachments={pendingAttachments}
+                items={items}
                 onRemove={removeAttachment}
+                onRetry={retryAttachment}
               />
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
                 multiple
                 className="hidden"
                 onChange={(e) => {
@@ -530,9 +523,8 @@ export function CreateTicketDialog({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
                 className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-40 transition-colors"
-                aria-label="Attach image"
+                aria-label="Attach files"
               >
                 <PaperClipIcon className="h-4 w-4" />
               </button>
@@ -585,7 +577,7 @@ export function CreateTicketDialog({
               </div>
             ) : fromConversation ? (
               <p className="rounded-md border border-dashed border-border/60 px-3 py-2 text-xs text-muted-foreground">
-                Anonymous visitor — no portal account on file.
+                Anonymous visitor, no portal account on file.
               </p>
             ) : (
               <PortalUserPicker

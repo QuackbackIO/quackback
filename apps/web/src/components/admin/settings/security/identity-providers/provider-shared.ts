@@ -67,6 +67,9 @@ export const SIGN_IN_TAB = {
   search: { tab: 'sign-in' as const },
 } as const
 
+/** The parent of both provider pages in the breadcrumb row. */
+export const SSO_CRUMBS = [{ label: 'Access & Security', ...SIGN_IN_TAB }]
+
 export const IDP_KIND_OPTIONS: IdpKind[] = ['okta', 'auth0', 'entra', 'keycloak', 'google', 'other']
 
 export const ROLES: Role[] = ['admin', 'member', 'user']

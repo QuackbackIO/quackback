@@ -47,6 +47,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import type { TicketType } from '@/lib/shared/db-types'
 import { TICKET_FORM_FIELD_TYPES } from '@/lib/shared/tickets'
 import type { TicketFormField, TicketFormFieldType } from '@/lib/shared/tickets'
@@ -75,6 +76,7 @@ export function FieldsEditor({ category, fields, onChange }: FieldsEditorProps) 
   const internal = category !== 'customer'
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<TicketFormField | null>(null)
+  const [toDelete, setToDelete] = useState<TicketFormField | null>(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -106,9 +108,7 @@ export function FieldsEditor({ category, fields, onChange }: FieldsEditorProps) 
   return (
     <div className="space-y-2 rounded-lg border border-border/50 p-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-medium text-muted-foreground">
-          Fields — answers land in customAttributes
-        </p>
+        <p className="text-xs font-medium text-muted-foreground">Fields</p>
         <Button
           type="button"
           variant="outline"
@@ -138,7 +138,7 @@ export function FieldsEditor({ category, fields, onChange }: FieldsEditorProps) 
                   setEditing(field)
                   setDialogOpen(true)
                 }}
-                onDelete={() => removeField(field)}
+                onDelete={() => setToDelete(field)}
               />
             ))}
           </div>
@@ -156,6 +156,23 @@ export function FieldsEditor({ category, fields, onChange }: FieldsEditorProps) 
         internal={internal}
         existingKeys={fields.map((f) => f.key)}
         onSubmit={saveField}
+      />
+
+      <ConfirmDialog
+        open={toDelete !== null}
+        onOpenChange={(open) => !open && setToDelete(null)}
+        variant="destructive"
+        title="Delete field?"
+        description={
+          toDelete
+            ? `"${toDelete.label}" is removed from this type's New ticket form when you save the type. Answers already on tickets are kept.`
+            : undefined
+        }
+        confirmLabel="Delete field"
+        onConfirm={() => {
+          if (toDelete) removeField(toDelete)
+          setToDelete(null)
+        }}
       />
     </div>
   )
@@ -329,7 +346,7 @@ function FieldDialog({
         <DialogHeader>
           <DialogTitle>{field ? 'Edit field' : 'Add field'}</DialogTitle>
           <DialogDescription>
-            Custom fields appear on this type&apos;s New Ticket form.
+            Custom fields appear on this type&apos;s New ticket form.
           </DialogDescription>
         </DialogHeader>
 
@@ -391,7 +408,7 @@ function FieldDialog({
                 onCheckedChange={(v) => setVisibleToCustomer(v === true)}
                 data-in-label
               />
-              Show to customers on the New Ticket form
+              Show to customers on the New ticket form
             </label>
           )}
 

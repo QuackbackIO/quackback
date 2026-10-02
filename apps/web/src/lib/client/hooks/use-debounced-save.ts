@@ -7,7 +7,8 @@ import { useCallback, useEffect, useRef } from 'react'
  * Unlike `useDebouncedValue` (which debounces a value for derived reads),
  * this debounces a side effect: `queue(v)` records the newest value and
  * (re)arms the timer; `flush()` fires immediately with whatever is queued.
- * `hasPending()` lets callers guard against clobbering newer local state
+ * `cancel()` drops the queued value without saving (an edit that was undone
+ * before the pause ended). `hasPending()` lets callers guard against clobbering newer local state
  * with a stale in-flight response.
  *
  * Used by the status settings page (text fields save debounced, switches
@@ -31,6 +32,14 @@ export function useDebouncedSave<T>(save: (value: T) => void, delayMs: number) {
     if (value !== null) saveRef.current(value)
   }, [])
 
+  const cancel = useCallback(() => {
+    if (timer.current) {
+      clearTimeout(timer.current)
+      timer.current = null
+    }
+    queued.current = null
+  }, [])
+
   const queue = useCallback(
     (value: T) => {
       queued.current = value
@@ -45,5 +54,5 @@ export function useDebouncedSave<T>(save: (value: T) => void, delayMs: number) {
   // Flush on unmount so closing the surface never drops typed text.
   useEffect(() => flush, [flush])
 
-  return { queue, flush, hasPending }
+  return { queue, flush, cancel, hasPending }
 }

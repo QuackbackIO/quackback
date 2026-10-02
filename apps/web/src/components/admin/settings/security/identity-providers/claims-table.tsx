@@ -153,11 +153,7 @@ function ClaimPath({ children }: { children: React.ReactNode }) {
 }
 
 function CustomBadge() {
-  return (
-    <Badge variant="outline" className="font-normal">
-      Custom
-    </Badge>
-  )
+  return <Badge variant="outline">Custom</Badge>
 }
 
 function IconButton({
@@ -300,18 +296,12 @@ function PeopleRowView({
           <span className="font-medium">{row.label}</span>
           {row.typeLabel && <span className="text-muted-foreground">{row.typeLabel}</span>}
           {row.orphaned && (
-            <Badge
-              variant="outline"
-              className="border-amber-500/40 font-normal text-amber-700 dark:text-amber-400"
-            >
+            <Badge variant="outline" className="border-warning/40 text-warning">
               Attribute no longer exists
             </Badge>
           )}
           {row.duplicate && (
-            <Badge
-              variant="outline"
-              className="border-amber-500/40 font-normal text-amber-700 dark:text-amber-400"
-            >
+            <Badge variant="outline" className="border-warning/40 text-warning">
               Duplicate
             </Badge>
           )}
@@ -428,7 +418,7 @@ export function IdentitySourcesEditor({
                 {index >= 0 ? `${index + 1}. ` : ''}
                 {SOURCE_LABELS[source]}
                 {source === 'accessTokenJwt' && (
-                  <span className="text-muted-foreground"> — may be issued for another API</span>
+                  <span className="text-muted-foreground"> (may be issued for another API)</span>
                 )}
               </span>
               {checked && (

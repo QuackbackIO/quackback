@@ -128,6 +128,20 @@ export function inboxNavKey(nav: InboxNavItem): string {
   return `view:${nav.view}`
 }
 
+/**
+ * Whether the list offers the status, priority and company refinements. A
+ * custom view owns its own rules, and Mentions, Spam and Created by me are
+ * self-contained feeds, so a refinement carried into them would narrow the
+ * list with no control to undo it.
+ */
+export function inboxScopeHasRefinements(nav: InboxNavItem): boolean {
+  if (nav.kind === 'custom') return false
+  return !(
+    nav.kind === 'view' &&
+    (nav.view === 'mentions' || nav.view === 'spam' || nav.view === 'created_by_me')
+  )
+}
+
 /** A real conversation status, or 'all' = no status filter. */
 export type StatusFilter = ConversationStatus | 'all'
 

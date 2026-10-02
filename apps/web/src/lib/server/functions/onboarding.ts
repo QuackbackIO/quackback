@@ -24,7 +24,6 @@ import {
 import { db, settings, principal, user, postStatuses, eq, DEFAULT_STATUSES } from '@/lib/server/db'
 import { isOnboardingComplete } from '@/lib/shared/db-types'
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
-import { ensureNewWorkspaceLabs } from '@/lib/server/domains/settings/settings.labs'
 import { DEFAULT_ASSISTANT_CONFIG } from '@/lib/shared/assistant/config'
 import {
   DEFAULT_AUTH_CONFIG,
@@ -279,7 +278,6 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
             })
             .returning()
           if (!row) throw new Error('Failed to create workspace settings')
-          await ensureNewWorkspaceLabs(row.id, tx)
           return row
         })
         await invalidateSettingsCache()

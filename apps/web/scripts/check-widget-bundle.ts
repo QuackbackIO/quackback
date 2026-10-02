@@ -28,9 +28,9 @@ const BUDGET_GZIP_BYTES = 420 * 1024
  */
 const BUDGET_CHUNKS = 60
 /**
- * Content markers for heavy libraries that must only ever load behind lazy
- * boundaries. Checked against eager chunk contents so renames can't dodge the
- * guard. Each marker is a string the library itself ships.
+ * Content markers for heavy libraries and admin-only modules that must only
+ * ever load behind lazy boundaries. Checked against eager chunk contents so
+ * renames can't dodge the guard. Each marker is a string the module itself ships.
  */
 const FORBIDDEN_CONTENT: { marker: string; library: string }[] = [
   { marker: 'ProseMirror', library: 'rich-text editor' },
@@ -38,6 +38,12 @@ const FORBIDDEN_CONTENT: { marker: string; library: string }[] = [
   { marker: 'DndDescribedBy', library: '@dnd-kit' },
   { marker: 'reactEasyCrop_Container', library: 'react-easy-crop' },
   { marker: 'transliterate', library: 'transliteration tables' },
+  { marker: 'Imports & exports', library: 'admin settings page registry' },
+  // File viewer engines: each loads only when someone opens a file of its format.
+  { marker: 'Setting up fake worker', library: 'PDF renderer' },
+  { marker: 'renderAltChunks', library: 'Word renderer' },
+  { marker: 'Sheet name cannot exceed 31 chars', library: 'spreadsheet reader' },
+  { marker: 'Could not find the language', library: 'syntax highlighting' },
 ]
 
 if (!existsSync(ASSETS_DIR)) {
@@ -129,7 +135,7 @@ console.log(
 let failed = false
 if (contaminated.length > 0) {
   console.error(
-    '\nFAIL: heavy lazy-only libraries are eagerly reachable from the widget:\n' +
+    '\nFAIL: lazy-only libraries or modules are eagerly reachable from the widget:\n' +
       contaminated.map((c) => `  ${c.name} (${c.markers.join(', ')})`).join('\n')
   )
   failed = true

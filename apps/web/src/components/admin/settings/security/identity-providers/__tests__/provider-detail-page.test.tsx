@@ -12,6 +12,7 @@
  */
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { IdentityProviderId } from '@quackback/ids'
@@ -124,15 +125,15 @@ vi.mock('@tanstack/react-router', () => ({
     children,
     to,
     params: _params,
-    search: _search,
+    search,
     ...rest
   }: {
     children: React.ReactNode
     to: string
     params?: unknown
-    search?: unknown
+    search?: Record<string, string>
   }) => (
-    <a href={to} {...rest}>
+    <a href={search ? `${to}?${new URLSearchParams(search).toString()}` : to} {...rest}>
       {children}
     </a>
   ),
@@ -271,9 +272,11 @@ function renderPage(provider: IdentityProvider, props: { autoTest?: boolean } = 
   })
   qc.setQueryData(['admin', 'userAttributes'], state.userAttributes)
   return render(
-    <QueryClientProvider client={qc}>
-      <ProviderDetailPage providerId={provider.id} {...props} />
-    </QueryClientProvider>
+    <IntlProvider locale="en" defaultLocale="en">
+      <QueryClientProvider client={qc}>
+        <ProviderDetailPage providerId={provider.id} {...props} />
+      </QueryClientProvider>
+    </IntlProvider>
   )
 }
 
@@ -325,8 +328,18 @@ describe('<ProviderDetailPage> page shell', () => {
     expect(screen.getByRole('heading', { name: 'Connection' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Sign-in & access' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'User details' })).toBeInTheDocument()
-    expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: /Remove/ })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('navigation')).toHaveLength(1)
+    expect(screen.queryByRole('heading', { name: /Delete|Remove|Danger/ })).not.toBeInTheDocument()
+  })
+
+  it('puts the provider under Access & Security in the breadcrumb', () => {
+    renderPage(makeProvider({ label: 'Acme SSO' }))
+    const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(crumbs).getByRole('link', { name: 'Access & Security' })).toHaveAttribute(
+      'href',
+      '/admin/settings/security/authentication?tab=sign-in'
+    )
+    expect(within(crumbs).getByText('Acme SSO')).toHaveAttribute('aria-current', 'page')
   })
 
   it('names the provider and its family in the header', () => {
@@ -340,9 +353,11 @@ describe('<ProviderDetailPage> page shell', () => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     qc.setQueryData(['settings', 'identityProviders'], [])
     render(
-      <QueryClientProvider client={qc}>
-        <ProviderDetailPage providerId={'idp_missing' as IdentityProviderId} />
-      </QueryClientProvider>
+      <IntlProvider locale="en" defaultLocale="en">
+        <QueryClientProvider client={qc}>
+          <ProviderDetailPage providerId={'idp_missing' as IdentityProviderId} />
+        </QueryClientProvider>
+      </IntlProvider>
     )
     expect(screen.getByText(/not found/i)).toBeInTheDocument()
   })
@@ -358,9 +373,11 @@ describe('<ProviderDetailPage> page shell', () => {
     qc.setQueryData(['settings', 'identityProviders', provider.id, 'accountCount'], { count: 0 })
     qc.setQueryData(['admin', 'userAttributes'], [])
     render(
-      <QueryClientProvider client={qc}>
-        <ProviderDetailPage providerId={provider.id} autoTest onAutoTestConsumed={consumed} />
-      </QueryClientProvider>
+      <IntlProvider locale="en" defaultLocale="en">
+        <QueryClientProvider client={qc}>
+          <ProviderDetailPage providerId={provider.id} autoTest onAutoTestConsumed={consumed} />
+        </QueryClientProvider>
+      </IntlProvider>
     )
     await waitFor(() => expect(openTestSpy).toHaveBeenCalledTimes(1))
     // A passing test on a disabled provider offers Enable sign-in as the
@@ -387,7 +404,7 @@ describe('<ProviderDetailPage> enabled toggle', () => {
   it('shows a disabled provider as disabled', () => {
     renderPage(makeProvider({ enabled: false }))
     expect(screen.getByRole('switch', { name: /enable acme sso/i })).not.toBeChecked()
-    expect(screen.getByText('Disabled')).toBeInTheDocument()
+    expect(screen.getByText('Off')).toBeInTheDocument()
   })
 
   it('flips the flag through upsert without touching another column', async () => {
@@ -534,7 +551,7 @@ describe('<ProviderDetailPage> connection', () => {
   }
   const allowWithoutEmail = () =>
     fireEvent.click(
-      screen.getByRole('button', { name: 'Let people sign in without an email address' })
+      screen.getByRole('button', { name: 'Let users sign in without an email address' })
     )
 
   it('offers to allow sign-in without email when the test account had none', async () => {
@@ -811,7 +828,7 @@ describe('<ProviderDetailPage> account options', () => {
   const openAccountOptions = () =>
     fireEvent.click(screen.getByRole('button', { name: /Account options/ }))
   const missingEmail = () =>
-    screen.getByRole('checkbox', { name: 'Let people sign in without an email address' })
+    screen.getByRole('checkbox', { name: 'Let users sign in without an email address' })
 
   it('is off and collapsed for a provider that has never been configured', () => {
     renderPage(makeProvider({ claimMapping: null }))
@@ -1131,7 +1148,7 @@ describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
     expect(sent.attributes?.syncOnSignIn).toBe(true)
   })
 
-  it('points at People settings when there are no definitions left to map', () => {
+  it('points at Users settings when there are no definitions left to map', () => {
     state.userAttributes = []
     renderPage(
       makeProvider({
@@ -1142,7 +1159,7 @@ describe('<ProviderDetailPage> claim → person-attribute mapping', () => {
     )
     customize()
     fireEvent.click(screen.getByRole('button', { name: 'Add mapping' }))
-    expect(screen.getByRole('link', { name: 'Open People settings' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Open Users settings' })).toHaveAttribute(
       'href',
       '/admin/settings/people'
     )
@@ -1244,9 +1261,9 @@ describe('<ProviderDetailPage> remove', () => {
     state.accountCount = 0
     renderPage(makeProvider({}))
     const user = await openMenu()
-    await user.click(await screen.findByRole('menuitem', { name: 'Remove provider' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete provider' }))
     const dialog = await screen.findByRole('alertdialog')
-    await user.click(within(dialog).getByRole('button', { name: 'Remove' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Delete provider' }))
     await waitFor(() => expect(deleteSpy).toHaveBeenCalledWith({ data: { id: 'idp_x' } }))
     await waitFor(() => expect(state.navigate).toHaveBeenCalled())
   })
@@ -1255,9 +1272,9 @@ describe('<ProviderDetailPage> remove', () => {
     state.accountCount = 4
     renderPage(makeProvider({}))
     const user = await openMenu()
-    await user.click(await screen.findByRole('menuitem', { name: 'Remove provider' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete provider' }))
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
-    expect(toastSpy.error).toHaveBeenCalledWith(expect.stringMatching(/4 people sign in/))
+    expect(toastSpy.error).toHaveBeenCalledWith(expect.stringMatching(/4 users sign in/))
     expect(deleteSpy).not.toHaveBeenCalled()
   })
 
@@ -1265,7 +1282,7 @@ describe('<ProviderDetailPage> remove', () => {
     state.authConfig = { oauth: { password: false } }
     renderPage(makeProvider({ enabled: true, configured: true }))
     const user = await openMenu()
-    await user.click(await screen.findByRole('menuitem', { name: 'Remove provider' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete provider' }))
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(toastSpy.error).toHaveBeenCalledWith(expect.stringMatching(/only enabled sign-in/i))
   })

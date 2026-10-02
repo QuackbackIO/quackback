@@ -8,11 +8,12 @@
  * exact rating digit instead of a button key (graph.ts's request_csat resume
  * case: `successorId(graph, node.id, String(rating))`).
  */
+import { useId } from 'react'
 import { PlusIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { SettingRow } from '@/components/admin/settings/setting-row'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,6 +33,8 @@ export function CsatEditor({
   step: Extract<TreeStep, { kind: 'request_csat' }>
   onChange: (step: TreeStep) => void
 }) {
+  const typingId = useId()
+  const commentId = useId()
   const wiredKeys = new Set(step.paths.map((p) => p.key))
   const unwired = RATING_KEYS.filter((k) => !wiredKeys.has(k))
 
@@ -54,31 +57,37 @@ export function CsatEditor({
         placeholder="How did we do?"
       />
 
-      <div className="flex items-center justify-between rounded-md border p-2.5">
-        <div>
-          <Label className="text-xs">Let customer type instead</Label>
-          <p className="text-[11px] text-muted-foreground">
-            When off, the composer disables until a face is tapped.
-          </p>
-        </div>
-        <Switch
-          aria-label="Let customer type instead"
-          checked={step.allowTypingInterrupt}
-          onCheckedChange={(allowTypingInterrupt) => onChange({ ...step, allowTypingInterrupt })}
-        />
-      </div>
-
-      <div className="space-y-2 rounded-md border p-2.5">
-        <div className="flex items-center justify-between">
-          <Label className="text-xs">Ask for a comment</Label>
+      <SettingRow
+        label="Let customer type instead"
+        description="When off, the composer disables until a face is tapped."
+        htmlFor={typingId}
+        className="py-2"
+        control={
           <Switch
-            aria-label="Ask for a comment"
-            checked={step.commentPrompt !== undefined}
-            onCheckedChange={(on) =>
-              onChange({ ...step, commentPrompt: on ? DEFAULT_COMMENT_PROMPT : undefined })
-            }
+            id={typingId}
+            aria-label="Let customer type instead"
+            checked={step.allowTypingInterrupt}
+            onCheckedChange={(allowTypingInterrupt) => onChange({ ...step, allowTypingInterrupt })}
           />
-        </div>
+        }
+      />
+
+      <div className="space-y-2">
+        <SettingRow
+          label="Ask for a comment"
+          htmlFor={commentId}
+          className="py-2"
+          control={
+            <Switch
+              id={commentId}
+              aria-label="Ask for a comment"
+              checked={step.commentPrompt !== undefined}
+              onCheckedChange={(on) =>
+                onChange({ ...step, commentPrompt: on ? DEFAULT_COMMENT_PROMPT : undefined })
+              }
+            />
+          }
+        />
         {step.commentPrompt !== undefined && (
           <Input
             value={step.commentPrompt}
@@ -126,8 +135,8 @@ export function CsatEditor({
           </DropdownMenu>
         )}
         <p className="mt-1 text-[11px] text-muted-foreground">
-          A rating with no path still records — the run just ends there. Add a path only where the
-          journey diverges (e.g. a low rating routes to an apology + hand-off).
+          A rating with no path still records, and the run just ends there. Add a path only where
+          the journey diverges (e.g. a low rating routes to an apology + hand-off).
         </p>
       </Field>
 

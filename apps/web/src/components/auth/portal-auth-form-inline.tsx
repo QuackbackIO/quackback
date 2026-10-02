@@ -1232,13 +1232,7 @@ export function PortalAuthFormInline({
             </Label>
             {showBack && <BackToEmailLink onClick={backToEmail} />}
           </div>
-          <Input
-            id="inline-email-locked"
-            type="email"
-            value={email}
-            readOnly
-            className="bg-muted/40"
-          />
+          <Input id="inline-email-locked" type="email" value={email} readOnly />
         </div>
       )}
 

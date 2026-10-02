@@ -1,6 +1,5 @@
 import { useRouteContext } from '@tanstack/react-router'
 import { isProductEnabled, type FeatureFlags, type ProductId } from '@/lib/shared/types/settings'
-import type { VisualTheme } from '@/lib/shared/labs'
 
 /**
  * Named reads of the route context. Every navigation hands the tree a new
@@ -58,21 +57,6 @@ export function useProductEnabled(product: ProductId): boolean {
     from: '__root__',
     select: (context) => isProductEnabled(context.settings?.featureFlags, product),
   })
-}
-
-/** The Labs appearance in effect: the viewer's own choice, else the workspace's. */
-export function useVisualTheme(): VisualTheme {
-  return useRouteContext({
-    from: '__root__',
-    select: (context) =>
-      context.visualTheme === 'refined' || context.settings?.visualTheme === 'refined'
-        ? 'refined'
-        : 'legacy',
-  })
-}
-
-export function useRefinedTheme(): boolean {
-  return useVisualTheme() === 'refined'
 }
 
 /** The signed-in team member's principal id, inside the admin shell. */

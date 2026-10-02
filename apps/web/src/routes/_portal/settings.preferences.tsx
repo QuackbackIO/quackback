@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { Cog6ToothIcon } from '@heroicons/react/24/solid'
-import { PageHeader } from '@/components/shared/page-header'
+import { PortalPageHeader } from '@/components/public/portal-page-header'
 import { ThemeSwitcher } from '@/components/theme-switcher'
 import { NotificationMatrixForm } from '@/components/settings/notification-matrix-form'
 import { getNotificationPreferencesFn } from '@/lib/server/functions/user'
@@ -23,7 +23,7 @@ function PreferencesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
+      <PortalPageHeader
         icon={Cog6ToothIcon}
         title={intl.formatMessage({
           id: 'portal.settings.preferences.title',

@@ -93,17 +93,17 @@ function ConnectionSummary({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 space-y-1 text-sm">
           {failure !== undefined ? (
-            <p className="flex items-start gap-1.5 font-medium text-amber-700 dark:text-amber-400">
+            <p className="flex items-start gap-1.5 font-medium text-warning">
               <ExclamationTriangleIcon className="mt-0.5 size-4 shrink-0" />
               {failureSummary(failure)}
             </p>
           ) : state.kind === 'verified' && who ? (
             <>
               <p className="flex flex-wrap items-center gap-x-1.5 font-medium">
-                <CheckCircleIcon className="size-4 shrink-0 text-green-600 dark:text-green-400" />
+                <CheckCircleIcon className="size-4 shrink-0 text-success" />
                 <span>Connected as {who}</span>
                 <span className="font-normal text-muted-foreground">
-                  · Tested <TimeAgo date={state.testedAt} />
+                  · Tested <TimeAgo date={state.testedAt} locale="en" />
                 </span>
               </p>
               {capture?.identity?.email && who !== capture.identity.email && (
@@ -112,11 +112,11 @@ function ConnectionSummary({
             </>
           ) : state.kind === 'verified' ? (
             <p className="flex items-center gap-1.5 font-medium">
-              <CheckCircleIcon className="size-4 shrink-0 text-green-600 dark:text-green-400" />
-              Connected · Tested <TimeAgo date={state.testedAt} />
+              <CheckCircleIcon className="size-4 shrink-0 text-success" />
+              Connected · Tested <TimeAgo date={state.testedAt} locale="en" />
             </p>
           ) : state.kind === 'stale' ? (
-            <p className="flex items-center gap-1.5 font-medium text-amber-700 dark:text-amber-400">
+            <p className="flex items-center gap-1.5 font-medium text-warning">
               <ClockIcon className="size-4 shrink-0" />
               Connection changed since the last test. Test again before requiring SSO.
             </p>
@@ -175,18 +175,18 @@ function AllowMissingEmailOffer({ provider }: { provider: IdentityProvider }) {
         operations: diffClaimMappingOperations(provider.claimMapping, proposed),
         acknowledgeAdminRules: mappingSaveRisks(provider.claimMapping, proposed).hasAdminRules,
       },
-      'People can now sign in without an email address.'
+      'Users can now sign in without an email address.'
     )
   }
 
   return (
-    <div className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 text-sm">
+    <div className="space-y-2 rounded-md border border-warning/30 bg-warning/5 px-3 py-2.5 text-sm">
       <p>
-        If your provider does not release email addresses, you can let people sign in without one.
+        If your provider does not release email addresses, you can let users sign in without one.
         They get a permanent placeholder address and are asked for a real one afterwards.
       </p>
       <Button type="button" size="sm" variant="outline" disabled={saving} onClick={allow}>
-        Let people sign in without an email address
+        Let users sign in without an email address
       </Button>
     </div>
   )

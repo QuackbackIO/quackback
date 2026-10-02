@@ -103,7 +103,8 @@ function Avatar({
 /**
  * Eager `<img>` for the simple Avatar API. A plain `<img>` is part of the SSR
  * HTML, so the browser fetches it during the initial parse. The fallback shows
- * while loading and on error, and is removed once the image loads so transparent
+ * while loading and on error (the image stays invisible until loaded, so a failing
+ * request never paints the broken-image glyph), and is removed once the image loads so transparent
  * avatars render as authored rather than showing initials through transparent
  * pixels. Caller keys this by src so a new URL resets the load state.
  */
@@ -135,7 +136,10 @@ function AvatarImageWithFallback({
           alt={alt}
           loading="lazy"
           decoding="async"
-          className="absolute inset-0 aspect-square size-full object-cover"
+          className={cn(
+            'absolute inset-0 aspect-square size-full object-cover',
+            status !== 'loaded' && 'opacity-0'
+          )}
           onLoad={() => setStatus('loaded')}
           onError={() => setStatus('error')}
         />

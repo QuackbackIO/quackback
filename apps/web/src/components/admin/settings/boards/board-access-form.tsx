@@ -29,8 +29,7 @@ import {
   UsersIcon,
 } from '@heroicons/react/24/solid'
 import { Checkbox } from '@/components/ui/checkbox'
-import { BoardSettingsSaveDock } from './board-settings-save-dock'
-import { FormError } from '@/components/shared/form-error'
+import { useDebouncedSave } from '@/lib/client/hooks/use-debounced-save'
 import { useUpdateBoardAccess } from '@/lib/client/mutations'
 import { useSegments } from '@/lib/client/hooks/use-segments-queries'
 import { settingsQueries } from '@/lib/client/queries/settings'
@@ -43,6 +42,7 @@ import {
   DEFAULT_BOARD_ACCESS,
 } from '@/lib/shared/db-types'
 import { accessForPreset } from '@/lib/shared/schemas/boards'
+import { INLINE_LINK } from '@/components/admin/settings/inline-link'
 
 /**
  * Per-board access form (R3 design).
@@ -74,25 +74,23 @@ interface TierMeta {
   icon: React.ComponentType<{ className?: string }>
 }
 
-// Tier icons use semantic muted token; the open→restrictive color ramp is
-// shown once on the legend swatch only (a documented data-viz exception),
-// so it stays out of the matrix cells where it would not theme correctly.
+// Tier icons use the semantic muted token so the matrix themes correctly.
 const TIERS: readonly TierMeta[] = [
   {
     id: 'anonymous',
-    label: 'Anyone',
-    blurb: 'Public · no sign-in',
+    label: 'Everyone',
+    blurb: 'No sign-in needed',
     icon: GlobeAltIcon,
   },
   {
     id: 'authenticated',
-    label: 'Signed-in',
-    blurb: 'Any logged-in user',
+    label: 'Signed-in users',
+    blurb: 'Any signed-in user',
     icon: UsersIcon,
   },
   {
     id: 'segments',
-    label: 'Segments',
+    label: 'Specific segments',
     blurb: 'Specific audiences',
     icon: TagIcon,
   },
@@ -144,14 +142,14 @@ function tiersForPreset(id: Exclude<PresetName, 'custom'>): Record<ActionId, Acc
 export const PRESET_META: readonly PresetMeta[] = [
   {
     id: 'public',
-    label: 'Public',
+    label: 'Everyone',
     description: 'Anyone can view. Sign-in is required to vote, comment, or submit.',
     icon: GlobeAltIcon,
     tiers: tiersForPreset('public'),
   },
   {
     id: 'private',
-    label: 'Private',
+    label: 'Team only',
     description: 'Only workspace members can access this board. Hidden from the portal.',
     icon: LockClosedIcon,
     tiers: tiersForPreset('private'),
@@ -202,6 +200,8 @@ function deriveActivePreset(values: FormShape): PresetName {
   return 'custom'
 }
 
+const AUTOSAVE_DELAY_MS = 400
+
 // ─── Main form ────────────────────────────────────────────────────────
 
 export function BoardAccessForm({ board }: BoardAccessFormProps) {
@@ -231,33 +231,47 @@ export function BoardAccessForm({ board }: BoardAccessFormProps) {
 
   const [openPicker, setOpenPicker] = useState<ActionId | null>(null)
 
-  // Sync form state when the server-side board.access changes (e.g. after a
-  // successful save invalidates the boards query).
-  const accessKey = JSON.stringify(board.access)
-  useEffect(() => {
-    const next = board.access ?? DEFAULT_BOARD_ACCESS
+  // Changes are sent once, after a short pause. The form re-baselines on the
+  // value it sends, so undoing an edit after it was sent counts as a new edit.
+  const { queue, cancel, hasPending } = useDebouncedSave<FormShape>((next) => {
+    mutation.mutate({ boardId: board.id, access: next })
     form.reset(next)
-    setOpenPicker(null)
-  }, [accessKey, board.access, form])
+  }, AUTOSAVE_DELAY_MS)
 
-  const values = form.watch()
-
-  // Auto-bump: when the workspace `allowAnonymous` master switch flips
-  // off, any of vote/comment/submit currently set to 'anonymous' gets
-  // bumped to 'authenticated' together. The bumped form is dirty so the
-  // user sees the save dock and can confirm or discard. We read the
-  // current tier via `form.getValues()` so the effect doesn't have to
-  // depend on `values` (which would re-fire on every keystroke / cell
-  // click).
-  useEffect(() => {
+  // Workspace ceiling: when `allowAnonymous` is off, vote/comment/submit cannot
+  // sit on 'anonymous', so the form shows them as 'authenticated'. The shown
+  // value is not marked dirty: opening the page saves nothing, and the next
+  // edit carries the bumped values with it. `form.getValues()` is read so the
+  // callback does not depend on `values`.
+  const applyCeiling = useCallback(() => {
     if (wsAllowAnonymous) return
     ANON_CEILING_ACTIONS.forEach((id) => {
       if (form.getValues(id) === 'anonymous') {
-        form.setValue(id, 'authenticated', { shouldDirty: true })
-        form.setValue(`segments.${id}`, [], { shouldDirty: true })
+        form.setValue(id, 'authenticated')
+        form.setValue(`segments.${id}`, [])
       }
     })
   }, [wsAllowAnonymous, form])
+
+  // Sync form state when the server-side board.access changes (e.g. after a
+  // successful save invalidates the boards query). A refetch never replaces
+  // edits that are unsaved, queued or in flight.
+  const accessKey = JSON.stringify(board.access)
+  const saving = mutation.isPending
+  useEffect(() => {
+    const next = board.access ?? DEFAULT_BOARD_ACCESS
+    const matches = JSON.stringify(form.getValues()) === JSON.stringify(next)
+    if (!matches && (form.formState.isDirty || hasPending() || saving)) return
+    form.reset(next)
+    applyCeiling()
+    setOpenPicker(null)
+  }, [accessKey, board.access, form, saving, hasPending, applyCeiling])
+
+  useEffect(() => {
+    applyCeiling()
+  }, [applyCeiling])
+
+  const values = form.watch()
 
   const activePreset = useMemo(() => deriveActivePreset(values), [values])
 
@@ -290,9 +304,8 @@ export function BoardAccessForm({ board }: BoardAccessFormProps) {
       const meta = PRESET_META.find((p) => p.id === id)
       if (!meta) return
       // Apply via setValue (not form.reset) so the change is tracked as
-      // dirty and the save bar appears. reset() re-baselines defaultValues,
-      // leaving isDirty false — which silently hides the save dock after a
-      // preset click. moderation is left untouched (owned by the Moderation
+      // dirty and autosaves. reset() re-baselines defaultValues, leaving
+      // isDirty false, so a preset click would never be saved. moderation is left untouched (owned by the Moderation
       // sub-tab); presets target the access matrix only.
       const opts = { shouldDirty: true } as const
       ACTIONS.forEach((a) => form.setValue(a.id, meta.tiers[a.id], opts))
@@ -358,50 +371,27 @@ export function BoardAccessForm({ board }: BoardAccessFormProps) {
     [form]
   )
 
-  const onSubmit = useCallback(
-    (next: FormShape) => {
-      if (segsError) return
-      mutation.mutate({ boardId: board.id, access: next })
-    },
-    [board.id, mutation, segsError]
-  )
-
-  const handleDiscard = useCallback(() => {
-    const original = board.access ?? DEFAULT_BOARD_ACCESS
-    form.reset(original)
-    setOpenPicker(null)
-  }, [board.access, form])
+  // Changes save after a short pause, once every Segments tier has a segment.
+  // Returning to the saved values leaves nothing to save, so a queued save for
+  // the undone edit is dropped.
+  const valuesKey = JSON.stringify(values)
+  useEffect(() => {
+    if (!dirty) cancel()
+    else if (!segsError) queue(form.getValues())
+  }, [valuesKey, dirty, segsError, form, queue, cancel])
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pb-24">
-      {mutation.isError && <FormError message={mutation.error?.message ?? 'An error occurred'} />}
-
+    <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
       <div className="space-y-4">
-        <p className="text-xs text-muted-foreground max-w-xl">
-          Pick a preset, or tweak any cell to fine-tune. Custom is set automatically when your
-          configuration doesn&apos;t match a preset.
+        <p className="text-[13px] text-muted-foreground">
+          Pick a preset, or change any cell to fine-tune.
         </p>
 
         <PresetGrid active={activePreset} onSelect={handlePresetClick} />
       </div>
 
       <div className="space-y-4">
-        <div className="flex items-baseline justify-between gap-2">
-          <span className="text-sm font-semibold">Per-action permissions</span>
-          <span className="text-xs text-muted-foreground inline-flex items-center gap-1.5">
-            {/* Legend swatch: the open→restrictive color ramp is a deliberate
-                data-viz signal and is the sole sanctioned literal-color use
-                in this form (it never appears in the themed matrix cells). */}
-            <span
-              className="inline-block h-1 w-5 rounded-sm"
-              style={{
-                background:
-                  'linear-gradient(to right, rgb(74 222 128), rgb(250 204 21), rgb(248 113 113))',
-              }}
-            />
-            More open <span className="opacity-60">→</span> More restrictive
-          </span>
-        </div>
+        <span className="block text-sm font-semibold">Per-action permissions</span>
 
         <Matrix
           values={values}
@@ -419,7 +409,7 @@ export function BoardAccessForm({ board }: BoardAccessFormProps) {
           <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
             <GlobeAltIcon className="h-3 w-3 shrink-0" />
             <span>
-              Workspace policy disables the <span className="text-foreground">Anyone</span> tier
+              Workspace policy disables the <span className="text-foreground">Everyone</span> tier
               for:{' '}
               <span className="text-foreground">
                 {wsBlockedActions.map((a) => a.label).join(', ')}
@@ -429,7 +419,7 @@ export function BoardAccessForm({ board }: BoardAccessFormProps) {
             <Link
               to="/admin/settings/security/authentication"
               search={{ tab: 'portal-access' }}
-              className="ml-auto whitespace-nowrap text-primary hover:underline"
+              className={`${INLINE_LINK} ml-auto whitespace-nowrap`}
             >
               Workspace access →
             </Link>
@@ -439,16 +429,14 @@ export function BoardAccessForm({ board }: BoardAccessFormProps) {
 
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
         <ShieldCheckIcon className="h-3 w-3" />
-        Team members and admins always have full access — they bypass these rules.
+        Team members and admins always have full access. They bypass these rules.
       </p>
 
-      <BoardSettingsSaveDock
-        dirty={dirty}
-        error={segsError}
-        errorMessage="Some rules use Segments but no segments are selected."
-        saving={mutation.isPending}
-        onDiscard={handleDiscard}
-      />
+      {segsError && (
+        <p role="alert" className="text-xs text-destructive">
+          Some rules use Segments but no segments are selected.
+        </p>
+      )}
     </form>
   )
 }
@@ -577,16 +565,16 @@ function Matrix({
         aria-label="Permissions matrix"
       >
         <div
-          className="grid min-w-[560px] bg-muted/40 border-b text-xs uppercase tracking-wider text-muted-foreground"
+          className="grid min-w-[560px] bg-muted/40 border-b text-xs text-muted-foreground"
           style={{ gridTemplateColumns: '1.5fr repeat(4, 1fr)' }}
         >
           <div className="px-4 py-2.5 font-medium">Action</div>
           {TIERS.map((t) => (
             <div
               key={t.id}
-              className="flex flex-col items-center justify-center gap-0.5 border-l py-2 text-center normal-case"
+              className="flex flex-col items-center justify-start gap-0.5 border-l px-1 py-2.5 text-center"
             >
-              <div className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+              <div className="flex items-center gap-1.5 whitespace-nowrap text-sm font-semibold text-foreground">
                 <span className="text-muted-foreground">
                   <t.icon className="h-3 w-3" />
                 </span>
@@ -962,7 +950,7 @@ function SegmentPicker({
             {selected.length}/{allSegments.length} selected
           </span>
         </span>
-        <Link to="/admin/users" className="text-primary hover:underline">
+        <Link to="/admin/users" className={INLINE_LINK}>
           Manage →
         </Link>
       </div>

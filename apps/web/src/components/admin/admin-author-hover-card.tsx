@@ -231,14 +231,14 @@ function TeamInfoRows({
               ) : null}
             </>
           ) : (
-            <span className="font-normal text-muted-foreground">—</span>
+            <span className="font-normal text-muted-foreground">-</span>
           )}
         </span>
       </div>
       <div className="flex items-center justify-between gap-2">
         <span className="shrink-0 text-muted-foreground">Last seen</span>
         <span className="min-w-0 truncate">
-          {team.lastSeenAt ? <TimeAgo date={team.lastSeenAt} /> : '—'}
+          {team.lastSeenAt ? <TimeAgo date={team.lastSeenAt} /> : '-'}
         </span>
       </div>
       {segments.length > 0 && (

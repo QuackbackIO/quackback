@@ -32,6 +32,7 @@ import {
   type PeopleDefinition,
   type RoleMapping,
 } from './provider-shared'
+import { INLINE_LINK } from '@/components/admin/settings/inline-link'
 
 export type ClaimRowDialogTarget =
   | { type: 'profile'; field: 'id' | 'email' | 'name' }
@@ -190,14 +191,11 @@ export function ClaimRowDialog({
               {availableTargets.length === 0 ? (
                 <div className="space-y-2 text-sm">
                   <p className="text-muted-foreground">
-                    Role rules are already mapped. Define an attribute under People to map another
+                    Role rules are already mapped. Define an attribute under Users to map another
                     claim.
                   </p>
-                  <Link
-                    to="/admin/settings/people"
-                    className="font-medium text-primary underline-offset-4 hover:underline"
-                  >
-                    Open People settings
+                  <Link to="/admin/settings/people" className={INLINE_LINK}>
+                    Open Users settings
                   </Link>
                 </div>
               ) : (

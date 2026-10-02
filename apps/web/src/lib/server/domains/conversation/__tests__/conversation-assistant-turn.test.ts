@@ -16,6 +16,7 @@ const assistantMock = vi.hoisted(() => ({
   loadConversationThread: vi.fn(async () => [
     { id: 'conversation_message_1', senderType: 'visitor', content: 'hi', author: null },
   ]),
+  loadThreadFileExcerpts: vi.fn(async () => new Map()),
   mapRowsToThreadMessages: vi.fn(() => [{ sender: 'customer', content: 'hi' }]),
   respondEligible: vi.fn(() => true),
   getActiveInvolvement: vi.fn(async () => null as { id: string; escalationOfferedAt: Date } | null),

@@ -3,10 +3,11 @@ import { Cog6ToothIcon, LockClosedIcon, MagnifyingGlassIcon } from '@heroicons/r
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Badge } from '@/components/ui/badge'
+import { StateBadge } from '@/components/shared/state-badge'
 import { AUTH_PROVIDER_ICON_MAP } from '@/components/icons/social-provider-icons'
 import { AUTH_PROVIDERS } from '@/lib/shared/auth-providers'
 import { cn } from '@/lib/shared/utils'
+import { INLINE_LINK } from '@/components/admin/settings/inline-link'
 
 type AuthProvider = (typeof AUTH_PROVIDERS)[number]
 type AuthProviderId = AuthProvider['id']
@@ -72,7 +73,7 @@ export function OAuthProviderGrid({
             <div
               className={cn(
                 'flex h-8 w-8 items-center justify-center rounded-lg shrink-0',
-                isConfigured ? provider.iconBg : provider.iconBg + ' opacity-60'
+                provider.iconBg
               )}
             >
               {IconComponent ? (
@@ -88,22 +89,13 @@ export function OAuthProviderGrid({
               <button
                 key={provider.id}
                 type="button"
+                aria-label={`Configure ${provider.name}`}
                 onClick={() => onConfigure(provider)}
-                className="group flex items-center gap-3 rounded-lg border border-dashed border-border/40 bg-muted/10 p-3 text-left transition-all hover:border-border/60 disabled:cursor-not-allowed disabled:opacity-60"
+                className="group flex items-center gap-3 rounded-lg border border-border/50 bg-card p-3 text-left transition-colors hover:bg-muted/40"
               >
                 {icon}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-muted-foreground">{provider.name}</p>
-                  <div className="mt-0.5">
-                    <Badge
-                      variant="outline"
-                      className="text-[11px] px-1.5 py-0 text-muted-foreground/60 border-border/40"
-                    >
-                      Not configured
-                    </Badge>
-                  </div>
-                </div>
-                <Cog6ToothIcon className="h-4 w-4 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors shrink-0" />
+                <p className="min-w-0 flex-1 truncate text-sm font-medium">{provider.name}</p>
+                <Cog6ToothIcon className="h-4 w-4 shrink-0 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground" />
               </button>
             )
           }
@@ -117,14 +109,7 @@ export function OAuthProviderGrid({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-medium text-foreground">{provider.name}</p>
-                  {isEnabled && (
-                    <Badge
-                      variant="outline"
-                      className="border-green-500/30 text-green-600 text-[11px] px-1.5 py-0"
-                    >
-                      Enabled
-                    </Badge>
-                  )}
+                  {isEnabled && <StateBadge state="on" />}
                   {lastMethod && (
                     <TooltipProvider>
                       <Tooltip>
@@ -141,7 +126,7 @@ export function OAuthProviderGrid({
                 <button
                   type="button"
                   onClick={() => onConfigure(provider)}
-                  className="text-xs text-primary hover:underline disabled:cursor-not-allowed disabled:no-underline"
+                  className={`${INLINE_LINK} text-xs disabled:cursor-not-allowed`}
                 >
                   Update credentials
                 </button>

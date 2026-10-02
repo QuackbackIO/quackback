@@ -17,7 +17,6 @@ import {
   fetchDefaultSlaPolicyFn,
   getSpamFilterConfigFn,
 } from '@/lib/server/functions/settings'
-import { listVisibleLabsExperimentsFn } from '@/lib/server/functions/labs'
 import { getHelpCenterConfigFn } from '@/lib/server/functions/help-center-settings'
 import { getHelpCenterDomainStatusFn } from '@/lib/server/functions/help-center-domain'
 import { listRedirectRulesFn } from '@/lib/server/functions/help-center-redirect-rules'
@@ -233,13 +232,6 @@ export const settingsQueries = {
       queryKey: ['settings', 'spamFilterConfig'],
       queryFn: getSpamFilterConfigFn,
       staleTime: STALE_TIME_MEDIUM,
-    }),
-
-  labs: () =>
-    queryOptions({
-      queryKey: ['settings', 'labs'],
-      queryFn: listVisibleLabsExperimentsFn,
-      staleTime: STALE_TIME_SHORT,
     }),
 
   /** Workspace export history, shared by the export action and the history list. */

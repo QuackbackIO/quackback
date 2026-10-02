@@ -2,17 +2,12 @@ import { useCallback, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import {
-  ChatBubbleLeftIcon,
-  InformationCircleIcon,
-  ShieldCheckIcon,
-  UserIcon,
-} from '@heroicons/react/24/solid'
-import { FormError } from '@/components/shared/form-error'
-import { BoardSettingsSaveDock } from './board-settings-save-dock'
+import { Badge } from '@/components/ui/badge'
+import { SegmentedControl } from '@/components/shared/segmented-control'
+import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
+import { useDebouncedSave } from '@/lib/client/hooks/use-debounced-save'
 import { useUpdateBoardAccess } from '@/lib/client/mutations'
 import { settingsQueries } from '@/lib/client/queries/settings'
-import { cn } from '@/lib/shared/utils/cn'
 import type { BoardId } from '@quackback/ids'
 import {
   type BoardAccess,
@@ -24,6 +19,7 @@ import {
   type ModerationAxis,
   type RequireApprovalLevel,
 } from '@/lib/shared/moderation-policy'
+import { INLINE_LINK } from '@/components/admin/settings/inline-link'
 
 /**
  * Per-board moderation form (R4 design, standalone page).
@@ -33,10 +29,12 @@ import {
  * resolved default ("On" / "Off") so admins can tell what they'd fall back
  * to.
  *
- * This form owns its own dirty state and only mutates the `moderation`
- * slice — on save it preserves the rest of `board.access` verbatim so a
+ * Changes autosave after a short pause. The form only mutates the
+ * `moderation` slice and preserves the rest of `board.access` verbatim so a
  * concurrent edit on the Access page is never zeroed out.
  */
+
+const AUTOSAVE_DELAY_MS = 400
 
 // ─── Rule config ──────────────────────────────────────────────────────
 
@@ -44,7 +42,6 @@ interface ModerationRuleMeta {
   id: ModerationAxis
   label: string
   sub: string
-  icon: React.ComponentType<{ className?: string }>
 }
 
 const MOD_RULES: readonly ModerationRuleMeta[] = [
@@ -52,19 +49,16 @@ const MOD_RULES: readonly ModerationRuleMeta[] = [
     id: 'anonPosts',
     label: 'Require approval for anonymous posts',
     sub: 'Posts from visitors without an account wait for review before they appear.',
-    icon: UserIcon,
   },
   {
     id: 'signedPosts',
     label: 'Require approval for signed-in posts',
-    sub: 'Posts from signed-in portal users wait for review before they appear.',
-    icon: UserIcon,
+    sub: 'Posts from signed-in users wait for review before they appear.',
   },
   {
     id: 'comments',
     label: 'Require approval for new comments',
     sub: 'Comments wait for review before they appear under a post.',
-    icon: ChatBubbleLeftIcon,
   },
 ] as const
 
@@ -116,34 +110,28 @@ export function BoardModerationForm({ board }: BoardModerationFormProps) {
     [form]
   )
 
-  const onSubmit = useCallback(
-    (next: ModerationShape) => {
-      // Only touch the moderation slice — preserve the rest of access so a
-      // concurrent edit on the Access page isn't zeroed out.
-      mutation.mutate({
-        boardId: board.id,
-        access: { ...board.access, moderation: next },
-      })
-    },
-    [board.id, board.access, mutation]
+  // Only touch the moderation slice; preserve the rest of access so a
+  // concurrent edit on the Access page isn't zeroed out.
+  const { queue, cancel } = useDebouncedSave<ModerationShape>(
+    (next) => mutation.mutate({ boardId: board.id, access: { ...board.access, moderation: next } }),
+    AUTOSAVE_DELAY_MS
   )
 
-  const handleDiscard = useCallback(() => {
-    form.reset(defaults)
-  }, [defaults, form])
+  // Returning every rule to its saved value leaves nothing to save, so a
+  // save queued for the undone edit is dropped.
+  const valuesKey = JSON.stringify(values)
+  useEffect(() => {
+    if (dirty) queue(form.getValues())
+    else cancel()
+  }, [valuesKey, dirty, form, queue, cancel])
 
   const anyOverridden = MOD_RULES.some((r) => values[r.id] !== 'inherit')
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pb-24">
-      {mutation.isError && <FormError message={mutation.error?.message ?? 'An error occurred'} />}
-
+    <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
       {/* Inheritance banner */}
-      <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
-        <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-md border bg-muted/40 text-muted-foreground">
-          <ShieldCheckIcon className="h-3.5 w-3.5" />
-        </span>
-        <div className="flex-1 text-xs text-foreground/90">
+      <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-muted/30 px-3 py-2">
+        <div className="flex-1 text-[13px] text-foreground/90">
           {anyOverridden ? (
             <>
               This board <span className="font-medium text-primary">overrides</span> some workspace
@@ -155,141 +143,66 @@ export function BoardModerationForm({ board }: BoardModerationFormProps) {
         </div>
         <Link
           to="/admin/settings/moderation"
-          className="text-xs text-primary hover:underline whitespace-nowrap"
+          className={`${INLINE_LINK} text-[13px] whitespace-nowrap`}
         >
           Workspace moderation →
         </Link>
       </div>
 
-      {/* Rules */}
-      <div className="flex flex-col">
-        {MOD_RULES.map((r, idx) => (
+      <SettingRows>
+        {MOD_RULES.map((r) => (
           <ModerationRuleRow
             key={r.id}
             rule={r}
             value={values[r.id]}
-            // Resolve the "Inherit" sub-pill via the shared helper so the UI
-            // pill and the server gate can never desync.
+            // Resolve the "Inherit" option via the shared helper so the UI
+            // label and the server gate can never desync.
             workspaceDefault={resolveWorkspaceModeration(r.id, workspaceApproval)}
             onChange={(v) => handleChange(r.id, v)}
-            isLast={idx === MOD_RULES.length - 1}
           />
         ))}
-      </div>
+      </SettingRows>
 
-      <p className="flex items-center gap-2 text-xs text-muted-foreground">
-        <InformationCircleIcon className="h-3 w-3" />
-        Held posts and comments appear in the <span className="text-foreground">review queue</span>.
+      <p className="pt-2 text-[13px] text-muted-foreground">
+        Held posts and comments appear in the{' '}
+        <Link to="/admin/feedback/moderation" className={INLINE_LINK}>
+          review queue
+        </Link>
+        .
       </p>
-
-      <BoardSettingsSaveDock dirty={dirty} saving={mutation.isPending} onDiscard={handleDiscard} />
     </form>
   )
 }
 
-// ─── Rule row + tri-state segmented control ──────────────────────────
+// ─── Rule row ────────────────────────────────────────────────────────
 
 interface ModerationRuleRowProps {
   rule: ModerationRuleMeta
   value: ModerationRuleValue
   workspaceDefault: 'on' | 'off'
   onChange: (value: ModerationRuleValue) => void
-  isLast: boolean
 }
 
-function ModerationRuleRow({
-  rule,
-  value,
-  workspaceDefault,
-  onChange,
-  isLast,
-}: ModerationRuleRowProps) {
-  const overridden = value !== 'inherit'
-  return (
-    <div
-      className={cn(
-        'flex flex-col gap-3 py-3.5 sm:flex-row sm:items-center sm:gap-3',
-        !isLast && 'border-b border-border'
-      )}
-    >
-      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border bg-muted/40 text-muted-foreground">
-        <rule.icon className="h-3.5 w-3.5" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">{rule.label}</span>
-          {overridden && (
-            <span className="rounded border border-primary/30 bg-primary/10 px-1.5 py-px text-xs font-semibold uppercase tracking-wider text-primary">
-              Override
-            </span>
-          )}
-        </div>
-        <div className="mt-0.5 text-xs leading-snug text-muted-foreground">{rule.sub}</div>
-      </div>
-      <SegmentedTri
-        value={value}
-        onChange={onChange}
-        workspaceDefault={workspaceDefault}
-        ruleLabel={rule.label}
-      />
-    </div>
-  )
-}
-
-interface SegmentedTriProps {
-  value: ModerationRuleValue
-  onChange: (value: ModerationRuleValue) => void
-  workspaceDefault: 'on' | 'off'
-  ruleLabel: string
-}
-
-function SegmentedTri({ value, onChange, workspaceDefault, ruleLabel }: SegmentedTriProps) {
-  const opts: ReadonlyArray<{
-    id: ModerationRuleValue
-    label: string
-    sub: string | null
-  }> = [
-    { id: 'inherit', label: 'Inherit', sub: workspaceDefault === 'on' ? 'On' : 'Off' },
-    { id: 'on', label: 'On', sub: null },
-    { id: 'off', label: 'Off', sub: null },
+function ModerationRuleRow({ rule, value, workspaceDefault, onChange }: ModerationRuleRowProps) {
+  const options: ReadonlyArray<{ value: ModerationRuleValue; label: string }> = [
+    { value: 'inherit', label: `Inherit (${workspaceDefault === 'on' ? 'On' : 'Off'})` },
+    { value: 'on', label: 'On' },
+    { value: 'off', label: 'Off' },
   ]
   return (
-    <div
-      role="radiogroup"
-      aria-label={ruleLabel}
-      className="inline-flex shrink-0 rounded-md border bg-muted/30 p-0.5"
-    >
-      {opts.map((o) => {
-        const on = o.id === value
-        return (
-          <button
-            key={o.id}
-            type="button"
-            role="radio"
-            aria-checked={on}
-            aria-label={`${ruleLabel}: ${o.label}`}
-            onClick={() => onChange(o.id)}
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs transition-colors',
-              on
-                ? 'border border-primary/40 bg-primary/10 font-medium text-foreground'
-                : 'border border-transparent text-muted-foreground hover:text-foreground'
-            )}
-          >
-            {o.label}
-            {o.sub && (
-              <span
-                className={cn(
-                  'rounded px-1 py-px text-xs',
-                  on ? 'bg-muted text-muted-foreground' : 'text-muted-foreground/70'
-                )}
-              >
-                {o.sub}
-              </span>
-            )}
-          </button>
-        )
-      })}
-    </div>
+    <SettingRow
+      label={rule.label}
+      description={rule.sub}
+      badge={
+        value !== 'inherit' ? (
+          <Badge variant="outline" size="sm">
+            Override
+          </Badge>
+        ) : undefined
+      }
+      control={
+        <SegmentedControl label={rule.label} options={options} value={value} onChange={onChange} />
+      }
+    />
   )
 }

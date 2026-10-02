@@ -218,7 +218,7 @@ describe('<CopilotPanel> ask -> stream -> answer', () => {
     vi.unstubAllGlobals()
   })
 
-  it('shows a retry affordance on an error response', async () => {
+  it('shows a try again affordance on an error response', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -234,7 +234,7 @@ describe('<CopilotPanel> ask -> stream -> answer', () => {
     await ask('Hello?')
 
     expect(await screen.findByText('The assistant is not configured')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
     vi.unstubAllGlobals()
   })
 

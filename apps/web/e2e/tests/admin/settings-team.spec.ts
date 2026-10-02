@@ -7,8 +7,9 @@ test.describe('Admin Team Settings', () => {
   })
 
   test('displays team members page', async ({ page }) => {
-    const pageContent = page.getByText(/team members/i).or(page.getByText(/manage who/i))
-    await expect(pageContent.first()).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('heading', { name: 'Members & Teams' })).toBeVisible({
+      timeout: 10000,
+    })
   })
 
   test('shows at least one team member', async ({ page }) => {
@@ -37,12 +38,12 @@ test.describe('Admin Team Settings', () => {
   })
 
   test('shows search input for filtering members', async ({ page }) => {
-    const searchInput = page.getByPlaceholder(/search by name, email, or role/i)
+    const searchInput = page.getByPlaceholder(/search by name, email or role/i)
     await expect(searchInput).toBeVisible({ timeout: 10000 })
   })
 
   test('search input filters the member list', async ({ page }) => {
-    const searchInput = page.getByPlaceholder(/search by name, email, or role/i)
+    const searchInput = page.getByPlaceholder(/search by name, email or role/i)
     await searchInput.fill('nonexistentuserxyz')
 
     await page.waitForTimeout(300)

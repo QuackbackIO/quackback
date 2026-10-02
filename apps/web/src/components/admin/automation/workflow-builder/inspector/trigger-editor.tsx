@@ -50,7 +50,7 @@ import {
  *  here rather than "use JSON mode", which doesn't exist for trigger
  *  settings. */
 const AUDIENCE_ADVANCED_FALLBACK =
-  'This audience condition is nested more deeply than this editor supports. It still applies as configured — remove it here to replace it.'
+  'This audience condition is nested more deeply than this editor supports. It still applies as configured. Remove it here to replace it.'
 
 export function TriggerEditor({
   triggerType,
@@ -204,8 +204,8 @@ export function TriggerEditor({
             onCommit={setBreachLeadMinutes}
           />
           <p className="text-[11px] text-muted-foreground">
-            With several live workflows on this trigger, the widest lead time governs — all of them
-            fire together at that earliest point.
+            With several live workflows on this trigger, the widest lead time governs, so all of
+            them fire together at that earliest point.
           </p>
         </>
       )}
@@ -303,7 +303,7 @@ export function TriggerEditor({
           </div>
         )}
         <p className="mt-1 text-[11px] text-muted-foreground">
-          Limits how many times this workflow can run for the same person.
+          Limits how many times this workflow can run for the same user.
         </p>
       </Field>
 
@@ -333,13 +333,11 @@ export function TriggerEditor({
           advancedFallback={AUDIENCE_ADVANCED_FALLBACK}
         />
         <p className="mt-1 text-[11px] text-muted-foreground">
-          Limits this trigger to conversations, people, and companies matching these rules. No rules
+          Limits this trigger to conversations, users, and companies matching these rules. No rules
           runs for everyone. Use this for a deterministic gate; use guidance rules when the AI agent
           should interpret the situation.
         </p>
-        {audienceWarning && (
-          <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-500">{audienceWarning}</p>
-        )}
+        {audienceWarning && <p className="mt-1 text-[11px] text-warning">{audienceWarning}</p>}
       </Field>
 
       <Field label="Workflow class">

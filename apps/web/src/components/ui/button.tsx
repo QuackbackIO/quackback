@@ -7,7 +7,7 @@ import { cn } from '@/lib/shared/utils'
 
 const buttonVariants = cva(
   [
-    'inline-flex items-center justify-center gap-2 shrink-0',
+    'inline-flex items-center justify-center gap-2 shrink-0 rounded-item',
     'text-sm font-medium whitespace-nowrap',
     'cursor-pointer',
     'transition-all duration-200 ease-out',
@@ -20,11 +20,14 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          'bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 hover:shadow-sm active:bg-primary/85 active:shadow-none',
+          'bg-primary text-primary-foreground hover:bg-primary/90 hover:brightness-94 active:bg-primary/85',
         destructive:
-          'bg-destructive text-white shadow-xs hover:bg-destructive/90 hover:shadow-sm active:bg-destructive/85 focus-visible:ring-destructive/40',
+          'bg-destructive text-white hover:bg-destructive/90 active:bg-destructive/85 focus-visible:ring-destructive/40',
         outline:
           'border border-border/50 bg-transparent hover:bg-muted/40 hover:border-border/70 active:bg-muted/60',
+        // Danger-zone actions: outlined red, never a filled button.
+        'outline-destructive':
+          'border border-destructive/40 bg-transparent text-destructive hover:border-destructive/60 hover:bg-destructive/10 active:bg-destructive/15 focus-visible:ring-destructive/40',
         secondary: 'bg-muted text-foreground hover:bg-muted/80 active:bg-muted/70',
         ghost: 'text-muted-foreground hover:text-foreground hover:bg-muted/40 active:bg-muted/60',
         link: 'text-primary underline-offset-4 hover:underline',
@@ -37,15 +40,10 @@ const buttonVariants = cva(
         'icon-sm': 'size-8',
         'icon-lg': 'size-11',
       },
-      shape: {
-        default: '[border-radius:var(--radius)]',
-        pill: 'rounded-full',
-      },
     },
     defaultVariants: {
       variant: 'default',
       size: 'default',
-      shape: 'pill',
     },
   }
 )
@@ -63,13 +61,12 @@ function Button({
   className,
   variant,
   size,
-  shape,
   asChild = false,
   render,
   children,
   ...props
 }: ButtonProps) {
-  const classes = cn(buttonVariants({ variant, size, shape, className }))
+  const classes = cn(buttonVariants({ variant, size, className }))
 
   if (asChild) {
     const child = React.Children.toArray(children).find(React.isValidElement)

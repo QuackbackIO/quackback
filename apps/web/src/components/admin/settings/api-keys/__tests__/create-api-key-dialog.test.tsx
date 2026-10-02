@@ -65,7 +65,7 @@ describe('CreateApiKeyDialog scopes', () => {
     const { getByLabelText, getByRole, onKeyCreated } = renderDialog()
 
     fireEvent.change(getByLabelText('Name'), { target: { value: 'CI' } })
-    fireEvent.click(getByRole('button', { name: 'Create Key' }))
+    fireEvent.click(getByRole('button', { name: 'Create API key' }))
 
     await waitFor(() => expect(onKeyCreated).toHaveBeenCalled())
     expect(mockCreateApiKeyFn).toHaveBeenCalledWith({
@@ -85,7 +85,7 @@ describe('CreateApiKeyDialog scopes', () => {
     fireEvent.click(getByRole('button', { name: 'Help Center: Read' }))
     fireEvent.click(getByRole('button', { name: 'Conversations: Read' }))
     fireEvent.click(getByRole('button', { name: 'Changelog: Write' }))
-    fireEvent.click(getByRole('button', { name: 'Create Key' }))
+    fireEvent.click(getByRole('button', { name: 'Create API key' }))
 
     await waitFor(() => expect(onKeyCreated).toHaveBeenCalled())
     const sent = mockCreateApiKeyFn.mock.calls[0][0].data.scopes as string[]
@@ -99,7 +99,7 @@ describe('CreateApiKeyDialog scopes', () => {
     fireEvent.click(getByRole('button', { name: 'Help Center: Read and write' }))
     fireEvent.click(getByRole('button', { name: 'Conversations: Read and write' }))
     fireEvent.click(getByRole('button', { name: 'Changelog: Write' }))
-    expect(getByRole('button', { name: 'Create Key' })).toBeDisabled()
+    expect(getByRole('button', { name: 'Create API key' })).toBeDisabled()
     expect(mockCreateApiKeyFn).not.toHaveBeenCalled()
   })
 })

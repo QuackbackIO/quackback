@@ -164,7 +164,7 @@ export const restoreArticleSchema = z.object({
 // ============================================================================
 
 /** A header link URL: an absolute http(s) URL or a root-relative path. */
-const helpCenterHeaderLinkUrl = z
+export const helpCenterHeaderLinkUrl = z
   .string()
   .min(1)
   .max(500)

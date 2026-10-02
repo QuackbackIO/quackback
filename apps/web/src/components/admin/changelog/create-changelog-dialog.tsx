@@ -9,7 +9,8 @@ import { useCreateChangelog } from '@/lib/client/mutations/changelog'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
-import { PlusIcon, Cog6ToothIcon } from '@heroicons/react/24/solid'
+import { Cog6ToothIcon } from '@heroicons/react/24/solid'
+import { NewButton } from '@/components/shared/new-button'
 import { Form } from '@/components/ui/form'
 import { ChangelogFormFields } from './changelog-form-fields'
 import { ChangelogMetadataSidebar } from './changelog-metadata-sidebar'
@@ -147,11 +148,11 @@ export function CreateChangelogDialog({
     }
     switch (publishState.type) {
       case 'draft':
-        return 'Save Draft'
+        return 'Save draft'
       case 'scheduled':
         return 'Schedule'
       case 'published':
-        return 'Publish Now'
+        return 'Publish now'
     }
   }
 
@@ -159,10 +160,7 @@ export function CreateChangelogDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       {!isControlled && (
         <DialogTrigger asChild>
-          <Button size="sm">
-            <PlusIcon className="h-4 w-4 mr-1.5" />
-            New Entry
-          </Button>
+          <NewButton noun="entry" />
         </DialogTrigger>
       )}
       <DialogContent
@@ -226,7 +224,7 @@ export function CreateChangelogDialog({
                 </SheetTrigger>
                 <SheetContent side="bottom" className="h-[70vh]">
                   <SheetHeader>
-                    <SheetTitle>Entry Settings</SheetTitle>
+                    <SheetTitle>Entry settings</SheetTitle>
                   </SheetHeader>
                   <div className="py-4 overflow-y-auto">
                     <ChangelogMetadataSidebarContent

@@ -22,20 +22,15 @@ describe('CopyAgentPromptButton', () => {
     const getPrompt = vi.fn().mockResolvedValue('prompt with qbi_code')
     render(<CopyAgentPromptButton getPrompt={getPrompt} />)
 
-    const button = screen.getByRole('button', {
-      name: 'Copy install prompt for your coding agent',
-    })
-    expect(screen.getByLabelText('Claude')).toBeTruthy()
-    expect(screen.getByLabelText('Cursor')).toBeTruthy()
-    expect(screen.getByLabelText('Codex')).toBeTruthy()
-    expect(screen.getByLabelText('Copilot')).toBeTruthy()
+    const button = screen.getByRole('button', { name: 'Copy install prompt' })
+    expect(screen.queryByLabelText('Claude')).toBeNull()
 
     fireEvent.click(button)
 
     await waitFor(() => {
       expect(getPrompt).toHaveBeenCalled()
       expect(copyWithFallback).toHaveBeenCalledWith('prompt with qbi_code')
-      expect(screen.getByRole('button', { name: 'Install prompt copied' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Prompt copied' })).toBeTruthy()
     })
   })
 })

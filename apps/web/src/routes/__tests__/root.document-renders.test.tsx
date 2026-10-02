@@ -9,6 +9,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import {
   RouterProvider,
   createMemoryHistory,
@@ -38,9 +39,14 @@ vi.mock('@/components/shared/document-head', () => ({
 }))
 vi.mock('@/components/shared/ott-handler', () => ({ OttHandler: () => null }))
 vi.mock('@/components/shared/visitor-beacon', () => ({ VisitorBeacon: () => null }))
+vi.mock('@tanstack/react-router', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tanstack/react-router')>()),
+  HeadContent: () => null,
+}))
 vi.mock('@/components/ui/sonner', () => ({ Toaster: () => null }))
 
 const { Route: RootRoute } = await import('../__root')
+const { MinimalDocument } = await import('@/components/shared/minimal-document')
 const { expireRouteContext } = await import('@/lib/client/route-context-memo')
 
 afterEach(() => {
@@ -48,11 +54,11 @@ afterEach(() => {
   expireRouteContext()
 })
 
-function bootstrap(themeCookie: 'light' | 'dark') {
+function bootstrap(themeCookie: 'light' | 'dark', settings: Record<string, unknown> = {}) {
   doc.bootstrap = {
     baseUrl: 'http://localhost',
     session: null,
-    settings: { featureFlags: {} },
+    settings: { featureFlags: {}, ...settings },
     onboarding: { complete: true, needsSetupWizard: false },
     userRole: 'admin',
     themeCookie,
@@ -119,5 +125,29 @@ describe('root document renders', () => {
     await act(() => router.invalidate())
 
     expect(doc.defaultTheme).toBe('light')
+  })
+
+  // Labs rows are ignored: a workspace that stored an old appearance and one
+  // with no row at all render the same document, with no theme marker.
+  it.each([
+    ['no stored appearance', {}],
+    ['a stored legacy appearance', { visualTheme: 'legacy' }],
+    ['a stored refined appearance', { visualTheme: 'refined' }],
+  ])('renders one theme for %s', async (_label, settings) => {
+    bootstrap('dark', settings)
+    await mount()
+    expect(document.documentElement.hasAttribute('data-visual-theme')).toBe(false)
+  })
+})
+
+describe('crash fallback document', () => {
+  it('renders without a theme marker, like the app document', () => {
+    const html = renderToStaticMarkup(
+      <MinimalDocument>
+        <p>fallback</p>
+      </MinimalDocument>
+    )
+    expect(html).toContain('<p>fallback</p>')
+    expect(html).not.toContain('data-visual-theme')
   })
 })

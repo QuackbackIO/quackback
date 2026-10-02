@@ -16,7 +16,7 @@ export function QuackbackUrlCard(props: {
   onSubmit: () => void
 }) {
   return (
-    <SettingsCard title="Workspace URL" description="The address customers use for this workspace">
+    <SettingsCard title="Workspace URL" description="The address customers use for this workspace.">
       <form
         className="max-w-xl space-y-5"
         onSubmit={(event) => {
@@ -33,7 +33,7 @@ export function QuackbackUrlCard(props: {
               id="platform-label"
               value={props.platformLabel}
               onChange={(event) => props.onPlatformLabelChange(event.target.value)}
-              className="h-full rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
+              className="h-full border-0 focus-visible:ring-0"
               maxLength={63}
               autoCapitalize="none"
               autoCorrect="off"
@@ -130,7 +130,6 @@ export function DomainsCard(props: {
                   <p className="truncate text-sm font-medium">{domain.hostname}</p>
                   <Badge
                     size="sm"
-                    shape="pill"
                     variant={
                       domain.readiness === 'ready'
                         ? 'secondary'

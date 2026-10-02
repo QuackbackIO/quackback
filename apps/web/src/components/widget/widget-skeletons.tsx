@@ -107,7 +107,7 @@ function VoteButtonSkeleton({ compact }: { compact?: boolean }) {
   return (
     <Skeleton
       className={cn(
-        'shrink-0 rounded-md border border-border/30 bg-muted/40',
+        'shrink-0 rounded-md border border-border/30',
         compact ? 'h-7 w-11' : 'h-14 w-12'
       )}
     />
@@ -411,7 +411,7 @@ export function WidgetHelpViewSkeleton() {
   return (
     <div className="flex h-full flex-col">
       <div className="shrink-0 px-3 pt-2 pb-1">
-        <Skeleton className="h-[38px] w-full rounded-lg border border-border/30 bg-muted/30" />
+        <Skeleton className="h-[38px] w-full rounded-lg border border-border/30" />
       </div>
       <div className="px-3 pt-1 pb-3">
         <WidgetHelpCollectionsSkeleton />

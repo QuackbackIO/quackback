@@ -1,8 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { BellIcon } from '@heroicons/react/24/solid'
-import { BackLink } from '@/components/ui/back-link'
-import { PageHeader } from '@/components/shared/page-header'
-import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { NotificationMatrixForm } from '@/components/settings/notification-matrix-form'
 
 export const Route = createFileRoute('/admin/settings/notifications')({
@@ -21,19 +18,8 @@ export const Route = createFileRoute('/admin/settings/notifications')({
 function NotificationsPage() {
   const { preferences } = Route.useLoaderData()
   return (
-    <div className="space-y-6 max-w-5xl">
-      <div className="lg:hidden">
-        <BackLink to="/admin/settings">Settings</BackLink>
-      </div>
-      <PageHeader
-        icon={BellIcon}
-        title="Notifications"
-        description="Choose what you're notified about and how."
-      />
-
-      <SettingsCard>
-        <NotificationMatrixForm surface="admin" initialPreferences={preferences} />
-      </SettingsCard>
-    </div>
+    <SettingsPage page="/admin/settings/notifications">
+      <NotificationMatrixForm surface="admin" initialPreferences={preferences} />
+    </SettingsPage>
   )
 }

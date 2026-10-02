@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { PortalBrandMark } from './portal-brand-mark'
 import { generateWorkspaceThemeCSS } from '@/lib/shared/theme'
 import { escapeInlineStyle } from '@/lib/shared/safe-inline-content'
-import { useVisualTheme, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 interface PortalAuthShellProps {
   heading: React.ReactNode
@@ -28,14 +28,10 @@ interface PortalAuthShellProps {
  */
 export function PortalAuthShell({ heading, subheading, children, footer }: PortalAuthShellProps) {
   const settings = useWorkspaceSettings()
-  const visualTheme = useVisualTheme()
   const brandingConfig = settings?.brandingConfig
   const customCss = settings?.customCss ?? ''
 
-  const themeStyles = useMemo(
-    () => generateWorkspaceThemeCSS(brandingConfig, visualTheme),
-    [brandingConfig, visualTheme]
-  )
+  const themeStyles = useMemo(() => generateWorkspaceThemeCSS(brandingConfig), [brandingConfig])
 
   return (
     <div className="relative min-h-screen flex items-center justify-center px-4 py-12 overflow-hidden">

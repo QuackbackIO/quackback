@@ -156,11 +156,11 @@ export function ChangelogModalContent({ entryId, onClose }: ChangelogModalConten
     }
     switch (publishState.type) {
       case 'draft':
-        return 'Save Draft'
+        return 'Save draft'
       case 'scheduled':
-        return 'Save Schedule'
+        return 'Save schedule'
       case 'published':
-        return 'Update & Publish'
+        return 'Update and publish'
     }
   }
 
@@ -178,7 +178,7 @@ export function ChangelogModalContent({ entryId, onClose }: ChangelogModalConten
         {/* Header */}
         <ModalHeader
           section="Changelog"
-          title={entry?.title || 'Edit Entry'}
+          title={entry?.title || 'Edit entry'}
           onClose={onClose}
           viewUrl={entry?.status === 'published' ? `/changelog/${entryId}` : null}
         />
@@ -235,7 +235,7 @@ export function ChangelogModalContent({ entryId, onClose }: ChangelogModalConten
             </SheetTrigger>
             <SheetContent side="bottom" className="h-[70vh]">
               <SheetHeader>
-                <SheetTitle>Entry Settings</SheetTitle>
+                <SheetTitle>Entry settings</SheetTitle>
               </SheetHeader>
               <div className="py-4 overflow-y-auto">
                 <ChangelogMetadataSidebarContent

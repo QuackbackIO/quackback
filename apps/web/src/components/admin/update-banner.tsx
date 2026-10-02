@@ -77,7 +77,7 @@ export function UpdateBanner({ latestVersion, dismissedVersion }: UpdateBannerPr
             <span className="font-medium text-foreground shrink-0">
               Quackback v{latestVersion.version} is available
             </span>
-            <span className="text-muted-foreground hidden sm:inline">—</span>
+            <span className="text-muted-foreground hidden sm:inline">-</span>
             <div className="hidden sm:flex items-center gap-2 text-muted-foreground">
               <a
                 href={CHANGELOG_URL}

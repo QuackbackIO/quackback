@@ -3,7 +3,7 @@
  * board and applies every tag carrying an AI prompt to that board's existing
  * untagged posts. The server batches the work, so a "more remain" result
  * invites a repeat click rather than failing. Hidden when no tag carries an
- * AI prompt — there is nothing to apply.
+ * AI prompt, so there is nothing to apply.
  */
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -42,7 +42,7 @@ export function AiBackfillCard({ tags, boards }: AiBackfillCardProps) {
       } else {
         toast.success(
           `Tagged ${result.tagged} of ${result.scanned} untagged posts` +
-            (result.hasMore ? ' — more remain, run again to continue' : '')
+            (result.hasMore ? ' (more remain, run again to continue)' : '')
         )
       }
     } catch (err) {

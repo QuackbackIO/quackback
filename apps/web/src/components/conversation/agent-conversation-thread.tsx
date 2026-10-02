@@ -19,10 +19,12 @@ import {
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
+  memo,
   useMemo,
   useRef,
   useState,
   type ClipboardEvent,
+  type ComponentProps,
   type DragEvent,
   type ReactNode,
   type RefObject,
@@ -52,6 +54,7 @@ import {
   ArrowDownTrayIcon,
   ArrowTopRightOnSquareIcon,
   UserPlusIcon,
+  InformationCircleIcon,
 } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
 import type {
@@ -114,6 +117,10 @@ import {
   resolveResolvedStatusId,
 } from '@/lib/shared/tickets'
 import { AgentMessageBubble, UnreadDivider } from '@/components/conversation/message-bubble'
+import {
+  ConversationGalleryContext,
+  useGalleryValue,
+} from '@/components/shared/files/conversation-gallery'
 import { computeBlockStates } from '@/components/shared/conversation/conversation-rows'
 import {
   ThreadViewport,
@@ -160,6 +167,7 @@ import {
   TicketPriorityControl,
 } from '@/components/admin/inbox/ticket-controls'
 import { InboxDetailPanel } from '@/components/admin/inbox/inbox-detail-panel'
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { CreateTicketDialog } from '@/components/admin/inbox/create-ticket-dialog'
 import { ConvertToPostDialog } from '@/components/admin/conversation/convert-to-post-dialog'
 import { EndConversationDialog } from '@/components/admin/conversation/end-conversation-dialog'
@@ -193,7 +201,7 @@ import type { JSONContent } from '@tiptap/core'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import { useConversationTyping } from '@/lib/client/hooks/use-conversation-typing'
-import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { useAgentFileUpload } from '@/lib/client/hooks/use-file-upload'
 import { useConversationComposerAttachments } from '@/lib/client/hooks/use-conversation-composer-attachments'
 import { useCopilotInsert } from '@/lib/client/hooks/use-copilot-insert'
 import { useComposerFocus } from '@/lib/client/hooks/use-composer-focus'
@@ -282,10 +290,6 @@ export interface ThreadComposerHandle {
    * thread currently in note mode is switched back to reply first.
    */
   openMacros: () => void
-}
-
-function toastImageUploadError(error: Error) {
-  toast.error(error.message)
 }
 
 /** The thread's scroll seam into its message list, which owns the virtualizer. */
@@ -489,6 +493,15 @@ export function AgentConversationThread({
   const permissions = usePermissions()
   const canViewTickets = permissions.has(PERMISSIONS.TICKET_VIEW)
   const canSetTicketStatus = permissions.has(PERMISSIONS.TICKET_SET_STATUS)
+  const [detailsSheetOpen, setDetailsSheetOpen] = useState(false)
+  const openDetailsSheet = useCallback(() => setDetailsSheetOpen(true), [])
+  const selectFromSheet = useCallback(
+    (id: Parameters<typeof onSelectItem>[0]) => {
+      setDetailsSheetOpen(false)
+      onSelectItem(id)
+    },
+    [onSelectItem]
+  )
 
   // Reply and Note each hold an independent draft (the rich doc persisted as
   // contentJson + its markdown mirror), so toggling modes preserves each mode's
@@ -543,40 +556,36 @@ export function AgentConversationThread({
   const sendTyping = useTypingSender(isTicket ? null : conversationId)
   const { onLocalInput } = useConversationTyping(sendTyping)
 
-  const { upload } = useImageUpload({
-    endpoint: '/api/upload/image',
-    prefix: 'chat-images',
-    onError: toastImageUploadError,
-  })
+  const { upload } = useAgentFileUpload()
   const {
-    pending: pendingAttachments,
+    items: attachmentItems,
+    attachments: pendingAttachments,
     addFiles,
     remove: removeAttachment,
+    retry: retryAttachment,
     clear: clearAttachments,
     uploading,
   } = useConversationComposerAttachments(upload)
   const fileInputRef = useRef<HTMLInputElement>(null)
   // Same as the visitor messenger: paste/drop stages the tray. The editor has
   // no onImageUpload, so it never inlines a resizableImage into the draft.
+  // Paste still works for an image from the clipboard; drop/paste now accept
+  // any file, same as the paperclip picker.
   const handleComposerPaste = useCallback(
     (e: ClipboardEvent<HTMLDivElement>) => {
-      const images = Array.from(e.clipboardData?.files ?? []).filter((f) =>
-        f.type.startsWith('image/')
-      )
-      if (images.length === 0) return
+      const files = Array.from(e.clipboardData?.files ?? [])
+      if (files.length === 0) return
       e.preventDefault()
-      void addFiles(images)
+      void addFiles(files)
     },
     [addFiles]
   )
   const handleComposerDrop = useCallback(
     (e: DragEvent<HTMLDivElement>) => {
-      const images = Array.from(e.dataTransfer?.files ?? []).filter((f) =>
-        f.type.startsWith('image/')
-      )
-      if (images.length === 0) return
+      const files = Array.from(e.dataTransfer?.files ?? [])
+      if (files.length === 0) return
       e.preventDefault()
-      void addFiles(images)
+      void addFiles(files)
     },
     [addFiles]
   )
@@ -646,6 +655,7 @@ export function AgentConversationThread({
   const messages: AgentConversationMessageDTO[] = isTicket
     ? (ticketThread?.messages ?? [])
     : (convThread?.messages ?? [])
+  const gallery = useGalleryValue(messages, { includeInternal: true })
   const issuePeople = useMemo(
     () =>
       conversation?.channel === 'github' ? githubIssuePeopleFromMessages(messages) : undefined,
@@ -1517,7 +1527,7 @@ export function AgentConversationThread({
   // exposes no imperative insert, so every "insert at cursor" affordance (macros,
   // Copilot, the emoji picker) routes through the controlled value + remount key.
   // One seam per converter: plain text (macros/emoji — literal paragraphs) vs
-  // Copilot answer (markdown-lite → real editor nodes, citation markers
+  // Copilot answer (Markdown → real editor nodes, citation markers
   // stripped; see appendAnswerToDraft).
   const insertIntoDraft = useCallback(
     (mode: 'reply' | 'note', append: (prev: ComposerDraft) => ComposerDraft) => {
@@ -1867,7 +1877,7 @@ export function AgentConversationThread({
   // (§2.7, M5): a ticket-status pill when the item is or links a ticket, an
   // icon cluster (create ticket / save for later / snooze / overflow), then
   // the primary Close (conversations) / Resolve (tickets) button. Priority/
-  // assignee move to the detail panel's Properties row; an xl:hidden fallback
+  // assignee move to the detail panel's Properties row; a below-1680px fallback
   // keeps them reachable below that breakpoint (the panel is xl-only).
   const backButton = (
     <button
@@ -1885,7 +1895,15 @@ export function AgentConversationThread({
   // The unified action bar's icon cluster + overflow + primary button —
   // identical JSX for both kinds, gated internally by `isTicket`/capabilities.
   const headerActions = (
-    <div className="flex shrink-0 items-center gap-1">
+    <div className="ml-auto flex shrink-0 items-center gap-1">
+      {/* Below the inline panel width the details open in a sheet. */}
+      {!detailPanelShown && (conversation || ticket) && (
+        <DetailsSheetTrigger
+          open={detailsSheetOpen}
+          onOpen={openDetailsSheet}
+          className={headerIconButtonClass}
+        />
+      )}
       {/* B24: the ticket-status pill's interactivity follows the resolved
           permissions — the full dropdown with `ticket.set_status`, an inert
           read-only chip with view-only, and nothing at all without
@@ -2061,8 +2079,8 @@ export function AgentConversationThread({
 
   const header: ReactNode =
     isTicket && ticket ? (
-      <div className="flex items-center justify-between gap-3 border-b border-border/50 px-4 py-3 sm:px-5">
-        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border/50 px-4 py-3 sm:px-5">
+        <div className="flex min-w-[6rem] flex-1 items-center gap-2.5">
           {backButton}
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold">{ticket.title}</p>
@@ -2074,18 +2092,13 @@ export function AgentConversationThread({
           </div>
         </div>
         {/* Narrow-viewport fallback: Properties live in the detail panel at
-            xl+; below that, priority/assignee stay reachable here. */}
-        {!detailPanelShown && (
-          <div className="flex shrink-0 items-center gap-1.5 xl:hidden">
-            <TicketPriorityControl ticket={ticket} onChanged={onChanged} />
-            <TicketAssigneeControl ticket={ticket} onChanged={onChanged} />
-          </div>
-        )}
+            1680px+; below that, priority/assignee stay reachable here. */}
+        {!detailPanelShown && <TicketTriageFallback ticket={ticket} onChanged={onChanged} />}
         {headerActions}
       </div>
     ) : (
-      <div className="flex items-center justify-between gap-3 border-b border-border/50 px-4 py-3 sm:px-5">
-        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border/50 px-4 py-3 sm:px-5">
+        <div className="flex min-w-[6rem] flex-1 items-center gap-2.5">
           {backButton}
           <Avatar
             src={conversation?.visitor.avatarUrl ?? null}
@@ -2117,27 +2130,17 @@ export function AgentConversationThread({
             </p>
           </div>
         </div>
-        {/* Triage controls live in the detail panel at xl+; below that
+        {/* Triage controls live in the detail panel at 1680px+; below that
             (panel hidden) they stay in the header. */}
         {conversation && !detailPanelShown && (
-          <div className="flex shrink-0 items-center gap-1.5 xl:hidden">
-            <PriorityControl
-              conversationId={conversationId ?? INACTIVE_CONVERSATION_ID}
-              value={conversation.priority}
-              onChanged={refreshThread}
-            />
-            <AssigneeControl
-              conversationId={conversationId ?? INACTIVE_CONVERSATION_ID}
-              assignedAgent={conversation.assignedAgent}
-              onChanged={refreshThread}
-            />
-            <StatusControl
-              conversationId={conversationId ?? INACTIVE_CONVERSATION_ID}
-              status={conversation.status}
-              snoozedUntil={conversation.snoozedUntil}
-              onChanged={refreshThread}
-            />
-          </div>
+          <ConversationTriageFallback
+            conversationId={conversationId ?? INACTIVE_CONVERSATION_ID}
+            priority={conversation.priority}
+            assignedAgent={conversation.assignedAgent}
+            status={conversation.status}
+            snoozedUntil={conversation.snoozedUntil}
+            onChanged={refreshThread}
+          />
         )}
         {headerActions}
       </div>
@@ -2148,22 +2151,25 @@ export function AgentConversationThread({
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {header}
 
-        {/* Conversation labels — xl+ shows them in the detail panel. Tickets
-            have no tags surface (§2.5's capability matrix — "tags,
+        {/* Conversation labels: 1680px+ shows them in the detail panel. Tickets
+            have no tags surface (§2.5's capability matrix: "tags,
             conversations only"). */}
         {!isTicket && conversation && conversationId && !detailPanelShown && (
-          <div className="flex items-center gap-1.5 border-b border-border/50 px-4 py-2 sm:px-5 xl:hidden">
-            <ConversationTagsEditor conversationId={conversationId} tags={conversation.tags} />
-          </div>
+          <ThreadTagsFallback conversationId={conversationId} tags={conversation.tags} />
         )}
 
-        <ThreadMessages
-          rows={rows}
-          renderRow={renderRow}
-          lastMessageId={lastMessageId}
-          skipInitialScroll={skipInitialScroll}
-          handleRef={messagesRef}
-        />
+        {/* Every attachment in the loaded thread, in message order, so a
+            card's click opens the viewer on the whole conversation. Agents
+            see internal notes' attachments too — includeInternal. */}
+        <ConversationGalleryContext.Provider value={gallery}>
+          <ThreadMessages
+            rows={rows}
+            renderRow={renderRow}
+            lastMessageId={lastMessageId}
+            skipInitialScroll={skipInitialScroll}
+            handleRef={messagesRef}
+          />
+        </ConversationGalleryContext.Provider>
 
         {/* P2-D.1 inbox translation: dismissible auto-suggest banner, shown
             above the composer when the customer's detected language differs
@@ -2255,7 +2261,6 @@ export function AgentConversationThread({
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
               multiple
               className="hidden"
               onChange={(e) => {
@@ -2269,7 +2274,7 @@ export function AgentConversationThread({
             {/* Reply and Note share the unified RichTextEditor; reply keeps
                 @-mentions on (agent surface), note is the team-internal preset.
                 Enter sends, Shift+Enter breaks; formatting comes from the editor's
-                own bubble/slash/`:` surfaces. Images stay tray-only (paste/drop
+                own bubble/slash/`:` surfaces. Files stay tray-only (paste/drop
                 and the paperclip stage files below) — the editor has no
                 onImageUpload, so it never inlines a resizableImage. A mounted
                 editor owns its text; `value` seeds each (re)mount, so it reads
@@ -2306,7 +2311,11 @@ export function AgentConversationThread({
                 onSubmit={onSend}
               />
             )}
-            <ComposerAttachmentTray attachments={pendingAttachments} onRemove={removeAttachment} />
+            <ComposerAttachmentTray
+              items={attachmentItems}
+              onRemove={removeAttachment}
+              onRetry={retryAttachment}
+            />
             {/* Live link unfurl while composing (Slack-style) — part of the
                 preview tray, gated by the flag + capability. */}
             {linkPreviewsEnabled && (
@@ -2317,9 +2326,8 @@ export function AgentConversationThread({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
                 className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-40 transition-colors"
-                aria-label="Attach image"
+                aria-label="Attach files"
               >
                 <PaperClipIcon className="h-4 w-4" />
               </button>
@@ -2565,9 +2573,129 @@ export function AgentConversationThread({
           visible={detailPanelShown}
         />
       )}
+      {!detailPanelShown && ((!isTicket && conversation) || (isTicket && ticket)) && (
+        <DetailsSheet
+          open={detailsSheetOpen}
+          onOpenChange={setDetailsSheetOpen}
+          item={item}
+          conversation={conversation}
+          ticket={panelTicket}
+          onChanged={refreshThread}
+          onSelectItem={selectFromSheet}
+          onTrackAsFeedback={handleTrackAsFeedback}
+          onCreateTicket={handleCreateTicketFromPanel}
+          onInsertFromCopilot={insertFromCopilot}
+          issuePeople={issuePeople}
+        />
+      )}
     </div>
   )
 }
+
+// The header's narrow-viewport fallbacks. Each is memoised on plain props, so
+// the render a keystroke causes (the reply turning sendable or empty) leaves
+// them, and the menus inside them, alone.
+const ConversationTriageFallback = memo(function ConversationTriageFallback({
+  conversationId,
+  priority,
+  assignedAgent,
+  status,
+  snoozedUntil,
+  onChanged,
+}: {
+  conversationId: ConversationId
+  priority: ConversationDTO['priority']
+  assignedAgent: ConversationDTO['assignedAgent']
+  status: ConversationDTO['status']
+  snoozedUntil: ConversationDTO['snoozedUntil']
+  onChanged: () => void
+}) {
+  return (
+    <div className="flex shrink-0 items-center gap-1.5 min-[1680px]:hidden">
+      <PriorityControl conversationId={conversationId} value={priority} onChanged={onChanged} />
+      <AssigneeControl
+        conversationId={conversationId}
+        assignedAgent={assignedAgent}
+        onChanged={onChanged}
+      />
+      <StatusControl
+        conversationId={conversationId}
+        status={status}
+        snoozedUntil={snoozedUntil}
+        onChanged={onChanged}
+      />
+    </div>
+  )
+})
+
+const TicketTriageFallback = memo(function TicketTriageFallback({
+  ticket,
+  onChanged,
+}: {
+  ticket: ComponentProps<typeof TicketPriorityControl>['ticket']
+  onChanged: () => void
+}) {
+  return (
+    <div className="flex shrink-0 items-center gap-1.5 min-[1680px]:hidden">
+      <TicketPriorityControl ticket={ticket} onChanged={onChanged} />
+      <TicketAssigneeControl ticket={ticket} onChanged={onChanged} />
+    </div>
+  )
+})
+
+const ThreadTagsFallback = memo(function ThreadTagsFallback({
+  conversationId,
+  tags,
+}: ComponentProps<typeof ConversationTagsEditor>) {
+  return (
+    <div className="flex items-center gap-1.5 border-b border-border/50 px-4 py-2 sm:px-5 min-[1680px]:hidden">
+      <ConversationTagsEditor conversationId={conversationId} tags={tags} />
+    </div>
+  )
+})
+
+// The sheet the Details button opens below the inline panel width. Memoised
+// with its props stable, so a keystroke does not re-render the closed sheet.
+const DetailsSheet = memo(function DetailsSheet({
+  open,
+  onOpenChange,
+  ...panelProps
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+} & Omit<ComponentProps<typeof InboxDetailPanel>, 'visible' | 'overlay' | 'openCopilotToken'>) {
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-[22rem] max-w-[90vw] gap-0 p-0 sm:max-w-[22rem]">
+        <SheetTitle className="sr-only">Details</SheetTitle>
+        <InboxDetailPanel {...panelProps} visible={open} overlay />
+      </SheetContent>
+    </Sheet>
+  )
+})
+
+const DetailsSheetTrigger = memo(function DetailsSheetTrigger({
+  open,
+  onOpen,
+  className,
+}: {
+  open: boolean
+  onOpen: () => void
+  className: string
+}) {
+  return (
+    <button
+      type="button"
+      title="Details"
+      aria-label="Details"
+      aria-expanded={open}
+      onClick={onOpen}
+      className={cn(className, 'min-[1680px]:hidden')}
+    >
+      <InformationCircleIcon className="h-4 w-4" />
+    </button>
+  )
+})
 
 /**
  * Link previews for the draft being written, from its text once typing

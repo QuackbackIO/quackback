@@ -16,7 +16,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
-import { BackLink } from '@/components/ui/back-link'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
+import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { SearchInput } from '@/components/shared/search-input'
 import { Label } from '@/components/ui/label'
 import {
@@ -35,15 +36,18 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/shared/utils'
-import { CUSTOM_ROLE_BADGE } from './role-ui'
 
 type RoleWithMeta = Awaited<ReturnType<typeof listRolesFn>>['roles'][number]
 
 type RoleEditorProps =
-  | { mode: 'edit'; roleId: string }
-  | { mode: 'create'; duplicateFromId?: string }
+  { mode: 'edit'; roleId: string } | { mode: 'create'; duplicateFromId?: string }
 
 const ROLES_TAB = { to: '/admin/settings/members', search: { tab: 'roles' } } as const
+
+const CRUMBS = [
+  { label: 'Members & Teams', to: '/admin/settings/members' },
+  { label: 'Roles', to: '/admin/settings/members', search: { tab: 'roles' } },
+]
 
 /**
  * Full-page create / edit / view surface for a role, shared by /roles/new and
@@ -186,28 +190,21 @@ export function RoleEditor(props: RoleEditorProps) {
   const countWord = isCreate ? 'selected' : 'granted'
 
   return (
-    <div className="max-w-3xl space-y-6">
-      <div className="flex items-center justify-between gap-2">
-        <BackLink to="/admin/settings/members" search={{ tab: 'roles' }}>
-          Roles
-        </BackLink>
-        {canManage && !isCreate && (
+    <SettingsPage
+      title={isCreate ? 'New role' : (role?.name ?? '')}
+      description={readOnly ? role?.description || undefined : undefined}
+      crumbs={CRUMBS}
+      actions={
+        canManage && !isCreate ? (
           <Button variant="outline" size="sm" onClick={duplicate}>
             Duplicate
           </Button>
-        )}
-      </div>
-
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        {readOnly ? (
-          <div className="space-y-1">
-            <h1 className="text-lg font-semibold">{role?.name}</h1>
-            {role?.description && (
-              <p className="text-sm text-muted-foreground">{role.description}</p>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-3">
+        ) : undefined
+      }
+    >
+      {!readOnly && (
+        <SettingsCard>
+          <div className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="role-editor-name">Name</Label>
               <Input
@@ -231,32 +228,18 @@ export function RoleEditor(props: RoleEditorProps) {
               />
             </div>
           </div>
-        )}
-        <div className="flex flex-col items-end gap-1.5 text-right">
-          <Badge
-            variant={role?.isSystem ? 'subtle' : 'outline'}
-            size="sm"
-            className={cn(!role?.isSystem && CUSTOM_ROLE_BADGE)}
-          >
-            {role?.isSystem ? 'Preset' : 'Custom'}
-          </Badge>
-          <span className="rounded-md bg-muted px-2 py-1 font-mono text-[11px] text-muted-foreground">
-            {selected.size} of {PERMISSION_CATALOGUE.length} {countWord}
-          </span>
-        </div>
-      </div>
+        </SettingsCard>
+      )}
 
       {isCreate && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 px-3.5 py-2.5">
-          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
-            Start from
-          </Label>
+          <Label className="text-[13px] text-muted-foreground">Start from</Label>
           <Select value={sourceId} onValueChange={onSourceChange}>
             <SelectTrigger size="sm" className="w-[280px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="blank">Blank — no permissions</SelectItem>
+              <SelectItem value="blank">Blank, no permissions</SelectItem>
               {data.roles.map((r) => (
                 <SelectItem key={r.id} value={r.id}>
                   Duplicate {r.name} · {r.permissionKeys.length} permissions
@@ -265,7 +248,7 @@ export function RoleEditor(props: RoleEditorProps) {
             </SelectContent>
           </Select>
           <span className="text-xs text-muted-foreground">
-            Picking a role stages its permissions below — edit from there.
+            Picking a role stages its permissions below. Edit from there.
           </span>
         </div>
       )}
@@ -278,7 +261,7 @@ export function RoleEditor(props: RoleEditorProps) {
         />
       </div>
 
-      <div className="space-y-3">
+      <SettingsCard flush contentClassName="divide-y divide-border/50">
         {PERMISSION_CATEGORIES.map((category) => {
           const inCategory = visible.filter((p) => p.category === category)
           if (inCategory.length === 0) return null
@@ -287,13 +270,8 @@ export function RoleEditor(props: RoleEditorProps) {
           const allOn = togglable.length > 0 && togglable.every((p) => selected.has(p.key))
           const isOpen = query ? true : openCats.has(category)
           return (
-            <div key={category} className="rounded-lg border">
-              <div
-                className={cn(
-                  'flex items-center gap-2.5 bg-muted/40 px-3.5 py-2',
-                  isOpen && 'border-b'
-                )}
-              >
+            <div key={category}>
+              <div className="flex items-center gap-3 px-4 py-2.5 sm:px-6">
                 <Checkbox
                   checked={grantedCount === 0 ? false : allOn ? true : 'indeterminate'}
                   disabled={readOnly || togglable.length === 0}
@@ -325,21 +303,19 @@ export function RoleEditor(props: RoleEditorProps) {
                     })
                   }
                 >
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    {CATEGORY_LABELS[category]}
-                  </span>
+                  <span className="text-sm font-medium">{CATEGORY_LABELS[category]}</span>
                   {inCategory.some((p) => newKeys.has(p.key)) && (
                     <Badge size="sm" variant="outline">
                       New
                     </Badge>
                   )}
-                  <span className="ml-auto font-mono text-[11px] text-muted-foreground">
+                  <span className="ml-auto text-[13px] text-muted-foreground tabular-nums">
                     {grantedCount} of {inCategory.length}
                   </span>
                 </button>
               </div>
               {isOpen && (
-                <ul>
+                <ul className="border-t border-border/50 bg-muted/20 pb-1">
                   {inCategory.map((p) => {
                     // Above the editor's ceiling: can't be granted here. Still
                     // removable when already on the role (de-escalation is free).
@@ -348,7 +324,7 @@ export function RoleEditor(props: RoleEditorProps) {
                       <li
                         key={p.key}
                         className={cn(
-                          'flex items-center gap-2.5 border-b px-3.5 py-1.5 text-[13px] last:border-b-0',
+                          'flex items-center gap-3 py-1.5 pl-10 pr-4 text-[13px] sm:pl-12 sm:pr-6',
                           aboveCeiling && 'opacity-50'
                         )}
                       >
@@ -377,7 +353,7 @@ export function RoleEditor(props: RoleEditorProps) {
             </div>
           )
         })}
-      </div>
+      </SettingsCard>
 
       {!readOnly && (
         <div className="sticky bottom-0 flex items-center justify-between gap-3 rounded-lg border bg-background px-4 py-3 shadow-sm">
@@ -401,12 +377,12 @@ export function RoleEditor(props: RoleEditorProps) {
           <div className="flex gap-2">
             {!isCreate && (
               <Button
-                variant="outline"
+                variant="outline-destructive"
                 size="sm"
-                className="mr-auto text-destructive hover:text-destructive"
+                className="mr-auto"
                 onClick={() => setDeleteOpen(true)}
               >
-                Delete
+                Delete role
               </Button>
             )}
             <Button variant="outline" size="sm" onClick={() => navigate(ROLES_TAB)}>
@@ -437,7 +413,7 @@ export function RoleEditor(props: RoleEditorProps) {
           roles={data.roles}
         />
       )}
-    </div>
+    </SettingsPage>
   )
 }
 
@@ -478,10 +454,10 @@ function DeleteRoleDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Delete "{role.name}"?</DialogTitle>
+          <DialogTitle>Delete role?</DialogTitle>
           <DialogDescription>
             {needsReassign
-              ? `${role.memberCount} member${role.memberCount === 1 ? '' : 's'} hold this role. Choose the role they should move to — they keep workspace access either way.`
+              ? `${role.memberCount} member${role.memberCount === 1 ? '' : 's'} hold this role. Choose the role they should move to. They keep workspace access either way.`
               : 'Nobody holds this role. This removes it permanently.'}
           </DialogDescription>
         </DialogHeader>
@@ -511,7 +487,7 @@ function DeleteRoleDialog({
             onClick={() => remove.mutate()}
             disabled={remove.isPending || (needsReassign && !reassignTo)}
           >
-            {remove.isPending ? 'Deleting…' : needsReassign ? 'Reassign & delete' : 'Delete role'}
+            {remove.isPending ? 'Deleting…' : 'Delete role'}
           </Button>
         </DialogFooter>
       </DialogContent>

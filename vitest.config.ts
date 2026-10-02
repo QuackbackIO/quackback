@@ -1,7 +1,10 @@
 import { defineConfig } from 'vitest/config'
 import path from 'path'
+import { serverWorkers } from './apps/web/src/lib/build/server-workers'
 
 export default defineConfig({
+  // Server code imports its worker-thread scripts with `?server-worker`.
+  plugins: [serverWorkers()],
   test: {
     globals: true,
     environment: 'node',

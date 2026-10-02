@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import {
   EnvelopeIcon,
   CalendarIcon,
-  PlusIcon,
   ChevronRightIcon,
   GlobeAltIcon,
   DocumentTextIcon,
@@ -11,9 +10,10 @@ import {
   AdjustmentsHorizontalIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
+import { formatCalendarDate } from '@/lib/shared/utils/date'
 import { DATE_PRESETS, getDateFromDaysAgo } from '@/components/shared/filter-presets'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { FilterChip, type FilterOption } from '@/components/shared/filter-chip'
+import { FilterAddButton, FilterChip, type FilterOption } from '@/components/shared/filter-chip'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -44,13 +44,7 @@ interface UsersActiveFiltersBarProps {
 }
 
 type FilterCategory =
-  | 'verified'
-  | 'date'
-  | 'emailDomain'
-  | 'postCount'
-  | 'voteCount'
-  | 'commentCount'
-  | 'customAttr'
+  'verified' | 'date' | 'emailDomain' | 'postCount' | 'voteCount' | 'commentCount' | 'customAttr'
 
 interface FilterCategoryDef {
   key: FilterCategory
@@ -270,7 +264,8 @@ function CustomAttrFilterInput({
   )
 }
 
-function AddFilterButton({
+/** The Filter control that opens the category menu; lives in the list toolbar. */
+export function UsersFilterButton({
   onFiltersChange,
   filters,
 }: {
@@ -341,20 +336,7 @@ function AddFilterButton({
       }}
     >
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            'inline-flex items-center gap-1 px-2 py-0.5',
-            'rounded-full text-[13px]',
-            'border border-dashed border-border/50',
-            'text-muted-foreground hover:text-foreground',
-            'hover:border-border hover:bg-muted/30',
-            'transition-colors'
-          )}
-        >
-          <PlusIcon className="h-3 w-3" />
-          Add filter
-        </button>
+        <FilterAddButton />
       </PopoverTrigger>
       <PopoverContent align="start" className="w-52 p-0">
         {activeCustomAttr ? (
@@ -528,13 +510,9 @@ function getFilterIcon(type: string) {
   return icons[type] ?? AdjustmentsHorizontalIcon
 }
 
+/** A date filter ("2026-10-01") as the calendar day it names, for every viewer. */
 function formatDate(dateStr: string): string {
-  try {
-    const date = new Date(dateStr)
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  } catch {
-    return dateStr
-  }
+  return formatCalendarDate(dateStr) ?? dateStr
 }
 
 function computeActiveFilters(
@@ -688,21 +666,13 @@ export function UsersActiveFiltersBar({
     [filters, onFiltersChange]
   )
 
-  if (activeFilters.length === 0) {
-    return (
-      <div className="flex items-center">
-        <AddFilterButton onFiltersChange={onFiltersChange} filters={filters} />
-      </div>
-    )
-  }
+  if (activeFilters.length === 0) return null
 
   return (
     <div className="flex flex-wrap gap-1 items-center">
       {activeFilters.map(({ key, type, ...filterProps }) => (
         <FilterChip key={key} icon={getFilterIcon(type)} {...filterProps} />
       ))}
-
-      <AddFilterButton onFiltersChange={onFiltersChange} filters={filters} />
 
       {activeFilters.length > 1 && (
         <button

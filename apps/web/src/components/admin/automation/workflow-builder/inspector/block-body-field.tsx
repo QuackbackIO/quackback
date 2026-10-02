@@ -54,7 +54,7 @@ export function BlockBodyField({
           />
         </div>
         <p className="text-[11px] text-muted-foreground">
-          Variables insert as <code className="font-mono">{'{token|fallback}'}</code> — edit the
+          Variables insert as <code className="font-mono">{'{token|fallback}'}</code>. Edit the
           fallback text after the “|”. An unresolved token never reaches the customer.
         </p>
       </div>

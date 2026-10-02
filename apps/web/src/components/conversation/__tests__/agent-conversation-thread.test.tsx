@@ -17,8 +17,25 @@
  */
 import { createRef } from 'react'
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { act, render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
+import {
+  act,
+  render as rtlRender,
+  screen,
+  cleanup,
+  fireEvent,
+  waitFor,
+  within,
+} from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+
+function render(node: React.ReactNode) {
+  return rtlRender(
+    <IntlProvider locale="en-US" messages={{}}>
+      {node}
+    </IntlProvider>
+  )
+}
 import type { TicketDTO } from '@/lib/server/domains/tickets'
 import type { ConversationDTO, AgentConversationMessageDTO } from '@/lib/shared/conversation/types'
 import type { LinkedTicketSummary } from '@/lib/shared/inbox/items'
@@ -116,18 +133,37 @@ vi.mock('../composer-ai-actions', () => ({
     return <div data-testid="composer-ai-actions" data-active-mode={activeMode} />
   },
 }))
+// Renders of the header's triage controls and tags row, by name.
+const headerRenders = vi.hoisted(() => ({ counts: {} as Record<string, number> }))
+const countRender = (name: string) => {
+  headerRenders.counts[name] = (headerRenders.counts[name] ?? 0) + 1
+}
 vi.mock('@/components/admin/conversation/priority-control', () => ({
-  PriorityControl: () => <span data-testid="priority-control" />,
+  PriorityControl: () => {
+    countRender('priority')
+    return <span data-testid="priority-control" />
+  },
 }))
 vi.mock('@/components/admin/conversation/assignee-control', () => ({
-  AssigneeControl: () => null,
+  AssigneeControl: () => {
+    countRender('assignee')
+    return null
+  },
 }))
 vi.mock('@/components/admin/conversation/channel-badge', () => ({ ChannelBadge: () => null }))
 vi.mock('@/components/admin/conversation/sla-chip', () => ({ SlaChip: () => null }))
 vi.mock('@/components/admin/conversation/conversation-tags-editor', () => ({
-  ConversationTagsEditor: () => null,
+  ConversationTagsEditor: () => {
+    countRender('tags')
+    return null
+  },
 }))
-vi.mock('@/components/admin/conversation/status-control', () => ({ StatusControl: () => null }))
+vi.mock('@/components/admin/conversation/status-control', () => ({
+  StatusControl: () => {
+    countRender('status')
+    return null
+  },
+}))
 // The detail panel renders whenever the thread does, so it doubles as the
 // thread's render counter. The editor stub hands out its latest onChange.
 const composer = vi.hoisted(() => ({
@@ -221,7 +257,6 @@ vi.mock('@/components/ui/rich-text-editor', async () => {
       }))
       return <textarea ref={areaRef} data-testid="editor" placeholder={placeholder} readOnly />
     },
-    RichTextContent: () => null,
   }
 })
 vi.mock('@/components/shared/composer-attachment-tray', () => ({
@@ -254,17 +289,21 @@ vi.mock('@/lib/client/hooks/use-inbox-translation', () => ({
   },
 }))
 vi.mock('@/lib/client/hooks/use-copilot-insert', () => ({ useCopilotInsert: () => vi.fn() }))
-vi.mock('@/lib/client/hooks/use-image-upload', () => ({
-  useImageUpload: () => ({ upload: vi.fn() }),
+vi.mock('@/lib/client/hooks/use-file-upload', () => ({
+  useAgentFileUpload: () => ({ upload: vi.fn() }),
 }))
 const addFiles = vi.fn()
 vi.mock('@/lib/client/hooks/use-conversation-composer-attachments', () => ({
   useConversationComposerAttachments: () => ({
-    pending: [],
+    items: [],
+    attachments: [],
     addFiles,
     remove: vi.fn(),
+    retry: vi.fn(),
     clear: vi.fn(),
+    restore: vi.fn(),
     uploading: false,
+    hasErrors: false,
   }),
 }))
 
@@ -590,6 +629,25 @@ describe('AgentConversationThread — conversation kind unaffected', () => {
     expect(await screen.findByRole('menuitemradio', { name: 'Note' })).toBeInTheDocument()
     expect(screen.getByTestId('inbox-detail-panel')).toBeInTheDocument()
     expect(screen.getByTestId('composer-ai-actions')).toHaveAttribute('data-active-mode', 'reply')
+  })
+})
+
+describe('AgentConversationThread: details toggle below the inline panel width', () => {
+  it('offers a Details button that opens the details content in a sheet', async () => {
+    renderThread({ kind: 'conversation', id: 'conversation_1' }, { detailPanelShown: false })
+    const toggle = await screen.findByRole('button', { name: 'Details' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    fireEvent.click(toggle)
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByTestId('inbox-detail-panel')).toHaveAttribute('data-visible', 'true')
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
+  it('has no Details button where the panel is inline', async () => {
+    renderThread({ kind: 'conversation', id: 'conversation_1' }, { detailPanelShown: true })
+    await screen.findByRole('button', { name: 'Snooze' })
+    expect(screen.queryByRole('button', { name: 'Details' })).toBeNull()
   })
 })
 
@@ -1125,6 +1183,26 @@ describe('AgentConversationThread composer typing', () => {
     composer.threadRenders = 0
     type('H', 'Hello there')
     expect(composer.threadRenders).toBe(0)
+  })
+
+  it('keeps the header controls out of the render the first character causes', async () => {
+    renderThread({ kind: 'conversation', id: 'conversation_1' })
+    await screen.findByTestId('inbox-detail-panel')
+    expect(Object.keys(headerRenders.counts).sort()).toEqual([
+      'assignee',
+      'priority',
+      'status',
+      'tags',
+    ])
+    const before = { ...headerRenders.counts }
+    composer.threadRenders = 0
+
+    type('', 'H')
+
+    // The thread did re-render (the reply became sendable) ...
+    expect(composer.threadRenders).toBeGreaterThan(0)
+    // ... and the header controls did not.
+    expect(headerRenders.counts).toEqual(before)
   })
 
   it('sends the reply as typed and empties the composer', async () => {

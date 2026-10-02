@@ -10,8 +10,8 @@ describe('WidgetLastDetected', () => {
   })
 
   it('renders a relative last-detected time', () => {
-    render(<WidgetLastDetected at={new Date().toISOString()} />)
+    render(<WidgetLastDetected at={new Date(Date.now() - 5 * 60_000).toISOString()} />)
     expect(screen.getByText(/Last detected/)).toBeInTheDocument()
-    expect(screen.getByText(/ago/)).toBeInTheDocument()
+    expect(screen.getByText('5 minutes ago')).toBeInTheDocument()
   })
 })

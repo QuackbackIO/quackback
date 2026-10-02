@@ -2,17 +2,12 @@
 
 import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
-import { PlusIcon, BoltIcon, TrashIcon, PencilIcon } from '@heroicons/react/24/outline'
+import { BoltIcon } from '@heroicons/react/24/outline'
 import { EmptyState } from '@/components/shared/empty-state'
-import { EllipsisVerticalIcon } from '@heroicons/react/24/solid'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+import { NewButton } from '@/components/shared/new-button'
+import { StateBadge, type BadgeState } from '@/components/shared/state-badge'
+import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { RowIcon, SettingsList, SettingsListRow } from '@/components/admin/settings/settings-list'
 import { UpgradeModal } from '@/components/admin/upgrade'
 import { CreateWebhookDialog } from './create-webhook-dialog'
 import { EditWebhookDialog } from './edit-webhook-dialog'
@@ -20,11 +15,13 @@ import { DeleteWebhookDialog } from './delete-webhook-dialog'
 import type { Webhook } from '@/lib/shared/types'
 
 const EVENT_LABELS: Record<string, string> = {
-  'post.created': 'New Post',
-  'post.status_changed': 'Status Changed',
-  'comment.created': 'New Comment',
-  'changelog.published': 'Changelog Published',
+  'post.created': 'New post',
+  'post.status_changed': 'Status changed',
+  'comment.created': 'New comment',
+  'changelog.published': 'Changelog published',
 }
+
+const WEBHOOK_LIMIT = 25
 
 interface WebhooksSettingsProps {
   webhooks: Webhook[]
@@ -45,159 +42,88 @@ export function WebhooksSettings({ webhooks, entitled }: WebhooksSettingsProps) 
     setCreateDialogOpen(true)
   }
 
-  const getStatusBadge = (webhook: Webhook) => {
-    if (webhook.status === 'disabled') {
-      if (webhook.failureCount >= 50) {
-        return (
-          <Badge
-            variant="destructive"
-            title={`Auto-disabled after ${webhook.failureCount} failures`}
-          >
-            Auto-disabled
-          </Badge>
-        )
-      }
-      return <Badge variant="secondary">Disabled</Badge>
-    }
-    if (webhook.failureCount >= 25) {
-      return (
-        <Badge variant="destructive" title={`${webhook.failureCount} consecutive failures`}>
-          Failing ({webhook.failureCount}/50)
-        </Badge>
-      )
-    }
-    if (webhook.failureCount > 0) {
-      return (
-        <Badge variant="outline" title={`${webhook.failureCount} consecutive failures`}>
-          Issues ({webhook.failureCount})
-        </Badge>
-      )
-    }
-    return <Badge variant="default">Active</Badge>
+  /** The default (active, no failures) state shows no badge. */
+  const getState = (webhook: Webhook): BadgeState | null => {
+    if (webhook.status === 'disabled') return webhook.failureCount >= 50 ? 'error' : 'off'
+    if (webhook.failureCount >= 25) return 'error'
+    if (webhook.failureCount > 0) return 'attention'
+    return null
   }
 
+  /** Visible failure context, so it never hides in a tooltip. */
+  const getFailureNote = (webhook: Webhook) => {
+    if (webhook.status === 'disabled' && webhook.failureCount >= 50) {
+      return `Auto-disabled after ${webhook.failureCount} failures`
+    }
+    if (webhook.failureCount > 0) {
+      return `${webhook.failureCount} consecutive ${webhook.failureCount === 1 ? 'failure' : 'failures'}`
+    }
+    return null
+  }
+
+  const atLimit = webhooks.length >= WEBHOOK_LIMIT
+  const newWebhookButton = (
+    <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+      {atLimit && (
+        <span className="text-[13px] text-muted-foreground">
+          Limit of {WEBHOOK_LIMIT} webhooks reached
+        </span>
+      )}
+      <NewButton noun="webhook" onClick={requestCreate} disabled={atLimit} />
+    </div>
+  )
+
   return (
-    <div className="space-y-4">
-      {/* Empty state */}
-      {webhooks.length === 0 && (
-        <div className="rounded-lg border border-dashed">
+    <>
+      <SettingsCard
+        title="Webhooks"
+        description="Receive an HTTP POST when events happen in your workspace."
+        action={newWebhookButton}
+        flush
+      >
+        {webhooks.length === 0 ? (
           <EmptyState
+            size="compact"
             icon={BoltIcon}
-            title="No webhooks configured"
-            description="Get notified in real-time when posts are created, statuses change, or votes hit milestones. Connect to Slack, Discord, or your own systems."
-            action={
-              <Button size="sm" onClick={requestCreate}>
-                <PlusIcon className="h-4 w-4 mr-1.5" />
-                Create your first webhook
-              </Button>
-            }
+            title="No webhooks yet"
+            description="Get notified when posts are created, statuses change or comments arrive."
           />
-        </div>
-      )}
-
-      {/* Header with create button */}
-      {webhooks.length > 0 && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">{webhooks.length} of 25 webhooks</p>
-          <Button size="sm" onClick={requestCreate} disabled={webhooks.length >= 25}>
-            <PlusIcon className="h-4 w-4 mr-1.5" />
-            Create Webhook
-          </Button>
-        </div>
-      )}
-
-      {/* Webhooks list */}
-      {webhooks.length > 0 && (
-        <div className="space-y-3">
-          {webhooks.map((webhook) => (
-            <div
-              key={webhook.id}
-              className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-border/50 p-4"
-            >
-              <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
-                  <BoltIcon className="h-5 w-5 text-muted-foreground" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p
-                      className="text-sm font-medium truncate max-w-[200px] sm:max-w-[300px]"
-                      title={webhook.url}
-                    >
-                      {webhook.url}
-                    </p>
-                    {getStatusBadge(webhook)}
-                  </div>
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-xs text-muted-foreground mt-1">
-                    <span className="truncate">
-                      {webhook.events.map((e) => EVENT_LABELS[e] || e).join(', ')}
-                    </span>
-                    {webhook.lastTriggeredAt && (
+        ) : (
+          <SettingsList>
+            {webhooks.map((webhook) => (
+              <SettingsListRow
+                key={webhook.id}
+                leading={<RowIcon icon={BoltIcon} />}
+                title={webhook.url}
+                badges={getState(webhook) && <StateBadge state={getState(webhook)!} />}
+                meta={
+                  <>
+                    {getFailureNote(webhook) && (
+                      <span className="text-destructive">{getFailureNote(webhook)}</span>
+                    )}
+                    {getFailureNote(webhook) && ' · '}
+                    {webhook.lastError && webhook.failureCount > 0 ? (
+                      <span className="text-destructive" title={webhook.lastError}>
+                        Error: {webhook.lastError}
+                      </span>
+                    ) : (
                       <>
-                        <span className="hidden sm:inline">·</span>
-                        <span>
-                          Last fired{' '}
-                          {formatDistanceToNow(webhook.lastTriggeredAt, { addSuffix: true })}
-                        </span>
+                        {webhook.events.map((e) => EVENT_LABELS[e] || e).join(', ')}
+                        {webhook.lastTriggeredAt &&
+                          ` · Last fired ${formatDistanceToNow(webhook.lastTriggeredAt, { addSuffix: true })}`}
                       </>
                     )}
-                  </div>
-                  {webhook.lastError && webhook.failureCount > 0 && (
-                    <p className="text-xs text-destructive mt-1 truncate" title={webhook.lastError}>
-                      Error: {webhook.lastError}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Desktop: show buttons */}
-              <div className="hidden sm:flex items-center gap-2 shrink-0">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setEditWebhook(webhook)}
-                  aria-label={`Edit webhook ${webhook.url}`}
-                >
-                  <PencilIcon className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setDeleteWebhook(webhook)}
-                  aria-label={`Delete webhook ${webhook.url}`}
-                  className="text-destructive hover:text-destructive"
-                >
-                  <TrashIcon className="h-4 w-4" />
-                </Button>
-              </div>
-
-              {/* Mobile: dropdown menu */}
-              <div className="sm:hidden self-end">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" aria-label="Webhook actions">
-                      <EllipsisVerticalIcon className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setEditWebhook(webhook)}>
-                      <PencilIcon className="h-4 w-4 mr-2" />
-                      Edit Webhook
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => setDeleteWebhook(webhook)}
-                      className="text-destructive focus:text-destructive"
-                    >
-                      <TrashIcon className="h-4 w-4 mr-2" />
-                      Delete Webhook
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+                  </>
+                }
+                actions={[
+                  { label: 'Edit', onSelect: () => setEditWebhook(webhook) },
+                  { label: 'Delete', destructive: true, onSelect: () => setDeleteWebhook(webhook) },
+                ]}
+              />
+            ))}
+          </SettingsList>
+        )}
+      </SettingsCard>
 
       {/* Dialogs */}
       <CreateWebhookDialog
@@ -225,6 +151,6 @@ export function WebhooksSettings({ webhooks, entitled }: WebhooksSettingsProps) 
           onOpenChange={(open) => !open && setDeleteWebhook(null)}
         />
       )}
-    </div>
+    </>
   )
 }

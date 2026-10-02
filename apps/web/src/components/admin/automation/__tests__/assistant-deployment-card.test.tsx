@@ -1,9 +1,14 @@
 // @vitest-environment happy-dom
-import { afterEach, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
+import { createAutosaveMutationCache } from '@/lib/client/autosave'
 
+const toastError = vi.hoisted(() => vi.fn())
+vi.mock('sonner', () => ({ toast: { error: toastError } }))
+
+vi.mock('@/lib/client/use-permissions', () => ({ useHasPermission: () => true }))
 vi.mock('@/lib/server/functions/assistant-settings', () => ({
   getAssistantSettingsFn: vi.fn(),
   updateAssistantIdentityFn: vi.fn(),
@@ -12,78 +17,136 @@ vi.mock('@/lib/server/functions/assistant-settings', () => ({
 }))
 
 import { updateWidgetAssistantDeploymentFn } from '@/lib/server/functions/assistant-settings'
-import { AssistantDeploymentCard } from '../assistant-deployment-card'
+import {
+  AgentPauseControl,
+  useAgentStatusLine,
+  type WidgetAssistantDeployment,
+} from '../assistant-deployment-card'
 
-afterEach(cleanup)
-
-it('shows deployment as a compact channel-level control', () => {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  render(
-    <IntlProvider locale="en" messages={{}} onError={() => {}}>
-      <QueryClientProvider client={queryClient}>
-        <AssistantDeploymentCard
-          deployment={{ enabled: true, respond: false }}
-          onChange={() => {}}
-        />
-      </QueryClientProvider>
-    </IntlProvider>
-  )
-
-  expect(screen.getByRole('heading', { name: 'Messenger replies' })).toBeInTheDocument()
-  expect(screen.getByText('Paused')).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Enable automatic replies' })).toBeInTheDocument()
+afterEach(() => {
+  cleanup()
+  toastError.mockReset()
+  vi.mocked(updateWidgetAssistantDeploymentFn).mockReset()
 })
 
-// The error styling used to be chosen by searching the message for the English
-// words "could not", so a translated error rendered as a neutral status line.
-it('announces a failed change as an alert in any locale', async () => {
-  vi.mocked(updateWidgetAssistantDeploymentFn).mockRejectedValueOnce(new Error('boom'))
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  render(
-    <IntlProvider
-      locale="nl"
-      messages={{ 'automation.agent.deployment.error': 'Wijzigen mislukt. Probeer het opnieuw.' }}
-      onError={() => {}}
-    >
-      <QueryClientProvider client={queryClient}>
-        <AssistantDeploymentCard
-          deployment={{ enabled: true, respond: false }}
-          onChange={() => {}}
-        />
-      </QueryClientProvider>
-    </IntlProvider>
+function Harness({
+  deployment,
+  available,
+  onChange = () => {},
+}: {
+  deployment: WidgetAssistantDeployment
+  available?: boolean
+  onChange?: (next: WidgetAssistantDeployment) => void
+}) {
+  const line = useAgentStatusLine(deployment, available)
+  return (
+    <>
+      <p data-testid="line">{line}</p>
+      <AgentPauseControl deployment={deployment} available={available} onChange={onChange} />
+    </>
   )
+}
 
-  fireEvent.click(screen.getByRole('button', { name: 'Enable automatic replies' }))
-  fireEvent.click(await screen.findByRole('button', { name: 'Enable replies' }))
-
-  // The confirm dialog stays open on failure, so the card behind it is aria-hidden.
-  const alert = await screen.findByRole('alert', { hidden: true })
-  expect(alert).toHaveTextContent('Wijzigen mislukt. Probeer het opnieuw.')
-  expect(alert).toHaveClass('text-destructive')
-  expect(alert).toHaveAttribute('aria-live', 'assertive')
-})
-
-it('keeps a successful change a polite status line', async () => {
-  vi.mocked(updateWidgetAssistantDeploymentFn).mockResolvedValueOnce(undefined as never)
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  render(
+function renderHarness(props: Parameters<typeof Harness>[0]) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+    mutationCache: createAutosaveMutationCache(),
+  })
+  return render(
     <IntlProvider locale="en" messages={{}} onError={() => {}}>
       <QueryClientProvider client={queryClient}>
-        <AssistantDeploymentCard
-          deployment={{ enabled: true, respond: false }}
-          onChange={() => {}}
-        />
+        <Harness {...props} />
       </QueryClientProvider>
     </IntlProvider>
   )
+}
 
-  fireEvent.click(screen.getByRole('button', { name: 'Enable automatic replies' }))
-  fireEvent.click(await screen.findByRole('button', { name: 'Enable replies' }))
+describe('Agent pause control', () => {
+  it('offers Pause Agent with a quiet status line while replying', () => {
+    renderHarness({ deployment: { enabled: true, respond: true } })
+    expect(screen.getByRole('button', { name: 'Pause Agent' })).toBeInTheDocument()
+    expect(screen.getByTestId('line')).toHaveTextContent('Replying in Messenger')
+  })
 
-  const status = await screen.findByRole('status')
-  expect(status).toHaveTextContent('Automatic replies are enabled in Messenger.')
-  expect(status).toHaveClass('text-muted-foreground')
-  expect(status).toHaveAttribute('aria-live', 'polite')
-  expect(screen.queryByRole('alert', { hidden: true })).not.toBeInTheDocument()
+  it('offers Resume when paused', () => {
+    renderHarness({ deployment: { enabled: true, respond: false } })
+    expect(screen.getByRole('button', { name: 'Resume' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Pause Agent' })).not.toBeInTheDocument()
+    expect(screen.getByTestId('line')).toHaveTextContent('Paused, not replying in Messenger')
+  })
+
+  it('explains that Support must be on when it is not', () => {
+    function LineOnly() {
+      return <p data-testid="line">{useAgentStatusLine({ enabled: true, respond: true }, false)}</p>
+    }
+    render(
+      <IntlProvider locale="en" messages={{}} onError={() => {}}>
+        <LineOnly />
+      </IntlProvider>
+    )
+    expect(screen.getByTestId('line')).toHaveTextContent(/Turn on Support/)
+  })
+
+  it('names the Support inbox for a tickets-only workspace', () => {
+    function LineOnly() {
+      return (
+        <p data-testid="line">
+          {useAgentStatusLine({ enabled: true, respond: true }, false, true)}
+        </p>
+      )
+    }
+    render(
+      <IntlProvider locale="en" messages={{}} onError={() => {}}>
+        <LineOnly />
+      </IntlProvider>
+    )
+    expect(screen.getByTestId('line')).toHaveTextContent(/need the Support inbox/)
+    expect(screen.getByTestId('line')).not.toHaveTextContent('Replying in Messenger')
+  })
+
+  it('pauses after confirming, sending only respond: false', async () => {
+    vi.mocked(updateWidgetAssistantDeploymentFn).mockResolvedValueOnce(undefined as never)
+    const onChange = vi.fn()
+    renderHarness({ deployment: { enabled: true, respond: true }, onChange })
+    fireEvent.click(screen.getByRole('button', { name: 'Pause Agent' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(updateWidgetAssistantDeploymentFn).not.toHaveBeenCalled()
+    fireEvent.click(
+      Array.from(dialog.querySelectorAll('button')).find((b) => b.textContent === 'Pause Agent')!
+    )
+    await waitFor(() =>
+      expect(updateWidgetAssistantDeploymentFn).toHaveBeenCalledWith({
+        data: { enabled: true, respond: false },
+      })
+    )
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith({ enabled: true, respond: false }))
+    expect(toastError).not.toHaveBeenCalled()
+  })
+
+  it('resumes after confirming, turning both flags on', async () => {
+    vi.mocked(updateWidgetAssistantDeploymentFn).mockResolvedValueOnce(undefined as never)
+    const onChange = vi.fn()
+    renderHarness({ deployment: { enabled: false, respond: false }, onChange })
+    fireEvent.click(screen.getByRole('button', { name: 'Resume' }))
+    const dialog = await screen.findByRole('alertdialog')
+    fireEvent.click(
+      Array.from(dialog.querySelectorAll('button')).find((b) => b.textContent === 'Resume')!
+    )
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith({ enabled: true, respond: true }))
+  })
+
+  it('shows the one autosave toast on failure and keeps the dialog open', async () => {
+    vi.mocked(updateWidgetAssistantDeploymentFn).mockRejectedValueOnce(new Error('boom'))
+    const onChange = vi.fn()
+    renderHarness({ deployment: { enabled: true, respond: true }, onChange })
+    fireEvent.click(screen.getByRole('button', { name: 'Pause Agent' }))
+    const dialog = await screen.findByRole('alertdialog')
+    fireEvent.click(
+      Array.from(dialog.querySelectorAll('button')).find((b) => b.textContent === 'Pause Agent')!
+    )
+    await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1))
+    expect(toastError).toHaveBeenCalledWith("Couldn't save. Try again.")
+    expect(onChange).not.toHaveBeenCalled()
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+  })
 })

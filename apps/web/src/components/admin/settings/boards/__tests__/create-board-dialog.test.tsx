@@ -51,10 +51,10 @@ function renderModal() {
 }
 
 function getPublicTile() {
-  return screen.getByRole('button', { name: 'Public' })
+  return screen.getByRole('button', { name: 'Everyone' })
 }
 function getPrivateTile() {
-  return screen.getByRole('button', { name: 'Private' })
+  return screen.getByRole('button', { name: 'Team only' })
 }
 function getCustomizeCheckbox() {
   return screen.getByRole('checkbox', { name: 'Customize access after create' })

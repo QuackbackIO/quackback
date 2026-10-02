@@ -90,7 +90,6 @@ function flattenButtonHost(element: React.ReactElement): React.ReactElement {
   const {
     variant,
     size,
-    shape,
     className,
     children: _children,
     asChild: _asChild,
@@ -99,7 +98,6 @@ function flattenButtonHost(element: React.ReactElement): React.ReactElement {
   } = element.props as {
     variant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link'
     size?: 'default' | 'sm' | 'lg' | 'icon' | 'icon-sm' | 'icon-lg'
-    shape?: 'default' | 'pill'
     className?: string
     children?: React.ReactNode
     asChild?: boolean
@@ -108,7 +106,7 @@ function flattenButtonHost(element: React.ReactElement): React.ReactElement {
   return React.createElement('button', {
     type: 'button',
     'data-slot': 'button',
-    className: cn(buttonVariants({ variant, size, shape, className })),
+    className: cn(buttonVariants({ variant, size, className })),
     ...(rest as React.ButtonHTMLAttributes<HTMLButtonElement>),
   })
 }

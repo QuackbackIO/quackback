@@ -163,7 +163,7 @@ export function MergeLeadControl({
                     <Avatar src={item.image} name={item.name} className="h-7 w-7" />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm text-foreground">
-                        {item.name || 'Unnamed User'}
+                        {item.name || 'Unnamed user'}
                       </span>
                       <span className="block truncate text-xs text-muted-foreground">
                         {item.email ?? 'No email'}

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { DomainsLanguagesTab } from '../domains-languages-tab'
 import { DEFAULT_HELP_CENTER_CONFIG } from '@/lib/server/domains/settings/settings.types'
 
@@ -62,6 +62,8 @@ describe('DomainsLanguagesTab', () => {
     mockBillingEnabled.current = false
     render(<DomainsLanguagesTab config={config} />)
     expect(screen.getByText('Custom domain')).toBeTruthy()
+    expect(screen.queryByText(/TLS terminates at your own reverse proxy/i)).toBeNull()
+    fireEvent.click(screen.getByText('DNS setup'))
     expect(screen.getByText(/TLS terminates at your own reverse proxy/i)).toBeTruthy()
   })
 

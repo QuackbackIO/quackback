@@ -17,7 +17,7 @@ import { z } from 'zod'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'moderation' })
-import { db, posts, postComments, boards, eq, and, or, isNull, sql } from '@/lib/server/db'
+import { db, posts, postComments, boards, sql } from '@/lib/server/db'
 import type { PostId, PostCommentId } from '@quackback/ids'
 import { requireAuth } from '@/lib/server/functions/auth-helpers'
 import { actorFromAuth } from '@/lib/server/audit/log'
@@ -106,73 +106,56 @@ export const rejectPostFn = createServerFn({ method: 'POST' })
 
 export const getModerationStatus = createServerFn({ method: 'GET' }).handler(async () => {
   await requireTeamAuth()
-  // Use allSettled so a transient failure of one query does not nuke the
-  // entire status badge. Filter through parent deletedAt to stay consistent
-  // with the listPending*Fn queries — items on a soft-deleted board (or, for
-  // comments, a soft-deleted post) should not contribute to the moderator's
-  // workload count.
-  const [postsResult, commentsResult] = await Promise.allSettled([
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(posts)
-      .innerJoin(boards, eq(posts.boardId, boards.id))
-      .where(
-        and(eq(posts.moderationState, 'pending'), isNull(posts.deletedAt), isNull(boards.deletedAt))
-      ),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(postComments)
-      .innerJoin(posts, eq(postComments.postId, posts.id))
-      .innerJoin(boards, eq(posts.boardId, boards.id))
-      .where(
-        and(
-          eq(postComments.moderationState, 'pending'),
-          isNull(postComments.deletedAt),
-          isNull(posts.deletedAt),
-          isNull(boards.deletedAt)
-        )
-      ),
-  ])
-  if (postsResult.status === 'rejected') {
-    log.error({ err: postsResult.reason }, 'pending posts count failed')
+  // One round trip for all three counts, so the rail's badge costs the page
+  // that carries it a single query. Filter through parent deletedAt to stay
+  // consistent with the listPending*Fn queries: items on a soft-deleted board
+  // (or, for comments, a soft-deleted post) should not contribute to the
+  // moderator's workload count.
+  //
+  // The third count lets the status surface when any board has a per-board
+  // moderation override set to `'on'`, even if the workspace default is 'none'
+  // AND the queue is currently empty. Without it, an admin who explicitly
+  // enables hold-posts on a single board sees no sidebar affordance until the
+  // first submission lands, making the queue discoverable only by chance. Only
+  // `'on'` overrides count because `'inherit'` defers to the workspace policy
+  // (covered by the requireApproval check below) and `'off'` opts out.
+  let postsCount = 0
+  let commentsCount = 0
+  let approvalCount = 0
+  try {
+    const result = await db.execute(sql`
+      select
+        (select count(*)::int from ${posts}
+          inner join ${boards} on ${posts.boardId} = ${boards.id}
+          where ${posts.moderationState} = 'pending'
+            and ${posts.deletedAt} is null and ${boards.deletedAt} is null) as posts,
+        (select count(*)::int from ${postComments}
+          inner join ${posts} on ${postComments.postId} = ${posts.id}
+          inner join ${boards} on ${posts.boardId} = ${boards.id}
+          where ${postComments.moderationState} = 'pending'
+            and ${postComments.deletedAt} is null
+            and ${posts.deletedAt} is null and ${boards.deletedAt} is null) as comments,
+        (select count(*)::int from ${boards}
+          where ${boards.deletedAt} is null
+            and (${boards.access}->'moderation'->>'anonPosts' = 'on'
+              or ${boards.access}->'moderation'->>'signedPosts' = 'on'
+              or ${boards.access}->'moderation'->>'comments' = 'on')) as approvals
+    `)
+    const [counts] = result as unknown as Array<{
+      posts: number
+      comments: number
+      approvals: number
+    }>
+    postsCount = counts?.posts ?? 0
+    commentsCount = counts?.comments ?? 0
+    approvalCount = counts?.approvals ?? 0
+  } catch (err) {
+    // A transient failure must not nuke the whole status badge.
+    log.error({ err }, 'moderation counts failed')
   }
-  if (commentsResult.status === 'rejected') {
-    log.error({ err: commentsResult.reason }, 'pending comments count failed')
-  }
-  const postsCount = postsResult.status === 'fulfilled' ? (postsResult.value[0]?.count ?? 0) : 0
-  const commentsCount =
-    commentsResult.status === 'fulfilled' ? (commentsResult.value[0]?.count ?? 0) : 0
   const pendingCount = postsCount + commentsCount
 
   const portalConfig = await getPortalConfig()
-
-  // Also surface the badge when any board has a per-board moderation
-  // override set to `'on'`, even if the workspace default is 'none' AND
-  // the queue is currently empty. Without this, an admin who explicitly
-  // enables hold-posts on a single board sees no sidebar affordance until
-  // the first submission lands — making the queue discoverable only by
-  // chance. We only count `'on'` overrides because `'inherit'` defers to
-  // the workspace policy (already covered by the requireApproval check
-  // below) and `'off'` actively opts out.
-  let approvalCount = 0
-  try {
-    const approvalRows = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(boards)
-      .where(
-        and(
-          isNull(boards.deletedAt),
-          or(
-            sql`${boards.access}->'moderation'->>'anonPosts' = 'on'`,
-            sql`${boards.access}->'moderation'->>'signedPosts' = 'on'`,
-            sql`${boards.access}->'moderation'->>'comments' = 'on'`
-          )
-        )
-      )
-    approvalCount = approvalRows[0]?.count ?? 0
-  } catch (err) {
-    log.error({ err }, 'per-board approval count failed')
-  }
 
   // Self-consistent: if there is a backlog (e.g. per-board approval routes
   // items to pending while the workspace default is 'none'), surface it.

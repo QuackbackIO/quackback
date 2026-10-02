@@ -3,9 +3,8 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
-import { MegaphoneIcon } from '@heroicons/react/24/solid'
-import { BackLink } from '@/components/ui/back-link'
-import { PageHeader } from '@/components/shared/page-header'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
+import { AUTOSAVE } from '@/lib/client/autosave'
 import { VisibilityCard } from '@/components/admin/settings/changelog/visibility-card'
 import { LabelsCard } from '@/components/admin/settings/changelog/labels-card'
 import { EmailCard } from '@/components/admin/settings/changelog/email-card'
@@ -46,6 +45,7 @@ function ChangelogSettingsPage() {
   const [settings, setSettings] = useState<ChangelogSettings>(data ?? DEFAULT_CHANGELOG_SETTINGS)
 
   const mutation = useMutation({
+    meta: AUTOSAVE,
     mutationFn: (patch: Partial<ChangelogSettings>) => updateChangelogSettingsFn({ data: patch }),
     onSuccess: (saved) => {
       setSettings(saved)
@@ -59,19 +59,10 @@ function ChangelogSettingsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      <div className="lg:hidden">
-        <BackLink to="/admin/settings">Settings</BackLink>
-      </div>
-      <PageHeader
-        icon={MegaphoneIcon}
-        title="Changelog"
-        description="Control who sees your changelog, organize entries with labels, and manage subscriber emails."
-      />
-
+    <SettingsPage page="/admin/settings/changelog">
       <VisibilityCard settings={settings} onChange={onChange} disabled={mutation.isPending} />
       <LabelsCard initialCategories={categories} />
       <EmailCard settings={settings} onChange={onChange} disabled={mutation.isPending} />
-    </div>
+    </SettingsPage>
   )
 }

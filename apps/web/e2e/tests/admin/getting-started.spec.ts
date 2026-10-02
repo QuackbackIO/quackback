@@ -8,7 +8,7 @@ test.describe('Home Getting Started card', () => {
     await expect(page.getByRole('navigation').first()).toBeVisible({ timeout: 10_000 })
   })
 
-  test('old Getting Started bookmarks land on Overview', async ({ page }) => {
+  test('old Getting Started bookmarks land on Home', async ({ page }) => {
     await page.goto('/admin/getting-started')
     await expect(page).toHaveURL(/\/admin\/?$/, { timeout: 10_000 })
     await expect(page.getByRole('navigation').first()).toBeVisible({ timeout: 10_000 })
@@ -46,7 +46,7 @@ test.describe('Home Getting Started card', () => {
     await expect(start.or(copy).first()).toBeVisible()
   })
 
-  test('the org logo returns to Overview from Feedback', async ({ page }) => {
+  test('the org logo returns to Home from Feedback', async ({ page }) => {
     await page.goto('/admin/feedback')
     await expect(page.getByRole('navigation').first()).toBeVisible({ timeout: 10_000 })
     await page.locator('aside a[href="/admin"]').first().click()

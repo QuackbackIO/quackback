@@ -1,11 +1,10 @@
 /// <reference types="vite/client" />
-import { Component, lazy, Suspense, useEffect, useLayoutEffect, type ReactNode } from 'react'
+import { Component, lazy, Suspense, useEffect, type ReactNode } from 'react'
 import type { Role } from '@/lib/shared/roles'
 import type { QueryClient } from '@tanstack/react-query'
 import {
   Outlet,
   createRootRouteWithContext,
-  HeadContent,
   redirect,
   rootRouteId,
   useRouter,
@@ -13,23 +12,18 @@ import {
 } from '@tanstack/react-router'
 import { isAdmin } from '@/lib/shared/roles'
 import appCss from '../globals.css?url'
-import refinedThemeCss from '../styles/labs/refined-theme.css?url'
 import { getBootstrapData, type BootstrapData } from '@/lib/server/functions/bootstrap'
 import { createRouteContextMemo } from '@/lib/client/route-context-memo'
 import type { WorkspaceSettings } from '@/lib/shared/types/settings'
 import { ThemeProvider } from '@/components/theme-provider'
 import { resolveDocumentTheme, SYSTEM_THEME_SCRIPT } from '@/lib/shared/theme'
+import { MinimalDocument } from '@/components/shared/minimal-document'
 import { DefaultErrorPage } from '@/components/shared/error-page'
 import { DocumentHead, DocumentScripts } from '@/components/shared/document-head'
 import { OttHandler } from '@/components/shared/ott-handler'
 import { VisitorBeacon } from '@/components/shared/visitor-beacon'
 import { documentLocale, htmlLangDir } from '@/lib/shared/document-locale'
 import { normalizeLocale, DEFAULT_LOCALE, type SupportedLocale } from '@/lib/shared/i18n'
-import {
-  applyVisualThemeToDocument,
-  visualThemeAttribute,
-  type VisualTheme,
-} from '@/lib/shared/labs'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
 // The toast renderer is its own chunk: the root module ships with every
@@ -51,8 +45,6 @@ export interface RouterContext {
   updateBannerDismissedVersion?: BootstrapData['updateBannerDismissedVersion']
   billingEnabled?: boolean
   cloudEnabled?: boolean
-  /** Effective Labs appearance. Independent of light/dark preference. */
-  visualTheme?: VisualTheme
 }
 
 // Paths that are allowed before onboarding is complete
@@ -77,8 +69,7 @@ export function isOnboardingExempt(pathname: string): boolean {
 // server, since its response also answers client-side navigations.
 async function loadRootContext() {
   const { settings, ...bootstrap } = await getBootstrapData()
-  const visualTheme: VisualTheme = settings?.visualTheme === 'refined' ? 'refined' : 'legacy'
-  return { ...bootstrap, settings, visualTheme }
+  return { ...bootstrap, settings }
 }
 
 type RootContext = Awaited<ReturnType<typeof loadRootContext>>
@@ -140,10 +131,6 @@ export const Route = createRootRouteWithContext<RouterContext>()({
         href: appCss,
       },
       {
-        rel: 'stylesheet',
-        href: refinedThemeCss,
-      },
-      {
         rel: 'alternate',
         type: 'application/rss+xml',
         title: 'Changelog RSS Feed',
@@ -173,25 +160,6 @@ function RootComponent() {
  * Wraps RootDocument with a fallback for when route context is unavailable
  * (e.g. when the error occurred during beforeLoad).
  */
-function MinimalDocument({ children }: Readonly<{ children: ReactNode }>) {
-  // No route context here, so the theme is unknown — fall back to the same
-  // OS-driven canvas the helper uses for `system`, so the error page doesn't
-  // white-flash either.
-  const { colorScheme } = resolveDocumentTheme('system')
-  return (
-    <html lang="en" style={{ colorScheme }} suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: SYSTEM_THEME_SCRIPT }} />
-        <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Quackback</title>
-        <HeadContent />
-      </head>
-      <body className="min-h-screen bg-background font-sans antialiased">{children}</body>
-    </html>
-  )
-}
-
 class SafeRootDocument extends Component<{ children: ReactNode }, { hasError: boolean }> {
   state = { hasError: false }
 
@@ -212,13 +180,6 @@ class SafeRootDocument extends Component<{ children: ReactNode }, { hasError: bo
 // reset pages match the public portal's branding so visitors don't
 // feel like they crossed into a different product.
 const NON_PORTAL_PREFIXES = ['/admin', '/onboarding', '/api', '/complete-signup']
-
-function VisualThemeSync({ visualTheme }: { visualTheme: VisualTheme }) {
-  useLayoutEffect(() => {
-    applyVisualThemeToDocument(visualTheme)
-  }, [visualTheme])
-  return null
-}
 
 /**
  * The first navigation after hydration reuses the context this document was
@@ -248,10 +209,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   const acceptLanguageLocale = Route.useRouteContext({
     select: (context) => context.acceptLanguageLocale,
   })
-  const visualTheme = Route.useRouteContext({ select: (context) => context.visualTheme })
   useSeedRootContext()
-  const resolvedVisualTheme: VisualTheme =
-    visualTheme === 'refined' || settings?.visualTheme === 'refined' ? 'refined' : 'legacy'
   // Portal routes can force a specific theme (light/dark) via branding config.
   // Admin and other non-portal routes always respect the user's preference.
   const isPortalRoute = useRouterState({
@@ -324,7 +282,6 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
       dir={dir}
       className={themeClass}
       style={{ colorScheme }}
-      data-visual-theme={visualThemeAttribute(resolvedVisualTheme)}
       suppressHydrationWarning
     >
       <head>
@@ -332,7 +289,6 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
         <DocumentHead />
       </head>
       <body className="min-h-screen bg-background font-sans antialiased">
-        <VisualThemeSync visualTheme={resolvedVisualTheme} />
         <ThemeProvider
           attribute="class"
           defaultTheme={defaultTheme}

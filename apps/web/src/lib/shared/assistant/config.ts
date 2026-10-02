@@ -5,6 +5,10 @@ export const ASSISTANT_NAME_MAX_LENGTH = 80
 export const ASSISTANT_AVATAR_URL_MAX_LENGTH = 2_000
 export const ASSISTANT_ADDITIONAL_INSTRUCTIONS_MAX_LENGTH = 2_000
 
+/** The message of the error a save raises when the settings changed in another session. */
+export const ASSISTANT_REVISION_CONFLICT_MESSAGE =
+  'AI agent settings changed in another session. Reload the latest settings and try again.'
+
 export const ASSISTANT_TONES = ['warm', 'balanced', 'professional'] as const
 export const ASSISTANT_RESPONSE_LENGTHS = ['brief', 'balanced', 'detailed'] as const
 

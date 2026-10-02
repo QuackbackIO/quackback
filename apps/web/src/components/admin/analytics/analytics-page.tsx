@@ -1,7 +1,8 @@
-import { lazy, Suspense, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useMemo, useState, type ReactNode } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { isProductEnabled, type FeatureFlags } from '@/lib/shared/types/settings'
-import { analyticsQueries, type AnalyticsPeriod } from '@/lib/client/queries/analytics'
+import { analyticsQueries, periodRange, type AnalyticsPeriod } from '@/lib/client/queries/analytics'
 import { formatDistanceToNow } from 'date-fns'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -15,17 +16,18 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { PageHeader } from '@/components/shared/page-header'
-import { FilterSection } from '@/components/shared/filter-section'
 import { MENU_ICON, MENU_ROW } from '@/components/ui/menu'
 import { cn } from '@/lib/shared/utils'
-import { ChartBarIcon, FunnelIcon, CalendarDaysIcon } from '@heroicons/react/24/solid'
+import { FunnelIcon, CalendarDaysIcon } from '@heroicons/react/24/solid'
 import { CHART_HEIGHT_CLASS, channelLabel, formatResponseTime } from './analytics-constants'
-import { SECTION_NAV_ITEMS, type Section } from './analytics-sections'
+import { SECTION_NAV_ITEMS, parseSection, type Section } from './analytics-sections'
 import { AnalyticsSectionSelect } from './analytics-section-select'
 import { AnalyticsSummaryCards, type MetricKey } from './analytics-summary-cards'
 import { AnalyticsVisitorCards, type VisitorMetricKey } from './analytics-visitor-cards'
 import { AnalyticsVisitorPanels } from './analytics-visitor-panels'
 import { AnalyticsStatRow, type AnalyticsStatProps } from './analytics-stat-row'
+import { AnalyticsQuinnSection } from './analytics-quinn-section'
+import { AnalyticsSlaCards } from './analytics-sla-cards'
 import { AnalyticsEmpty } from './analytics-empty'
 import { AnalyticsBoardChart } from './analytics-board-chart'
 import { AnalyticsChangelogCard } from './analytics-changelog-card'
@@ -37,6 +39,7 @@ import { AnalyticsResponseDistribution } from './analytics-response-distribution
 import { AnalyticsTeammatePerformance } from './analytics-teammate-performance'
 import { ChartSkeleton, StatusChartSkeleton, SectionSkeleton } from './analytics-skeletons'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { useFormatNumber, type NumberFormatter } from '@/components/ui/format-number'
 
 // Defer recharts (~580KB minified, including victory-vendor) and the chart
 // primitives that wrap it. Analytics is admin-gated and rarely the first
@@ -72,52 +75,14 @@ function StatSection({ stats, children }: { stats: AnalyticsStatProps[]; childre
   return (
     <Card className="overflow-hidden py-0 gap-0">
       <AnalyticsStatRow stats={stats} />
-      <div className="border-t border-border/50 px-6 py-6">{children}</div>
+      <div className="border-t border-border/50 px-4 sm:px-6 py-6">{children}</div>
     </Card>
   )
 }
 
-/** Quinn's outcome split (Resolved / Escalated / Pending) as a proportional bar. */
-function AiOutcomeBreakdown({
-  ai,
-}: {
-  ai: { resolved: number; escalated: number; pending: number }
-}) {
-  const items = [
-    { label: 'Resolved', value: ai.resolved, className: 'bg-emerald-500' },
-    { label: 'Escalated', value: ai.escalated, className: 'bg-amber-500' },
-    { label: 'Pending', value: ai.pending, className: 'bg-primary' },
-  ]
-  const total = items.reduce((sum, i) => sum + i.value, 0) || 1
-  return (
-    <div className="space-y-3">
-      <div className="flex h-2 overflow-hidden rounded-full bg-muted">
-        {items.map((i) => (
-          <div
-            key={i.label}
-            className={i.className}
-            style={{ width: `${(i.value / total) * 100}%` }}
-          />
-        ))}
-      </div>
-      <div className="flex flex-wrap gap-x-5 gap-y-1.5">
-        {items.map((i) => (
-          <div key={i.label} className="flex items-center gap-1.5 text-xs">
-            <span className={cn('h-2 w-2 rounded-full', i.className)} />
-            <span className="text-muted-foreground">{i.label}</span>
-            <span className="font-medium tabular-nums text-foreground">
-              {i.value.toLocaleString()}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 /** Integer average, guarding divide-by-zero, with thousands separators. */
-function avgPerItem(total: number, count: number): string {
-  return count > 0 ? Math.round(total / count).toLocaleString() : '0'
+function avgPerItem(formatNumber: NumberFormatter, total: number, count: number): string {
+  return count > 0 ? formatNumber(Math.round(total / count)) : '0'
 }
 
 /** Period total per channel, in the series' volume-desc channel order. */
@@ -132,9 +97,9 @@ function channelTotals(volume: {
 }
 
 /** Format a median resolution time (in days) as a stat value + unit suffix.
- *  null (nothing resolved in the period) renders as an em dash. */
+ *  null (nothing resolved in the period) renders as a hyphen. */
 function formatResolveTime(days: number | null): { value: string; suffix?: string } {
-  if (days == null) return { value: '—' }
+  if (days == null) return { value: '-' }
   if (days < 1) return { value: '<1', suffix: 'day' }
   return { value: days < 10 ? days.toFixed(1) : Math.round(days).toString(), suffix: 'days' }
 }
@@ -148,6 +113,7 @@ const periods: Array<{ value: AnalyticsPeriod; label: string }> = [
 
 export function AnalyticsPage() {
   const settings = useWorkspaceSettings()
+  const formatNumber = useFormatNumber()
   const flags = settings?.featureFlags as FeatureFlags | undefined
   // Product reports follow product availability. Visitor reporting is always on.
   const sections = SECTION_NAV_ITEMS.filter(
@@ -158,7 +124,18 @@ export function AnalyticsPage() {
   )
 
   const [period, setPeriod] = useState<AnalyticsPeriod>('30d')
-  const [section, setSection] = useState<Section>('overview')
+  // The section is part of the URL; one the workspace has switched off opens the overview.
+  const search = useSearch({ strict: false }) as { section?: string }
+  const navigate = useNavigate()
+  const requested = parseSection(search.section)
+  const section: Section = sections.some((i) => i.key === requested) ? requested : 'overview'
+  const setSection = (next: Section) =>
+    void navigate({
+      to: '/admin/analytics',
+      search: (prev: Record<string, unknown>) => ({ ...prev, section: next }),
+    })
+  // The windows the Quinn and SLA cards read: fixed per period so their query keys stay stable.
+  const range = useMemo(() => periodRange(period), [period])
   const [activeMetric, setActiveMetric] = useState<MetricKey>('posts')
   const [visitorMetric, setVisitorMetric] = useState<VisitorMetricKey>('visitors')
   const [surface, setSurface] = useState<'all' | 'portal' | 'widget'>('all')
@@ -178,38 +155,36 @@ export function AnalyticsPage() {
       {/* Left sidebar */}
       <aside
         data-side-pane=""
-        className="hidden lg:flex w-64 xl:w-72 shrink-0 flex-col border-r border-border/50 bg-card/30 overflow-hidden"
+        className="hidden lg:flex w-64 xl:w-72 shrink-0 flex-col border-e border-chrome-hairline bg-background overflow-hidden"
       >
-        <div className="shrink-0 px-4 py-3.5">
-          <PageHeader icon={ChartBarIcon} title="Analytics" />
+        <div className="shrink-0 px-5 py-3.5">
+          <PageHeader as="h2" title="Analytics" />
         </div>
         <ScrollArea className="min-h-0 flex-1">
-          <div className="px-5 pb-5">
-            <FilterSection title="Sections">
-              <div className="space-y-1">
-                {sections.map(({ key, label, icon: Icon }) => {
-                  const active = section === key
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => setSection(key)}
-                      data-active={active || undefined}
-                      className={cn(
-                        MENU_ROW,
-                        'w-full',
-                        active
-                          ? 'bg-muted text-foreground font-medium'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                      )}
-                    >
-                      <Icon className={cn(MENU_ICON, active && 'text-primary')} />
-                      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </FilterSection>
+          <div className="px-2.5 pb-5">
+            <div className="space-y-1">
+              {sections.map(({ key, label, icon: Icon }) => {
+                const active = section === key
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setSection(key)}
+                    data-active={active || undefined}
+                    className={cn(
+                      MENU_ROW,
+                      'w-full',
+                      active
+                        ? 'bg-muted text-foreground font-medium'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                    )}
+                  >
+                    <Icon className={cn(MENU_ICON, active && 'text-primary')} />
+                    <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
         </ScrollArea>
       </aside>
@@ -217,7 +192,7 @@ export function AnalyticsPage() {
       {/* Main content */}
       <main className="flex-1 min-w-0 overflow-hidden">
         <ScrollArea className="h-full">
-          <div className="w-full px-6 pt-4 pb-6 flex flex-col gap-4">
+          <div className="w-full px-4 sm:px-6 pt-4 pb-6 flex flex-col gap-4">
             {/* Header: mobile title + section switcher (left) · updated + period (right) */}
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3 lg:hidden">
@@ -279,7 +254,12 @@ export function AnalyticsPage() {
               </div>
             </div>
 
-            {isLoading ? (
+            {section === 'ai' ? (
+              <AnalyticsQuinnSection
+                range={range}
+                periodLabel={periods.find((p) => p.value === period)?.label ?? ''}
+              />
+            ) : isLoading ? (
               <SectionSkeleton section={section} />
             ) : !data ? null : (
               <>
@@ -290,7 +270,7 @@ export function AnalyticsPage() {
                       activeMetric={activeMetric}
                       onMetricChange={setActiveMetric}
                     />
-                    <div className="border-t border-border/50 px-6 pt-7 pb-6">
+                    <div className="border-t border-border/50 px-4 sm:px-6 pt-7 pb-6">
                       <Suspense fallback={<ChartSkeleton className={CHART_HEIGHT_CLASS} />}>
                         <AnalyticsActivityChart
                           dailyStats={data.dailyStats}
@@ -320,7 +300,7 @@ export function AnalyticsPage() {
                           activeMetric={visitorMetric}
                           onMetricChange={setVisitorMetric}
                         />
-                        <div className="border-t border-border/50 px-6 pt-7 pb-6">
+                        <div className="border-t border-border/50 px-4 sm:px-6 pt-7 pb-6">
                           <Suspense fallback={<ChartSkeleton className={CHART_HEIGHT_CLASS} />}>
                             <AnalyticsVisitorChart
                               dailyStats={visitorData.dailyStats}
@@ -339,7 +319,7 @@ export function AnalyticsPage() {
                       stats={[
                         {
                           label: 'Posts',
-                          value: data.summary.posts.total.toLocaleString(),
+                          value: formatNumber(data.summary.posts.total),
                           delta: data.summary.posts.delta,
                         },
                         {
@@ -353,7 +333,7 @@ export function AnalyticsPage() {
                         },
                         {
                           label: 'Followers',
-                          value: data.followers.toLocaleString(),
+                          value: formatNumber(data.followers),
                           caption: 'current',
                         },
                       ]}
@@ -389,7 +369,7 @@ export function AnalyticsPage() {
                       stats={[
                         {
                           label: 'New conversations',
-                          value: data.conversationVolume.total.toLocaleString(),
+                          value: formatNumber(data.conversationVolume.total),
                           delta: data.conversationVolume.delta,
                         },
                         // Per-channel totals for the top channels, in the same
@@ -398,7 +378,7 @@ export function AnalyticsPage() {
                           .slice(0, 3)
                           .map((c) => ({
                             label: channelLabel(c.channel),
-                            value: c.total.toLocaleString(),
+                            value: formatNumber(c.total),
                           })),
                       ]}
                     >
@@ -414,7 +394,7 @@ export function AnalyticsPage() {
                         },
                         {
                           label: 'Answered',
-                          value: data.firstResponse.responded.toLocaleString(),
+                          value: formatNumber(data.firstResponse.responded),
                           caption: 'conversations',
                         },
                       ]}
@@ -439,7 +419,7 @@ export function AnalyticsPage() {
                         },
                         {
                           label: 'Closed',
-                          value: data.timeToClose.closed.toLocaleString(),
+                          value: formatNumber(data.timeToClose.closed),
                           caption: 'conversations',
                         },
                       ]}
@@ -469,58 +449,36 @@ export function AnalyticsPage() {
                             suffix: '/ 5',
                             delta: data.csat.avgRatingDelta,
                           },
-                          { label: 'Responses', value: data.csat.responseCount.toLocaleString() },
+                          { label: 'Responses', value: formatNumber(data.csat.responseCount) },
                           { label: 'Response rate', value: `${data.csat.responseRate}%` },
                         ]}
                       >
                         <AnalyticsCsatDistribution distribution={data.csat.distribution} />
                       </StatSection>
                     )}
+                    <AnalyticsSlaCards range={range} />
                   </div>
                 )}
-
-                {section === 'ai' &&
-                  (data.ai.involved === 0 ? (
-                    <Card className="overflow-hidden">
-                      <AnalyticsEmpty message="Quinn hasn't handled any conversations this period" />
-                    </Card>
-                  ) : (
-                    <StatSection
-                      stats={[
-                        {
-                          label: 'Conversations',
-                          value: data.ai.involved.toLocaleString(),
-                          caption: 'Quinn engaged',
-                        },
-                        { label: 'Resolution rate', value: `${data.ai.resolutionRate}%` },
-                        { label: 'Escalation rate', value: `${data.ai.escalationRate}%` },
-                        {
-                          label: 'AI CSAT',
-                          value:
-                            data.ai.ratingCount > 0 ? (data.ai.avgRating ?? 0).toFixed(1) : '—',
-                          suffix: data.ai.ratingCount > 0 ? '/ 5' : undefined,
-                        },
-                      ]}
-                    >
-                      <AiOutcomeBreakdown ai={data.ai} />
-                    </StatSection>
-                  ))}
 
                 {section === 'changelog' && (
                   <StatSection
                     stats={[
                       {
                         label: 'Published',
-                        value: data.changelog.publishedInPeriod.toLocaleString(),
+                        value: formatNumber(data.changelog.publishedInPeriod),
                       },
                       {
                         label: 'Total views',
-                        value: data.changelog.totalViews.toLocaleString(),
+                        value: formatNumber(data.changelog.totalViews),
                         caption: 'all time',
                       },
                       {
                         label: 'Avg / entry',
-                        value: avgPerItem(data.changelog.totalViews, data.changelog.publishedCount),
+                        value: avgPerItem(
+                          formatNumber,
+                          data.changelog.totalViews,
+                          data.changelog.publishedCount
+                        ),
                         caption: 'all time',
                       },
                     ]}
@@ -535,17 +493,17 @@ export function AnalyticsPage() {
                       stats={[
                         {
                           label: 'Signups',
-                          value: data.summary.users.total.toLocaleString(),
+                          value: formatNumber(data.summary.users.total),
                           delta: data.summary.users.delta,
                         },
                         {
                           label: 'New leads',
-                          value: data.newLeads.total.toLocaleString(),
+                          value: formatNumber(data.newLeads.total),
                           delta: data.newLeads.delta,
                         },
-                        { label: 'Active users', value: data.activeUsers.toLocaleString() },
+                        { label: 'Active users', value: formatNumber(data.activeUsers) },
                         { label: 'Verified', value: `${data.verifiedRate}%`, caption: 'all time' },
-                        { label: 'Contributors', value: data.contributorCount.toLocaleString() },
+                        { label: 'Contributors', value: formatNumber(data.contributorCount) },
                       ]}
                     >
                       <AnalyticsTopContributors contributors={data.topContributors} />

@@ -120,7 +120,7 @@ export function PlanDowngradeDialog(props: {
             <ul className="space-y-2 rounded-xl border border-border px-4 py-3">
               {features.map((line) => (
                 <li key={line} className="flex gap-2 text-sm text-muted-foreground">
-                  <span className="mt-1 size-1.5 shrink-0 rounded-full bg-amber-400" />
+                  <span className="mt-1 size-1.5 shrink-0 rounded-full bg-warning" />
                   {line}
                 </li>
               ))}

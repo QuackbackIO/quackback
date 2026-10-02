@@ -45,7 +45,7 @@ export function UserCard({ user, isSelected, onClick, showCountry = false }: Use
       {/* Name column */}
       <div className="min-w-0 flex-1 flex items-center gap-1.5">
         <h3 className="font-medium text-sm text-foreground truncate">
-          {user.name || 'Unnamed User'}
+          {user.name || 'Unnamed user'}
         </h3>
         {user.isLead ? (
           <span className="shrink-0 rounded-full border border-border/60 px-1.5 py-px text-[11px] font-medium uppercase tracking-wide text-muted-foreground">

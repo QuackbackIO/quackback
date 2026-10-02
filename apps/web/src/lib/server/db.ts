@@ -466,6 +466,8 @@ export {
   // Schema tables - assistant knowledge documents
   assistantDocuments,
   assistantDocumentsRelations,
+  files,
+  filesRelations,
   // Schema tables - assistant web sources
   assistantWebSources,
   // Schema tables - assistant pending actions
@@ -525,6 +527,7 @@ export type {
   MacroAction,
 } from '@quackback/db'
 export type { ServiceMetadata } from '@quackback/db'
+export type { FileRecord, NewFileRecord } from '@quackback/db'
 export type { IdentityProviderClaimMapping, ClaimRoleMapping } from '@quackback/db'
 export type { PermissionKey, PermissionCategory, SystemRoleKey } from '@quackback/db'
 export type {

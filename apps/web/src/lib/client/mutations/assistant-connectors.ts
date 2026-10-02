@@ -7,6 +7,7 @@ import {
   updateConnectorFn,
 } from '@/lib/server/functions/assistant-connectors'
 import type { ConnectorCreateInput, ConnectorUpdateInput } from '@/lib/shared/assistant/connectors'
+import { AUTOSAVE } from '@/lib/client/autosave'
 import { connectorKeys } from '@/lib/client/queries/assistant-connectors'
 
 export function useCreateConnector() {
@@ -19,9 +20,11 @@ export function useCreateConnector() {
   })
 }
 
-export function useUpdateConnector() {
+/** `autosave` tags the mutation so a failed change-triggered save shows the shared toast. */
+export function useUpdateConnector(options?: { autosave?: boolean }) {
   const queryClient = useQueryClient()
   return useMutation({
+    meta: options?.autosave ? AUTOSAVE : undefined,
     mutationFn: (input: ConnectorUpdateInput) => updateConnectorFn({ data: input }),
     onSuccess: (_row, input) => {
       void queryClient.invalidateQueries({ queryKey: connectorKeys.all() })

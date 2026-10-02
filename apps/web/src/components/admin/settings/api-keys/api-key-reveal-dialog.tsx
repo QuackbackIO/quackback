@@ -28,13 +28,13 @@ export function ApiKeyRevealDialog({
     <SecretRevealDialog
       open={open}
       onOpenChange={handleOpenChange}
-      title="API Key Created"
+      title="API key created"
       description={
         <>
           Your API key <strong>{keyName}</strong> has been created successfully.
         </>
       }
-      secretLabel="Your API Key"
+      secretLabel="Your API key"
       secretValue={keyValue}
       confirmLabel="I've saved my key"
     >

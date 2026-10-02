@@ -40,17 +40,19 @@ function AdminOverviewPage() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="mx-auto w-full max-w-6xl space-y-6 px-4 pt-4 pb-16 sm:px-6">
-        <OverviewDashboard
-          actions={<HomeActions flags={flags} />}
-          banner={
-            admin ? (
-              <Suspense fallback={null}>
-                <HomeGettingStarted />
-              </Suspense>
-            ) : null
-          }
-        />
+      <div className="px-4 pt-4 pb-16 sm:px-6">
+        <div className="w-full max-w-5xl space-y-6">
+          <OverviewDashboard
+            actions={<HomeActions flags={flags} />}
+            banner={
+              admin ? (
+                <Suspense fallback={null}>
+                  <HomeGettingStarted />
+                </Suspense>
+              ) : null
+            }
+          />
+        </div>
       </div>
     </ScrollArea>
   )

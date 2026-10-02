@@ -9,7 +9,7 @@
  * (`window`/`document`/DOMPurify): it is a recursive string walker over
  * write-time-sanitized JSON. Text nodes are HTML-escaped here (defense in
  * depth); client callers additionally run the output through DOMPurify (see
- * `RichTextContent`), which requires a DOM and so stays in the editor module.
+ * `RichTextContent`), which requires a DOM and lives in its own reader module.
  */
 import type { JSONContent } from '@tiptap/core'
 import { normalizeVideoMimeType } from '@/lib/shared/storage-config'
@@ -19,19 +19,12 @@ import {
   sanitizeImageUrl,
   sanitizeMediaUrl,
   safePositiveInt,
+  sanitizeOrderedListStart,
   extractYoutubeId,
 } from '@/lib/shared/utils/sanitize'
 
-// NOTE: this module is deliberately free of `@tiptap/extension-emoji` — its
-// ~700 KB shortcode dataset would otherwise land in every read-only portal
-// chunk that reaches `generateContentHTML`. Emoji nodes are serialized from
-// `attrs.emoji` (the Unicode char the picker stores at write time); a legacy
-// `name`-only node degrades to its `:shortcode:` placeholder here, and the
-// client renderer (`RichTextContent`) upgrades it on demand via a dynamic
-// import of `@/lib/shared/content-emoji`. Server-side callers that need the
-// legacy lookup import `lookupEmoji` from that module directly.
+// Emoji nodes carry their Unicode character; reading never needs the dataset.
 
-// Generate HTML from TipTap JSON content for SSR / email.
 export function generateContentHTML(content: JSONContent): string {
   function extractPlainText(node: JSONContent): string {
     if (!node) return ''
@@ -109,8 +102,10 @@ export function generateContentHTML(content: JSONContent): string {
       case 'bulletList':
         return `<ul>${node.content?.map(renderNode).join('') ?? ''}</ul>`
 
-      case 'orderedList':
-        return `<ol>${node.content?.map(renderNode).join('') ?? ''}</ol>`
+      case 'orderedList': {
+        const start = sanitizeOrderedListStart(node.attrs?.start)
+        return `<ol${start !== 1 ? ` start="${start}"` : ''}>${node.content?.map(renderNode).join('') ?? ''}</ol>`
+      }
 
       case 'listItem': {
         // Unwrap single-paragraph list items to avoid <li><p>…</p></li>
@@ -183,15 +178,6 @@ export function generateContentHTML(content: JSONContent): string {
         return `<img src="${src}" alt="${alt}" loading="lazy" decoding="async" class="max-w-full h-auto rounded-lg" ${style} />`
       }
 
-      case 'chatImage': {
-        // Inline conversation image. Bounded (max-w-xs) so it sits inside a message bubble.
-        // Renders nothing if the src is empty after sanitization.
-        const src = escapeHtmlAttr(sanitizeImageUrl(String(node.attrs?.src ?? '')))
-        const alt = escapeHtmlAttr(String(node.attrs?.alt ?? ''))
-        if (!src) return ''
-        return `<img src="${src}" alt="${alt}" loading="lazy" decoding="async" class="max-w-xs h-auto object-contain rounded-md" />`
-      }
-
       case 'youtube': {
         const src = node.attrs?.src ?? ''
         const width = safePositiveInt(node.attrs?.width, 640)
@@ -228,16 +214,10 @@ export function generateContentHTML(content: JSONContent): string {
       }
 
       case 'emoji': {
-        // Prefer the Unicode char the picker persists in `attrs.emoji`. A legacy
-        // `name`-only node (older @tiptap/extension-emoji stored just the
-        // shortcode) has no char here — rather than statically pull in the
-        // ~700 KB emoji dataset, we emit the `:shortcode:` placeholder and let
-        // the client renderer swap in the real glyph on demand (see
-        // RichTextContent's emoji upgrade). HTML-escape for defence-in-depth.
         const rawName = String(node.attrs?.name ?? '')
         const rawChar = String(node.attrs?.emoji ?? '')
-        const ch = rawChar || (rawName ? `:${rawName}:` : '')
-        const escaped = ch.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        if (!rawChar) return ''
+        const escaped = rawChar.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         const name = escapeHtmlAttr(rawName)
         const dataNameAttr = name ? ` data-name="${name}"` : ''
         return `<span data-type="emoji"${dataNameAttr}>${escaped}</span>`

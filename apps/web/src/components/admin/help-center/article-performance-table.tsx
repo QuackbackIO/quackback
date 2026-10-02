@@ -104,7 +104,7 @@ export function ArticlePerformanceTable() {
                 },
                 {
                   label: 'Overall helpful rate',
-                  value: summary.overallRate === null ? '—' : `${summary.overallRate}%`,
+                  value: summary.overallRate === null ? '-' : `${summary.overallRate}%`,
                 },
               ]}
             />
@@ -188,7 +188,6 @@ export function ArticlePerformanceTable() {
                       <div className="flex items-center gap-2 min-w-0">
                         <Badge
                           size="sm"
-                          shape="pill"
                           variant={article.status === 'published' ? 'default' : 'secondary'}
                           className={
                             article.status === 'published'
@@ -225,7 +224,7 @@ export function ArticlePerformanceTable() {
                       </span>
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-muted-foreground">
-                      {rate === null ? '—' : `${rate}%`}
+                      {rate === null ? '-' : `${rate}%`}
                     </TableCell>
                   </TableRow>
                 )

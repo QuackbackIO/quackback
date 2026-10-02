@@ -74,4 +74,34 @@ describe('ConfirmDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     expect(onConfirm).toHaveBeenCalledOnce()
   })
+
+  it('keeps the confirm action disabled while confirmDisabled is set', () => {
+    const onConfirm = vi.fn()
+    const { rerender } = render(
+      <ConfirmDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Delete board?"
+        confirmLabel="Delete board"
+        confirmDisabled
+        onConfirm={onConfirm}
+      />
+    )
+    const confirm = screen.getByRole('button', { name: 'Delete board' })
+    expect(confirm).toBeDisabled()
+    fireEvent.click(confirm)
+    expect(onConfirm).not.toHaveBeenCalled()
+
+    rerender(
+      <ConfirmDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Delete board?"
+        confirmLabel="Delete board"
+        confirmDisabled={false}
+        onConfirm={onConfirm}
+      />
+    )
+    expect(screen.getByRole('button', { name: 'Delete board' })).not.toBeDisabled()
+  })
 })

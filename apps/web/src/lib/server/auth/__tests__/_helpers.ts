@@ -89,7 +89,6 @@ export function makeWorkspace(overrides: Partial<WorkspaceSettings> = {}): Works
     managedFieldPaths: [],
     verifiedDomains: [],
     state: 'active',
-    visualTheme: 'legacy',
     ...overrides,
   }
 }

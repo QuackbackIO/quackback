@@ -29,6 +29,7 @@ export interface MailpitSummary {
 export interface MailpitMessage extends MailpitSummary {
   HTML: string
   Text: string
+  Attachments: Array<{ FileName: string; ContentType: string; Size: number }>
 }
 
 async function probe(): Promise<boolean> {

@@ -1,6 +1,5 @@
 import { db, settings, eq } from '@/lib/server/db'
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
-import { ensureNewWorkspaceLabs } from '@/lib/server/domains/settings/settings.labs'
 import {
   DEFAULT_PORTAL_CONFIG,
   DEFAULT_WIDGET_CONFIG,
@@ -71,29 +70,25 @@ export function makeReconcileDeps(): ReconcileDeps {
       // missing-row case — sees a mismatch on its next request and
       // rebuilds. Without this, the cached "no settings row" and the
       // freshly-created "version 0" tie and the stale instance sticks.
-      await db.transaction(async (tx) => {
-        const [created] = await tx
-          .insert(settings)
-          .values({
-            id: generateId('workspace'),
-            name: insert.name,
-            slug: insert.slug,
-            createdAt: new Date(),
-            setupState: insert.setupState,
-            tierLimits: insert.tierLimits,
-            managedFieldPaths: insert.managedFieldPaths,
-            authConfigVersion: 1,
-            portalConfig: JSON.stringify(DEFAULT_PORTAL_CONFIG),
-            widgetConfig: JSON.stringify(DEFAULT_WIDGET_CONFIG),
-            assistantConfig: DEFAULT_ASSISTANT_CONFIG,
-            featureFlags: JSON.stringify(
-              featureFlagsForUseCase(getSetupState(insert.setupState ?? null)?.useCase)
-            ),
-          })
-          .onConflictDoNothing({ target: settings.slug })
-          .returning({ id: settings.id })
-        if (created) await ensureNewWorkspaceLabs(created.id, tx)
-      })
+      await db
+        .insert(settings)
+        .values({
+          id: generateId('workspace'),
+          name: insert.name,
+          slug: insert.slug,
+          createdAt: new Date(),
+          setupState: insert.setupState,
+          tierLimits: insert.tierLimits,
+          managedFieldPaths: insert.managedFieldPaths,
+          authConfigVersion: 1,
+          portalConfig: JSON.stringify(DEFAULT_PORTAL_CONFIG),
+          widgetConfig: JSON.stringify(DEFAULT_WIDGET_CONFIG),
+          assistantConfig: DEFAULT_ASSISTANT_CONFIG,
+          featureFlags: JSON.stringify(
+            featureFlagsForUseCase(getSetupState(insert.setupState ?? null)?.useCase)
+          ),
+        })
+        .onConflictDoNothing({ target: settings.slug })
     },
     applyTierLimits: async (limits) => {
       const { writeTierLimits } = await import('@/lib/server/domains/settings/tier-limits.write')

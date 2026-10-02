@@ -2,8 +2,7 @@ import { createFileRoute, Navigate, redirect } from '@tanstack/react-router'
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { ChatBubbleLeftRightIcon, ChevronDownIcon, TicketIcon } from '@heroicons/react/24/solid'
-import { BuildingOffice2Icon } from '@heroicons/react/24/outline'
+import { ChatBubbleLeftRightIcon, TicketIcon } from '@heroicons/react/24/solid'
 import { isValidTypeId } from '@quackback/ids'
 import type {
   ConversationId,
@@ -85,6 +84,7 @@ import { resolveDefaultClosedStatusId } from '@/lib/shared/tickets'
 import { inboxTeamsQueryOptions } from '@/lib/client/queries/inbox-teams'
 import {
   inboxNavKey,
+  inboxScopeHasRefinements,
   isInboxView,
   navFromSearch,
   normalizeTriageFacet,
@@ -116,12 +116,6 @@ import { useInboxListSource } from '@/lib/client/hooks/use-inbox-list-source'
 import { useMediaQuery } from '@/lib/client/hooks/use-media-query'
 import { useCopilotTabGate } from '@/lib/client/hooks/use-copilot-tab-gate'
 import { EmptyState } from '@/components/shared/empty-state'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/shared/utils'
 import {
   getFirstEnabledAdminProductPath,
@@ -129,56 +123,7 @@ import {
   type FeatureFlags,
 } from '@/lib/shared/types/settings'
 import { useFeatureFlag, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
-
-/** Quinn-view outcome sub-filter. */
-const QUINN_BUCKETS: {
-  value: 'resolved' | 'escalated' | 'pending' | undefined
-  label: string
-}[] = [
-  { value: undefined, label: 'All' },
-  { value: 'pending', label: 'Pending' },
-  { value: 'escalated', label: 'Escalated' },
-  { value: 'resolved', label: 'Resolved' },
-]
-
-function QuinnBucketChips({
-  value,
-  counts,
-  onChange,
-}: {
-  value?: 'resolved' | 'escalated' | 'pending'
-  counts?: { resolved: number; escalated: number; pending: number }
-  onChange: (value?: 'resolved' | 'escalated' | 'pending') => void
-}) {
-  const countFor = (v?: 'resolved' | 'escalated' | 'pending'): number | undefined => {
-    if (!counts) return undefined
-    return v ? counts[v] : counts.resolved + counts.escalated + counts.pending
-  }
-  return (
-    <div className="flex flex-wrap gap-1.5 px-3 pb-2 pt-1">
-      {QUINN_BUCKETS.map((b) => {
-        const active = value === b.value
-        const n = countFor(b.value)
-        return (
-          <button
-            key={b.label}
-            type="button"
-            onClick={() => onChange(b.value)}
-            className={cn(
-              'flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[13px] font-medium transition-colors',
-              active
-                ? 'bg-primary/15 text-primary'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-            )}
-          >
-            {b.label}
-            {n != null && <span className="tabular-nums opacity-70">{n}</span>}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
+import { QuinnViewHeader } from '@/components/admin/conversation/quinn-view-header'
 
 // URL is the source of truth for open item + filters (refresh-safe, shareable).
 // `?c=` is the legacy alias for `?i=`, accepted forever.
@@ -534,6 +479,9 @@ function InboxPage() {
         segment: item.kind === 'segment' ? item.segmentId : undefined,
         team: item.kind === 'team' ? item.teamId : undefined,
         viewId: item.kind === 'custom' ? item.viewId : undefined,
+        // A scope without refinements has no company control, so the filter
+        // does not follow the agent into it.
+        ...(!inboxScopeHasRefinements(item) && { company: undefined }),
         i: scopeMemory.current.get(inboxNavKey(item)),
         m: undefined,
       }),
@@ -622,12 +570,7 @@ function InboxPage() {
   // as they are for the self-contained Mentions/Spam/Created-by-me feeds.
   const activeView: ConversationViewDTO | undefined =
     nav.kind === 'custom' ? navViews?.find((v) => v.id === nav.viewId) : undefined
-  const showRefinements =
-    nav.kind !== 'custom' &&
-    !(
-      nav.kind === 'view' &&
-      (nav.view === 'mentions' || nav.view === 'spam' || nav.view === 'created_by_me')
-    )
+  const showRefinements = inboxScopeHasRefinements(nav)
   // Ordering: URL sort wins; else a custom view's saved sort; else the list's
   // implicit default (relevance while searching, most-recent otherwise).
   const sort: ConversationSort = urlSort ?? activeView?.sort ?? defaultConversationSort(!!search)
@@ -657,6 +600,10 @@ function InboxPage() {
     queryFn: () => listCompaniesFn(),
     staleTime: 60_000,
   })
+  // A deep link can carry `?company=` into a scope that cannot filter by it.
+  useEffect(() => {
+    if (urlCompany && !showRefinements) updateSearch({ company: undefined })
+  }, [urlCompany, showRefinements, updateSearch])
   // Drop a stale `?company=` (deleted / no longer visible) so the filter never
   // strands the list on an unselectable company — mirrors the tag/segment
   // scope-cleanup effect.
@@ -806,12 +753,24 @@ function InboxPage() {
           conversationKeys.agentThread(conversationId),
           (prev) => applyAgentThreadEvent(prev, evt, conversationId)
         )
+        // A new message with files invalidates the detail panel's Files
+        // section — same event, no separate read.
+        if (evt.kind === 'message' && evt.message.attachments.length > 0) {
+          void queryClient.invalidateQueries({
+            queryKey: conversationKeys.agentConversationFiles(conversationId),
+          })
+        }
       } else if (evt.kind === 'ticket_message' || evt.kind === 'ticket_message_updated') {
         reconcileCachedThread<TicketThreadCache>(
           queryClient,
           ticketKeys.thread(evt.ticketId),
           (prev) => applyTicketThreadEvent(prev, evt, evt.ticketId)
         )
+        if (evt.kind === 'ticket_message' && evt.message.attachments.length > 0) {
+          void queryClient.invalidateQueries({
+            queryKey: conversationKeys.agentConversationFiles(evt.ticketId),
+          })
+        }
       }
     },
   })
@@ -1499,26 +1458,34 @@ function InboxPage() {
     onOpenHelp: () => setHelpOpen(true),
   })
 
-  // The list header's slot. Quinn view: the outcome sub-filter chips
-  // (Resolved/Escalated/Pending). Otherwise the company picker, shown only when
-  // the workspace has companies to filter by. Memoized so opening an item
-  // leaves the (memoized) list header as it was.
+  // The list header's slot: the Quinn view's outcome sub-filter chips
+  // (Resolved/Escalated/Pending). Memoized so opening an item leaves the
+  // (memoized) list header as it was.
   const listHeaderSlot = useMemo(
     () =>
       isQuinnView ? (
-        <QuinnBucketChips
+        <QuinnViewHeader
           value={urlAi}
           counts={assistantCounts}
           onChange={(ai) => updateSearch({ ai, i: undefined, m: undefined })}
         />
-      ) : companies && companies.length > 0 ? (
-        <CompanyInboxFilter
-          companies={companies}
-          value={urlCompany}
-          onChange={(id) => updateSearch({ company: id, i: undefined, m: undefined })}
-        />
       ) : undefined,
-    [isQuinnView, urlAi, assistantCounts, companies, urlCompany, updateSearch]
+    [isQuinnView, urlAi, assistantCounts, updateSearch]
+  )
+
+  // The company refinement, offered only when the workspace has companies.
+  // Memoized for the same reason as the header slot.
+  const companyFilter = useMemo(
+    () =>
+      companies && companies.length > 0
+        ? {
+            companies,
+            value: urlCompany,
+            onChange: (id: string | undefined) =>
+              updateSearch({ company: id, i: undefined, m: undefined }),
+          }
+        : undefined,
+    [companies, urlCompany, updateSearch]
   )
 
   // The floating bar shows for a real multi-selection, or when a value menu was
@@ -1530,8 +1497,6 @@ function InboxPage() {
       <InboxNavSidebar
         nav={nav}
         onSelect={setNav}
-        search={searchInput}
-        onSearch={setSearchInput}
         onCreateView={openCreateView}
         onEditView={openEditView}
       />
@@ -1560,6 +1525,7 @@ function InboxPage() {
           scopeLabel={scopeLabel}
           showRefinements={showRefinements}
           headerSlot={listHeaderSlot}
+          companyFilter={companyFilter}
           searchInput={searchInput}
           onSearchInput={setSearchInput}
           facet={facet}
@@ -1669,50 +1635,6 @@ function InboxPage() {
         onOpenChange={setHelpOpen}
         copilotAvailable={copilotAvailable}
       />
-    </div>
-  )
-}
-
-/**
- * Compact company filter for the inbox list header: a dropdown over the
- * workspace companies. "All companies" clears the refinement.
- */
-function CompanyInboxFilter({
-  companies,
-  value,
-  onChange,
-}: {
-  companies: { id: string; name: string }[]
-  value: string | undefined
-  onChange: (companyId: string | undefined) => void
-}) {
-  const active = companies.find((co) => co.id === value)
-  return (
-    <div className="flex items-center gap-1.5 border-b border-border/50 px-3 py-2">
-      <BuildingOffice2Icon className="size-3.5 shrink-0 text-muted-foreground" />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            aria-label="Filter by company"
-            className={cn(
-              'inline-flex min-w-0 shrink items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium transition-colors',
-              value ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted'
-            )}
-          >
-            <span className="truncate">{active?.name ?? 'All companies'}</span>
-            <ChevronDownIcon className="size-3.5 shrink-0" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
-          <DropdownMenuItem onClick={() => onChange(undefined)}>All companies</DropdownMenuItem>
-          {companies.map((co) => (
-            <DropdownMenuItem key={co.id} onClick={() => onChange(co.id)}>
-              {co.name}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
     </div>
   )
 }

@@ -1,7 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { HomeIcon } from '@heroicons/react/24/solid'
 import { adminOverviewQueries } from '@/lib/client/queries/admin-overview'
 import {
   overviewMetricGridClass,
@@ -22,6 +21,7 @@ import { StatusBadge } from '@/components/ui/status-badge'
 import { Avatar } from '@/components/ui/avatar'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useFormatNumber } from '@/components/ui/format-number'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
@@ -76,14 +76,14 @@ export function OverviewDashboard({
 
   return (
     <div className="min-w-0 space-y-6">
-      <PageHeader icon={HomeIcon} title="Overview" size="large" action={actions} />
+      <PageHeader title="Home" actions={actions} />
 
       {banner}
 
       {overview.isError ? (
-        <SettingsCard contentClassName="p-0 sm:p-0">
+        <SettingsCard flush>
           <Quiet>
-            Couldn’t load the overview.{' '}
+            Couldn’t load this page.{' '}
             <RetryButton onClick={() => void overview.refetch()}>Try again</RetryButton>
           </Quiet>
         </SettingsCard>
@@ -103,7 +103,7 @@ export function OverviewDashboard({
               hasAside && 'lg:grid-cols-[minmax(0,1.65fr)_minmax(280px,1fr)]'
             )}
           >
-            <SettingsCard contentClassName="p-0 sm:p-0">
+            <SettingsCard flush>
               {filters.length > 2 ? (
                 <Tabs
                   value={filter}
@@ -128,7 +128,7 @@ export function OverviewDashboard({
                   {feedError && attention.length > 0 ? (
                     <p className="border-b border-border px-3 py-2.5 text-sm text-muted-foreground sm:px-4">
                       {feedError}{' '}
-                      <RetryButton onClick={() => void overview.refetch()}>Retry</RetryButton>
+                      <RetryButton onClick={() => void overview.refetch()}>Try again</RetryButton>
                     </p>
                   ) : null}
                   {attention.length > 0 ? (
@@ -140,10 +140,10 @@ export function OverviewDashboard({
                   ) : feedError ? (
                     <Quiet>
                       {feedError}{' '}
-                      <RetryButton onClick={() => void overview.refetch()}>Retry</RetryButton>
+                      <RetryButton onClick={() => void overview.refetch()}>Try again</RetryButton>
                     </Quiet>
                   ) : (
-                    <Quiet>You’re all caught up.</Quiet>
+                    <Quiet>Nothing to review</Quiet>
                   )}
                 </>
               )}
@@ -190,6 +190,7 @@ function CountsCard({
   loading: boolean
   onFilter: (filter: OverviewMetric['filter']) => void
 }) {
+  const formatNumber = useFormatNumber()
   if (loading) return <Skeleton className="h-24 w-full rounded-xl" />
   if (metrics.length === 0) return null
   return (
@@ -200,14 +201,13 @@ function CountsCard({
             key={metric.key}
             link={metric.link}
             onClick={() => onFilter(metric.filter)}
-            className="flex min-w-0 items-center gap-3 bg-card px-3 py-3.5 transition-colors hover:bg-muted/40 sm:gap-4 sm:px-5 sm:py-5"
+            className="flex min-w-0 flex-col gap-2 bg-card px-5 py-4 transition-colors hover:bg-muted/40"
           >
-            <span className="shrink-0 text-3xl font-semibold leading-none tabular-nums tracking-tight sm:text-4xl">
-              {metric.count.toLocaleString()}
+            <span className="line-clamp-2 min-h-[2lh] text-[13px] text-muted-foreground">
+              {`${metric.label} ${metric.detail}`.replace(/^./, (c) => c.toUpperCase())}
             </span>
-            <span className="min-w-0 text-sm leading-snug text-muted-foreground">
-              <span className="block">{metric.label}</span>
-              <span className="block">{metric.detail}</span>
+            <span className="text-2xl leading-none font-bold tabular-nums tracking-tight sm:text-3xl">
+              {formatNumber(metric.count)}
             </span>
           </OverviewNavLink>
         ))}
@@ -318,16 +318,16 @@ function ModuleCard<T>({
 }) {
   if (error) {
     return (
-      <SettingsCard title={title} contentClassName="p-0 sm:p-0">
+      <SettingsCard title={title} flush>
         <Quiet>
-          {error} {onRetry ? <RetryButton onClick={onRetry}>Retry</RetryButton> : null}
+          {error} {onRetry ? <RetryButton onClick={onRetry}>Try again</RetryButton> : null}
         </Quiet>
       </SettingsCard>
     )
   }
   if (items.length === 0) return null
   return (
-    <SettingsCard title={title} contentClassName="p-0 sm:p-0">
+    <SettingsCard title={title} flush>
       <div className="divide-y divide-border">{items.map(children)}</div>
     </SettingsCard>
   )

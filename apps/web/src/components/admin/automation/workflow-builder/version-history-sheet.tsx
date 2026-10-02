@@ -51,7 +51,7 @@ function VersionRow({
       <div className="flex items-center gap-2">
         <span className="truncate font-medium">{version.name}</span>
         {isCurrent && (
-          <Badge size="sm" shape="pill" variant="outline" className="shrink-0">
+          <Badge size="sm" variant="outline" className="shrink-0">
             Current
           </Badge>
         )}
@@ -207,7 +207,7 @@ export function VersionHistorySheet({
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title="Restore this version?"
-        description="The workflow's name, trigger, and steps will be replaced with this saved state. Its live/paused/draft status won't change, and this creates a new version too — nothing is lost."
+        description="The workflow's name, trigger, and steps will be replaced with this saved state. Its live/paused/draft status won't change, and this creates a new version too, so nothing is lost."
         confirmLabel="Restore"
         isPending={restoreMutation.isPending}
         onConfirm={() => {

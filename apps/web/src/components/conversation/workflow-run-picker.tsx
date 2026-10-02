@@ -99,7 +99,7 @@ export function WorkflowRunPicker({
               >
                 <span className="truncate font-medium">{w.name}</span>
                 {w.class === 'customer_facing' && (
-                  <Badge size="sm" variant="secondary" shape="pill">
+                  <Badge size="sm" variant="secondary">
                     bot
                   </Badge>
                 )}

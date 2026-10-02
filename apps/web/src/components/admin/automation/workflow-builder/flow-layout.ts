@@ -35,6 +35,7 @@ import {
   sendWindowSummary,
   stepPaths,
   waitSummary,
+  snoozeUntilLabel,
   type AttributeFieldDef,
   type PersonCompanyAttributeFieldDef,
   type EntityLabels,
@@ -264,10 +265,7 @@ function actionChips(action: GraphAction, labels: EntityLabels): ChipData[] {
             'seconds' in action
               ? `For ${durationPhrase(action.seconds)}`
               : action.untilIso
-                ? new Date(action.untilIso).toLocaleString(undefined, {
-                    dateStyle: 'medium',
-                    timeStyle: 'short',
-                  })
+                ? snoozeUntilLabel(action.untilIso, labels)
                 : 'Until they reply',
         },
       ]
@@ -375,7 +373,7 @@ function buildStepNodeData(
         title: BLOCK_STEP_LABELS.show_reply_time,
         icon: 'show_reply_time',
         tone: 'pink',
-        meta: "We're online — typically replies in under an hour.",
+        meta: "We're online, typically replies in under an hour.",
       }
     case 'disable_composer':
       return {

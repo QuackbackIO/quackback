@@ -16,11 +16,11 @@ interface StatusUptimeBarProps {
   className?: string
 }
 
-function formatDayTitle(dateStr: string): string {
+function formatDayTitle(dateStr: string, locale: string): string {
   // dateStr is a UTC calendar day (YYYY-MM-DD) — parse as UTC midnight so the
   // viewer's local timezone can't shift it to the adjacent day.
   const parsed = new Date(`${dateStr}T00:00:00Z`)
-  return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+  return parsed.toLocaleDateString(locale, { month: 'short', day: 'numeric', timeZone: 'UTC' })
 }
 
 /**
@@ -52,7 +52,7 @@ export function StatusUptimeBar({ days, className }: StatusUptimeBarProps) {
                   id: 'portal.status.uptime.dayTooltip',
                   defaultMessage: '{day} — {label}, {pct}%',
                 },
-                { day: formatDayTitle(day.date), label, pct: day.uptimePct }
+                { day: formatDayTitle(day.date, intl.locale), label, pct: day.uptimePct }
               )}
               className={cn(
                 'h-full min-w-[2px] flex-1 rounded-xs transition-opacity hover:opacity-60',

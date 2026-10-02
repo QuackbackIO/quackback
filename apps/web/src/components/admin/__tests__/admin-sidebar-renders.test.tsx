@@ -106,13 +106,18 @@ function buildRouter() {
     validateSearch: (search: Record<string, unknown>) => search as { post?: string },
     component: () => <p>feedback page</p>,
   })
+  const home = createRoute({
+    getParentRoute: () => adminRoute,
+    path: '/',
+    component: () => <p>home page</p>,
+  })
   const roadmap = createRoute({
     getParentRoute: () => adminRoute,
     path: '/roadmap',
     component: () => <p>roadmap page</p>,
   })
   return createRouter({
-    routeTree: rootRoute.addChildren([adminRoute.addChildren([feedback, roadmap])]),
+    routeTree: rootRoute.addChildren([adminRoute.addChildren([home, feedback, roadmap])]),
     history: createMemoryHistory({ initialEntries: ['/admin/feedback'] }),
     context: {},
   })
@@ -175,17 +180,27 @@ describe('AdminSidebar renders', () => {
     expect(bellRenders).toBe(bell)
   })
 
+  it('highlights Home only on the admin index, not on every admin page', async () => {
+    adminAnswer = { principal: { role: 'admin' }, permissions: [] }
+    const { router, container } = await mount()
+    expect(activeHrefs(container)).not.toContain('/admin')
+
+    await act(() => router.navigate({ to: '/admin' }))
+    await screen.findByText('home page')
+    expect(activeHrefs(container)).toEqual(['/admin'])
+  })
+
   it('shows and hides permission-gated items when the permissions change', async () => {
     adminAnswer = {
       principal: { role: 'member' },
       permissions: [PERMISSIONS.ASSISTANT_MANAGE],
     }
     const { router, container } = await mount()
-    expect(container.querySelector('aside a[href="/admin/automation/agent"]')).toBeTruthy()
+    expect(container.querySelector('aside a[href="/admin/settings"]')).toBeTruthy()
 
     adminAnswer = { principal: { role: 'member' }, permissions: [] }
     await act(() => router.invalidate())
 
-    expect(container.querySelector('aside a[href="/admin/automation/agent"]')).toBeNull()
+    expect(container.querySelector('aside a[href="/admin/settings"]')).toBeNull()
   })
 })

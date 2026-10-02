@@ -1,16 +1,10 @@
-import { useMemo, useState, useEffect } from 'react'
-import {
-  Squares2X2Icon,
-  TagIcon,
-  UserGroupIcon,
-  MagnifyingGlassIcon,
-  PlusIcon,
-  ChevronRightIcon,
-  XMarkIcon,
-} from '@heroicons/react/24/solid'
+import { useMemo, useState } from 'react'
+import { Squares2X2Icon, TagIcon, UserGroupIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { FilterChip, type FilterOption } from '@/components/shared/filter-chip'
+import { AdminListHeader } from '@/components/admin/admin-list-header'
+import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
+import { FilterAddButton, FilterChip, type FilterOption } from '@/components/shared/filter-chip'
 import type { RoadmapFilters } from '@/lib/shared/types'
 import type { PostTag } from '@/lib/shared/db-types'
 import type { SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
@@ -47,9 +41,9 @@ type RoadmapFilterType = 'board' | 'tags' | 'segment'
 // ---------------------------------------------------------------------------
 
 const SORT_OPTIONS = [
-  { value: 'votes' as const, label: 'Votes' },
-  { value: 'newest' as const, label: 'Newest' },
-  { value: 'oldest' as const, label: 'Oldest' },
+  { value: 'votes', label: 'Votes' },
+  { value: 'newest', label: 'Newest' },
+  { value: 'oldest', label: 'Oldest' },
 ]
 
 const FILTER_ICON_MAP: Record<RoadmapFilterType, IconComponent> = {
@@ -60,7 +54,7 @@ const FILTER_ICON_MAP: Record<RoadmapFilterType, IconComponent> = {
 
 const FILTER_CATEGORIES: { key: FilterCategory; label: string; icon: IconComponent }[] = [
   { key: 'board', label: 'Board', icon: Squares2X2Icon },
-  { key: 'tags', label: 'PostTag', icon: TagIcon },
+  { key: 'tags', label: 'Tag', icon: TagIcon },
   { key: 'segment', label: 'Segment', icon: UserGroupIcon },
 ]
 
@@ -136,7 +130,7 @@ function computeActiveFilters(
       result.push({
         key: `tag-${id}`,
         type: 'tags',
-        label: 'PostTag:',
+        label: 'Tag:',
         value: tag.name,
         valueId: id,
         options: tagOptions,
@@ -188,6 +182,7 @@ function computeActiveFilters(
 // AddFilterButton
 // ---------------------------------------------------------------------------
 
+/** The Filter control that opens the category menu; lives in the list toolbar. */
 function AddFilterButton({
   boards,
   tags,
@@ -228,20 +223,7 @@ function AddFilterButton({
       }}
     >
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            'inline-flex items-center gap-1 px-2 py-0.5',
-            'rounded-full text-[13px]',
-            'border border-dashed border-border/50',
-            'text-muted-foreground hover:text-foreground',
-            'hover:border-border hover:bg-muted/30',
-            'transition-colors'
-          )}
-        >
-          <PlusIcon className="h-3 w-3" />
-          Add filter
-        </button>
+        <FilterAddButton />
       </PopoverTrigger>
       <PopoverContent align="start" className="w-48 p-0">
         {activeCategory === null ? (
@@ -330,7 +312,7 @@ function AddFilterButton({
 }
 
 // ---------------------------------------------------------------------------
-// RoadmapFiltersBar (unified for admin and public)
+// RoadmapFiltersBar: the standard list toolbar (search, sort, filter)
 // ---------------------------------------------------------------------------
 
 export function RoadmapFiltersBar({
@@ -344,102 +326,25 @@ export function RoadmapFiltersBar({
   onToggleTag,
   onToggleSegment,
 }: RoadmapFiltersBarProps) {
-  const [searchValue, setSearchValue] = useState(filters.search || '')
-  const [searchOpen, setSearchOpen] = useState(false)
-
-  useEffect(() => {
-    setSearchValue(filters.search || '')
-  }, [filters.search])
+  const { value: searchValue, setValue: setSearchValue } = useDebouncedSearch({
+    externalValue: filters.search,
+    onChange: (next) => onFiltersChange({ search: next }),
+  })
 
   const activeFilters = useMemo(
     () => computeActiveFilters(filters, boards, tags, segments, onFiltersChange),
     [filters, boards, tags, segments, onFiltersChange]
   )
 
-  const handleSearchSubmit = () => {
-    onFiltersChange({ search: searchValue.trim() || undefined })
-    setSearchOpen(false)
-  }
-
-  const currentSort = filters.sort ?? 'votes'
-
   return (
-    <div className="flex flex-col gap-1.5">
-      {/* Search and sort row */}
-      <div className="flex items-center gap-2">
-        <Popover open={searchOpen} onOpenChange={setSearchOpen}>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              className={cn(
-                'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[13px] transition-colors',
-                filters.search
-                  ? 'bg-foreground/10 text-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              )}
-            >
-              <MagnifyingGlassIcon className="size-4" />
-              {filters.search || 'Search'}
-              {filters.search && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onFiltersChange({ search: undefined })
-                  }}
-                  className="ml-0.5 hover:text-foreground"
-                >
-                  <XMarkIcon className="h-3 w-3" />
-                </button>
-              )}
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-64 p-2">
-            <form
-              onSubmit={(e) => {
-                e.preventDefault()
-                handleSearchSubmit()
-              }}
-            >
-              <input
-                type="text"
-                value={searchValue}
-                onChange={(e) => setSearchValue(e.target.value)}
-                placeholder="Search posts..."
-                className="w-full px-2 py-1.5 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-                autoFocus
-              />
-            </form>
-          </PopoverContent>
-        </Popover>
-
-        <div className="h-4 w-px bg-border/50" />
-
-        <div className="flex items-center gap-0.5">
-          {SORT_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => onFiltersChange({ sort: opt.value })}
-              className={cn(
-                'px-2 py-1 rounded-md text-[13px] transition-colors',
-                currentSort === opt.value
-                  ? 'bg-foreground/10 text-foreground font-medium'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              )}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Active filters + add button */}
-      <div className="flex flex-wrap gap-1 items-center">
-        {activeFilters.map(({ key, type, ...filterProps }) => (
-          <FilterChip key={key} icon={FILTER_ICON_MAP[type]} {...filterProps} />
-        ))}
-
+    <AdminListHeader
+      searchValue={searchValue}
+      onSearchChange={setSearchValue}
+      searchPlaceholder="Search posts..."
+      sortOptions={SORT_OPTIONS}
+      activeSort={filters.sort ?? 'votes'}
+      onSortChange={(sort) => onFiltersChange({ sort: sort as RoadmapFilters['sort'] })}
+      filters={
         <AddFilterButton
           boards={boards}
           tags={tags}
@@ -448,22 +353,30 @@ export function RoadmapFiltersBar({
           onToggleTag={onToggleTag}
           onToggleSegment={onToggleSegment}
         />
+      }
+    >
+      {activeFilters.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1 items-center">
+          {activeFilters.map(({ key, type, ...filterProps }) => (
+            <FilterChip key={key} icon={FILTER_ICON_MAP[type]} {...filterProps} />
+          ))}
 
-        {activeFilters.length > 1 && (
-          <button
-            type="button"
-            onClick={onClearAll}
-            className={cn(
-              'text-[13px] text-muted-foreground hover:text-foreground',
-              'px-1.5 py-0.5 rounded',
-              'hover:bg-muted/50',
-              'transition-colors'
-            )}
-          >
-            Clear all
-          </button>
-        )}
-      </div>
-    </div>
+          {activeFilters.length > 1 && (
+            <button
+              type="button"
+              onClick={onClearAll}
+              className={cn(
+                'text-[13px] text-muted-foreground hover:text-foreground',
+                'px-1.5 py-0.5 rounded',
+                'hover:bg-muted/50',
+                'transition-colors'
+              )}
+            >
+              Clear all
+            </button>
+          )}
+        </div>
+      )}
+    </AdminListHeader>
   )
 }

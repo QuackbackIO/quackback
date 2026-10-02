@@ -12,7 +12,7 @@
  * Sign-in appearance (display name and logo, both prefilled from the provider)
  * and Account options (signing in without an email address).
  */
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import type { Role } from '@/lib/shared/roles'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { SettingRow } from '@/components/admin/settings/setting-row'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import { allowsMissingEmail } from '@/lib/shared/oidc-claim-mapping'
 import { diffClaimMappingOperations, mappingSaveRisks } from '@/lib/shared/sso-claim-mapping-edit'
@@ -97,13 +98,12 @@ export function SignInCard({ provider }: { provider: IdentityProvider }) {
             checked={showButton}
             onChange={setShowButton}
             disabled={saving}
-          >
-            {!showButton && provider.domains.some((d) => d.verifiedAt) && (
-              <p className="text-sm text-muted-foreground">
-                People at a verified domain are still sent here from the email step.
-              </p>
-            )}
-          </SwitchRow>
+            description={
+              !showButton && provider.domains.some((d) => d.verifiedAt)
+                ? 'Users at a verified domain are still sent here from the email step.'
+                : undefined
+            }
+          />
 
           <Disclosure
             title="Sign-in appearance"
@@ -177,11 +177,11 @@ export function SignInCard({ provider }: { provider: IdentityProvider }) {
               checked={allowMissingEmail}
               onCheckedChange={(v) => setAllowMissingEmail(v === true)}
               disabled={saving}
-              aria-label="Let people sign in without an email address"
+              aria-label="Let users sign in without an email address"
               className="mt-0.5"
             />
             <span>
-              Let people sign in without an email address
+              Let users sign in without an email address
               {allowMissingEmail && (
                 <span className="mt-1 block text-muted-foreground">
                   They get a permanent placeholder address and are asked for a real one afterwards.
@@ -204,30 +204,33 @@ export function SignInCard({ provider }: { provider: IdentityProvider }) {
 
 function SwitchRow({
   label,
+  description,
   checked,
   onChange,
   disabled,
-  children,
 }: {
   label: string
+  description?: string
   checked: boolean
   onChange: (next: boolean) => void
   disabled: boolean
-  children?: React.ReactNode
 }) {
+  const id = useId()
   return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between gap-4">
-        <Label className="font-medium">{label}</Label>
+    <SettingRow
+      label={label}
+      description={description}
+      htmlFor={id}
+      disabled={disabled}
+      control={
         <Switch
+          id={id}
           checked={checked}
           onCheckedChange={onChange}
           disabled={disabled}
           aria-label={label}
-          className="shrink-0"
         />
-      </div>
-      {children}
-    </div>
+      }
+    />
   )
 }

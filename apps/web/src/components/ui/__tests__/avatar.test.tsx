@@ -57,6 +57,15 @@ describe('Avatar (simple API)', () => {
     expect(screen.getByRole('img')).toBeInTheDocument()
   })
 
+  // A pending or failing request must never paint the browser's broken-image
+  // glyph over the initials: the image stays invisible until it has loaded.
+  it('keeps the image invisible until it has loaded', () => {
+    render(<Avatar src="https://example.com/a.png" name="Jane Doe" />)
+    expect(screen.getByRole('img')).toHaveClass('opacity-0')
+    fireEvent.load(screen.getByRole('img'))
+    expect(screen.getByRole('img')).not.toHaveClass('opacity-0')
+  })
+
   it('drops the image and shows initials when it fails to load', () => {
     render(<Avatar src="https://example.com/broken.png" name="Jane Doe" />)
     fireEvent.error(screen.getByRole('img'))

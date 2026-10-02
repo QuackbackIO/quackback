@@ -1,5 +1,5 @@
 /**
- * Admin Overview — the on-call landing view (Status Admin Redesign spec,
+ * Admin Overview: the on-call landing view (Status Admin Redesign spec,
  * Phase 2). Answers "what does the public see right now" before anything
  * else: a banner mirroring the portal hero (same worst-of derivation, same
  * copy), active incidents with Post update one click away, upcoming
@@ -7,13 +7,17 @@
  */
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { ArrowTopRightOnSquareIcon, CheckCircleIcon, PencilIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/shared/page-header'
+import { AnalyticsStatRow } from '@/components/admin/analytics/analytics-stat-row'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useFormatNumber } from '@/components/ui/format-number'
 import { TimeAgo } from '@/components/ui/time-ago'
+import { useLocalDateFormatter, type LocalDateFormatter } from '@/components/ui/local-date'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { Route } from '@/routes/admin/status'
 import { statusOverviewQueries, type StatusOverview } from '@/lib/client/queries/status'
@@ -38,12 +42,25 @@ export function StatusOverviewView() {
 
   return (
     <div className="max-w-5xl w-full flex flex-col flex-1 min-h-0">
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-3 py-2.5 flex items-center gap-2 border-b border-border/40">
-        <h2 className="text-sm font-semibold px-1">Overview</h2>
-        <div className="flex items-center gap-2 ml-auto">
-          <ScheduleMaintenanceDialog />
-          <ReportIncidentDialog />
-        </div>
+      <div className="px-3 pt-3.5">
+        <PageHeader
+          title="Overview"
+          actions={
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" asChild>
+                <a href="/status" target="_blank" rel="noreferrer">
+                  <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+                  View public page
+                </a>
+              </Button>
+              <Button variant="ghost" size="sm" asChild>
+                <Link to="/admin/settings/status">Settings</Link>
+              </Button>
+              <ScheduleMaintenanceDialog />
+              <ReportIncidentDialog />
+            </div>
+          }
+        />
       </div>
 
       {isLoading || !data ? <OverviewSkeleton /> : <OverviewBody data={data} />}
@@ -79,8 +96,8 @@ function OverviewBody({ data }: { data: StatusOverview }) {
 function DisabledNotice() {
   const navigate = useNavigate({ from: Route.fullPath })
   return (
-    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 flex items-center gap-3 text-sm">
-      <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
+    <div className="rounded-xl border border-warning/30 bg-warning/5 px-4 py-3 flex items-center gap-3 text-sm">
+      <span className="h-2 w-2 rounded-full bg-warning shrink-0" />
       <span className="text-foreground/90">
         The status page is turned off, so visitors can't see any of this yet.
       </span>
@@ -90,7 +107,7 @@ function DisabledNotice() {
         className="ml-auto shrink-0"
         onClick={() => void navigate({ to: '/admin/settings/status' })}
       >
-        Page settings
+        Settings
       </Button>
     </div>
   )
@@ -109,8 +126,8 @@ function PublicStateBanner({
   const parts: string[] = []
   parts.push(
     activeCount === 0
-      ? 'No active incidents'
-      : `${activeCount} active incident${activeCount === 1 ? '' : 's'}`
+      ? 'No open incidents'
+      : `${activeCount} open incident${activeCount === 1 ? '' : 's'}`
   )
   if (affectedCount > 0) {
     parts.push(`${affectedCount} service${affectedCount === 1 ? '' : 's'} affected`)
@@ -129,20 +146,12 @@ function PublicStateBanner({
         <span className="h-3 w-3 rounded-full" style={{ backgroundColor: hex }} />
       </span>
       <div className="flex-1 min-w-48">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Visitors currently see
-        </p>
+        <p className="text-[13px] text-muted-foreground">Visitors currently see</p>
         <h3 className="text-lg font-semibold leading-tight mt-0.5">
           {TOP_LEVEL_HEADLINES[status]}
         </h3>
         <p className="text-xs text-muted-foreground mt-0.5">{parts.join(' · ')}</p>
       </div>
-      <Button variant="outline" size="sm" asChild>
-        <a href="/status" target="_blank" rel="noreferrer">
-          Open public page
-          <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5 ml-1.5" />
-        </a>
-      </Button>
     </div>
   )
 }
@@ -158,8 +167,8 @@ function CardShell({
 }) {
   return (
     <section className="rounded-xl border border-border/50 bg-card shadow-sm overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/40">
-        <h4 className="text-[13px] font-semibold">{title}</h4>
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border/40">
+        <h2 className="text-base font-semibold">{title}</h2>
         <div className="ml-auto">{action}</div>
       </div>
       {children}
@@ -197,17 +206,17 @@ function ActiveIncidentsCard({ incidents }: { incidents: OverviewIncident[] }) {
 
   if (incidents.length === 0) {
     return (
-      <CardShell title="Active incidents">
+      <CardShell title="Open incidents">
         <div className="px-4 py-5 flex items-center gap-2.5 text-sm text-muted-foreground">
-          <CheckCircleIcon className="h-5 w-5 text-emerald-500" />
-          No active incidents. All clear.
+          <CheckCircleIcon className="h-5 w-5 text-success" />
+          No open incidents
         </div>
       </CardShell>
     )
   }
 
   return (
-    <CardShell title="Active incidents" action={<ViewAllLink view="open" />}>
+    <CardShell title="Open incidents" action={<ViewAllLink view="open" />}>
       <div className="divide-y divide-border/40">
         {incidents.map((incident) => {
           const latest = incident.updates[incident.updates.length - 1]
@@ -237,7 +246,7 @@ function ActiveIncidentsCard({ incidents }: { incidents: OverviewIncident[] }) {
                     ))}
                     <span className="text-muted-foreground/50">·</span>
                     <span>
-                      Started <TimeAgo date={incident.startedAt} />
+                      Started <TimeAgo date={incident.startedAt} locale="en" />
                     </span>
                   </div>
                 </div>
@@ -248,7 +257,7 @@ function ActiveIncidentsCard({ incidents }: { incidents: OverviewIncident[] }) {
               {latest && (
                 <p className="text-xs text-muted-foreground border-l-2 border-border pl-2.5 ml-1 line-clamp-2">
                   <span className="text-foreground/80 font-medium">
-                    Latest update <TimeAgo date={latest.createdAt} />:
+                    Latest update <TimeAgo date={latest.createdAt} locale="en" />:
                   </span>{' '}
                   {latest.body}
                 </p>
@@ -261,19 +270,24 @@ function ActiveIncidentsCard({ incidents }: { incidents: OverviewIncident[] }) {
   )
 }
 
-function formatWindow(startIso: string | null, endIso: string | null): string {
+function formatWindow(
+  format: LocalDateFormatter,
+  startIso: string | null,
+  endIso: string | null
+): string {
   if (!startIso) return 'Not scheduled'
-  const start = new Date(startIso)
-  const day = start.toLocaleDateString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  })
-  const time = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  return endIso ? `${day}, ${time(start)} – ${time(new Date(endIso))}` : `${day}, ${time(start)}`
+  const day = format(startIso, { weekday: 'short', month: 'short', day: 'numeric' })
+  const time = (iso: string) => format(iso, { hour: '2-digit', minute: '2-digit' })
+  return endIso ? `${day}, ${time(startIso)} to ${time(endIso)}` : `${day}, ${time(startIso)}`
+}
+
+/** The day of the month as plain digits ("2", never "2."), in the formatter's zone. */
+function dayOfMonth(format: LocalDateFormatter, date: Date): string {
+  return format(date, { day: 'numeric', numberingSystem: 'latn' }).replace(/\D/g, '')
 }
 
 function UpcomingMaintenanceCard({ windows }: { windows: OverviewIncident[] }) {
+  const formatDate = useLocalDateFormatter()
   const goToIncident = useGoToIncident()
   const startMutation = useStartStatusMaintenanceNow()
   const [startTarget, setStartTarget] = useState<OverviewIncident | null>(null)
@@ -290,11 +304,11 @@ function UpcomingMaintenanceCard({ windows }: { windows: OverviewIncident[] }) {
             return (
               <div key={w.id} className="px-4 py-3 flex items-center gap-3">
                 <div className="w-11 shrink-0 rounded-lg border border-border/60 text-center overflow-hidden">
-                  <div className="text-[11px] font-bold tracking-wide uppercase bg-blue-500/15 text-blue-600 dark:text-blue-400 py-0.5">
-                    {start ? start.toLocaleDateString(undefined, { month: 'short' }) : '—'}
+                  <div className="text-[11px] font-medium bg-muted text-muted-foreground py-0.5">
+                    {start ? formatDate(start, { month: 'short' }) : '-'}
                   </div>
                   <div className="text-base font-semibold py-0.5 tabular-nums">
-                    {start ? start.getDate() : '?'}
+                    {start ? dayOfMonth(formatDate, start) : '?'}
                   </div>
                 </div>
                 <div className="flex-1 min-w-0">
@@ -307,7 +321,7 @@ function UpcomingMaintenanceCard({ windows }: { windows: OverviewIncident[] }) {
                   </button>
                   <div className="flex items-center flex-wrap gap-2 text-[11px] text-muted-foreground mt-1">
                     <LifecycleBadge status={lifecycle} />
-                    <span>{formatWindow(w.scheduledStartAt, w.scheduledEndAt)}</span>
+                    <span>{formatWindow(formatDate, w.scheduledStartAt, w.scheduledEndAt)}</span>
                     {w.autoStart && (
                       <Badge variant="outline" size="sm">
                         Auto-start
@@ -368,35 +382,34 @@ function UpcomingMaintenanceCard({ windows }: { windows: OverviewIncident[] }) {
 }
 
 function StatTiles({ data }: { data: StatusOverview }) {
+  const formatNumber = useFormatNumber()
   return (
-    <div className="rounded-xl border border-border/50 bg-card shadow-sm grid grid-cols-3 divide-x divide-border/40">
-      <div className="px-4 py-3">
-        <p className="text-lg font-semibold tabular-nums">
-          {data.uptime90d === null ? '—' : `${data.uptime90d.toFixed(2)}%`}
-        </p>
-        <p className="text-[11px] text-muted-foreground mt-0.5">90-day uptime, all services</p>
-      </div>
-      <div className="px-4 py-3">
-        <p className="text-lg font-semibold tabular-nums">
-          {data.subscribers.active.toLocaleString()}
-        </p>
-        <p className="text-[11px] text-muted-foreground mt-0.5">Subscribers</p>
-        {data.subscribers.newLast7d > 0 && (
-          <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">
-            +{data.subscribers.newLast7d} this week
-          </p>
-        )}
-      </div>
-      <div className="px-4 py-3">
-        <p className="text-lg font-semibold tabular-nums">{data.incidentsLast30d}</p>
-        <p className="text-[11px] text-muted-foreground mt-0.5">Incidents in the last 30 days</p>
-      </div>
+    <div className="rounded-xl border border-border/50 bg-card shadow-sm overflow-hidden">
+      <AnalyticsStatRow
+        stats={[
+          {
+            label: '90-day uptime',
+            value: data.uptime90d === null ? '-' : `${data.uptime90d.toFixed(2)}%`,
+          },
+          {
+            label: 'Subscribers',
+            value: formatNumber(data.subscribers.active),
+            caption:
+              data.subscribers.newLast7d > 0
+                ? `+${data.subscribers.newLast7d} this week`
+                : undefined,
+          },
+          { label: 'Incidents, 30 days', value: String(data.incidentsLast30d) },
+        ]}
+      />
     </div>
   )
 }
 
 function ServiceHealthCard({ data }: { data: StatusOverview }) {
-  const hasAny = data.ungroupedComponents.length > 0 || data.groups.length > 0
+  // A group with no services has nothing to report, so it is not listed.
+  const groups = data.groups.filter((g) => g.components.length > 0)
+  const hasAny = data.ungroupedComponents.length > 0 || groups.length > 0
 
   return (
     <CardShell title="Service health" action={<ViewAllLink view="components" label="Manage" />}>
@@ -409,9 +422,9 @@ function ServiceHealthCard({ data }: { data: StatusOverview }) {
           {data.ungroupedComponents.map((c) => (
             <ServiceRow key={c.id} name={c.name} status={c.status as StatusComponentStatus} />
           ))}
-          {data.groups.map((g) => (
+          {groups.map((g) => (
             <div key={g.id}>
-              <div className="px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground bg-muted/40 border-t border-border/40">
+              <div className="px-4 py-1.5 text-[13px] font-medium text-muted-foreground bg-muted/40 border-t border-border/40">
                 {g.name}
               </div>
               {g.components.map((c) => (

@@ -376,7 +376,7 @@ export function BlockCsatRow({
   )
 }
 
-/** "We're online — typically replies in under an hour" / away variant — a
+/** "We're online, typically replies in under an hour" / away variant: a
  *  quiet system-style caption (never a chat bubble), localized client-side
  *  from `block.status` (the message's stored `content` is only the English
  *  transcript/email fallback). */
@@ -390,7 +390,7 @@ export function BlockReplyTimeCaption({
       {status === 'online' ? (
         <FormattedMessage
           id="widget.messenger.replyTime.online"
-          defaultMessage="We're online — typically replies in under an hour."
+          defaultMessage="We're online, typically replies in under an hour."
         />
       ) : (
         <FormattedMessage

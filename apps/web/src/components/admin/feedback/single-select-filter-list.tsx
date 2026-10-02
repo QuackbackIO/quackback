@@ -1,7 +1,11 @@
+import { memo } from 'react'
+import { ChatBubbleLeftIcon } from '@heroicons/react/16/solid'
 import { cn } from '@/lib/shared/utils'
-import { MENU_ROW } from '@/components/ui/menu'
+import { MENU_ICON, MENU_ROW } from '@/components/ui/menu'
 
-interface FilterListProps<T extends { id: string; name: string }> {
+type RowIcon = React.ComponentType<{ className?: string }>
+
+interface FilterListProps<T extends { id: string; name: string; icon?: RowIcon }> {
   items: T[]
   selectedIds: string[]
   onSelect: (id: string, addToSelection: boolean) => void
@@ -11,14 +15,14 @@ interface FilterListProps<T extends { id: string; name: string }> {
   className?: string
 }
 
-function FilterCount({ count }: { count: number | undefined }) {
+const FilterCount = memo(function FilterCount({ count }: { count: number | undefined }) {
   if (count == null) return null
   return (
     <span className="ml-auto shrink-0 text-[11px] tabular-nums text-muted-foreground">{count}</span>
   )
-}
+})
 
-export function FilterList<T extends { id: string; name: string }>({
+export function FilterList<T extends { id: string; name: string; icon?: RowIcon }>({
   items,
   selectedIds,
   onSelect,
@@ -55,7 +59,10 @@ export function FilterList<T extends { id: string; name: string }>({
             {renderItem ? (
               renderItem(item, isSelected)
             ) : (
-              <span className="min-w-0 flex-1 truncate text-left">{item.name}</span>
+              <>
+                {item.icon && <item.icon className={MENU_ICON} aria-hidden="true" />}
+                <span className="min-w-0 flex-1 truncate text-left">{item.name}</span>
+              </>
             )}
             <FilterCount count={count} />
           </button>
@@ -113,5 +120,6 @@ export function BoardFilterList({
   onSelect: (id: string, addToSelection: boolean) => void
   counts?: Record<string, number>
 }) {
-  return <FilterList items={boards} selectedIds={selectedIds} onSelect={onSelect} counts={counts} />
+  const items = boards.map((b) => ({ id: b.id, name: b.name, icon: ChatBubbleLeftIcon }))
+  return <FilterList items={items} selectedIds={selectedIds} onSelect={onSelect} counts={counts} />
 }

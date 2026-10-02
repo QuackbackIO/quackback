@@ -58,7 +58,7 @@ export function RotateApiKeyDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Rotate API Key</DialogTitle>
+          <DialogTitle>Rotate API key</DialogTitle>
           <DialogDescription>
             Generate a new secret for the API key <strong>{apiKey.name}</strong>.
           </DialogDescription>
@@ -84,7 +84,7 @@ export function RotateApiKeyDialog({
             Cancel
           </Button>
           <Button onClick={handleRotate} disabled={isPending}>
-            {isPending ? 'Rotating...' : 'Rotate Key'}
+            {isPending ? 'Rotating...' : 'Rotate key'}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -9,22 +9,19 @@ test.describe('Admin MCP Settings', () => {
   test('legacy /admin/settings/mcp URL lands on the developers MCP tab', async ({ page }) => {
     await page.goto('/admin/settings/mcp')
     await page.waitForURL(/\/admin\/settings\/developers\?tab=mcp/)
-    await expect(page.getByText('MCP Server').first()).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('switch', { name: 'MCP server' })).toBeVisible({ timeout: 10000 })
   })
 
-  test('page loads and shows MCP Server heading', async ({ page }) => {
-    await expect(page.getByText('MCP Server').first()).toBeVisible({ timeout: 10000 })
-    await expect(
-      page.getByText('Enable or disable the MCP endpoint for AI integrations.')
-    ).toBeVisible({ timeout: 10000 })
+  test('page loads and shows the MCP server switch', async ({ page }) => {
+    await expect(page.getByRole('switch', { name: 'MCP server' })).toBeVisible({ timeout: 10000 })
   })
 
-  test('shows Enable MCP Server toggle', async ({ page }) => {
-    await expect(page.getByText('Enable MCP Server').first()).toBeVisible({ timeout: 10000 })
+  test('shows the MCP server toggle with its description', async ({ page }) => {
+    await expect(page.getByText('MCP server', { exact: true }).first()).toBeVisible({
+      timeout: 10000,
+    })
     await expect(
-      page.getByText(
-        'Allow AI tools like Claude Code to interact with your feedback data via the MCP protocol'
-      )
+      page.getByText('Let AI coding tools work with your feedback over MCP.')
     ).toBeVisible()
   })
 
@@ -62,8 +59,8 @@ test.describe('Admin MCP Settings', () => {
     expect(await mcpToggle.isChecked()).toBe(wasChecked)
   })
 
-  test('shows Setup Guide section heading', async ({ page }) => {
-    await expect(page.getByText('Setup Guide').first()).toBeVisible({ timeout: 10000 })
+  test('shows Setup guide section heading', async ({ page }) => {
+    await expect(page.getByText('Setup guide').first()).toBeVisible({ timeout: 10000 })
     await expect(page.getByText('Connect an AI tool to your MCP server').first()).toBeVisible()
   })
 
@@ -133,10 +130,10 @@ test.describe('Admin MCP Settings', () => {
   })
 
   test('Claude Code client shows OAuth and API Key variant buttons', async ({ page }) => {
-    await expect(page.getByRole('button', { name: /OAuth \(recommended\)/i })).toBeVisible({
+    await expect(page.getByRole('button', { name: 'OAuth', exact: true })).toBeVisible({
       timeout: 10000,
     })
-    await expect(page.getByRole('button', { name: /API Key/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'API key', exact: true })).toBeVisible()
   })
 
   test('switching to Cursor client updates the code panel filename', async ({ page }) => {
@@ -169,10 +166,10 @@ test.describe('Admin MCP Settings', () => {
     await expect(claudeDesktopButton).toBeVisible({ timeout: 10000 })
     await claudeDesktopButton.click()
 
-    await expect(page.getByRole('button', { name: /OAuth \(recommended\)/i })).toBeVisible({
+    await expect(page.getByRole('button', { name: 'OAuth', exact: true })).toBeVisible({
       timeout: 5000,
     })
-    await expect(page.getByRole('button', { name: /API Key/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'API key', exact: true })).toBeVisible()
     // Claude Desktop config filename
     await expect(page.getByText('claude_desktop_config.json')).toBeVisible()
   })
@@ -220,7 +217,7 @@ test.describe('Admin MCP Settings', () => {
 
   test('Claude Code API Key variant shows Authorization Bearer config', async ({ page }) => {
     // Switch to API Key variant
-    const apiKeyVariant = page.getByRole('button', { name: /API Key/i })
+    const apiKeyVariant = page.getByRole('button', { name: 'API key', exact: true })
     if ((await apiKeyVariant.count()) > 0) {
       await apiKeyVariant.first().click()
       await expect(page.getByText(/QUACKBACK_API_KEY/).first()).toBeVisible({ timeout: 5000 })

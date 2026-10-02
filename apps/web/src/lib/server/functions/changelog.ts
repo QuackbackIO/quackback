@@ -167,6 +167,7 @@ export const listChangelogsFn = createServerFn({ method: 'GET' })
       status: data.status,
       cursor: data.cursor,
       limit: data.limit,
+      sort: data.sort,
     })
 
     return {

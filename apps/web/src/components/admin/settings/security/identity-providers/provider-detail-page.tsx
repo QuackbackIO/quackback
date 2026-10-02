@@ -17,7 +17,7 @@ import { ExclamationTriangleIcon } from '@heroicons/react/24/solid'
 import type { IdentityProviderId } from '@quackback/ids'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
-import { BackLink } from '@/components/ui/back-link'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { IdpLogo } from '@/components/icons/idp-provider-icons'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
@@ -29,7 +29,7 @@ import { ConnectionCard } from './connection-card'
 import { ProviderMenu } from './provider-menu'
 import { SignInCard } from './sign-in-card'
 import { UserDetailsCard } from './user-details-card'
-import { identityMappingIssue, isOnlyWorkingMethod, SIGN_IN_TAB } from './provider-shared'
+import { identityMappingIssue, isOnlyWorkingMethod, SSO_CRUMBS } from './provider-shared'
 import { useConnectionTest } from './use-connection-test'
 import { useProviderSave } from './use-provider-save'
 
@@ -48,10 +48,9 @@ export function ProviderDetailPage({
 
   if (!provider) {
     return (
-      <div className="max-w-3xl space-y-6">
-        <BackLink {...SIGN_IN_TAB}>Sign-in</BackLink>
+      <SettingsPage title="Identity provider" crumbs={SSO_CRUMBS}>
         <p className="text-sm text-muted-foreground">Identity provider not found.</p>
-      </div>
+      </SettingsPage>
     )
   }
 
@@ -83,13 +82,11 @@ function ProviderDetailBody({
   useAutoTest(provider, autoTest, onAutoTestConsumed)
 
   return (
-    <div className="max-w-3xl space-y-6">
-      <BackLink {...SIGN_IN_TAB}>Sign-in</BackLink>
-      <ProviderHeader provider={provider} isOnlyMethod={isOnlyMethod} />
+    <ProviderPageShell provider={provider} isOnlyMethod={isOnlyMethod}>
       <ConnectionCard provider={provider} />
       <SignInCard provider={provider} />
       <UserDetailsCard provider={provider} />
-    </div>
+    </ProviderPageShell>
   )
 }
 
@@ -126,12 +123,14 @@ function useEnabledMethodCount(): number {
   })
 }
 
-function ProviderHeader({
+function ProviderPageShell({
   provider,
   isOnlyMethod,
+  children,
 }: {
   provider: IdentityProvider
   isOnlyMethod: boolean
+  children: React.ReactNode
 }) {
   const { saving, save } = useProviderSave(provider)
   const [enabled, setEnabled] = useState(provider.enabled)
@@ -147,57 +146,58 @@ function ProviderHeader({
     if (!ok) setEnabled(!checked)
   }
 
+  const badges = (!provider.configured || mappingIssue) && (
+    <>
+      {!provider.configured && (
+        <Badge size="sm" variant="outline">
+          No client secret
+        </Badge>
+      )}
+      {mappingIssue && (
+        <Badge size="sm" variant="warning">
+          <ExclamationTriangleIcon />
+          {mappingIssue}
+        </Badge>
+      )}
+    </>
+  )
+
   return (
-    <div className="flex flex-wrap items-start justify-between gap-4">
-      <div className="flex min-w-0 items-start gap-3">
-        {provider.logoUrl ? (
+    <SettingsPage
+      title={provider.label}
+      description={IDP_KIND_NAMES[kind]}
+      crumbs={SSO_CRUMBS}
+      logo={
+        provider.logoUrl ? (
           <img
             src={provider.logoUrl}
             alt=""
-            className="mt-0.5 h-9 w-9 shrink-0 rounded-lg border border-border object-cover"
+            className="h-9 w-9 shrink-0 rounded-lg border border-border object-cover"
           />
         ) : (
-          <IdpLogo kind={kind} className="mt-0.5 h-9 w-9 shrink-0" iconClassName="h-5 w-5" />
-        )}
-        <div className="min-w-0 space-y-1">
-          <h1 className="truncate text-lg font-semibold">{provider.label}</h1>
-          <div className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
-            <span>{IDP_KIND_NAMES[kind]}</span>
-            {!provider.configured && (
-              <Badge size="sm" shape="pill" variant="outline">
-                No client secret
-              </Badge>
-            )}
-            {mappingIssue && (
-              <Badge
-                size="sm"
-                shape="pill"
-                variant="outline"
-                className="border-amber-500/40 text-amber-700 dark:text-amber-400"
-              >
-                <ExclamationTriangleIcon />
-                {mappingIssue}
-              </Badge>
-            )}
+          <IdpLogo kind={kind} className="h-9 w-9 shrink-0" iconClassName="h-5 w-5" />
+        )
+      }
+      badge={badges || undefined}
+      actions={
+        <>
+          <div
+            className="flex items-center gap-2 text-sm"
+            title={isOnlyMethod ? 'At least one sign-in method must stay enabled.' : undefined}
+          >
+            <span className="text-muted-foreground">{enabled ? 'On' : 'Off'}</span>
+            <Switch
+              checked={enabled}
+              onCheckedChange={(v) => void toggle(v)}
+              disabled={saving || isOnlyMethod}
+              aria-label={`Enable ${provider.label}`}
+            />
           </div>
-        </div>
-      </div>
-
-      <div className="flex shrink-0 items-center gap-2">
-        <div
-          className="flex items-center gap-2 text-sm"
-          title={isOnlyMethod ? 'At least one sign-in method must stay enabled.' : undefined}
-        >
-          <span className="text-muted-foreground">{enabled ? 'Enabled' : 'Disabled'}</span>
-          <Switch
-            checked={enabled}
-            onCheckedChange={(v) => void toggle(v)}
-            disabled={saving || isOnlyMethod}
-            aria-label={`Enable ${provider.label}`}
-          />
-        </div>
-        <ProviderMenu provider={provider} isOnlyMethod={isOnlyMethod} />
-      </div>
-    </div>
+          <ProviderMenu provider={provider} isOnlyMethod={isOnlyMethod} />
+        </>
+      }
+    >
+      {children}
+    </SettingsPage>
   )
 }

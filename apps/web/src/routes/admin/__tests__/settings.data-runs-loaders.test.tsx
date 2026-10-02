@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 /**
- * The export and import history are warmed by the loaders of the pages that
- * show them (General's export action; the Imports & exports hub), so the
+ * The export and import history are warmed by the loader of the page that
+ * show them (the Imports & exports hub), so the
  * server-rendered page carries them and the browser fetches nothing more for
  * them after hydration. The history components are mounted against the query
  * client the loader filled; a read the loader missed shows up as a fetch.
@@ -141,14 +141,6 @@ function mount(ui: React.ReactElement) {
 }
 
 describe('data history warmed by the settings loaders', () => {
-  it('the General page carries the export runs its export action reads', async () => {
-    await load('@/routes/admin/settings.general')
-    expect(served).toEqual(['export runs'])
-    mount(<ExportWorkspaceAction />)
-    expect(fetchSpy).not.toHaveBeenCalled()
-    expect(served).toEqual(['export runs'])
-  })
-
   it('the Imports & exports hub carries both histories, shown on first render', async () => {
     await load('@/routes/admin/settings.imports')
     expect(served.sort()).toEqual(['export runs', 'import runs'])

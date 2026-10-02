@@ -5,13 +5,15 @@ import {
   useContext,
   useEffect,
   useId,
+  useRef,
   useState,
 } from 'react'
 import { useIntl } from 'react-intl'
 import { Button } from '@/components/ui/button'
+import { isRevisionConflict } from '@/lib/client/autosave'
+import { enqueueAssistantSave } from './assistant-save-queue'
 
-export type AssistantSaveState = 'idle' | 'saving' | 'saved' | 'error' | 'conflict'
-export type AssistantSettingsTab = 'basics' | 'guidance' | 'actions'
+export type AssistantSettingsTab = 'basics' | 'knowledge' | 'guidance' | 'actions'
 
 interface AssistantDirtyState {
   dirtyTabs: ReadonlySet<AssistantSettingsTab>
@@ -62,17 +64,6 @@ export function isAssistantFieldManaged(managedPaths: string[], path: string): b
   )
 }
 
-export function isAssistantRevisionConflict(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false
-  const value = error as { code?: unknown; statusCode?: unknown; message?: unknown }
-  return (
-    value.code === 'ASSISTANT_CONFIG_REVISION_CONFLICT' ||
-    value.statusCode === 409 ||
-    (typeof value.message === 'string' &&
-      /changed in another session|revision conflict/i.test(value.message))
-  )
-}
-
 export function useUnsavedChanges(isDirty: boolean, tab?: AssistantSettingsTab) {
   const formId = useId()
   const reportDirty = useContext(AssistantDirtyStateContext)?.reportDirty
@@ -106,59 +97,101 @@ export function ManagedSettingHint() {
   )
 }
 
-export function AssistantSaveFeedback({
-  state,
-  onReload,
-}: {
-  state: AssistantSaveState
-  onReload?: () => void | Promise<void>
-}) {
+/** Shown when a save was rejected because the settings changed in another session. */
+export function AssistantConflictNotice({ onReload }: { onReload: () => void | Promise<void> }) {
   const intl = useIntl()
-  const message =
-    state === 'saving'
-      ? intl.formatMessage({
-          id: 'automation.agent.save.saving',
-          defaultMessage: 'Saving changes…',
-        })
-      : state === 'saved'
-        ? intl.formatMessage({
-            id: 'automation.agent.save.saved',
-            defaultMessage: 'Changes saved.',
-          })
-        : state === 'error'
-          ? intl.formatMessage({
-              id: 'automation.agent.save.error',
-              defaultMessage: 'Changes could not be saved. Your draft is still here.',
-            })
-          : state === 'conflict'
-            ? intl.formatMessage({
-                id: 'automation.agent.save.conflict',
-                defaultMessage:
-                  'These settings changed in another session. Reload the latest settings before saving again.',
-              })
-            : ''
-
   return (
-    <div className="flex min-h-9 flex-col items-start justify-center gap-2 sm:flex-row sm:items-center sm:justify-between">
-      <p
-        className={
-          state === 'error' || state === 'conflict'
-            ? 'text-xs text-destructive'
-            : 'text-xs text-muted-foreground'
-        }
-        role={state === 'error' || state === 'conflict' ? 'alert' : 'status'}
-        aria-live="polite"
-      >
-        {message}
+    <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <p role="alert" className="text-xs text-destructive">
+        {intl.formatMessage({
+          id: 'automation.agent.save.conflict',
+          defaultMessage:
+            'These settings changed in another session. Reload the latest settings to keep editing.',
+        })}
       </p>
-      {state === 'conflict' && onReload && (
-        <Button type="button" variant="outline" size="sm" onClick={() => void onReload()}>
-          {intl.formatMessage({
-            id: 'automation.agent.save.reload',
-            defaultMessage: 'Reload latest settings',
-          })}
-        </Button>
-      )}
+      <Button type="button" variant="outline" size="sm" onClick={() => void onReload()}>
+        {intl.formatMessage({
+          id: 'automation.agent.save.reload',
+          defaultMessage: 'Reload latest settings',
+        })}
+      </Button>
     </div>
   )
+}
+
+/**
+ * Saves a draft as it changes. Text fields pass a debounce delay, tile choices
+ * pass 0. Saves join the shared queue (see `enqueueAssistantSave`). A failed
+ * save is not retried until the draft changes or `touch` reports the user acting
+ * on the field again (the mutation's autosave meta shows the toast), a revision
+ * conflict stops saving until `clearConflict` is called after reloading, and a
+ * draft that is unsaved or still changing is saved when the page is left.
+ */
+export function useAssistantAutosave({
+  dirty,
+  valid = true,
+  signature,
+  delayMs,
+  save,
+}: {
+  dirty: boolean
+  valid?: boolean
+  /** Identifies the current draft; a failed save is retried only once this changes or `touch` runs. */
+  signature: string
+  delayMs: number
+  save: () => Promise<void>
+}) {
+  const [conflict, setConflict] = useState(false)
+  const [settledCount, setSettledCount] = useState(0)
+  const [touchCount, setTouchCount] = useState(0)
+  const saveRef = useRef(save)
+  saveRef.current = save
+  const inFlight = useRef(false)
+  const sentSignature = useRef<string | null>(null)
+  const failedSignature = useRef<string | null>(null)
+  const canSave = dirty && valid && !conflict
+  const latest = useRef({ canSave, signature })
+  latest.current = { canSave, signature }
+
+  const run = useCallback(async (attempted: string) => {
+    inFlight.current = true
+    sentSignature.current = attempted
+    try {
+      await enqueueAssistantSave(() => saveRef.current())
+      failedSignature.current = null
+    } catch (error) {
+      if (isRevisionConflict(error)) setConflict(true)
+      else failedSignature.current = attempted
+    } finally {
+      inFlight.current = false
+      setSettledCount((count) => count + 1)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!canSave || inFlight.current || failedSignature.current === signature) return
+    const timer = setTimeout(() => void run(signature), delayMs)
+    return () => clearTimeout(timer)
+  }, [canSave, signature, delayMs, run, settledCount, touchCount])
+
+  useEffect(
+    () => () => {
+      const { canSave: unsaved, signature: current } = latest.current
+      if (!unsaved || failedSignature.current === current) return
+      if (inFlight.current && sentSignature.current === current) return
+      void enqueueAssistantSave(() => saveRef.current()).catch(() => {})
+    },
+    []
+  )
+
+  return {
+    conflict,
+    clearConflict: useCallback(() => setConflict(false), []),
+    /** Reports the user acting on the field again, so a failed save is sent once more. */
+    touch: useCallback(() => {
+      if (failedSignature.current === null) return
+      failedSignature.current = null
+      setTouchCount((count) => count + 1)
+    }, []),
+  }
 }

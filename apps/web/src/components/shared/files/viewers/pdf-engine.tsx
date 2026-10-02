@@ -1,0 +1,479 @@
+/**
+ * PDFs, drawn with the pdf.js core API (no viewer, no annotation layer, no
+ * scripting). Pages sit as white paper on the desk and are drawn only near
+ * the viewport; a thumbnail rail, virtualized like the pages, tracks the
+ * current page; find searches each page's text and highlights matches in the
+ * text layer. A long document shows its first `MAX_PDF_PAGES` pages and says
+ * so. Encrypted or damaged files are reported as unreadable, and closing the
+ * viewer destroys the document and its worker.
+ */
+import './pdf-engine.css'
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
+import { useIntl } from 'react-intl'
+import { useVirtualizer } from '@tanstack/react-virtual'
+import {
+  GlobalWorkerOptions,
+  TextLayer,
+  getDocument,
+  type PDFDocumentLoadingTask,
+  type PDFDocumentProxy,
+} from 'pdfjs-dist'
+import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import type { ViewerEngineProps } from '../types'
+import { ViewerSkeleton } from '../viewer-skeleton'
+import { withTimeout } from './budgets'
+import { FindBar, useFindToggle } from './find-bar'
+import { MAX_FIND_MATCHES, stepMatch } from './find-limit'
+import {
+  currentPage,
+  findMatches,
+  fitWidthZoom,
+  MAX_PDF_PAGES,
+  PDF_TO_CSS,
+  pageTextIndex,
+  pageTops,
+  pagesNear,
+  pdfFailure,
+  type TextMatch,
+} from './pdf-layout'
+import { PdfPage, PdfThumb, thumbSlotHeight, type PageText } from './pdf-page'
+import { pdfDocumentParams } from './pdf-resources'
+import { ZOOM_MAX, ZOOM_MIN, clampZoom } from './zoom'
+
+// The worker is a file from our own build, served from this origin.
+GlobalWorkerOptions.workerSrc = workerUrl
+
+const PAGE_GAP = 16
+/** Room for the desk's vertical scrollbar when fitting pages to its width. */
+const SCROLLBAR_ALLOWANCE = 16
+/** The thumbnail rail's width (`w-28`), its padding and the gap between thumbnails. */
+const RAIL_WIDTH = 112
+const RAIL_PADDING = 14
+const RAIL_GAP = 14
+const FIND_DEBOUNCE_MS = 150
+
+interface PageSize {
+  /** PDF points, rotation applied. */
+  width: number
+  height: number
+}
+
+const NO_MATCHES: readonly TextMatch[] = []
+
+export default function PdfEngine({ data, onToolbar, onError, compact }: ViewerEngineProps) {
+  const intl = useIntl()
+  const rootRef = useRef<HTMLDivElement>(null)
+  const deskRef = useRef<HTMLDivElement>(null)
+  const railRef = useRef<HTMLElement>(null)
+  const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null)
+  const [sizes, setSizes] = useState<PageSize[]>([])
+  const [zoom, setZoom] = useState(1)
+  const [fit, setFit] = useState(1)
+  const [current, setCurrent] = useState(1)
+  const [visible, setVisible] = useState<ReadonlySet<number>>(() => new Set([1]))
+  const fail = useEffectEvent(onError)
+  const report = useEffectEvent(onToolbar)
+  const padding = compact ? 12 : 24
+
+  // ---- Loading ------------------------------------------------------------
+
+  const texts = useRef(new Map<number, Promise<PageText>>())
+
+  useEffect(() => {
+    setPdf(null)
+    setSizes([])
+    texts.current = new Map()
+    if (!data) return
+    let cancelled = false
+    // pdf.js transfers the bytes to its worker; hand it a copy so the viewer
+    // keeps its own for Download.
+    const task: PDFDocumentLoadingTask = getDocument(
+      pdfDocumentParams(new Uint8Array(data.slice(0)))
+    )
+
+    async function open() {
+      const doc = await withTimeout(task.promise)
+      const first = (await doc.getPage(1)).getViewport({ scale: 1 })
+      if (cancelled) return
+      // The rail appears with the document, so measure the whole engine less the rail.
+      const deskWidth = (rootRef.current?.clientWidth ?? 0) - (compact ? 0 : RAIL_WIDTH)
+      const fitted = fitWidthZoom(deskWidth, first.width, padding * 2 + SCROLLBAR_ALLOWANCE)
+      setFit(fitted)
+      setZoom(fitted)
+      setCurrent(1)
+      const shown = Math.min(doc.numPages, MAX_PDF_PAGES)
+      setSizes(Array.from({ length: shown }, () => ({ width: first.width, height: first.height })))
+      setPdf(doc)
+      if (shown === 1) return
+      // Mixed page sizes settle once every shown page's box is known.
+      const all = await Promise.all(
+        Array.from({ length: shown }, (_, i) =>
+          doc.getPage(i + 1).then((page) => page.getViewport({ scale: 1 }))
+        )
+      )
+      if (!cancelled) setSizes(all.map((v) => ({ width: v.width, height: v.height })))
+    }
+
+    // Destroying the task ends the document, its fonts and its worker.
+    const close = () => task.destroy().catch(() => {})
+    open().catch((error: unknown) => {
+      if (cancelled) return
+      void close()
+      fail(pdfFailure(error))
+    })
+    return () => {
+      cancelled = true
+      // The text layer's measuring canvases live on the page body until released.
+      void close().then(() => TextLayer.cleanup())
+    }
+  }, [data, padding, compact])
+
+  const loadText = useCallback(
+    (pageNumber: number): Promise<PageText> => {
+      if (!pdf) return Promise.reject(new Error('No document'))
+      let pending = texts.current.get(pageNumber)
+      if (!pending) {
+        pending = pdf
+          .getPage(pageNumber)
+          .then((page) => page.getTextContent())
+          .then((content) => ({
+            content,
+            index: pageTextIndex(
+              content.items.flatMap((item) =>
+                'str' in item ? [{ str: item.str, hasEOL: item.hasEOL }] : []
+              )
+            ),
+          }))
+        texts.current.set(pageNumber, pending)
+      }
+      return pending
+    },
+    [pdf]
+  )
+
+  // ---- Geometry -----------------------------------------------------------
+
+  const geometry = useMemo(() => {
+    const scale = zoom * PDF_TO_CSS
+    const widths = sizes.map((s) => s.width * scale)
+    const heights = sizes.map((s) => s.height * scale)
+    return { widths, heights, tops: pageTops(heights, padding, PAGE_GAP) }
+  }, [sizes, zoom, padding])
+  const geometryRef = useRef(geometry)
+  useLayoutEffect(() => {
+    geometryRef.current = geometry
+  }, [geometry])
+
+  // Keep the same spot of the same page in view across a zoom change.
+  const anchor = useRef<{ zoom: number; tops: number[]; heights: number[] } | null>(null)
+  useLayoutEffect(() => {
+    const desk = deskRef.current
+    const before = anchor.current
+    const { tops, heights } = geometry
+    if (
+      desk &&
+      before &&
+      before.zoom !== zoom &&
+      before.tops.length === tops.length &&
+      tops.length
+    ) {
+      const index = currentPage(before.tops, before.heights, desk.scrollTop, desk.clientHeight) - 1
+      const within = (desk.scrollTop - before.tops[index]!) / before.heights[index]!
+      desk.scrollTop = tops[index]! + within * heights[index]!
+      desk.scrollLeft *= zoom / before.zoom
+    }
+    anchor.current = { zoom, tops, heights }
+  }, [geometry, zoom])
+
+  useEffect(() => {
+    const desk = deskRef.current
+    if (!desk || !pdf) return
+    let frame = 0
+    const onScroll = () => {
+      if (frame) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        const { tops, heights } = geometryRef.current
+        setCurrent(currentPage(tops, heights, desk.scrollTop, desk.clientHeight))
+      })
+    }
+    desk.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      desk.removeEventListener('scroll', onScroll)
+      cancelAnimationFrame(frame)
+    }
+  }, [pdf])
+
+  const go = useCallback(
+    (page: number) => {
+      const desk = deskRef.current
+      const { tops } = geometryRef.current
+      const target = Math.min(Math.max(1, Math.round(page)), tops.length)
+      if (!desk || tops.length === 0) return
+      desk.scrollTo({ top: tops[target - 1]! - padding / 2 })
+      setCurrent(target)
+    },
+    [padding]
+  )
+
+  // ---- Which pages to draw --------------------------------------------------
+
+  const deskObserver = useVisibility(deskRef, pdf, setVisible)
+  const total = pdf ? sizes.length : 0
+  const drawnPages = useMemo(() => new Set(pagesNear(visible, total)), [visible, total])
+
+  // The rail holds only the thumbnails near its view, however long the document.
+  const rail = useVirtualizer({
+    count: compact ? 0 : total,
+    getScrollElement: () => railRef.current,
+    estimateSize: (i) => thumbSlotHeight(sizes[i] ? sizes[i].height / sizes[i].width : 1.29),
+    paddingStart: RAIL_PADDING,
+    paddingEnd: RAIL_PADDING,
+    gap: RAIL_GAP,
+    overscan: 3,
+  })
+  useEffect(() => {
+    if (!compact && total > 0) rail.scrollToIndex(current - 1)
+  }, [current, compact, total, rail])
+
+  // ---- Find ---------------------------------------------------------------
+
+  const { findOpen, inputRef: findInputRef, openFind, closeFind } = useFindToggle(deskRef)
+  const [query, setQuery] = useState('')
+  const [matches, setMatches] = useState<readonly TextMatch[]>(NO_MATCHES)
+  const [activeMatch, setActiveMatch] = useState(-1)
+  const [revealNonce, setRevealNonce] = useState(0)
+  const [searching, setSearching] = useState(false)
+
+  const reveal = useCallback(
+    (index: number, list: readonly TextMatch[]) => {
+      setActiveMatch(index)
+      setRevealNonce((n) => n + 1)
+      const match = list[index]
+      // A page off screen has no text layer yet: bring it in, and it scrolls
+      // its highlighted match into view once drawn.
+      if (match && !drawnPages.has(match.page)) go(match.page)
+    },
+    [drawnPages, go]
+  )
+  const revealMatch = useEffectEvent(reveal)
+
+  useEffect(() => {
+    if (!pdf || !findOpen || query.trim() === '') {
+      setMatches(NO_MATCHES)
+      setActiveMatch(-1)
+      setSearching(false)
+      return
+    }
+    let cancelled = false
+    setSearching(true)
+    const timer = setTimeout(() => {
+      Promise.all(
+        Array.from({ length: total }, (_, i) => loadText(i + 1).then((t) => t.index.text))
+      )
+        .then((pageTexts) => {
+          if (cancelled) return
+          const found = findMatches(pageTexts, query)
+          setMatches(found)
+          setSearching(false)
+          if (found.length > 0) revealMatch(0, found)
+          else setActiveMatch(-1)
+        })
+        .catch(() => {
+          if (!cancelled) setSearching(false)
+        })
+    }, FIND_DEBOUNCE_MS)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [pdf, total, findOpen, query, loadText])
+
+  const step = useCallback(
+    (direction: 1 | -1) => {
+      const next = stepMatch(activeMatch, matches.length, direction)
+      if (next >= 0) reveal(next, matches)
+    },
+    [activeMatch, matches, reveal]
+  )
+
+  const matchesByPage = useMemo(() => {
+    const byPage = new Map<number, { list: TextMatch[]; first: number }>()
+    matches.forEach((match, i) => {
+      const entry = byPage.get(match.page)
+      if (entry) entry.list.push(match)
+      else byPage.set(match.page, { list: [match], first: i })
+    })
+    return byPage
+  }, [matches])
+
+  // ---- Toolbar ------------------------------------------------------------
+
+  const changeZoom = useCallback((value: number) => setZoom(clampZoom(value, fit)), [fit])
+
+  const capped = pdf !== null && pdf.numPages > MAX_PDF_PAGES
+  const note = capped
+    ? intl.formatMessage(
+        {
+          id: 'files.pdf.firstPages',
+          defaultMessage: 'Showing the first {count, plural, one {# page} other {# pages}}',
+        },
+        { count: MAX_PDF_PAGES }
+      )
+    : undefined
+
+  useEffect(() => {
+    if (!pdf) return
+    report({
+      zoom: { value: zoom, min: Math.min(ZOOM_MIN, fit), max: ZOOM_MAX, set: changeZoom },
+      page: { current, total, go },
+      find: { open: openFind },
+      ...(note ? { note } : {}),
+    })
+  }, [pdf, total, note, zoom, fit, changeZoom, current, go, openFind])
+
+  // ---- Render -------------------------------------------------------------
+
+  return (
+    <div ref={rootRef} className="flex min-h-0 min-w-0 flex-1">
+      {!compact && pdf && (
+        <nav
+          ref={railRef}
+          aria-label={intl.formatMessage({ id: 'files.pdf.railAria', defaultMessage: 'Pages' })}
+          className="w-28 shrink-0 overflow-y-auto border-r border-border bg-background"
+        >
+          <div className="relative w-full" style={{ height: rail.getTotalSize() }}>
+            {rail.getVirtualItems().map((item) => {
+              const size = sizes[item.index]!
+              return (
+                <div
+                  key={item.key}
+                  className="absolute inset-x-0 top-0 flex justify-center"
+                  style={{ transform: `translateY(${item.start}px)` }}
+                >
+                  <PdfThumb
+                    pdf={pdf}
+                    pageNumber={item.index + 1}
+                    pageWidthPt={size.width}
+                    aspect={size.height / size.width}
+                    current={current === item.index + 1}
+                    onSelect={go}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        </nav>
+      )}
+      <div className="relative flex min-h-0 min-w-0 flex-1">
+        {findOpen && pdf && (
+          <FindBar
+            inputRef={findInputRef}
+            query={query}
+            onQueryChange={setQuery}
+            current={activeMatch}
+            total={matches.length}
+            capped={matches.length >= MAX_FIND_MATCHES}
+            searching={searching}
+            onStep={step}
+            onClose={closeFind}
+          />
+        )}
+        <div
+          ref={deskRef}
+          tabIndex={-1}
+          className="min-h-0 min-w-0 flex-1 overflow-auto bg-[oklch(0.935_0_0)] outline-none dark:bg-[oklch(0.11_0_0)]"
+        >
+          {pdf ? (
+            <div
+              className="mx-auto flex w-max min-w-full flex-col items-center"
+              style={{ padding, gap: PAGE_GAP }}
+            >
+              {sizes.map((_, i) => {
+                const pageNumber = i + 1
+                const pageMatches = matchesByPage.get(pageNumber)
+                const active = pageMatches ? activeMatch - pageMatches.first : -1
+                return (
+                  <PdfPage
+                    key={pageNumber}
+                    pdf={pdf}
+                    pageNumber={pageNumber}
+                    width={geometry.widths[i]!}
+                    height={geometry.heights[i]!}
+                    zoom={zoom}
+                    drawn={drawnPages.has(pageNumber)}
+                    loadText={loadText}
+                    matches={pageMatches?.list ?? NO_MATCHES}
+                    activeMatch={pageMatches && active < pageMatches.list.length ? active : -1}
+                    revealNonce={revealNonce}
+                    register={deskObserver}
+                  />
+                )
+              })}
+            </div>
+          ) : (
+            <ViewerSkeleton />
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Tracks which pages (elements registered with their page number) are near a
+ * scrolling root, and returns the registration callback. The root's box is
+ * extended by its own height above and below, so a page is "near" and gets
+ * drawn just before it scrolls into view, not the instant it does.
+ */
+function useVisibility(
+  rootRef: React.RefObject<HTMLElement | null>,
+  active: unknown,
+  onChange: (pages: ReadonlySet<number>) => void
+): (pageNumber: number, el: HTMLElement | null) => void {
+  const elements = useRef(new Map<number, HTMLElement>())
+  const observer = useRef<IntersectionObserver | null>(null)
+  const report = useEffectEvent(onChange)
+
+  useEffect(() => {
+    const root = rootRef.current
+    if (!root || !active) return
+    const near = new Set<number>()
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const page = Number((entry.target as HTMLElement).dataset.page)
+          if (entry.isIntersecting) near.add(page)
+          else near.delete(page)
+        }
+        report(new Set(near))
+      },
+      { root, rootMargin: '100% 0px' }
+    )
+    for (const el of elements.current.values()) io.observe(el)
+    observer.current = io
+    return () => {
+      io.disconnect()
+      observer.current = null
+    }
+  }, [rootRef, active])
+
+  return useCallback((pageNumber: number, el: HTMLElement | null) => {
+    const previous = elements.current.get(pageNumber)
+    if (previous && previous !== el) observer.current?.unobserve(previous)
+    if (el) {
+      elements.current.set(pageNumber, el)
+      observer.current?.observe(el)
+    } else {
+      elements.current.delete(pageNumber)
+    }
+  }, [])
+}

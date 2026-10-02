@@ -14,8 +14,8 @@ export function SeatGatePanel({ usage }: { usage: SeatUsage }) {
           {usage.used} / {usage.limit}
         </span>
       </div>
-      <div className="flex items-center justify-between gap-3 rounded-[10px] border border-amber-500/30 bg-amber-500/10 p-3">
-        <p className="text-[13px] leading-snug text-amber-700">
+      <div className="flex items-center justify-between gap-3 rounded-[10px] border border-warning/30 bg-warning/10 p-3">
+        <p className="text-[13px] leading-snug text-warning">
           All {usage.limit} seats are in use. Upgrade to send this invitation.
         </p>
         <Button type="button" size="sm" className="shrink-0" asChild>

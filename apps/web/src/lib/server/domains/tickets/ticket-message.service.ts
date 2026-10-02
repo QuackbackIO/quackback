@@ -85,12 +85,12 @@ import type {
 } from '@/lib/shared/conversation/types'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import {
-  validateAttachments,
   validateContent,
   richMessageFallbackLabel,
   resolveMessageContent,
   toMessageDTO,
 } from '@/lib/server/messages/message-core'
+import { resolveAttachments, linkFilesToMessage } from '@/lib/server/domains/files/files.service'
 import { loadAuthors, loadAuthorAudiences, fallbackAuthor } from '../principals/principal-display'
 // The conversation domain, not this one, owns reaction/flag storage
 // (conversationMessageReactions/Flags) — `enrichMessagesForAgent` is already
@@ -245,7 +245,12 @@ export async function insertTicketMessage(
   principalId: PrincipalId,
   opts: InsertTicketMessageOpts
 ): Promise<{ message: ConversationMessageDTO; ticket: Ticket }> {
-  const attachments = validateAttachments(input.attachments)
+  // The caller authorized the sender; an agent write may attach any stored
+  // file, a requester only files they uploaded.
+  const attachments = await resolveAttachments(input.attachments, {
+    principalId,
+    canAttachAnyFile: opts.senderType === 'agent',
+  })
   const safeContentJson = input.contentJson
     ? sanitizeTiptapContent(input.contentJson, {
         // Requester-authored inline images may only reference our own storage.
@@ -292,6 +297,7 @@ export async function insertTicketMessage(
         metadata: input.metadata ?? undefined,
       })
       .returning()
+    await linkFilesToMessage(tx, attachments, row!.id)
 
     await tx
       .update(tickets)

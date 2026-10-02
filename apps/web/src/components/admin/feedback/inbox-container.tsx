@@ -1,6 +1,5 @@
 import { useCallback, useMemo } from 'react'
 import { useQueryClient, useQueries } from '@tanstack/react-query'
-import { ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
 import { InboxLayout } from '@/components/admin/feedback/inbox-layout'
 import { InboxFiltersPanel } from '@/components/admin/feedback/inbox-filters'
 import { FeedbackTableView } from '@/components/admin/feedback/table'
@@ -136,7 +135,6 @@ export function InboxContainer({
   return (
     <InboxLayout
       hasActiveFilters={hasActiveFilters}
-      headerIcon={ChatBubbleLeftIcon}
       headerTitle="Feedback"
       filters={
         <InboxFiltersPanel
@@ -170,21 +168,21 @@ export function InboxContainer({
         onToggleBoard={toggleBoard}
         onToggleSegment={toggleSegment}
         duplicateCountByPostId={duplicateCountByPostId}
+        headerFilters={
+          <SavedViewsMenu
+            filters={filters}
+            hasActiveFilters={hasActiveFilters}
+            onApply={applyView}
+          />
+        }
         headerAction={
-          <div className="flex items-center gap-2">
-            <SavedViewsMenu
-              filters={filters}
-              hasActiveFilters={hasActiveFilters}
-              onApply={applyView}
-            />
-            <CreatePostDialog
-              boards={boards}
-              tags={tags}
-              statuses={statuses}
-              currentUser={currentUser}
-              onPostCreated={refetchPosts}
-            />
-          </div>
+          <CreatePostDialog
+            boards={boards}
+            tags={tags}
+            statuses={statuses}
+            currentUser={currentUser}
+            onPostCreated={refetchPosts}
+          />
         }
       />
     </InboxLayout>

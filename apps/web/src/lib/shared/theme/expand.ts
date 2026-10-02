@@ -31,43 +31,12 @@ type ThemeColorBase = Omit<
 >
 
 /**
- * Palette used for any variable a theme leaves out. These are the values
- * globals.css already ships as the un-branded defaults, so filling a gap emits
+ * Palette used for any variable a theme leaves out. globals.css
+ * ships these same values as the un-branded defaults, so filling a gap emits
  * the value the page would otherwise have inherited. The `default` preset is
  * built from these same constants, which keeps the two from drifting apart.
  */
 export const DEFAULT_LIGHT_BASE: ThemeColorBase = {
-  primary: 'oklch(0.886 0.176 86)',
-  background: 'oklch(1 0 0)',
-  foreground: 'oklch(0.145 0 0)',
-  card: 'oklch(1 0 0)',
-  muted: 'oklch(0.97 0 0)',
-  mutedForeground: 'oklch(0.45 0 0)',
-  border: 'oklch(0.87 0 0)',
-  destructive: 'oklch(0.577 0.245 27)',
-  success: 'oklch(0.62 0.149 163)',
-}
-
-export const DEFAULT_DARK_BASE: ThemeColorBase = {
-  primary: 'oklch(0.886 0.176 86)',
-  background: 'oklch(0.145 0 0)',
-  foreground: 'oklch(0.985 0 0)',
-  card: 'oklch(0.17 0 0)',
-  muted: 'oklch(0.269 0 0)',
-  mutedForeground: 'oklch(0.708 0 0)',
-  border: 'oklch(0.269 0 0)',
-  destructive: 'oklch(0.70 0.19 25)',
-  success: 'oklch(0.696 0.149 163)',
-}
-
-export type ThemeBaseline = 'legacy' | 'refined'
-
-/**
- * Unbranded refined-theme baseline. Used only when the Labs experiment is
- * enabled; unspecified branding keys inherit these instead of the legacy
- * defaults. Primary gold is unchanged.
- */
-export const REFINED_LIGHT_BASE: ThemeColorBase = {
   primary: 'oklch(0.886 0.176 86)',
   background: '#ffffff',
   foreground: '#0a0a0a',
@@ -76,15 +45,15 @@ export const REFINED_LIGHT_BASE: ThemeColorBase = {
   mutedForeground: '#525252',
   border: '#d4d4d4',
   destructive: 'oklch(0.577 0.245 27)',
-  success: 'oklch(0.62 0.149 163)',
+  success: 'oklch(0.49 0.115 165.6)',
 }
 
-export const REFINED_DARK_BASE: ThemeColorBase = {
+export const DEFAULT_DARK_BASE: ThemeColorBase = {
   primary: 'oklch(0.886 0.176 86)',
   background: '#0a0a0a',
   foreground: '#fafafa',
-  card: '#0a0a0a',
-  muted: '#181818',
+  card: '#0f0f0f',
+  muted: '#222222',
   mutedForeground: '#a1a1a1',
   border: '#262626',
   destructive: 'oklch(0.70 0.19 25)',
@@ -97,12 +66,10 @@ export const REFINED_DARK_BASE: ThemeColorBase = {
  */
 export const DEFAULT_FONT_SANS = '"Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif'
 
-/** The corner radius globals.css ships; the refined stylesheet ships its own. */
-export const DEFAULT_RADIUS = '0.625rem'
-const REFINED_DEFAULT_RADIUS = '0.5rem'
+/** The corner radius globals.css ships. */
+export const DEFAULT_RADIUS = '0.5rem'
 
-function basePalette(mode: 'light' | 'dark', baseline: ThemeBaseline): ThemeColorBase {
-  if (baseline === 'refined') return mode === 'light' ? REFINED_LIGHT_BASE : REFINED_DARK_BASE
+function basePalette(mode: 'light' | 'dark'): ThemeColorBase {
   return mode === 'light' ? DEFAULT_LIGHT_BASE : DEFAULT_DARK_BASE
 }
 
@@ -112,14 +79,11 @@ function basePalette(mode: 'light' | 'dark', baseline: ThemeBaseline): ThemeColo
  * customised. The branding editor starts from it, so saving a theme nobody
  * touched stores what visitors already see.
  */
-export function unbrandedTheme(
-  mode: 'light' | 'dark',
-  baseline: ThemeBaseline = 'legacy'
-): MinimalThemeVariables {
+export function unbrandedTheme(mode: 'light' | 'dark'): MinimalThemeVariables {
   return {
-    ...basePalette(mode, baseline),
+    ...basePalette(mode),
     fontSans: DEFAULT_FONT_SANS,
-    radius: baseline === 'refined' ? REFINED_DEFAULT_RADIUS : DEFAULT_RADIUS,
+    radius: DEFAULT_RADIUS,
   }
 }
 
@@ -153,32 +117,20 @@ const MINIMAL_KEYS = [
  */
 function resolveMinimal(
   minimal: Partial<MinimalThemeVariables>,
-  mode: 'light' | 'dark',
-  baseline: ThemeBaseline = 'legacy'
+  mode: 'light' | 'dark'
 ): MinimalThemeVariables {
-  const resolved: MinimalThemeVariables = { ...basePalette(mode, baseline) }
+  const resolved: MinimalThemeVariables = { ...basePalette(mode) }
   for (const key of MINIMAL_KEYS) {
     const value = minimal[key]
     if (typeof value === 'string' && value.trim() !== '') resolved[key] = value
   }
-  if (baseline === 'refined' && !(typeof minimal.radius === 'string' && minimal.radius.trim())) {
-    resolved.radius = REFINED_DEFAULT_RADIUS
+  if (!(typeof minimal.radius === 'string' && minimal.radius.trim())) {
+    resolved.radius = DEFAULT_RADIUS
   }
   return resolved
 }
 
 const LIGHT_SHADOWS = {
-  shadow2xs: '0 1px oklch(0 0 0 / 0.05)',
-  shadowXs: '0 1px 2px 0 oklch(0 0 0 / 0.05)',
-  shadowSm: '0 1px 3px 0 oklch(0 0 0 / 0.1), 0 1px 2px -1px oklch(0 0 0 / 0.1)',
-  shadow: '0 1px 3px 0 oklch(0 0 0 / 0.1), 0 1px 2px -1px oklch(0 0 0 / 0.1)',
-  shadowMd: '0 4px 6px -1px oklch(0 0 0 / 0.1), 0 2px 4px -2px oklch(0 0 0 / 0.1)',
-  shadowLg: '0 10px 15px -3px oklch(0 0 0 / 0.1), 0 4px 6px -4px oklch(0 0 0 / 0.1)',
-  shadowXl: '0 20px 25px -5px oklch(0 0 0 / 0.1), 0 8px 10px -6px oklch(0 0 0 / 0.1)',
-  shadow2xl: '0 25px 50px -12px oklch(0 0 0 / 0.25)',
-}
-
-const REFINED_LIGHT_SHADOWS = {
   shadow2xs: '0 0 0 0 transparent',
   shadowXs: '0 0 0 0 transparent',
   shadowSm: '0 0 0 1px oklch(0 0 0 / 0.04)',
@@ -189,7 +141,7 @@ const REFINED_LIGHT_SHADOWS = {
   shadow2xl: '0 16px 40px oklch(0 0 0 / 0.16)',
 }
 
-const REFINED_DARK_SHADOWS = {
+const DARK_SHADOWS = {
   shadow2xs: '0 0 0 0 transparent',
   shadowXs: '0 0 0 0 transparent',
   shadowSm: '0 0 0 1px oklch(1 0 0 / 0.06)',
@@ -198,17 +150,6 @@ const REFINED_DARK_SHADOWS = {
   shadowLg: '0 12px 32px oklch(0 0 0 / 0.5)',
   shadowXl: '0 16px 40px oklch(0 0 0 / 0.55)',
   shadow2xl: '0 20px 48px oklch(0 0 0 / 0.6)',
-}
-
-const DARK_SHADOWS = {
-  shadow2xs: '0 1px oklch(0 0 0 / 0.15)',
-  shadowXs: '0 1px 2px 0 oklch(0 0 0 / 0.15)',
-  shadowSm: '0 1px 3px 0 oklch(0 0 0 / 0.25), 0 1px 2px -1px oklch(0 0 0 / 0.25)',
-  shadow: '0 1px 3px 0 oklch(0 0 0 / 0.25), 0 1px 2px -1px oklch(0 0 0 / 0.25)',
-  shadowMd: '0 4px 6px -1px oklch(0 0 0 / 0.25), 0 2px 4px -2px oklch(0 0 0 / 0.25)',
-  shadowLg: '0 10px 15px -3px oklch(0 0 0 / 0.25), 0 4px 6px -4px oklch(0 0 0 / 0.25)',
-  shadowXl: '0 20px 25px -5px oklch(0 0 0 / 0.25), 0 8px 10px -6px oklch(0 0 0 / 0.25)',
-  shadow2xl: '0 25px 50px -12px oklch(0 0 0 / 0.5)',
 }
 
 export function parseOklch(oklch: string): { l: number; c: number; h: number } | null {
@@ -274,18 +215,10 @@ export function generateChartColors(primary: string): [string, string, string, s
  */
 export function expandTheme(
   partial: Partial<MinimalThemeVariables>,
-  options: { mode: 'light' | 'dark'; baseline?: ThemeBaseline }
+  options: { mode: 'light' | 'dark' }
 ): ThemeVariables {
-  const baseline = options.baseline ?? 'legacy'
-  const minimal = resolveMinimal(partial, options.mode, baseline)
-  const shadows =
-    baseline === 'refined'
-      ? options.mode === 'light'
-        ? REFINED_LIGHT_SHADOWS
-        : REFINED_DARK_SHADOWS
-      : options.mode === 'light'
-        ? LIGHT_SHADOWS
-        : DARK_SHADOWS
+  const minimal = resolveMinimal(partial, options.mode)
+  const shadows = options.mode === 'light' ? LIGHT_SHADOWS : DARK_SHADOWS
   const primaryForeground = computeContrastForeground(minimal.primary)
   const destructiveForeground = computeContrastForeground(minimal.destructive)
   const accentInk = computeAccentInk(minimal.primary, options.mode)

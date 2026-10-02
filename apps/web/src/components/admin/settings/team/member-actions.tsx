@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   CheckIcon,
-  EllipsisVerticalIcon,
+  EllipsisHorizontalIcon,
   ShieldCheckIcon,
   ShieldExclamationIcon,
   UserIcon,
@@ -142,9 +142,13 @@ export function MemberActions({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon">
-            <EllipsisVerticalIcon className="h-4 w-4" />
-            <span className="sr-only">Member actions</span>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Actions for ${memberName}`}
+            className="size-7 text-muted-foreground"
+          >
+            <EllipsisHorizontalIcon className="size-4" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
@@ -169,7 +173,7 @@ export function MemberActions({
           </DropdownMenuItem>
           {customRoles.length > 0 && (
             <>
-              <DropdownMenuLabel className="text-[11px] uppercase tracking-wider text-muted-foreground">
+              <DropdownMenuLabel className="uppercase tracking-wider text-muted-foreground">
                 Custom
               </DropdownMenuLabel>
               {customRoles.map((r) => (

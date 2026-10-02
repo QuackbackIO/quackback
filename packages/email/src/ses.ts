@@ -36,6 +36,7 @@ import { SendEmailCommand, SESv2Client } from '@aws-sdk/client-sesv2'
 import type { SendEmailCommandOutput } from '@aws-sdk/client-sesv2'
 import { createLogger } from '@quackback/logger'
 import { sesWireMessageId } from './message-id'
+import type { EmailAttachment } from './attachment'
 
 const log = createLogger({ base: { service_name: 'quackback-email' } }).child({
   component: 'email-ses',
@@ -185,6 +186,11 @@ export interface SesSendRequest {
    *  on the way out rather than rejected by the API — see
    *  {@link stripPlatformControlledHeaders}. */
   headers?: Record<string, string>
+  /** Real files, carried on the Simple content's own `Attachments` list — no
+   *  raw MIME message to assemble ourselves, and every other field on this
+   *  request (threading headers, Message-ID handling) stays exactly as it is
+   *  without them. */
+  attachments?: EmailAttachment[]
 }
 
 export interface SesSendResult {
@@ -607,6 +613,16 @@ export async function sendViaSes(
           ...(request.text !== undefined ? { Text: { Data: request.text, Charset: 'UTF-8' } } : {}),
         },
         ...(headerList.length > 0 ? { Headers: headerList } : {}),
+        ...(request.attachments && request.attachments.length > 0
+          ? {
+              Attachments: request.attachments.map((attachment) => ({
+                RawContent: attachment.content,
+                FileName: attachment.filename,
+                ContentType: attachment.contentType,
+                ContentDisposition: 'ATTACHMENT' as const,
+              })),
+            }
+          : {}),
       },
     },
   })

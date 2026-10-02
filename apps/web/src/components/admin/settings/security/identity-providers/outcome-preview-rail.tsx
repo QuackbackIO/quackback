@@ -125,15 +125,15 @@ export function OutcomePreviewRail({
       {dirty && <p className="font-medium">Preview of unsaved changes</p>}
 
       {preview.status === 'mapping_failed' && (
-        <p className="text-amber-700 dark:text-amber-400">Connection test did not pass.</p>
+        <p className="text-warning">Connection test did not pass.</p>
       )}
 
       {preview.status === 'needs_retest' && preview.limitations[0] && (
-        <p className="text-amber-700 dark:text-amber-400">{preview.limitations[0]}</p>
+        <p className="text-warning">{preview.limitations[0]}</p>
       )}
 
       {preview.stale && preview.status === 'ready' && (
-        <p className="text-amber-700 dark:text-amber-400">
+        <p className="text-warning">
           Configuration changed since this test. Test again to confirm it.
         </p>
       )}
@@ -165,7 +165,7 @@ export function OutcomePreviewRail({
             <p>Roles are not applied because account creation is off.</p>
           ) : preview.roleMatch && draft?.role ? (
             <p>
-              <span className="font-medium">{preview.roleMatch.role}</span> — rule{' '}
+              <span className="font-medium">{preview.roleMatch.role}</span>, rule{' '}
               {preview.roleMatch.ruleIndex + 1} matched{' '}
               <span className="font-mono text-xs">
                 {draft.role.rules[preview.roleMatch.ruleIndex]?.whenContains}
@@ -316,8 +316,8 @@ export function TestDetails({
                   <span className="font-medium">{SOURCE_WORDS[snapshot.source]}</span>
                   <span className="text-muted-foreground">
                     {snapshot.unavailable
-                      ? ` — unavailable (${snapshot.unavailable})`
-                      : ` — ${Object.keys(snapshot.claims ?? {}).length} claims`}
+                      ? `: unavailable (${snapshot.unavailable})`
+                      : `: ${Object.keys(snapshot.claims ?? {}).length} claims`}
                   </span>
                 </li>
               ))}

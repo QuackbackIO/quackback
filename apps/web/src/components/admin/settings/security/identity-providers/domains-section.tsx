@@ -87,7 +87,7 @@ export function DomainsSection({
       <div>
         <Label className="font-medium">Domains</Label>
         <p className="mt-1 text-sm text-muted-foreground">
-          People at a verified domain are sent to this provider. Require SSO to make it their only
+          Users at a verified domain are sent to this provider. Require SSO to make it their only
           way in.
         </p>
       </div>
@@ -229,9 +229,9 @@ function DomainRow({
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           {isVerified ? (
-            <CheckCircleIcon className="h-4 w-4 shrink-0 text-green-700 dark:text-green-400" />
+            <CheckCircleIcon className="h-4 w-4 shrink-0 text-success" />
           ) : (
-            <ClockIcon className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
+            <ClockIcon className="h-4 w-4 shrink-0 text-warning" />
           )}
           <span className="truncate text-sm font-medium">{domain.name}</span>
           <span className="text-sm text-muted-foreground">

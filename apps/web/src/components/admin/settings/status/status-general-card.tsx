@@ -12,10 +12,7 @@ interface StatusGeneralCardProps {
 
 export function StatusGeneralCard({ settings, onChange, onFlushText }: StatusGeneralCardProps) {
   return (
-    <SettingsCard
-      title="General"
-      description="The status page publishes from the Status toggle on Settings → General. Hide or rename the portal tab in Portal → Navigation."
-    >
+    <SettingsCard title="Page">
       <div className="space-y-2">
         <Label htmlFor="status-description" className="text-sm font-medium">
           Page description

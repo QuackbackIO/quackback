@@ -35,6 +35,7 @@ vi.mock('@/lib/server/storage/s3', () => ({
   isS3Usable: vi.fn(() => true),
   getStorageSigningSecret: vi.fn(() => 'test-secret'),
   isPublicStorageKey: vi.fn((key: string) => key.startsWith('logos/')),
+  hasExpiringReadToken: vi.fn((key: string) => key.startsWith('files/')),
   verifyStorageReadToken: vi.fn(
     (_secret: string, _key: string, sig: string | null) => sig === 'ok'
   ),
@@ -179,7 +180,8 @@ describe('handleStorageGet: what a stored file may do when opened', () => {
   // declares its own). Proxied, it is served from this origin, so anything a
   // browser could run is a download, sandboxed, never a page.
   // Each test names its own key: the proxy cache lives for the module.
-  const htmlKey = (name: string) => `chat-files/2026/09/3f2b8c1e-1a2b-4c3d-9e8f-0123456789ab-${name}.html`
+  const htmlKey = (name: string) =>
+    `chat-files/2026/09/3f2b8c1e-1a2b-4c3d-9e8f-0123456789ab-${name}.html`
   const HTML_KEY = htmlKey('invoice')
   const htmlObject = () => ({
     body: new Blob(['<script>alert(1)</script>']).stream(),
@@ -213,7 +215,10 @@ describe('handleStorageGet: what a stored file may do when opened', () => {
 
   it('keeps it a download on a range request', async () => {
     mockConfig.s3Proxy = true
-    getS3Object.mockImplementationOnce(async () => ({ ...htmlObject(), contentRange: 'bytes 0-9/26' }))
+    getS3Object.mockImplementationOnce(async () => ({
+      ...htmlObject(),
+      contentRange: 'bytes 0-9/26',
+    }))
 
     const res = await new Promise<Response>((resolve) =>
       resolve(
@@ -246,12 +251,55 @@ describe('handleStorageGet: what a stored file may do when opened', () => {
   it('redirects a non-media file to a download', async () => {
     const res = await get(`/api/storage/${HTML_KEY}?read=ok`)
     expect(res.status).toBe(302)
-    expect(generatePresignedGetUrl).toHaveBeenCalledWith(HTML_KEY, undefined, 'invoice.html', undefined)
+    expect(generatePresignedGetUrl).toHaveBeenCalledWith(
+      HTML_KEY,
+      172_800,
+      'invoice.html',
+      undefined
+    )
   })
 
   it('redirects a media file with its type forced from the extension', async () => {
     const key = 'chat-files/2026/09/3f2b8c1e-1a2b-4c3d-9e8f-0123456789ab-report.pdf'
     await get(`/api/storage/${key}?read=ok`)
-    expect(generatePresignedGetUrl).toHaveBeenCalledWith(key, undefined, undefined, 'application/pdf')
+    expect(generatePresignedGetUrl).toHaveBeenCalledWith(key, 172_800, undefined, 'application/pdf')
+  })
+})
+
+describe('handleStorageGet — the viewer fetch (?proxy=1)', () => {
+  it('serves the bytes from this origin instead of redirecting, without S3_PROXY', async () => {
+    const res = await get('/api/storage/files/2026/10/a.pdf?read=ok&proxy=1')
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Location')).toBeNull()
+    expect(getS3Object).toHaveBeenCalledWith('files/2026/10/a.pdf')
+  })
+
+  it('still requires the read capability', async () => {
+    const res = await get('/api/storage/files/2026/10/a.pdf?proxy=1')
+    expect(res.status).toBe(403)
+    expect(getS3Object).not.toHaveBeenCalled()
+  })
+
+  it('streams a large object rather than buffering it whole', async () => {
+    let pulled = 0
+    const big = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled++
+        if (pulled > 3) return controller.close()
+        controller.enqueue(new Uint8Array(1024))
+      },
+    })
+    getS3Object.mockResolvedValueOnce({
+      body: big,
+      contentType: 'application/pdf',
+      contentLength: 5 * 1024 * 1024,
+    })
+    const res = await get('/api/storage/files/2026/10/big.pdf?read=ok&proxy=1')
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Content-Length')).toBe(String(5 * 1024 * 1024))
+    // Answered before the body was drained: the handler handed the stream on.
+    expect(pulled).toBeLessThanOrEqual(1)
+    await res.arrayBuffer()
+    expect(pulled).toBeGreaterThan(3)
   })
 })

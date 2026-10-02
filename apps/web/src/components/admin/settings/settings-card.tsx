@@ -5,6 +5,8 @@ interface SettingsCardProps {
   description?: string
   action?: React.ReactNode
   variant?: 'default' | 'danger'
+  /** A body without padding, for a `SettingsList` whose rows carry the card's horizontal padding. */
+  flush?: boolean
   contentClassName?: string
   children: React.ReactNode
 }
@@ -14,19 +16,26 @@ export function SettingsCard({
   description,
   action,
   variant = 'default',
+  flush = false,
   contentClassName,
   children,
 }: SettingsCardProps): React.ReactElement {
   return (
     <section
       data-settings-card=""
+      data-variant={variant}
       className={cn(
-        'rounded-xl border bg-card shadow-sm overflow-hidden',
-        variant === 'danger' ? 'border-destructive/20' : 'border-border/50'
+        'overflow-hidden rounded-panel border bg-card',
+        variant === 'danger' ? 'border-destructive/40' : 'border-border'
       )}
     >
       {(title || description || action) && (
-        <div className="flex flex-wrap items-start justify-between gap-2 px-4 py-3 sm:px-6 sm:py-4 border-b border-border/50">
+        <div
+          className={cn(
+            'flex flex-wrap justify-between gap-2 px-4 py-3 sm:px-6 sm:py-4 border-b border-border/50',
+            description ? 'items-start' : 'items-center'
+          )}
+        >
           <div>
             {title && (
               <h2
@@ -43,7 +52,7 @@ export function SettingsCard({
           {action}
         </div>
       )}
-      <div className={cn('p-4 sm:p-6', contentClassName)}>{children}</div>
+      <div className={cn(!flush && 'p-4 sm:p-6', contentClassName)}>{children}</div>
     </section>
   )
 }

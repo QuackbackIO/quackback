@@ -120,7 +120,7 @@ function UserDetailsSummary({
 
   return (
     <div className="space-y-4 text-sm">
-      {issue && <p className="font-medium text-amber-700 dark:text-amber-400">{issue}</p>}
+      {issue && <p className="font-medium text-warning">{issue}</p>}
       {!customProfile && <p className="font-medium">Uses standard profile fields</p>}
       <ClaimsTable
         profileRows={customProfile ? model.profile : []}
@@ -464,7 +464,7 @@ function UserDetailsEditor({
                 {risks.adminRules.length === 1
                   ? 'A rule grants admin access.'
                   : `${risks.adminRules.length} rules grant admin access.`}{' '}
-                Matching people become admins even when their email is outside this provider&apos;s
+                Matching users become admins even when their email is outside this provider&apos;s
                 verified domains.
               </p>
             )}

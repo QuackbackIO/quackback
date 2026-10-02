@@ -591,7 +591,7 @@ export const PostModalContent = memo(function PostModalContent({
       {/* Footer */}
       <ModalFooter
         onCancel={onClose}
-        submitLabel={updatePost.isPending ? 'Saving...' : 'Save Changes'}
+        submitLabel={updatePost.isPending ? 'Saving...' : 'Save changes'}
         isPending={updatePost.isPending}
         submitType="button"
         onSubmit={handleSubmit}

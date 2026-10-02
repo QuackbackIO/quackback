@@ -21,7 +21,6 @@ import TableHeader from '@tiptap/extension-table-header'
 import type { TiptapContent } from '@/lib/server/db'
 import type { JSONContent } from '@tiptap/core'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
-import { lookupEmoji } from '@/lib/shared/content-emoji'
 import { parseEmbedUrl } from '@/lib/shared/embeds/parse-embed-url'
 
 /**
@@ -228,8 +227,7 @@ function normalizeForMarkdown(node: JSONContent): JSONContent {
   }
   if (node.type === 'emoji') {
     const attrs = node.attrs ?? {}
-    const name = String(attrs.name ?? '')
-    const emoji = String(attrs.emoji ?? lookupEmoji(name)?.emoji ?? (name ? `:${name}:` : ''))
+    const emoji = String(attrs.emoji ?? '')
     return { type: 'text', text: emoji }
   }
   if (node.type === 'youtube') {

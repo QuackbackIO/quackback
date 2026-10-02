@@ -4,19 +4,11 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { settingsQueries } from '@/lib/client/queries/settings'
-import {
-  ChatBubbleLeftIcon,
-  Cog6ToothIcon,
-  LockClosedIcon,
-  ShieldCheckIcon,
-  ArrowUpTrayIcon,
-  ArrowDownTrayIcon,
-} from '@heroicons/react/24/solid'
-import { PageHeader } from '@/components/shared/page-header'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
+import { moduleCrumb } from '@/components/admin/settings/settings-nav-sections'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
-import { BackLink } from '@/components/ui/back-link'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { BoardSettingsCrumb } from '@/components/admin/settings/channel-settings-crumb'
+import { boardTabSearch, type BoardTab } from '@/components/admin/settings/boards/board-tabs'
 import { BoardGeneralForm } from '@/components/admin/settings/boards/board-general-form'
 import { BoardAccessForm } from '@/components/admin/settings/boards/board-access-form'
 import { BoardModerationForm } from '@/components/admin/settings/boards/board-moderation-form'
@@ -28,11 +20,8 @@ import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { readBatch } from '@/lib/client/queries/read-batch'
 
-const BOARD_TABS = ['general', 'access', 'moderation', 'import', 'export'] as const
-export type BoardTab = (typeof BOARD_TABS)[number]
-
 const searchSchema = z.object({
-  tab: z.enum(BOARD_TABS).optional(),
+  tab: boardTabSearch,
 })
 
 export const Route = createFileRoute('/admin/settings/boards/$slug')({
@@ -87,19 +76,13 @@ function BoardSettingsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl w-full">
-      <div className="lg:hidden">
-        <BackLink to="/admin/settings/boards">Boards</BackLink>
-      </div>
-      <div className="space-y-1.5">
-        <BoardSettingsCrumb page={currentBoard.name} />
-        <PageHeader
-          icon={ChatBubbleLeftIcon}
-          title={currentBoard.name}
-          description={currentBoard.description || undefined}
-        />
-      </div>
-
+    <SettingsPage
+      title={currentBoard.name}
+      crumbs={[
+        moduleCrumb('/admin/settings/feedback'),
+        { label: 'Boards', to: '/admin/settings/boards' },
+      ]}
+    >
       <Tabs
         value={selectedTab}
         onValueChange={(next) => {
@@ -113,26 +96,10 @@ function BoardSettingsPage() {
         className="space-y-6"
       >
         <TabsList>
-          <TabsTrigger value="general">
-            <Cog6ToothIcon />
-            General
-          </TabsTrigger>
-          <TabsTrigger value="access">
-            <LockClosedIcon />
-            Access
-          </TabsTrigger>
-          <TabsTrigger value="moderation">
-            <ShieldCheckIcon />
-            Moderation
-          </TabsTrigger>
-          <TabsTrigger value="import">
-            <ArrowUpTrayIcon />
-            Import Data
-          </TabsTrigger>
-          <TabsTrigger value="export">
-            <ArrowDownTrayIcon />
-            Export Data
-          </TabsTrigger>
+          <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="access">Access</TabsTrigger>
+          <TabsTrigger value="moderation">Moderation</TabsTrigger>
+          <TabsTrigger value="data">Data</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="space-y-6">
@@ -140,7 +107,7 @@ function BoardSettingsPage() {
             <BoardGeneralForm key={currentBoard.id} board={currentBoard} />
           </SettingsCard>
 
-          <SettingsCard title="Danger Zone" variant="danger">
+          <SettingsCard title="Danger zone" variant="danger">
             <DeleteBoardForm key={currentBoard.id} board={currentBoard} />
           </SettingsCard>
         </TabsContent>
@@ -157,18 +124,15 @@ function BoardSettingsPage() {
           </SettingsCard>
         </TabsContent>
 
-        <TabsContent value="import">
-          <SettingsCard description="Import posts from a CSV file into this board">
+        <TabsContent value="data" className="space-y-6">
+          <SettingsCard title="Import">
             <BoardImportSection boardId={currentBoard.id} />
           </SettingsCard>
-        </TabsContent>
-
-        <TabsContent value="export">
-          <SettingsCard description="Download all posts from this board as CSV">
+          <SettingsCard title="Export">
             <BoardExportSection boardId={currentBoard.id} />
           </SettingsCard>
         </TabsContent>
       </Tabs>
-    </div>
+    </SettingsPage>
   )
 }

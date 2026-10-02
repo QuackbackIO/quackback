@@ -13,6 +13,7 @@ import {
   assistantIdentitySchema,
   assistantToolRulesSchema,
   assistantVoiceSchema,
+  ASSISTANT_REVISION_CONFLICT_MESSAGE,
   DEFAULT_ASSISTANT_CONFIG,
   normalizeAssistantConfig,
   type AssistantAgentKind,
@@ -226,7 +227,7 @@ export async function updateAssistantConfig(
     if (row.assistantConfigRevision !== expectedRevision) {
       throw new ConflictError(
         'ASSISTANT_CONFIG_REVISION_CONFLICT',
-        'AI agent settings changed in another session. Reload the latest settings and try again.'
+        ASSISTANT_REVISION_CONFLICT_MESSAGE
       )
     }
 

@@ -8,6 +8,7 @@ import {
   BuildingOffice2Icon,
   CalendarIcon,
   CheckBadgeIcon,
+  CheckCircleIcon,
   ChevronDownIcon,
   ClockIcon,
   FaceSmileIcon,
@@ -15,11 +16,12 @@ import {
   InboxArrowDownIcon,
   PuzzlePieceIcon,
   SparklesIcon,
+  StopCircleIcon,
   TagIcon,
   TicketIcon,
   UserCircleIcon,
 } from '@heroicons/react/24/outline'
-import type { ConversationId, PrincipalId } from '@quackback/ids'
+import type { ConversationId, PrincipalId, TicketId } from '@quackback/ids'
 import {
   HANDOFF_REASON_LABELS,
   CONVERSATION_END_REASON_LABELS,
@@ -29,6 +31,9 @@ import {
 import type { InboxItemRef } from '@/lib/shared/inbox/items'
 import type { TicketDTO } from '@/lib/server/domains/tickets'
 import { conversationPanelQueries } from '@/lib/client/queries/conversation-panels'
+import { FileRow } from '@/components/shared/files/file-card'
+import { useFileViewer } from '@/components/shared/files/file-viewer-context'
+import { toViewerFile } from '@/components/shared/files/types'
 
 import { useCopilotTabGate } from '@/lib/client/hooks/use-copilot-tab-gate'
 import { formatSlaCountdown, dueCountdownTone } from '@/lib/shared/conversation/sla'
@@ -62,7 +67,8 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { MENU_LABEL } from '@/components/ui/menu'
-import { DetailRow as Row, formatDate } from '@/components/shared/detail-row'
+import { DETAIL_DATE, DetailDate, DetailRow as Row } from '@/components/shared/detail-row'
+import { CalendarDate, useLocalDateFormatter } from '@/components/ui/local-date'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
 import { useFeatureFlags } from '@/lib/client/hooks/use-root-context'
@@ -107,6 +113,7 @@ function AiOutcomePill({ outcome }: { outcome: AssistantInvolvementOutcome }) {
  * date set, and only after mount (the label depends on "now").
  */
 function TicketDueChip({ dueAt, resolvedAt }: { dueAt: string | null; resolvedAt: string | null }) {
+  const formatDate = useLocalDateFormatter()
   const [now, setNow] = useState<Date | null>(null)
   useEffect(() => {
     setNow(new Date())
@@ -126,7 +133,7 @@ function TicketDueChip({ dueAt, resolvedAt }: { dueAt: string | null; resolvedAt
         'inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums',
         TONE_CLASSES[tone]
       )}
-      title={`Due ${formatDate(dueAt)}`}
+      title={`Due ${formatDate(dueAt, DETAIL_DATE)}`}
     >
       <ClockIcon className="h-3 w-3" aria-hidden />
       {overdue ? `${formatSlaCountdown(abs)} over` : formatSlaCountdown(abs)}
@@ -176,6 +183,55 @@ function TicketSlaChip({ sla }: { sla: NonNullable<TicketDTO['sla']> }) {
   )
 }
 
+/**
+ * The Files section (after Contact): every attachment across the item's
+ * whole thread, newest first, as compact rows. Renders nothing for an item
+ * with no files at all — no empty section, no "no files yet" copy.
+ */
+function FilesSection({
+  target,
+  visible,
+}: {
+  target: { conversationId: ConversationId } | { ticketId: TicketId }
+  visible: boolean
+}) {
+  const { open } = useFileViewer()
+  const { data } = useQuery({
+    ...conversationPanelQueries.files(target),
+    enabled: visible,
+  })
+  const entries = data ?? []
+  if (entries.length === 0) return null
+
+  const galleryFiles = entries.map((e) =>
+    toViewerFile(e.attachment, {
+      senderName: e.senderName ?? undefined,
+      sentAt: e.sentAt,
+      messageId: e.messageId,
+    })
+  )
+
+  return (
+    <div className="space-y-1.5 border-t border-border/30 pt-4">
+      <div className="flex items-center justify-between">
+        <span className={MENU_LABEL}>
+          <FormattedMessage id="admin.inbox.filesSectionTitle" defaultMessage="Files" />
+        </span>
+        <span className="text-xs text-muted-foreground">{entries.length}</span>
+      </div>
+      <div className="flex flex-col">
+        {entries.map((entry, index) => (
+          <FileRow
+            key={`${entry.messageId}-${index}`}
+            attachment={entry.attachment}
+            onOpen={() => open(galleryFiles, index)}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export interface InboxDetailPanelProps {
   /** The open item, discriminated by kind. */
   item: InboxItemRef
@@ -204,9 +260,11 @@ export interface InboxDetailPanelProps {
   /** Distinct GitHub users who have written on this issue. */
   issuePeople?: { principalId: string; displayName: string; avatarUrl: string | null }[]
   /** Whether the viewport shows the panel (DETAIL_PANEL_MEDIA_QUERY, read by
-   *  the inbox route). The panel is `hidden xl:flex`; it only fetches its data
+   *  the inbox route). The panel is `hidden min-[1680px]:flex`; it only fetches its data
    *  when shown, so smaller viewports don't pay for an invisible sidebar. */
   visible: boolean
+  /** Renders the panel to fill a sheet instead of as the inline right column. */
+  overlay?: boolean
 }
 
 /**
@@ -231,8 +289,12 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
   openCopilotToken,
   issuePeople,
   visible: isVisible,
+  overlay = false,
 }: InboxDetailPanelProps) {
   const flags = useFeatureFlags()
+  const asideClassName = overlay
+    ? 'flex h-full min-h-0 w-full flex-col overflow-hidden'
+    : 'hidden h-full min-h-0 w-80 shrink-0 flex-col overflow-hidden border-l border-border/50 bg-card/20 min-[1680px]:flex'
   // The flag + copilot.use gate, shared with the inbox route's
   // `copilotAvailable` so the Ask Copilot affordances can never disagree
   // with the tab actually existing.
@@ -340,7 +402,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
   const showCreateTicketSlot = !isTicketItem && !ticket && showTickets
 
   const detailsBody = (
-    <ScrollArea className="min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
+    <ScrollArea className="min-h-0 flex-1 pe-2.5 [&_[data-slot=scroll-area-viewport]>div]:!block">
       {/* Force Radix's inner viewport wrapper (display:table by default, which
           grows to content width and defeats truncate) to block so children are
           constrained to the panel width and long text clips with an ellipsis. */}
@@ -386,7 +448,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
                       {getChannelDescriptor(conversation!.channel)?.label} user
                     </p>
                   ) : (
-                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
                       Anonymous <UnreachableBadge channel={conversation?.channel ?? 'email'} />
                     </p>
                   )
@@ -442,7 +504,9 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
                 {firstSeen && (
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">First seen</span>
-                    <span className="font-medium text-foreground">{formatDate(firstSeen)}</span>
+                    <span className="font-medium text-foreground">
+                      <DetailDate date={firstSeen} />
+                    </span>
                   </div>
                 )}
               </div>
@@ -474,6 +538,13 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
             )}
           </div>
         )}
+
+        {/* 1b. Files — every attachment across the item's whole thread. */}
+        {isTicketItem
+          ? ticket && <FilesSection target={{ ticketId: ticket.id }} visible={isVisible} />
+          : conversation && (
+              <FilesSection target={{ conversationId: conversation.id }} visible={isVisible} />
+            )}
 
         {!isTicketItem &&
           conversation?.channel === 'github' &&
@@ -561,18 +632,18 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
             )}
             <Row icon={CalendarIcon} label="Opened">
               <span className="text-sm font-medium text-foreground">
-                {formatDate(ticket.createdAt)}
+                <DetailDate date={ticket.createdAt} />
               </span>
             </Row>
             <Row icon={CalendarIcon} label="First response">
               <span className="text-sm font-medium text-foreground">
-                {ticket.firstResponseAt ? formatDate(ticket.firstResponseAt) : 'Not yet'}
+                {ticket.firstResponseAt ? <DetailDate date={ticket.firstResponseAt} /> : 'Not yet'}
               </span>
             </Row>
             {ticket.resolvedAt && (
               <Row icon={CalendarIcon} label="Resolved">
                 <span className="text-sm font-medium text-foreground">
-                  {formatDate(ticket.resolvedAt)}
+                  <DetailDate date={ticket.resolvedAt} />
                 </span>
               </Row>
             )}
@@ -586,7 +657,17 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
               const raw = ticket.customAttributes[field.key]
               if (raw === undefined || raw === null || raw === '') return null
               const display =
-                field.type === 'checkbox' ? (raw === true ? 'Yes' : 'No') : String(raw)
+                field.type === 'checkbox' ? (
+                  raw === true ? (
+                    'Yes'
+                  ) : (
+                    'No'
+                  )
+                ) : field.type === 'date' && typeof raw === 'string' ? (
+                  <CalendarDate value={raw} options={DETAIL_DATE} />
+                ) : (
+                  String(raw)
+                )
               return (
                 <Row key={field.key} icon={PuzzlePieceIcon} label={field.label}>
                   <span className="text-sm font-medium text-foreground break-words">{display}</span>
@@ -609,15 +690,15 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
               ticket's own status lives in the Ticket card above, so it is not
               repeated here. */}
         <div className="space-y-4 border-t border-border/30 pt-4">
-          <span className={MENU_LABEL}>Properties</span>
+          <span className={cn(MENU_LABEL, 'block')}>Properties</span>
           {!isTicketItem && conversation && (
             <>
               {isClosedConversation && endReasonLabel && (
-                <Row label="Ended">
+                <Row icon={StopCircleIcon} label="Ended">
                   <span className="text-sm font-medium text-foreground">{endReasonLabel}</span>
                 </Row>
               )}
-              <Row label="Status">
+              <Row icon={CheckCircleIcon} label="Status">
                 <StatusControl
                   conversationId={conversation.id}
                   status={conversation.status}
@@ -697,7 +778,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
           {!isTicketItem && conversation && (
             <Row icon={CalendarIcon} label="Created">
               <span className="text-sm font-medium text-foreground">
-                {formatDate(conversation.createdAt)}
+                <DetailDate date={conversation.createdAt} />
               </span>
             </Row>
           )}
@@ -781,13 +862,13 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
           <div className="space-y-2.5 border-t border-border/30 pt-4">
             <div className="flex items-center justify-between">
               <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <SparklesIcon className="h-4 w-4" /> Quinn AI
+                <SparklesIcon className="h-4 w-4" /> Quinn
               </p>
               <AiOutcomePill outcome={aiActivity.outcome} />
             </div>
             {aiActivity.outcome === 'handed_off' && aiActivity.handoffReason && (
               <p className="text-xs text-muted-foreground">
-                Escalated —{' '}
+                Escalated:{' '}
                 {HANDOFF_REASON_LABELS[aiActivity.handoffReason] ?? aiActivity.handoffReason}
               </p>
             )}
@@ -823,20 +904,14 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
   // the pre-Copilot panel.
   if (!showCopilotTab) {
     return (
-      <aside
-        aria-label="Item details"
-        className="hidden h-full min-h-0 w-80 shrink-0 flex-col overflow-hidden border-l border-border/50 bg-card/20 xl:flex 2xl:w-96"
-      >
+      <aside aria-label="Item details" className={asideClassName}>
         {detailsBody}
       </aside>
     )
   }
 
   return (
-    <aside
-      aria-label="Item details"
-      className="hidden h-full min-h-0 w-80 shrink-0 flex-col overflow-hidden border-l border-border/50 bg-card/20 xl:flex 2xl:w-96"
-    >
+    <aside aria-label="Item details" className={asideClassName}>
       <Tabs
         value={tab}
         onValueChange={setTab}

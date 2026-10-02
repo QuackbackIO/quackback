@@ -35,7 +35,7 @@ import {
   PlusIcon,
   SparklesIcon,
 } from '@heroicons/react/24/outline'
-import { BoltIcon, ChevronDownIcon, EllipsisVerticalIcon } from '@heroicons/react/24/solid'
+import { BoltIcon, ChevronDownIcon } from '@heroicons/react/24/solid'
 import type { WorkflowDTO } from '@/lib/server/functions/workflows'
 import { workflowsQuery } from '@/lib/client/queries/workflows'
 import { workflowEffectivenessQuery } from '@/lib/client/queries/workflow-reporting'
@@ -67,24 +67,20 @@ import { UpgradeModal } from '@/components/admin/upgrade'
 import { isPlanRefusal } from '@/lib/shared/describe-upgrade'
 import { WorkflowRunsSheet } from './workflow-runs-sheet'
 import { cn } from '@/lib/shared/utils'
-import { PageHeader } from '@/components/shared/page-header'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
+import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { RowActions } from '@/components/admin/settings/settings-list'
+import { WorkflowFilters } from './workflow-filters'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { useFormatNumber } from '@/components/ui/format-number'
 import { Input } from '@/components/ui/input'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 
@@ -229,9 +225,13 @@ export function workflowStepSummary(graph: unknown): string {
 export function WorkflowsManager({
   entitled = true,
   children,
+  after,
 }: {
   entitled?: boolean
+  /** A note shown above the list. */
   children?: ReactNode
+  /** Page content shown below the list. */
+  after?: ReactNode
 }) {
   const intl = useIntl()
   const navigate = useNavigate()
@@ -247,8 +247,8 @@ export function WorkflowsManager({
   )
 
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'any' | StatusValue>('any')
-  const [typeFilter, setTypeFilter] = useState<'any' | (typeof CLASSES)[number]['value']>('any')
+  const [statusFilter, setStatusFilter] = useState<StatusValue | null>(null)
+  const [typeFilter, setTypeFilter] = useState<(typeof CLASSES)[number]['value'] | null>(null)
   const [galleryOpen, setGalleryOpen] = useState(false)
   const [upgradeOpen, setUpgradeOpen] = useState(false)
   const [deleting, setDeleting] = useState<WorkflowDTO | null>(null)
@@ -279,8 +279,8 @@ export function WorkflowsManager({
     const q = search.trim().toLowerCase()
     return (workflows ?? []).filter((wf) => {
       if (q && !wf.name.toLowerCase().includes(q)) return false
-      if (statusFilter !== 'any' && wf.status !== statusFilter) return false
-      if (typeFilter !== 'any' && wf.class !== typeFilter) return false
+      if (statusFilter !== null && wf.status !== statusFilter) return false
+      if (typeFilter !== null && wf.class !== typeFilter) return false
       return true
     })
   }, [workflows, search, statusFilter, typeFilter])
@@ -298,7 +298,7 @@ export function WorkflowsManager({
 
   const goToBuilder = (workflowId: string) => {
     void navigate({
-      to: '/admin/automation/workflows/$workflowId',
+      to: '/admin/settings/workflows/$workflowId',
       params: { workflowId },
     })
   }
@@ -350,7 +350,7 @@ export function WorkflowsManager({
   // A narrowed list shows a subset of each group in the same visual order, so a
   // drop inside it would silently decide the priority of rows it isn't showing.
   // Reordering is therefore only offered on the unfiltered list.
-  const isFiltered = search.trim() !== '' || statusFilter !== 'any' || typeFilter !== 'any'
+  const isFiltered = search.trim() !== '' || statusFilter !== null || typeFilter !== null
 
   const handleDragEnd = (items: WorkflowDTO[], event: DragEndEvent) => {
     const { active, over } = event
@@ -409,21 +409,14 @@ export function WorkflowsManager({
   )
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        icon={BoltIcon}
-        title={intl.formatMessage({
-          id: 'automation.workflows.title',
-          defaultMessage: 'Workflows',
-        })}
-        description={intl.formatMessage({
-          id: 'automation.workflows.description',
-          defaultMessage:
-            'Automate routing, replies, and housekeeping on top of your conversations.',
-        })}
-        action={newWorkflowMenu}
-      />
-
+    <SettingsPage
+      page="/admin/settings/workflows"
+      description={intl.formatMessage({
+        id: 'automation.workflows.description',
+        defaultMessage: 'Automate routing, replies, and housekeeping on top of your conversations.',
+      })}
+      actions={newWorkflowMenu}
+    >
       {children}
 
       <div className="space-y-4">
@@ -435,44 +428,23 @@ export function WorkflowsManager({
               onChange={(e) => setSearch(e.target.value)}
               placeholder={intl.formatMessage({
                 id: 'automation.workflows.search',
-                defaultMessage: 'Search workflows…',
+                defaultMessage: 'Search workflows...',
               })}
               aria-label={intl.formatMessage({
                 id: 'automation.workflows.search',
-                defaultMessage: 'Search workflows…',
+                defaultMessage: 'Search workflows...',
               })}
               className="pl-8"
             />
           </div>
-          <Select
-            value={statusFilter}
-            onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}
-          >
-            <SelectTrigger size="sm" className="w-36" aria-label="Filter by status">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="any">Status · Any</SelectItem>
-              {STATUSES.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {STATUS_META[s].label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as typeof typeFilter)}>
-            <SelectTrigger size="sm" className="w-44" aria-label="Filter by type">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="any">Type · Any</SelectItem>
-              {CLASSES.map((c) => (
-                <SelectItem key={c.value} value={c.value}>
-                  {c.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <WorkflowFilters
+            statuses={STATUSES.map((value) => ({ id: value, label: STATUS_META[value].label }))}
+            types={CLASSES.map((c) => ({ id: c.value, label: c.label }))}
+            status={statusFilter}
+            type={typeFilter}
+            onStatus={(value) => setStatusFilter(value as StatusValue | null)}
+            onType={(value) => setTypeFilter(value as (typeof CLASSES)[number]['value'] | null)}
+          />
         </div>
 
         {!hasAnyWorkflows ? (
@@ -514,7 +486,7 @@ export function WorkflowsManager({
             })}
           </div>
         ) : (
-          <div className="overflow-hidden rounded-xl border">
+          <SettingsCard flush>
             {groups.map((group, groupIndex) => {
               const isCustomerFacing = group.cls.value === 'customer_facing'
               const reorderMode: 'enabled' | 'filtered' | 'none' = !isCustomerFacing
@@ -525,7 +497,10 @@ export function WorkflowsManager({
                     ? 'filtered'
                     : 'enabled'
               return (
-                <div key={group.cls.value} className={groupIndex > 0 ? 'border-t' : undefined}>
+                <div
+                  key={group.cls.value}
+                  className={groupIndex > 0 ? 'border-t border-border/50' : undefined}
+                >
                   <GroupHeader
                     label={
                       group.cls.value === 'customer_facing'
@@ -579,7 +554,7 @@ export function WorkflowsManager({
                 </div>
               )
             })}
-          </div>
+          </SettingsCard>
         )}
       </div>
 
@@ -594,7 +569,7 @@ export function WorkflowsManager({
         <ConfirmDialog
           open
           onOpenChange={(open) => !open && setDeleting(null)}
-          title="Delete workflow"
+          title="Delete workflow?"
           description={`"${deleting.name}" will be permanently deleted. This can't be undone.`}
           variant="destructive"
           confirmLabel={del.isPending ? 'Deleting…' : 'Delete workflow'}
@@ -609,7 +584,8 @@ export function WorkflowsManager({
         open={runsWorkflow !== null}
         onOpenChange={(open) => !open && setRunsWorkflow(null)}
       />
-    </div>
+      {after}
+    </SettingsPage>
   )
 }
 
@@ -625,7 +601,7 @@ function GroupHeader({
   return (
     <div className="flex items-center gap-2 bg-muted/30 px-4 py-2">
       <span className="text-[13px] font-semibold">{label}</span>
-      <Badge size="sm" shape="pill" variant="secondary">
+      <Badge size="sm" variant="secondary">
         {count}
       </Badge>
       {dragHint && (
@@ -669,13 +645,14 @@ function WorkflowRow({
   onDelete: (workflow: WorkflowDTO) => void
   onViewRuns: (workflow: WorkflowDTO) => void
 }) {
+  const formatNumber = useFormatNumber()
   const needsSetup = needsSetupBadgeText(rowSetup(workflow))
   const started = metrics?.started ?? 0
   const completed = metrics?.completed ?? 0
   const trigger = triggerLabel(workflow.triggerType)
   const showMetrics = workflow.status === 'live' && started > 0
   const metricsText = showMetrics
-    ? `${started.toLocaleString()} runs · ${Math.round((completed / started) * 100)}% completed (7d)`
+    ? `${formatNumber(started)} runs · ${Math.round((completed / started) * 100)}% completed (7d)`
     : ''
   const stepSummary = showMetrics ? '' : workflowStepSummary(workflow.graph)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -754,37 +731,23 @@ function WorkflowRow({
       </div>
 
       <div className="flex shrink-0 items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7"
-              aria-label={`Actions for ${workflow.name}`}
-            >
-              <EllipsisVerticalIcon className="size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onNavigate(workflow.id)}>Edit</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onViewRuns(workflow)}>View runs</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            {STATUSES.filter((s) => s !== workflow.status).map((s) => (
-              <DropdownMenuItem key={s} onClick={() => onSetStatus(workflow.id, s)}>
-                {STATUS_ACTION_LABEL[s]}
-              </DropdownMenuItem>
-            ))}
-            <DropdownMenuSeparator />
-            {/* Same one-tick deferral as the gallery item above: the confirm
-                dialog must open after the menu's teardown, not during it. */}
-            <DropdownMenuItem
-              variant="destructive"
-              onClick={() => setTimeout(() => onDelete(workflow), 0)}
-            >
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <RowActions
+          label={workflow.name}
+          items={[
+            { label: 'Edit', onSelect: () => onNavigate(workflow.id) },
+            { label: 'View runs', onSelect: () => onViewRuns(workflow) },
+            ...STATUSES.filter((s) => s !== workflow.status).map((s) => ({
+              label: STATUS_ACTION_LABEL[s],
+              onSelect: () => onSetStatus(workflow.id, s),
+            })),
+            // The confirm dialog opens one tick after the menu's teardown, not during it.
+            {
+              label: 'Delete',
+              destructive: true,
+              onSelect: () => setTimeout(() => onDelete(workflow), 0),
+            },
+          ]}
+        />
         <ChevronRightIcon className="size-3.5 text-muted-foreground" aria-hidden />
       </div>
     </div>
@@ -801,33 +764,20 @@ function WorkflowStatusBadge({
   return (
     <>
       {status === 'live' ? (
-        <Badge
-          size="sm"
-          shape="pill"
-          className="border-transparent bg-emerald-500/10 font-medium text-emerald-700 dark:text-emerald-400"
-        >
+        <Badge size="sm" variant="success">
           Live
         </Badge>
       ) : status === 'paused' ? (
-        <Badge
-          size="sm"
-          shape="pill"
-          className="border-transparent bg-amber-500/10 font-medium text-amber-700 dark:text-amber-400"
-        >
+        <Badge size="sm" variant="warning">
           Paused
         </Badge>
       ) : (
-        <Badge size="sm" shape="pill" variant="secondary">
+        <Badge size="sm" variant="secondary">
           Draft
         </Badge>
       )}
       {needsSetup && (
-        <Badge
-          size="sm"
-          shape="pill"
-          className="gap-1 border-transparent bg-amber-500/10 font-medium text-amber-700 dark:text-amber-400"
-          title={needsSetup}
-        >
+        <Badge size="sm" variant="warning" title={needsSetup}>
           <ExclamationTriangleIcon className="size-3" />
           {needsSetup}
         </Badge>

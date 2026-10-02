@@ -5,6 +5,7 @@ import { routeTree } from './routeTree.gen'
 import { DefaultErrorPage, NotFoundPage } from '@/components/shared/error-page'
 import { RoutePendingComponent } from '@/components/shared/route-pending'
 import { expireRouteContextOnInvalidate } from '@/lib/client/route-context-memo'
+import { createAutosaveMutationCache } from '@/lib/client/autosave'
 
 // The small client helpers that lazily loaded chunks share. Reachable from
 // here, they join the entry chunk's static closure (see the `$initial` group
@@ -16,6 +17,7 @@ export { createValueStore, useStoreValue, useDebouncedStoreValue } from '@/lib/c
 
 export function getRouter() {
   const queryClient = new QueryClient({
+    mutationCache: createAutosaveMutationCache(),
     defaultOptions: {
       queries: {
         staleTime: 30 * 1000,

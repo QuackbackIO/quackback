@@ -7,7 +7,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import type { PostId } from '@quackback/ids'
 import type { PostListItem, PostStatusEntity } from '@/lib/shared/db-types'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
@@ -27,11 +27,28 @@ vi.mock('@/components/public/post-card', () => ({
 
 let filterBarRenders = 0
 vi.mock('@/components/admin/feedback/active-filters-bar', () => ({
+  AddFilterButton: () => null,
   ActiveFiltersBar: () => {
     filterBarRenders++
     return null
   },
 }))
+
+// The sort menu's dropdown, reduced to a render counter.
+let sortMenuRenders = 0
+vi.mock('@/components/ui/dropdown-menu', () => {
+  const Passthrough = ({ children }: { children?: React.ReactNode }) => <>{children}</>
+  return {
+    DropdownMenu: ({ children }: { children?: React.ReactNode }) => {
+      sortMenuRenders++
+      return <>{children}</>
+    },
+    DropdownMenuTrigger: Passthrough,
+    DropdownMenuContent: Passthrough,
+    DropdownMenuRadioGroup: Passthrough,
+    DropdownMenuRadioItem: Passthrough,
+  }
+})
 
 const { FeedbackTableView } = await import('../feedback-table-view')
 
@@ -63,6 +80,11 @@ function Harness() {
   const [posts, setPostsState] = useState(FIRST)
   const [filters, setFilters] = useState<InboxFilters>({ sort: 'newest' })
   setPosts = setPostsState
+  // Stable, like the inbox's own setFilters.
+  const onFiltersChange = useCallback((updates: Partial<InboxFilters>) => {
+    filterChanges.push(updates)
+    setFilters((current) => ({ ...current, ...updates }))
+  }, [])
   return (
     <FeedbackTableView
       posts={posts}
@@ -71,10 +93,7 @@ function Harness() {
       tags={[]}
       members={[]}
       filters={filters}
-      onFiltersChange={(updates) => {
-        filterChanges.push(updates)
-        setFilters((current) => ({ ...current, ...updates }))
-      }}
+      onFiltersChange={onFiltersChange}
       hasMore={false}
       isLoading={false}
       isLoadingMore={false}
@@ -92,6 +111,7 @@ beforeEach(() => {
   vi.useFakeTimers()
   cardRenders.clear()
   filterBarRenders = 0
+  sortMenuRenders = 0
   opened.length = 0
   filterChanges.length = 0
 })
@@ -110,7 +130,7 @@ describe('FeedbackTableView renders', () => {
     render(<Harness />)
     expect(rendersSoFar()).toEqual({ post_a: 1, post_b: 1, post_c: 1 })
 
-    const search = screen.getByPlaceholderText('Search...')
+    const search = screen.getByPlaceholderText('Search posts...')
     let typed = ''
     for (const char of 'export') {
       typed += char
@@ -122,16 +142,36 @@ describe('FeedbackTableView renders', () => {
     expect(filterBarRenders).toBe(1)
   })
 
+  it('leaves the sort menu alone while the search is typed', () => {
+    render(<Harness />)
+    expect(sortMenuRenders).toBe(1)
+
+    const search = screen.getByPlaceholderText('Search posts...')
+    let typed = ''
+    for (const char of 'export') {
+      typed += char
+      fireEvent.change(search, { target: { value: typed } })
+    }
+    act(() => {
+      vi.advanceTimersByTime(300)
+    })
+
+    expect(filterChanges).toEqual([{ search: 'export' }])
+    expect(sortMenuRenders).toBe(1)
+  })
+
   it('renders no row when the debounced search lands with the old rows still showing', () => {
     render(<Harness />)
-    fireEvent.change(screen.getByPlaceholderText('Search...'), { target: { value: 'export' } })
+    fireEvent.change(screen.getByPlaceholderText('Search posts...'), {
+      target: { value: 'export' },
+    })
 
     act(() => {
       vi.advanceTimersByTime(300)
     })
 
     expect(filterChanges).toEqual([{ search: 'export' }])
-    expect(screen.getByPlaceholderText('Search...')).toHaveValue('export')
+    expect(screen.getByPlaceholderText('Search posts...')).toHaveValue('export')
     expect(rendersSoFar()).toEqual({ post_a: 1, post_b: 1, post_c: 1 })
   })
 

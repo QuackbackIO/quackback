@@ -5,7 +5,7 @@ import type { UserId } from '@quackback/ids'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { getEmailChangeStateFn } from '@/lib/server/functions/contact-email'
 import { UserIcon } from '@heroicons/react/24/solid'
-import { PageHeader } from '@/components/shared/page-header'
+import { PortalPageHeader } from '@/components/public/portal-page-header'
 import { ProfileForm } from '@/components/settings/profile-form'
 import { TwoFactorSection } from '@/components/settings/two-factor-section'
 
@@ -51,7 +51,7 @@ function ProfilePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
+      <PortalPageHeader
         icon={UserIcon}
         title={intl.formatMessage({
           id: 'portal.settings.profile.title',

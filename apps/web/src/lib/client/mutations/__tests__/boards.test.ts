@@ -25,6 +25,7 @@ vi.mock('@tanstack/react-query', async () => {
 vi.mock('@/lib/server/functions/boards', () => ({
   createBoardFn: vi.fn(),
   updateBoardFn: vi.fn(),
+  updateBoardAccessFn: vi.fn(),
   deleteBoardFn: vi.fn(),
 }))
 
@@ -150,5 +151,14 @@ describe('board mutations cache invalidation', () => {
       name: 'Кириллица',
       slug: 'kirillica',
     })
+  })
+})
+
+describe('board settings mutations autosave', () => {
+  it('tags the update and access mutations as autosave so failures toast', async () => {
+    const { useUpdateBoard, useUpdateBoardAccess, useDeleteBoard } = await import('../boards')
+    expect((useUpdateBoard() as { meta?: unknown }).meta).toEqual({ autosave: true })
+    expect((useUpdateBoardAccess() as { meta?: unknown }).meta).toEqual({ autosave: true })
+    expect((useDeleteBoard() as { meta?: unknown }).meta).toBeUndefined()
   })
 })

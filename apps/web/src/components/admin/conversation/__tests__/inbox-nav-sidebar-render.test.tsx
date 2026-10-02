@@ -74,14 +74,13 @@ const { InboxNavSidebar } = await import('../inbox-nav-sidebar')
 
 const NAV: InboxNavItem = { kind: 'view', view: 'all' }
 const onSelect = vi.fn()
-const onSearch = vi.fn()
 
 function renderSidebar() {
   let rerenderParent = () => {}
   function Parent() {
     const [, setTick] = useState(0)
     rerenderParent = () => setTick((n) => n + 1)
-    return <InboxNavSidebar nav={NAV} onSelect={onSelect} search="" onSearch={onSearch} />
+    return <InboxNavSidebar nav={NAV} onSelect={onSelect} />
   }
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(

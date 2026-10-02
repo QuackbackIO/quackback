@@ -94,7 +94,7 @@ export function WidgetVoteButton({
         'group transition-colors duration-200',
         !noAccessReason && 'cursor-pointer',
         hasVoted
-          ? 'border-post-card-voted/60 bg-post-card-voted/15 text-post-card-voted'
+          ? 'border-post-card-voted/60 bg-post-card-voted/15 bg-clip-padding text-post-card-voted'
           : 'bg-muted/40 text-muted-foreground border-border/50',
         // Hover affordances only when the button is actionable (not denied).
         !hasVoted &&

@@ -1,5 +1,22 @@
-import { FormattedMessage } from 'react-intl'
+import { FormattedMessage, useIntl } from 'react-intl'
+import { LocalDate } from '@/components/ui/local-date'
 import { cn } from '@/lib/shared/utils'
+
+const BACK_AT: Intl.DateTimeFormatOptions = { weekday: 'long', hour: 'numeric', minute: '2-digit' }
+
+/**
+ * When the team is back, e.g. "Monday 9:00 AM": in the visitor's language,
+ * and in their time zone once hydrated. Nothing for a missing or invalid time.
+ */
+export function BackAtTime({ at }: { at: string | null | undefined }) {
+  const intl = useIntl()
+  return <LocalDate date={at} options={BACK_AT} locale={intl.locale} />
+}
+
+/** Whether `at` is a time `BackAtTime` can show. */
+export function hasBackAtTime(at: string | null | undefined): at is string {
+  return !!at && !Number.isNaN(new Date(at).getTime())
+}
 
 /**
  * The shared online/offline cue — a status dot plus "We're online" / "We'll
@@ -9,13 +26,13 @@ import { cn } from '@/lib/shared/utils'
  */
 export function ConversationPresenceBadge({
   available,
-  backAt,
+  nextOpenAt,
   className,
 }: {
   available: boolean
-  /** Pre-formatted "when we're back" label, shown after the away copy when
-   *  office hours are configured — sets an honest expectation up front. */
-  backAt?: string | null
+  /** When the team is back (ISO), shown after the away copy when office hours
+   *  are configured: it sets an honest expectation up front. */
+  nextOpenAt?: string | null
   className?: string
 }) {
   return (
@@ -36,13 +53,13 @@ export function ConversationPresenceBadge({
       ) : (
         <span className="min-w-0 truncate">
           <FormattedMessage id="widget.messenger.offline" defaultMessage="We'll reply by email" />
-          {backAt && (
+          {hasBackAtTime(nextOpenAt) && (
             <span className="text-muted-foreground/70">
               {' · '}
               <FormattedMessage
                 id="widget.messenger.offline.backAt"
                 defaultMessage="Back {when}"
-                values={{ when: backAt }}
+                values={{ when: <BackAtTime at={nextOpenAt} /> }}
               />
             </span>
           )}

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 
 import { TrustedSendersCard } from '../trusted-senders-card'
 
@@ -37,10 +37,28 @@ describe('<TrustedSendersCard>', () => {
     await waitFor(() => expect(onSave).toHaveBeenCalledWith(['acme.com']))
   })
 
-  it('removes an entry via its remove button', async () => {
+  it('removes an entry only after the delete confirmation', async () => {
     render(<TrustedSendersCard entries={ENTRIES} onSave={onSave} />)
     fireEvent.click(screen.getByRole('button', { name: /remove jane@acme\.com/i }))
+    expect(onSave).not.toHaveBeenCalled()
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText('Delete sender?')).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete sender' }))
     await waitFor(() => expect(onSave).toHaveBeenCalledWith(['partner.io']))
+  })
+
+  it('keeps the entry when the confirmation is cancelled', async () => {
+    render(<TrustedSendersCard entries={ENTRIES} onSave={onSave} />)
+    fireEvent.click(screen.getByRole('button', { name: /remove jane@acme\.com/i }))
+    const dialog = await screen.findByRole('alertdialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(onSave).not.toHaveBeenCalled()
+  })
+
+  it('says so quietly when the list is empty', () => {
+    render(<TrustedSendersCard entries={[]} onSave={onSave} />)
+    expect(screen.getByText('No trusted senders yet.')).toBeTruthy()
+    expect(screen.queryByText(/spam classification/)).toBeNull()
   })
 
   it('rejects an implausible entry without saving', () => {

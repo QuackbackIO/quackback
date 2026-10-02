@@ -2,11 +2,9 @@ import { z } from 'zod'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { createFileRoute, useNavigate, redirect } from '@tanstack/react-router'
-import { CircleStackIcon } from '@heroicons/react/24/solid'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { conversationAttributeQueries } from '@/lib/client/queries/conversation-attributes'
-import { BackLink } from '@/components/ui/back-link'
-import { PageHeader } from '@/components/shared/page-header'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ConversationAttributesList } from '@/components/admin/settings/conversation-data/conversation-attributes-list'
 import { ConversationTagsManager } from '@/components/admin/settings/conversation-data/conversation-tags-manager'
@@ -37,16 +35,7 @@ function ConversationDataPage() {
   const navigate = useNavigate()
 
   return (
-    <div className="max-w-5xl space-y-6">
-      <div className="lg:hidden">
-        <BackLink to="/admin/settings">Settings</BackLink>
-      </div>
-      <PageHeader
-        icon={CircleStackIcon}
-        title="Conversation data"
-        description="Attributes and tags that structure your conversations and tickets."
-      />
-
+    <SettingsPage page="/admin/settings/conversation-data">
       <Tabs
         value={tab}
         onValueChange={(next) => {
@@ -71,6 +60,6 @@ function ConversationDataPage() {
           <ConversationTagsManager />
         </TabsContent>
       </Tabs>
-    </div>
+    </SettingsPage>
   )
 }

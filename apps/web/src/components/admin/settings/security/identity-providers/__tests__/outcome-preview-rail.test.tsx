@@ -164,7 +164,7 @@ describe('OutcomePreviewRail', () => {
     expect(screen.getByText(/does not limit this admin rule/)).toBeInTheDocument()
   })
 
-  it('auto-create off suppresses role application but not People preview', () => {
+  it('auto-create off suppresses role application but not User preview', () => {
     renderRail({
       autoCreateUsers: false,
       draft: {
@@ -199,7 +199,7 @@ describe('OutcomePreviewRail', () => {
       },
     })
     expect(screen.queryByText(/kept existing/i)).not.toBeInTheDocument()
-    expect(screen.getByText(/Assumes the person has no attributes yet/)).toBeInTheDocument()
+    expect(screen.getByText(/Assumes the user has no attributes yet/)).toBeInTheDocument()
   })
 
   it('shows Member (runtime default) when Accounts role is null', () => {

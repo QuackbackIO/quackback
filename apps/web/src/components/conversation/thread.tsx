@@ -27,7 +27,13 @@ import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 export function docHasContentNode(doc: JSONContent | null): boolean {
   if (!doc) return false
   const walk = (nodes: JSONContent[] | undefined): boolean =>
-    !!nodes?.some((n) => n.type === 'chatImage' || n.type === 'quackbackEmbed' || walk(n.content))
+    !!nodes?.some(
+      (n) =>
+        n.type === 'resizableImage' ||
+        n.type === 'image' ||
+        n.type === 'quackbackEmbed' ||
+        walk(n.content)
+    )
   return walk(doc.content)
 }
 

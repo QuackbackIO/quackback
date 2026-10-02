@@ -3,10 +3,12 @@ import { useRouter } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { useUpdateModerationDefault } from '@/lib/client/mutations/settings'
-import { ShieldCheckIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
-import { BackLink } from '@/components/ui/back-link'
-import { PageHeader } from '@/components/shared/page-header'
+import { ArrowTopRightOnSquareIcon } from '@heroicons/react/16/solid'
+import { Link } from '@tanstack/react-router'
+import { Button } from '@/components/ui/button'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { SettingsPage } from '@/components/admin/settings/settings-page'
+import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
 import { Switch } from '@/components/ui/switch'
 import {
   requireApprovalToToggles,
@@ -14,37 +16,7 @@ import {
   type ApprovalToggles,
 } from '@/lib/shared/moderation-policy'
 
-interface PermissionToggleProps {
-  id: string
-  label: string
-  checked: boolean
-  saving?: boolean
-  onCheckedChange: (checked: boolean) => void
-  disabled?: boolean
-}
-
-function PermissionToggle({
-  id,
-  label,
-  checked,
-  saving,
-  onCheckedChange,
-  disabled,
-}: PermissionToggleProps) {
-  return (
-    <div className="flex items-center justify-between py-4 first:pt-0 last:pb-0">
-      <div className="pr-4">
-        <label htmlFor={id} className="text-sm font-medium cursor-pointer">
-          {label}
-        </label>
-      </div>
-      <div className="flex items-center gap-2">
-        {saving && <ArrowPathIcon className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
-        <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
-      </div>
-    </div>
-  )
-}
+type ModerationInput = Parameters<ReturnType<typeof useUpdateModerationDefault>['mutateAsync']>[0]
 
 export function ModerationPage() {
   const router = useRouter()
@@ -63,102 +35,120 @@ export function ModerationPage() {
     portalConfigQuery.data.moderationDefault?.holdLinks === true
   )
 
-  const [savingField, setSavingField] = useState<string | null>(null)
+  // Each switch saves on change. Switches are locked while a save is in
+  // flight, so a failed save reverts exactly the change it carried and a
+  // later save never includes an unconfirmed one. A failed save reverts the
+  // switch; the autosave handler shows the one toast.
+  const [saving, setSaving] = useState(false)
 
-  async function updateModeration(key: keyof ApprovalToggles, checked: boolean) {
-    const prev = moderationToggles
+  async function save(apply: (checked: boolean) => void, checked: boolean, input: ModerationInput) {
+    setSaving(true)
+    apply(checked)
+    try {
+      await updateModerationDefault.mutateAsync(input)
+      startTransition(() => router.invalidate())
+    } catch {
+      apply(!checked)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function updateModeration(key: keyof ApprovalToggles, checked: boolean) {
     const next = { ...moderationToggles, [key]: checked }
-    setModerationToggles(next)
-    setSavingField(`moderation-${key}`)
-    try {
-      await updateModerationDefault.mutateAsync({
-        requireApproval: togglesToRequireApproval(next),
-      })
-      startTransition(() => router.invalidate())
-    } catch {
-      setModerationToggles(prev)
-    } finally {
-      setSavingField(null)
-    }
+    return save((value) => setModerationToggles((cur) => ({ ...cur, [key]: value })), checked, {
+      requireApproval: togglesToRequireApproval(next),
+    })
   }
 
-  async function updateContentHold(key: 'holdImages' | 'holdLinks', checked: boolean) {
-    const setFlag = key === 'holdImages' ? setHoldImages : setHoldLinks
-    setFlag(checked)
-    setSavingField(`moderation-${key}`)
-    try {
-      await updateModerationDefault.mutateAsync({
-        requireApproval: togglesToRequireApproval(moderationToggles),
-        [key]: checked,
-      })
-      startTransition(() => router.invalidate())
-    } catch {
-      setFlag(!checked)
-    } finally {
-      setSavingField(null)
-    }
+  function updateContentHold(key: 'holdImages' | 'holdLinks', checked: boolean) {
+    return save(key === 'holdImages' ? setHoldImages : setHoldLinks, checked, {
+      requireApproval: togglesToRequireApproval(moderationToggles),
+      [key]: checked,
+    })
   }
 
-  const isBusy = savingField !== null || isPending
+  const disabled = isPending || saving
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      <div className="lg:hidden">
-        <BackLink to="/admin/settings/feedback">Feedback & Roadmaps</BackLink>
-      </div>
-      <PageHeader
-        icon={ShieldCheckIcon}
-        title="Moderation"
-        description="Approval rules and content review for incoming posts and comments."
-      />
-
+    <SettingsPage
+      page="/admin/settings/moderation"
+      actions={
+        <Button asChild variant="outline" size="sm">
+          <Link to="/admin/feedback/moderation">
+            <ArrowTopRightOnSquareIcon className="size-4" />
+            Open queue
+          </Link>
+        </Button>
+      }
+    >
       <SettingsCard
-        title="Approval rules"
-        description="Posts from the selected groups wait for review before publishing."
+        title="Approval"
+        description="Posts from these groups wait for review before they publish."
       >
-        <div className="divide-y divide-border/50">
-          <PermissionToggle
-            id="moderate-anonymous"
-            label="Require approval for anonymous posts"
-            checked={moderationToggles.anonymous}
-            saving={savingField === 'moderation-anonymous'}
-            onCheckedChange={(checked) => updateModeration('anonymous', checked)}
-            disabled={isBusy}
+        <SettingRows>
+          <SettingRow
+            label="Anonymous posts"
+            htmlFor="moderate-anonymous"
+            disabled={disabled}
+            control={
+              <Switch
+                id="moderate-anonymous"
+                checked={moderationToggles.anonymous}
+                onCheckedChange={(checked) => updateModeration('anonymous', checked)}
+                disabled={disabled}
+              />
+            }
           />
-          <PermissionToggle
-            id="moderate-authenticated"
-            label="Require approval for signed-in posts"
-            checked={moderationToggles.authenticated}
-            saving={savingField === 'moderation-authenticated'}
-            onCheckedChange={(checked) => updateModeration('authenticated', checked)}
-            disabled={isBusy}
+          <SettingRow
+            label="Signed-in posts"
+            htmlFor="moderate-authenticated"
+            disabled={disabled}
+            control={
+              <Switch
+                id="moderate-authenticated"
+                checked={moderationToggles.authenticated}
+                onCheckedChange={(checked) => updateModeration('authenticated', checked)}
+                disabled={disabled}
+              />
+            }
           />
-        </div>
+        </SettingRows>
       </SettingsCard>
 
       <SettingsCard
         title="Content review"
-        description="Hold submissions that include media or outbound links for review."
+        description="Hold posts and comments for review when they contain:"
       >
-        <div className="divide-y divide-border/50">
-          <PermissionToggle
-            id="moderate-images"
-            label="Hold posts and comments that contain images"
-            checked={holdImages}
-            saving={savingField === 'moderation-holdImages'}
-            onCheckedChange={(checked) => updateContentHold('holdImages', checked)}
-            disabled={isBusy}
+        <SettingRows>
+          <SettingRow
+            label="Images"
+            htmlFor="moderate-images"
+            disabled={disabled}
+            control={
+              <Switch
+                id="moderate-images"
+                checked={holdImages}
+                onCheckedChange={(checked) => updateContentHold('holdImages', checked)}
+                disabled={disabled}
+              />
+            }
           />
-          <PermissionToggle
-            id="moderate-links"
-            label="Hold posts and comments that contain links"
-            checked={holdLinks}
-            saving={savingField === 'moderation-holdLinks'}
-            onCheckedChange={(checked) => updateContentHold('holdLinks', checked)}
-            disabled={isBusy}
+          <SettingRow
+            label="Links"
+            htmlFor="moderate-links"
+            disabled={disabled}
+            control={
+              <Switch
+                id="moderate-links"
+                checked={holdLinks}
+                onCheckedChange={(checked) => updateContentHold('holdLinks', checked)}
+                disabled={disabled}
+              />
+            }
           />
-        </div>
+        </SettingRows>
       </SettingsCard>
-    </div>
+    </SettingsPage>
   )
 }

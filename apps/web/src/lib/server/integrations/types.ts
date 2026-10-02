@@ -85,7 +85,7 @@ export const INTEGRATION_CATEGORIES = {
     description: 'Get notified when things happen',
   },
   issue_tracking: {
-    label: 'Issue Tracking',
+    label: 'Issue tracking',
     description: 'Push feedback into your workflow',
   },
   support_crm: {
@@ -93,7 +93,7 @@ export const INTEGRATION_CATEGORIES = {
     description: 'Enrich feedback with customer data',
   },
   user_data: {
-    label: 'User Data',
+    label: 'User data',
     description: 'Sync user attributes and segment membership',
   },
   automation: {

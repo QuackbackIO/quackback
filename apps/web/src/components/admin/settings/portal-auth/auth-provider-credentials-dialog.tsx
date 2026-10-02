@@ -11,6 +11,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { AuthProviderCredentialsForm } from './auth-provider-credentials-form'
 import type { PlatformCredentialField } from '@/lib/shared/integration-types'
+import { INLINE_LINK } from '@/components/admin/settings/inline-link'
 
 interface AuthProviderCredentialsDialogProps {
   credentialType: string
@@ -62,12 +63,7 @@ export function AuthProviderCredentialsDialog({
             {helpUrl && (
               <>
                 {' '}
-                <a
-                  href={helpUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
+                <a href={helpUrl} target="_blank" rel="noopener noreferrer" className={INLINE_LINK}>
                   Open {providerName} developer console &rarr;
                 </a>
               </>

@@ -166,7 +166,7 @@ export function SubscriptionBell({
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel className="font-normal">
+        <DropdownMenuLabel>
           <p className="text-sm font-medium">
             <FormattedMessage
               id="portal.subscriptionBell.menu.title"

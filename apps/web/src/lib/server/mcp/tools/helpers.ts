@@ -14,7 +14,7 @@ import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service
 import { segmentIdsForPrincipal } from '@/lib/server/domains/segments/segment-membership.service'
 import { DomainException } from '@/lib/shared/errors'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
-import type { TiptapContent } from '@/lib/server/db'
+import type { ConversationAttachment, TiptapContent } from '@/lib/server/db'
 import type { Actor } from '@/lib/server/policy/types'
 import { hasApiScope } from '@/lib/server/domains/api-keys/api-key-scopes'
 import type { McpAuthContext, McpScope } from '../types'
@@ -211,6 +211,21 @@ export function registerTool<TArgs>(
 /** Build the agent-author object used by the conversation write tools (reply, suggest, share). */
 export function agentFromMcpAuth(auth: McpAuthContext) {
   return { principalId: auth.principalId, displayName: auth.name, email: auth.email }
+}
+
+/**
+ * Turn the `fileIds` a reply/note tool was called with into the attachment
+ * refs `resolveAttachments` expects. Only `fileId` is filled in — the service
+ * rebuilds url/name/contentType/size from the stored row, so nothing else on
+ * this ref is trusted. Undefined (not an empty array) when there are none, so
+ * a caller that forwards this straight into a service input leaves that
+ * field absent rather than an empty list.
+ */
+export function attachmentsFromFileIds(
+  fileIds: string[] | undefined
+): ConversationAttachment[] | undefined {
+  if (!fileIds || fileIds.length === 0) return undefined
+  return fileIds.map((fileId) => ({ fileId })) as ConversationAttachment[]
 }
 
 // ============================================================================

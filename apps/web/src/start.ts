@@ -13,6 +13,7 @@
 import { createStart, createCsrfMiddleware } from '@tanstack/react-start'
 import { oauthCorsMiddleware } from '@/lib/server/middleware/oauth-cors'
 import { requestContextMiddleware } from '@/lib/server/middleware/request-context'
+import { userContentHostMiddleware } from '@/lib/server/middleware/user-content-host'
 import { serverFnLogMiddleware } from '@/lib/server/middleware/server-fn-log'
 import { workspaceContextMiddleware } from '@/lib/server/middleware/workspace-context'
 import { expireRouteContextOnWrite } from '@/lib/client/route-context-middleware'
@@ -39,8 +40,11 @@ export const startInstance = createStart(() => {
     // QUACKBACK_TENANCY=single it is a pass-through.
     // OAuth/MCP CORS answers preflights before workspace resolution: a
     // preflight carries no credentials and needs no database.
+    // The user-content host (USER_CONTENT_URL) is narrowed to stored-file
+    // reads before anything else looks at the request.
     requestMiddleware: [
       requestContextMiddleware,
+      userContentHostMiddleware,
       oauthCorsMiddleware,
       workspaceContextMiddleware,
       csrfMiddleware,

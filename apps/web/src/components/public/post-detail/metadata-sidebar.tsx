@@ -387,7 +387,7 @@ export function MetadataSidebar({
   const [ownerOpen, setOwnerOpen] = useState(false)
   const [etaOpen, setEtaOpen] = useState(false)
 
-  const etaLabel = formatMonthYear(eta)
+  const etaLabel = formatMonthYear(eta, intl.locale)
   // Month input value ("YYYY-MM"), derived in UTC to match the stored ETA.
   const etaMonthValue = eta ? new Date(eta).toISOString().slice(0, 7) : ''
   const handleEtaChange = async (value: string) => {

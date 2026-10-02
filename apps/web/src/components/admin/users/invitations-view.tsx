@@ -1,13 +1,17 @@
 import { useMemo } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowPathIcon, PlusIcon } from '@heroicons/react/24/solid'
-import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/shared/utils'
+import { ArrowPathIcon, EnvelopeIcon } from '@heroicons/react/24/solid'
+import { PageHeader } from '@/components/shared/page-header'
+import { NewButton } from '@/components/shared/new-button'
+import { EmptyState } from '@/components/shared/empty-state'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { usePortalInvites } from './use-portal-invites'
 import { InviteRow } from './invite-row'
 import { InvitePeopleDialog } from './invite-people-dialog'
 
 type InvitesStatus = 'pending' | 'accepted' | 'expired' | 'all'
+
+const STATUSES: InvitesStatus[] = ['pending', 'accepted', 'expired', 'all']
 
 const STATUS_LABEL: Record<InvitesStatus, string> = {
   pending: 'Pending',
@@ -18,20 +22,20 @@ const STATUS_LABEL: Record<InvitesStatus, string> = {
 
 const EMPTY_COPY: Record<InvitesStatus, { title: string; body: string }> = {
   pending: {
-    title: 'No pending invitations',
-    body: 'Invitations you send appear here until the recipient signs in.',
+    title: 'No invitations yet',
+    body: 'Invitations appear here until the recipient signs in.',
   },
   accepted: {
     title: 'No accepted invitations yet',
-    body: 'Once a recipient clicks their magic link and signs in, the invitation will move here.',
+    body: 'Accepted invitations move here once the recipient signs in.',
   },
   expired: {
     title: 'No expired invitations',
-    body: 'Pending invitations expire after 30 days. Expired ones show here so you can resend.',
+    body: 'Pending invitations expire after 30 days and show here to resend.',
   },
   all: {
     title: 'No invitations yet',
-    body: 'Use "Invite people" to send the first portal invitation.',
+    body: 'Invite users to give them access to your portal.',
   },
 }
 
@@ -71,53 +75,39 @@ export function InvitationsView({ status }: InvitationsViewProps) {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Sticky header: title + send-CTA */}
-      <div className="border-b border-border/40 bg-background/80 backdrop-blur sticky top-0 z-10">
-        <div className="flex items-center justify-between gap-3 px-4 py-3">
-          <div>
-            <h1 className="text-base font-semibold">Invitations</h1>
-            <p className="text-xs text-muted-foreground">
-              Portal access sent to people who don&apos;t yet have an account.
-            </p>
-          </div>
-          <Button type="button" size="sm" onClick={portal.openDialog}>
-            <PlusIcon className="mr-1.5 h-3.5 w-3.5" />
-            Invite people
-          </Button>
-        </div>
+      <div className="w-full max-w-5xl space-y-4 px-4 pt-4 sm:px-6">
+        <PageHeader
+          title="Invitations"
+          actions={
+            <NewButton noun="user" onClick={portal.openDialog}>
+              Invite users
+            </NewButton>
+          }
+        />
 
-        {/* Status chips */}
-        <div className="flex items-center gap-1 px-4 pb-3">
-          <StatusChip
-            label={STATUS_LABEL.pending}
-            count={portal.pendingCount}
-            active={status === 'pending'}
-            onClick={() => setStatus('pending')}
-          />
-          <StatusChip
-            label={STATUS_LABEL.accepted}
-            count={portal.acceptedCount}
-            active={status === 'accepted'}
-            onClick={() => setStatus('accepted')}
-          />
-          <StatusChip
-            label={STATUS_LABEL.expired}
-            count={portal.expiredCount}
-            active={status === 'expired'}
-            onClick={() => setStatus('expired')}
-          />
-          <StatusChip
-            label={STATUS_LABEL.all}
-            count={portal.invites.length}
-            active={status === 'all'}
-            onClick={() => setStatus('all')}
-          />
-        </div>
+        <Tabs
+          value={status}
+          onValueChange={(value) => setStatus(value as InvitesStatus)}
+          variant="line"
+        >
+          <TabsList>
+            {STATUSES.map((value) => (
+              <TabsTrigger key={value} value={value}>
+                {STATUS_LABEL[value]}
+                {value === 'pending' && portal.pendingCount > 0 && (
+                  <span className="ml-1.5 text-xs tabular-nums text-muted-foreground">
+                    {portal.pendingCount}
+                  </span>
+                )}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
       </div>
 
       {/* Inline status messages */}
       {(portal.lastSentSummary || portal.actionError || portal.resendConfirm) && (
-        <div className="px-4 pt-3 space-y-1">
+        <div className="px-4 pt-3 space-y-1 sm:px-6">
           {portal.lastSentSummary && (
             <p className="text-xs text-emerald-700 dark:text-emerald-400" role="status">
               {portal.lastSentSummary}
@@ -133,27 +123,19 @@ export function InvitationsView({ status }: InvitationsViewProps) {
       )}
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto px-4 py-3">
+      <div className="w-full max-w-5xl flex-1 overflow-y-auto px-4 py-3 sm:px-6">
         {portal.isLoading ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
             <span>Loading invites…</span>
           </div>
         ) : visible.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border/50 p-8 text-center">
-            <p className="text-sm font-medium">{empty.title}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{empty.body}</p>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="mt-4"
-              onClick={portal.openDialog}
-            >
-              <PlusIcon className="mr-1.5 h-3.5 w-3.5" />
-              Invite people
-            </Button>
-          </div>
+          <EmptyState
+            size="compact"
+            icon={EnvelopeIcon}
+            title={empty.title}
+            description={empty.body}
+          />
         ) : (
           <ul className="space-y-1.5" role="list" aria-label="Portal invitations">
             {visible.map((inv) => (
@@ -183,43 +165,6 @@ export function InvitationsView({ status }: InvitationsViewProps) {
         onSend={portal.onSend}
       />
     </div>
-  )
-}
-
-/** Pill-shaped tab for the per-status filter. Matches the visual weight of
- *  the regular Users filter chips elsewhere in the admin UI. */
-function StatusChip({
-  label,
-  count,
-  active,
-  onClick,
-}: {
-  label: string
-  count: number
-  active: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-        active
-          ? 'border-primary/40 bg-primary/10 text-foreground'
-          : 'border-border/50 text-muted-foreground hover:bg-muted/50'
-      )}
-    >
-      <span>{label}</span>
-      <span
-        className={cn(
-          'rounded-full px-1.5 text-[11px] tabular-nums',
-          active ? 'bg-primary/15 text-foreground' : 'bg-muted/50 text-muted-foreground'
-        )}
-      >
-        {count}
-      </span>
-    </button>
   )
 }
 
