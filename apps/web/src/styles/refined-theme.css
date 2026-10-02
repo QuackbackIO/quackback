@@ -462,6 +462,72 @@
   border-bottom-color: var(--primary);
 }
 
+/*
+ * Admin page-section tabs read as the side pane's rows laid flat: no underline, an 8px row with
+ * the pane's flat fill when active. Yellow stays an icon accent. The portal keeps the underline.
+ */
+[data-visual-theme='refined']
+  [data-admin-canvas]
+  [data-slot='tabs'][data-variant='line']
+  [data-slot='tabs-list'],
+[data-visual-theme='refined'] [data-admin-canvas] [data-slot='tabs-list'][data-variant='line'] {
+  height: auto;
+  gap: 2px;
+  border-bottom: 0;
+  box-shadow: none;
+}
+
+[data-visual-theme='refined']
+  [data-admin-canvas]
+  [data-slot='tabs'][data-variant='line']
+  [data-slot='tabs-trigger'],
+[data-visual-theme='refined'] [data-admin-canvas] [data-slot='tabs-trigger'][data-variant='line'] {
+  height: 32px;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-field);
+  font-size: 13.5px;
+  font-weight: 400;
+  color: var(--chrome-pane-text);
+  background: transparent;
+}
+
+[data-visual-theme='refined']
+  [data-admin-canvas]
+  [data-slot='tabs'][data-variant='line']
+  [data-slot='tabs-trigger']:hover,
+[data-visual-theme='refined']
+  [data-admin-canvas]
+  [data-slot='tabs-trigger'][data-variant='line']:hover {
+  background: var(--chrome-hover);
+}
+
+[data-visual-theme='refined']
+  [data-admin-canvas]
+  [data-slot='tabs'][data-variant='line']
+  [data-slot='tabs-trigger'][data-active],
+[data-visual-theme='refined']
+  [data-admin-canvas]
+  [data-slot='tabs-trigger'][data-variant='line'][data-active] {
+  background: var(--chrome-pane-active-background);
+  color: var(--chrome-active-text);
+  font-weight: 500;
+}
+
+/* Inset, so a tab bar that scrolls sideways does not clip the ring. */
+[data-visual-theme='refined']
+  [data-admin-canvas]
+  [data-slot='tabs'][data-variant='line']
+  [data-slot='tabs-trigger']:focus-visible,
+[data-visual-theme='refined']
+  [data-admin-canvas]
+  [data-slot='tabs-trigger'][data-variant='line']:focus-visible {
+  outline: 2px solid var(--chrome-focus);
+  outline-offset: -2px;
+  box-shadow: none;
+}
+
 /* Supporting panels stay 12px outlined groups. Lists do not. */
 [data-visual-theme='refined'] [data-slot='card'],
 [data-visual-theme='refined'] [data-settings-card] {

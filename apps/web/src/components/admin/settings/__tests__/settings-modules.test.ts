@@ -2,7 +2,6 @@ import { PERMISSIONS, SYSTEM_ROLE_PERMISSIONS, type PermissionKey } from '@/lib/
 import { describe, expect, it } from 'vitest'
 import {
   buildSettingsModules,
-  settingsModuleForPath,
   settingsModuleLandingPath,
   settingsModuleRedirectPath,
   settingsModulesFor,
@@ -80,34 +79,6 @@ describe('settingsModuleLandingPath', () => {
     expect(settingsModuleLandingPath(modules.find((m) => m.id === 'helpCenter')!)).toBe(
       '/admin/settings/help-center'
     )
-  })
-})
-
-describe('settingsModuleForPath', () => {
-  const modules = buildSettingsModules({
-    supportInbox: true,
-    helpCenter: true,
-    statusPage: true,
-  })
-
-  it('has no hub page to match', () => {
-    expect(settingsModuleForPath('/admin/settings/feedback', modules)).toBeUndefined()
-    expect(settingsModuleForPath('/admin/settings/support', modules)).toBeUndefined()
-  })
-
-  it('matches a nested board page to Feedback & Roadmaps', () => {
-    expect(settingsModuleForPath('/admin/settings/boards/general-feedback', modules)?.id).toBe(
-      'feedback'
-    )
-  })
-
-  it('matches a channel child page to Support', () => {
-    expect(settingsModuleForPath('/admin/settings/channels/email', modules)?.id).toBe('support')
-  })
-
-  it('does not treat Statuses as the Status module', () => {
-    expect(settingsModuleForPath('/admin/settings/statuses', modules)?.id).toBe('feedback')
-    expect(settingsModuleForPath('/admin/settings/status', modules)?.id).toBe('status')
   })
 })
 

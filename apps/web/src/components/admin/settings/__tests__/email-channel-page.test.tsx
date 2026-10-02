@@ -74,6 +74,8 @@ describe('EmailChannelPage', () => {
     renderPage()
     const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' })
     expect(crumbs.textContent).toMatch(/Support\s*\/\s*Channels\s*\/\s*Email/)
+    expect(crumbs.querySelector('a[href="/admin/settings/support"]')).toBeTruthy()
+    expect(crumbs.querySelector('a[href="/admin/settings/channels"]')).toBeTruthy()
   })
 
   it('shows the last 5 activity rows, then every loaded row in place on View all activity', () => {

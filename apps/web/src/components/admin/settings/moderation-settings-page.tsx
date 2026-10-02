@@ -73,7 +73,6 @@ export function ModerationPage() {
   return (
     <SettingsPage
       page="/admin/settings/moderation"
-      crumbs={[{ label: 'Feedback & Roadmaps' }]}
       actions={
         <Button asChild variant="outline" size="sm">
           <Link to="/admin/feedback/moderation">

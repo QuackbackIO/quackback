@@ -210,7 +210,7 @@ function OfficeHoursPage() {
   }
 
   return (
-    <SettingsPage page="/admin/settings/office-hours" crumbs={[{ label: 'Support' }]}>
+    <SettingsPage page="/admin/settings/office-hours">
       <SettingsCard title="Availability" description="Off means available 24/7.">
         <div className="space-y-5">
           <SettingRows>

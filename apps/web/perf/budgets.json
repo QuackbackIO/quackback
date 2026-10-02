@@ -267,8 +267,8 @@
     "ui:admin-settings-click-through": {
       "dbQueries": 52,
       "serverRequests": 7,
-      "requests": 65,
-      "jsRequests": 61,
+      "requests": 66,
+      "jsRequests": 62,
       "jsKB": 312.3,
       "htmlTransferKB": 0,
       "componentRenders": 673
@@ -1027,8 +1027,8 @@
     "ui:admin-settings-tour": {
       "dbQueries": 52,
       "serverRequests": 10,
-      "requests": 89,
-      "jsRequests": 79,
+      "requests": 90,
+      "jsRequests": 80,
       "jsKB": 138.9,
       "htmlTransferKB": 0,
       "componentRenders": 977

@@ -65,7 +65,7 @@ describe('settings page registry', () => {
   it('names the renamed pages in the nav', () => {
     const navItems = buildNavSections(ALL_FLAGS, true, true)
       .flatMap((section) => section.items)
-      .filter((item) => !('kids' in item))
+      .filter((item) => !('pages' in item))
     expect(navItems.map((item) => item.label)).toEqual(
       expect.arrayContaining(['Users', 'Conversations', 'Plan & billing'])
     )

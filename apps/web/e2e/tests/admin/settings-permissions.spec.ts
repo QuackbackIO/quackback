@@ -15,7 +15,14 @@ test.describe('Admin Moderation Settings', () => {
   })
 
   test('page loads and shows moderation heading', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: 'Moderation' })).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('heading', { level: 1, name: 'Feedback & Roadmaps' })).toBeVisible({
+      timeout: 10000,
+    })
+    await expect(
+      page
+        .getByRole('navigation', { name: 'Feedback & Roadmaps' })
+        .getByRole('link', { name: 'Moderation' })
+    ).toHaveAttribute('aria-current', 'page')
     await expect(page.getByRole('link', { name: /open queue/i })).toBeVisible({ timeout: 10000 })
   })
 

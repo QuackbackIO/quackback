@@ -198,7 +198,6 @@ export function StatusesSettingsPage({ initialStatuses }: StatusListProps) {
   return (
     <SettingsPage
       page="/admin/settings/statuses"
-      crumbs={[{ label: 'Feedback & Roadmaps' }]}
       actions={<NewButton noun="status" onClick={() => setCreateDialogOpen(true)} />}
     >
       {/* Status categories with drag and drop */}

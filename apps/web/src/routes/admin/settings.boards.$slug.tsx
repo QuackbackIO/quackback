@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
+import { moduleCrumb } from '@/components/admin/settings/settings-nav-sections'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { boardTabSearch, type BoardTab } from '@/components/admin/settings/boards/board-tabs'
@@ -77,7 +78,10 @@ function BoardSettingsPage() {
   return (
     <SettingsPage
       title={currentBoard.name}
-      crumbs={[{ label: 'Feedback & Roadmaps' }, { label: 'Boards', to: '/admin/settings/boards' }]}
+      crumbs={[
+        moduleCrumb('/admin/settings/feedback'),
+        { label: 'Boards', to: '/admin/settings/boards' },
+      ]}
     >
       <Tabs
         value={selectedTab}

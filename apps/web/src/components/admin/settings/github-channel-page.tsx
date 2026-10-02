@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ExclamationTriangleIcon } from '@heroicons/react/24/solid'
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
+import { moduleCrumb } from '@/components/admin/settings/settings-nav-sections'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
 import { Button } from '@/components/ui/button'
@@ -28,7 +29,10 @@ export function GitHubChannelPage() {
     <SettingsPage
       page="/admin/settings/channels/github"
       description="Issues as conversations."
-      crumbs={[{ label: 'Support' }, { label: 'Channels', to: '/admin/settings/channels' }]}
+      crumbs={[
+        moduleCrumb('/admin/settings/support'),
+        { label: 'Channels', to: '/admin/settings/channels' },
+      ]}
     >
       {attention && status?.lastError && (
         <div className="flex items-start gap-2 rounded-[10px] border border-destructive/30 bg-destructive/5 p-3">

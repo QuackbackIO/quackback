@@ -5,6 +5,7 @@ import { channelSettingsQueries } from '@/lib/client/queries/channel-settings'
 import { useUpdateSpamFilterConfig } from '@/lib/client/mutations/settings'
 import { useUpdateEmailAutoAck } from '@/lib/client/mutations/channel-settings'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
+import { moduleCrumb } from '@/components/admin/settings/settings-nav-sections'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
 import { Button } from '@/components/ui/button'
@@ -22,7 +23,10 @@ export function EmailChannelPage() {
     <SettingsPage
       page="/admin/settings/channels/email"
       description="Receive and send support conversations from the customer's mailbox."
-      crumbs={[{ label: 'Support' }, { label: 'Channels', to: '/admin/settings/channels' }]}
+      crumbs={[
+        moduleCrumb('/admin/settings/support'),
+        { label: 'Channels', to: '/admin/settings/channels' },
+      ]}
     >
       <EmailTransportCard />
       <EmailChannelSettings />

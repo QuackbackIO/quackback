@@ -73,6 +73,7 @@ describe('GitHubChannelPage', () => {
     const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' })
     expect(crumbs.textContent).toMatch(/Support\s*\/\s*Channels\s*\/\s*GitHub/)
     expect(crumbs.querySelector('a[href="/admin/settings/channels"]')).toBeTruthy()
+    expect(crumbs.querySelector('a[href="/admin/settings/support"]')).toBeTruthy()
   })
 
   it('titles the toggle card Inbox with a one-line description', () => {

@@ -33,7 +33,6 @@ function TicketStatusesPage() {
   return (
     <SettingsPage
       page="/admin/settings/ticket-statuses"
-      crumbs={[{ label: 'Support' }]}
       actions={<NewButton noun="status" onClick={() => setCreating(true)} />}
     >
       <TicketStatusList creating={creating} onCreatingChange={setCreating} />

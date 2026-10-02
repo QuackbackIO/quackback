@@ -3,11 +3,12 @@
  * The settings nav stays mounted while the admin moves between settings
  * pages. A navigation changes which row is active, so only the row that
  * stops being active and the one that becomes active may render again, not
- * every row in the nav, and not the nav around them. Each navigation also
+ * every row in the nav, and not the nav around them. A module is one row that
+ * stays highlighted on all of its pages. Each navigation also
  * hands the tree a new route context object whose parts are unchanged.
  */
 import { forwardRef, type ComponentType } from 'react'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   Outlet,
@@ -57,7 +58,8 @@ vi.mock('@heroicons/react/24/solid', async (importOriginal) => {
   }
 })
 
-// Only the nav itself asks for the cloud flag, so this counts the nav's renders.
+// Only the provider that builds the nav asks for the cloud flag, so this counts
+// the renders of the nav around the rows.
 vi.mock('@/lib/client/hooks/use-root-context', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/client/hooks/use-root-context')>()),
   useCloudEnabled: () => {
@@ -68,7 +70,7 @@ vi.mock('@/lib/client/hooks/use-root-context', async (importOriginal) => ({
 
 import { SYSTEM_ROLE_PERMISSIONS } from '@/lib/shared/permissions'
 
-const { SettingsNav } = await import('../settings-nav')
+const { SettingsNav, SettingsNavProvider } = await import('../settings-nav')
 
 afterEach(cleanup)
 
@@ -95,19 +97,20 @@ async function mount(initial: string) {
     path: '/admin',
     beforeLoad: () => ({ ...adminAnswer }),
     component: () => (
-      <>
+      <SettingsNavProvider>
         <SettingsNav />
         <Outlet />
-      </>
+      </SettingsNavProvider>
     ),
   })
-  const pages = ['general', 'members', 'boards', 'tags', 'channels'].map((page) =>
-    createRoute({
-      getParentRoute: () => adminRoute,
-      path: `/settings/${page}`,
-      validateSearch: (search: Record<string, unknown>) => search as { tab?: string },
-      component: () => <p>{page} page</p>,
-    })
+  const pages = ['general', 'members', 'boards', 'boards/feature-requests', 'tags', 'channels'].map(
+    (page) =>
+      createRoute({
+        getParentRoute: () => adminRoute,
+        path: `/settings/${page}`,
+        validateSearch: (search: Record<string, unknown>) => search as { tab?: string },
+        component: () => <p>{page.split('/').pop()} page</p>,
+      })
   )
   const router = createRouter({
     routeTree: rootRoute.addChildren([adminRoute.addChildren(pages)]),
@@ -155,42 +158,51 @@ describe('SettingsNav', () => {
     expect(rowRenders).toEqual([])
   })
 
-  it('opens the module of the current page and highlights only the page itself', async () => {
-    const { container } = await mount('/admin/settings/boards')
-    expect(activeHrefs(container)).toEqual(['/admin/settings/boards'])
-    // Its pages are rows of their own.
-    for (const to of ['statuses', 'tags', 'moderation']) {
-      expect(container.querySelector(`a[href="/admin/settings/${to}"]`)).toBeTruthy()
+  it('shows each module as one row that opens its first page', async () => {
+    const { container } = await mount('/admin/settings/general')
+    const row = screen.getByRole('link', { name: 'Feedback & Roadmaps' })
+    expect(row.getAttribute('href')).toBe('/admin/settings/boards')
+    expect(screen.getByRole('link', { name: 'Support' }).getAttribute('href')).toBe(
+      '/admin/settings/channels'
+    )
+    // A module's pages are tabs on the page, not rows in the nav.
+    for (const to of ['statuses', 'tags', 'moderation', 'macros']) {
+      expect(container.querySelector(`a[href="/admin/settings/${to}"]`)).toBeNull()
     }
-    // A module the viewer is not in stays closed.
-    expect(container.querySelector('a[href="/admin/settings/macros"]')).toBeNull()
-    const header = screen.getByRole('button', { name: /Feedback & Roadmaps/ })
-    expect(header.getAttribute('aria-expanded')).toBe('true')
-    expect(header.hasAttribute('data-active')).toBe(false)
+    expect(container.querySelector('button')).toBeNull()
   })
 
-  it("moves the highlight between a module's pages without rendering the nav", async () => {
-    const { router, container } = await mount('/admin/settings/boards')
-    await act(() => router.navigate({ to: '/admin/settings/tags' }))
-    await screen.findByText('tags page')
-    expect(activeHrefs(container)).toEqual(['/admin/settings/tags'])
+  it('highlights the module row on each of its pages and their child pages', async () => {
+    const { router, container } = await mount('/admin/settings/tags')
+    expect(activeHrefs(container)).toEqual(['/admin/settings/boards'])
+    const row = screen.getByRole('link', { name: 'Feedback & Roadmaps' })
+    expect(row.getAttribute('aria-current')).toBe('page')
+
+    await act(() => router.navigate({ to: '/admin/settings/boards' }))
+    await screen.findByText('boards page')
+    expect(activeHrefs(container)).toEqual(['/admin/settings/boards'])
+
+    await act(() =>
+      router.navigate({
+        to: '/admin/settings/boards/$slug',
+        params: { slug: 'feature-requests' },
+      })
+    )
+    await screen.findByText('feature-requests page')
+    expect(activeHrefs(container)).toEqual(['/admin/settings/boards'])
+    // Staying in the module moves nothing.
+    expect(rowRenders).toEqual([])
     expect(navRenders.count).toBe(0)
   })
 
-  it('opens a closed module and goes to its first page', async () => {
-    const { container } = await mount('/admin/settings/general')
-    expect(container.querySelector('a[href="/admin/settings/tags"]')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: /Support/ }))
-    await screen.findByText('channels page')
-    expect(activeHrefs(container)).toEqual(['/admin/settings/channels'])
-    expect(container.querySelector('a[href="/admin/settings/macros"]')).toBeTruthy()
-  })
-
-  it('collapses the open module without leaving the page', async () => {
-    const { container } = await mount('/admin/settings/boards')
-    fireEvent.click(screen.getByRole('button', { name: /Feedback & Roadmaps/ }))
-    expect(container.querySelector('a[href="/admin/settings/tags"]')).toBeNull()
-    expect(screen.getByText('boards page')).toBeTruthy()
+  it('moves the highlight into a module rendering only its row, and not its contents', async () => {
+    const { router, container } = await mount('/admin/settings/general')
+    await act(() => router.navigate({ to: '/admin/settings/tags' }))
+    await screen.findByText('tags page')
+    expect(activeHrefs(container)).toEqual(['/admin/settings/boards'])
+    expect(rowRenders).toEqual(['/admin/settings/boards'])
+    expect(iconRenders.ChatBubbleLeftIcon).toBe(0)
+    expect(navRenders.count).toBe(0)
   })
 
   it('marks the active row with the muted fill, not the primary tint', async () => {

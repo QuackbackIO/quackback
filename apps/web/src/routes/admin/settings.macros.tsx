@@ -42,7 +42,6 @@ function MacrosSettingsPage() {
     <SettingsPage
       page="/admin/settings/macros"
       description="Reusable replies with variables and bundled actions."
-      crumbs={[{ label: 'Support' }]}
       actions={
         macrosEntitled ? <NewButton noun="macro" onClick={() => setCreating(true)} /> : undefined
       }

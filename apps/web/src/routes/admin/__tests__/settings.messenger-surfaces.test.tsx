@@ -101,6 +101,7 @@ describe('Messenger Surfaces', () => {
     const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' })
     expect(crumbs.textContent).toMatch(/Support\s*\/\s*Channels\s*\/\s*Messenger/)
     expect(crumbs.querySelector('a[href="/admin/settings/channels"]')).toBeTruthy()
+    expect(crumbs.querySelector('a[href="/admin/settings/support"]')).toBeTruthy()
   })
 })
 
