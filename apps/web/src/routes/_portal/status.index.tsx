@@ -58,8 +58,8 @@ export const Route = createFileRoute('/_portal/status/')({
   component: StatusPage,
 })
 
-function formatUtcDayLong(dateStr: string): string {
-  return new Date(`${dateStr}T00:00:00Z`).toLocaleDateString('en-US', {
+function formatUtcDayLong(dateStr: string, locale: string): string {
+  return new Date(`${dateStr}T00:00:00Z`).toLocaleDateString(locale, {
     month: 'long',
     day: 'numeric',
     year: 'numeric',
@@ -67,23 +67,27 @@ function formatUtcDayLong(dateStr: string): string {
   })
 }
 
-function formatMaintenanceWindow(startIso: string | null, endIso: string | null): string {
+function formatMaintenanceWindow(
+  startIso: string | null,
+  endIso: string | null,
+  locale: string
+): string {
   if (!startIso) return ''
   const start = new Date(startIso)
-  const dayLabel = start.toLocaleDateString('en-US', {
+  const dayLabel = start.toLocaleDateString(locale, {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
     timeZone: 'UTC',
   })
-  const startTime = start.toLocaleTimeString('en-US', {
+  const startTime = start.toLocaleTimeString(locale, {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
     timeZone: 'UTC',
   })
   if (!endIso) return `${dayLabel} · ${startTime} UTC`
-  const endTime = new Date(endIso).toLocaleTimeString('en-US', {
+  const endTime = new Date(endIso).toLocaleTimeString(locale, {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
@@ -196,10 +200,10 @@ function StatusPage() {
                   <div key={incident.id} className="flex gap-3.5 p-4 sm:p-5">
                     <div className="w-11 shrink-0 overflow-hidden rounded-md border border-border/60 text-center">
                       <div className="bg-blue-500/15 py-0.5 text-[11px] font-semibold tracking-wide text-blue-600 uppercase dark:text-blue-400">
-                        {start.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' })}
+                        {start.toLocaleDateString(intl.locale, { month: 'short', timeZone: 'UTC' })}
                       </div>
                       <div className="py-0.5 text-sm font-semibold">
-                        {start.toLocaleDateString('en-US', { day: 'numeric', timeZone: 'UTC' })}
+                        {start.toLocaleDateString(intl.locale, { day: 'numeric', timeZone: 'UTC' })}
                       </div>
                     </div>
                     <div className="min-w-0 flex-1">
@@ -220,7 +224,8 @@ function StatusPage() {
                       <p className="mt-1 text-[13px] text-muted-foreground">
                         {formatMaintenanceWindow(
                           incident.scheduledStartAt,
-                          incident.scheduledEndAt
+                          incident.scheduledEndAt,
+                          intl.locale
                         )}
                         {latestUpdate ? ` · ${latestUpdate.body}` : ''}
                       </p>
@@ -269,7 +274,7 @@ function StatusPage() {
           {snapshot.recentIncidents.map((day) => (
             <div key={day.date} className="py-3.5 first:pt-0">
               <p className="mb-1.5 text-[13px] font-semibold text-muted-foreground">
-                {formatUtcDayLong(day.date)}
+                {formatUtcDayLong(day.date, intl.locale)}
               </p>
               {day.incidents.length === 0 ? (
                 <p className="text-[13px] text-muted-foreground/75">
@@ -309,7 +314,7 @@ function StatusPage() {
             {historyItems.map((incident) => (
               <div key={incident.id}>
                 <p className="text-xs text-muted-foreground">
-                  {new Date(incident.startedAt).toLocaleDateString('en-US', {
+                  {new Date(incident.startedAt).toLocaleDateString(intl.locale, {
                     month: 'long',
                     day: 'numeric',
                     year: 'numeric',
