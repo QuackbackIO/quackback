@@ -297,7 +297,10 @@ export function ComposerAttachmentTray({
     const readyItems = items.filter((it) => it.status === 'ready' && it.file)
     const index = readyItems.findIndex((it) => it.localId === item.localId)
     if (index < 0) return
-    open(readyItems.map((it) => toViewerFile(it.file!)), index)
+    open(
+      readyItems.map((it) => toViewerFile(it.file!)),
+      index
+    )
   }
 
   return (
