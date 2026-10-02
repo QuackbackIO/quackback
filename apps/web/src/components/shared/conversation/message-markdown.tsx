@@ -1,21 +1,32 @@
-import { useMemo, type ReactNode } from 'react'
-import Markdown, { type Components } from 'react-markdown'
+import { createContext, useContext, useId, type ComponentProps, type ReactNode } from 'react'
+import Markdown, { type Components, type ExtraProps } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Element, Root, RootContent } from 'hast'
 import { cn } from '@/lib/shared/utils'
 import { sanitizeImageUrl, sanitizeUrl } from '@/lib/shared/utils/sanitize'
 import { CITATION_MARKER_RE } from '@/lib/shared/assistant/citation-markers'
 
-/** Add citation placeholders after Markdown has resolved links and code. This
+/** Scope footnote labels per message and add citation placeholders after Markdown
+ * has resolved links and code. This
  * keeps numeric link labels intact and never inserts an anchor inside another
  * anchor, or interprets examples inside code as source references. */
-function citationPlaceholders() {
+function messageReferences(options: { footnotePrefix: string; citations: boolean }) {
   return (tree: Root) => {
     function walk(parent: Root | Element) {
-      if (parent.type === 'element' && ['a', 'code', 'pre'].includes(parent.tagName)) return
+      if (parent.type === 'element') {
+        // remark-rehype gives every document the same footnote heading ID.
+        const properties = parent.properties
+        if (properties.id === 'footnote-label')
+          properties.id = `${options.footnotePrefix}footnote-label`
+        if (Array.isArray(properties.ariaDescribedBy))
+          properties.ariaDescribedBy = properties.ariaDescribedBy.map((id) =>
+            id === 'footnote-label' ? `${options.footnotePrefix}footnote-label` : id
+          )
+        if (['a', 'code', 'pre'].includes(parent.tagName)) return
+      }
       const children: RootContent[] = []
       for (const child of parent.children) {
-        if (child.type === 'text') {
+        if (child.type === 'text' && options.citations) {
           let last = 0
           for (const match of child.value.matchAll(CITATION_MARKER_RE)) {
             const index = match.index
@@ -41,6 +52,57 @@ function citationPlaceholders() {
   }
 }
 
+type CitationRenderer = (number: number) => ReactNode
+const CitationRendererContext = createContext<CitationRenderer | undefined>(undefined)
+
+function CitationSpan({ node, children }: ComponentProps<'span'> & ExtraProps) {
+  const renderCitation = useContext(CitationRendererContext)
+  const number = node?.properties['data-citation']
+  return typeof number === 'number' && renderCitation ? (
+    renderCitation(number)
+  ) : (
+    <span>{children}</span>
+  )
+}
+
+// Keep component identities stable across text/citation updates, preserving DOM
+// nodes, selections and focus while an answer streams or its sources refresh.
+const components: Components = {
+  a: ({ node: _node, href, children, className, ...props }) =>
+    href ? (
+      <a
+        {...props}
+        href={href}
+        target={href.startsWith('#') ? undefined : '_blank'}
+        rel="noopener noreferrer"
+        className={cn('underline underline-offset-2', className)}
+      >
+        {children}
+      </a>
+    ) : (
+      <>{children}</>
+    ),
+  img: ({ src, alt, title }) =>
+    typeof src === 'string' && src ? (
+      <img
+        src={src}
+        alt={alt ?? ''}
+        title={title}
+        loading="lazy"
+        className="max-w-full rounded-lg"
+      />
+    ) : (
+      <>{alt}</>
+    ),
+  p: ({ children }) => <p className="whitespace-pre-wrap">{children}</p>,
+  table: ({ children }) => (
+    <div className="max-w-full overflow-x-auto">
+      <table>{children}</table>
+    </div>
+  ),
+  span: CitationSpan,
+}
+
 /** Shared by admin and visitor messages. Render Markdown as React elements;
  * raw HTML stays escaped and URL protocols are checked before creating links or
  * images. Keep canonical TipTap documents on the rich-text render path. */
@@ -55,52 +117,7 @@ export function MessageMarkdown({
   renderCitation?: (number: number) => ReactNode
   trailing?: ReactNode
 }) {
-  const components = useMemo<Components>(
-    () => ({
-      a: ({ href, children, title }) =>
-        href ? (
-          <a
-            href={href}
-            title={title}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline underline-offset-2"
-          >
-            {children}
-          </a>
-        ) : (
-          <>{children}</>
-        ),
-      img: ({ src, alt, title }) =>
-        typeof src === 'string' && src ? (
-          <img
-            src={src}
-            alt={alt ?? ''}
-            title={title}
-            loading="lazy"
-            className="max-w-full rounded-lg"
-          />
-        ) : (
-          <>{alt}</>
-        ),
-      p: ({ children }) => <p className="whitespace-pre-wrap">{children}</p>,
-      table: ({ children }) => (
-        <div className="max-w-full overflow-x-auto">
-          <table>{children}</table>
-        </div>
-      ),
-      span: ({ node, children }) => {
-        const number = node?.properties['data-citation']
-        return typeof number === 'number' && renderCitation ? (
-          renderCitation(number)
-        ) : (
-          <span>{children}</span>
-        )
-      },
-    }),
-    [renderCitation]
-  )
-
+  const footnotePrefix = `message-${useId()}-`
   return (
     <div
       className={cn(
@@ -115,14 +132,17 @@ export function MessageMarkdown({
         className
       )}
     >
-      <Markdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={renderCitation ? [citationPlaceholders] : []}
-        components={components}
-        urlTransform={(url, key) => (key === 'src' ? sanitizeImageUrl(url) : sanitizeUrl(url))}
-      >
-        {text}
-      </Markdown>
+      <CitationRendererContext value={renderCitation}>
+        <Markdown
+          remarkPlugins={[remarkGfm]}
+          remarkRehypeOptions={{ clobberPrefix: footnotePrefix }}
+          rehypePlugins={[[messageReferences, { footnotePrefix, citations: !!renderCitation }]]}
+          components={components}
+          urlTransform={(url, key) => (key === 'src' ? sanitizeImageUrl(url) : sanitizeUrl(url))}
+        >
+          {text}
+        </Markdown>
+      </CitationRendererContext>
       {trailing}
     </div>
   )

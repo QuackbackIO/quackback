@@ -846,7 +846,7 @@ describe('conversation email body (P4.5)', () => {
         { type: 'paragraph', content: [{ type: 'text', text: 'see:' }] },
         // Self-origin storage ref: mail clients won't follow the route's 302,
         // so the email body must carry the force-proxy hint.
-        { type: 'chatImage', attrs: { src: '/api/storage/chat-images/a.png' } },
+        { type: 'resizableImage', attrs: { src: '/api/storage/chat-images/a.png' } },
         // Foreign origin: left byte-identical.
         { type: 'resizableImage', attrs: { src: 'https://cdn.example.com/b.png' } },
       ],

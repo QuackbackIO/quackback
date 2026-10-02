@@ -166,6 +166,75 @@ for (const surface of ['admin', 'widget'] as const) {
 }
 
 describe('citation rendering safety', () => {
+  it('keeps paragraphs, links and focused source triggers mounted when citations refresh', () => {
+    const text = 'Read [the guide](https://example.com/guide) [1].'
+    const { container, rerender } = render(<AssistantAnswer text={text} citations={[citation]} />)
+    const paragraph = container.querySelector('p')
+    const link = screen.getByRole('link', { name: 'the guide' })
+    const source = screen.getByRole('link', { name: 'Source 1: AI features' })
+    source.focus()
+    expect(document.activeElement).toBe(source)
+    rerender(<AssistantAnswer text={text} citations={[{ ...citation }]} />)
+    expect(container.querySelector('p')).toBe(paragraph)
+    expect(screen.getByRole('link', { name: 'the guide' })).toBe(link)
+    expect(screen.getByRole('link', { name: 'Source 1: AI features' })).toBe(source)
+    expect(document.activeElement).toBe(source)
+    rerender(
+      <AssistantAnswer
+        text={text}
+        citations={[{ ...citation, title: 'Updated guide', url: 'https://example.com/updated' }]}
+      />
+    )
+    expect(screen.getByRole('link', { name: 'Source 1: Updated guide' })).toBe(source)
+    expect(source).toHaveAttribute('href', 'https://example.com/updated')
+    expect(document.activeElement).toBe(source)
+  })
+
+  it('keeps the answer paragraph mounted when streaming completes', () => {
+    const { container, rerender } = render(<AssistantAnswer text="Summary." citations={[]} caret />)
+    const paragraph = container.querySelector('p')
+    rerender(<AssistantAnswer text="Summary." citations={[]} />)
+    expect(container.querySelector('p')).toBe(paragraph)
+  })
+
+  it('keeps footnote references and backlinks within the conversation document', () => {
+    const { container } = render(
+      <AssistantAnswer text={'A footnote[^note].\n\n[^note]: Supporting detail.'} citations={[]} />
+    )
+    const links = container.querySelectorAll('a')
+    expect(links).toHaveLength(2)
+    for (const link of links) {
+      expect(link).not.toHaveAttribute('target', '_blank')
+      const targetId = link.getAttribute('href')!.slice(1)
+      expect(document.getElementById(targetId)).not.toBeNull()
+    }
+    expect(links[0]).toHaveAttribute('aria-describedby')
+    expect(links[1]).toHaveAttribute('aria-label', 'Back to reference 1')
+  })
+
+  it('gives repeated footnote labels distinct targets in each message', () => {
+    const text = 'A footnote[^note].\n\n[^note]: Supporting detail.'
+    const { container } = render(
+      <>
+        <AssistantAnswer text={text} citations={[]} />
+        <AssistantAnswer text={text} citations={[]} />
+      </>
+    )
+    const ids = Array.from(container.querySelectorAll('[id]'), (node) => node.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    const messages = container.children
+    const references = Array.from(messages, (message) => message.querySelector('a')!)
+    expect(references[0].getAttribute('href')).not.toBe(references[1].getAttribute('href'))
+    for (const [index, reference] of references.entries()) {
+      const target = document.getElementById(reference.getAttribute('href')!.slice(1))
+      expect(target).not.toBeNull()
+      expect(messages[index].contains(target)).toBe(true)
+      const label = document.getElementById(reference.getAttribute('aria-describedby')!)
+      expect(label).not.toBeNull()
+      expect(messages[index].contains(label)).toBe(true)
+    }
+  })
+
   it('formats Markdown-only internal notes in the admin thread', () => {
     render(
       <AgentMessageBubble
