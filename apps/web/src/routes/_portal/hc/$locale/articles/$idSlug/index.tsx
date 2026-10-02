@@ -1,7 +1,7 @@
 import { createFileRoute, getRouteApi, notFound, redirect } from '@tanstack/react-router'
 import { formatDistanceToNow } from 'date-fns'
 import { getPublicArticlePageFn } from '@/lib/server/functions/help-center'
-import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-editor'
+import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-content'
 import { EmbedHydration } from '@/components/shared/embed-hydration'
 import { HelpCenterBreadcrumbs } from '@/components/help-center/help-center-breadcrumbs'
 import { HelpCenterPrevNext } from '@/components/help-center/help-center-prev-next'

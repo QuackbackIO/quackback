@@ -23,6 +23,7 @@ const SRC = path.resolve(__dirname, '../../..')
 
 const READING_SURFACES = [
   'routes/_portal.b.$slug.posts.$postId.tsx',
+  'routes/_portal/hc/$locale/articles/$idSlug/index.tsx',
   'components/public/comment-content.tsx',
   'components/public/comment-thread.tsx',
   'components/public/pinned-comment.tsx',

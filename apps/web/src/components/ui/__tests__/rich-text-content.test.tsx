@@ -1,4 +1,4 @@
-// @vitest-environment happy-dom
+// @vitest-environment jsdom
 /**
  * Tests for mention rendering in generateContentHTML and RichTextContent.
  *
@@ -14,7 +14,8 @@
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
 import type { JSONContent } from '@tiptap/core'
-import { generateContentHTML, RichTextContent } from '../rich-text-editor'
+import { generateContentHTML } from '@/lib/shared/content-html'
+import { RichTextContent } from '../rich-text-content'
 
 describe('generateContentHTML — mention nodes', () => {
   it('emits styled span with data attributes for mention nodes', () => {

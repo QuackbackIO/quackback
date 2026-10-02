@@ -16,6 +16,7 @@ import {
   sanitizeImageUrl,
   sanitizeMediaUrl,
   safePositiveInt,
+  sanitizeOrderedListStart,
 } from '@/lib/shared/utils/sanitize'
 import { isTrustedAttachmentUrl } from '@/lib/server/storage/trusted-url'
 import { normalizeVideoMimeType } from '@/lib/shared/storage-config'
@@ -234,7 +235,7 @@ function sanitizeAttrs(
 
     case 'orderedList':
       return attrs.start !== undefined
-        ? { start: safePositiveInt(attrs.start, 1, 999999) }
+        ? { start: sanitizeOrderedListStart(attrs.start) }
         : undefined
 
     case 'mention': {

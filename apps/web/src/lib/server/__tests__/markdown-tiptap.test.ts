@@ -265,7 +265,7 @@ describe('contentJsonToMarkdown', () => {
           type: 'paragraph',
           content: [
             { type: 'text', text: 'Launch ' },
-            { type: 'emoji', attrs: { name: 'tada' } },
+            { type: 'emoji', attrs: { name: 'tada', emoji: '🎉' } },
           ],
         },
         { type: 'resizableImage', attrs: { src: 'https://cdn.example.com/s.png', alt: 'S' } },
@@ -282,9 +282,7 @@ describe('contentJsonToMarkdown', () => {
     expect(result.replace(/\\/g, '')).toContain('[Embedded post: post_123]')
   })
 
-  test('derives a name-only crossed_fingers emoji to its Unicode glyph', () => {
-    // attrs.name is the canonical name, which is NOT in shortcodes[] — the
-    // markdown path must still resolve 🤞 instead of leaving :crossed_fingers:.
+  test('projects the persisted Unicode emoji glyph', () => {
     const doc = {
       type: 'doc' as const,
       content: [
@@ -292,7 +290,7 @@ describe('contentJsonToMarkdown', () => {
           type: 'paragraph',
           content: [
             { type: 'text', text: 'Luck ' },
-            { type: 'emoji', attrs: { name: 'crossed_fingers' } },
+            { type: 'emoji', attrs: { name: 'crossed_fingers', emoji: '🤞' } },
           ],
         },
       ],

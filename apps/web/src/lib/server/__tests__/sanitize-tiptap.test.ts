@@ -16,6 +16,22 @@ const sanitize = sanitizeTiptapContent as (
 ) => ReturnType<typeof sanitizeTiptapContent>
 
 describe('sanitizeTiptapContent', () => {
+  it('preserves integer list starts and rejects hostile or fractional values', () => {
+    for (const [start, expected] of [
+      [0, 0],
+      [-3, -3],
+      [7, 7],
+      [999999999, 999999999],
+      ['7" onclick="alert(1)', 1],
+      [Infinity, 1],
+      [1000000000, 1],
+      [1.5, 1],
+    ]) {
+      const result = sanitize({ type: 'doc', content: [{ type: 'orderedList', attrs: { start } }] })
+      expect(result.content?.[0].attrs?.start).toBe(expected)
+    }
+  })
+
   // ============================================
   // Basic structure
   // ============================================

@@ -20,24 +20,18 @@ export function escapeHtmlAttr(str: string): string {
  * Sanitize URLs for use in href attributes - only allow safe protocols
  */
 export function sanitizeUrl(url: string): string {
+  return sanitizeReference(url, ['http:', 'https:', 'mailto:'])
+}
+
+/** Validate against a base without rewriting relative references to that base. */
+function sanitizeReference(url: string, protocols: readonly string[]): string {
   if (!url || typeof url !== 'string') return ''
-
   try {
-    // Handle relative URLs by using a base
     const parsed = new URL(url, 'https://example.com')
-
-    // Only allow safe protocols
-    const safeProtocols = ['http:', 'https:', 'mailto:']
-    if (!safeProtocols.includes(parsed.protocol)) {
-      return ''
-    }
-
-    // The base above is only for validation. Keep relative paths, fragments,
-    // and query references relative to the actual serving origin.
+    if (!protocols.includes(parsed.protocol)) return ''
     const trimmed = url.trim()
     return /^[a-z][a-z\d+.-]*:/i.test(trimmed) ? parsed.href : trimmed
   } catch {
-    // Invalid URL - reject it
     return ''
   }
 }
@@ -62,30 +56,12 @@ export function sanitizeImageUrl(url: string): string {
     return ''
   }
 
-  try {
-    const parsed = new URL(url, 'https://example.com')
-
-    // Only allow http(s) for image sources
-    if (!['http:', 'https:'].includes(parsed.protocol)) {
-      return ''
-    }
-
-    return url.startsWith('/') ? url : parsed.href
-  } catch {
-    return ''
-  }
+  return sanitizeMediaUrl(url)
 }
 
 /** Sanitize an uploaded audio/video source. Data and executable URLs are refused. */
 export function sanitizeMediaUrl(url: string): string {
-  if (!url || typeof url !== 'string') return ''
-  try {
-    const parsed = new URL(url, 'https://example.com')
-    if (!['http:', 'https:'].includes(parsed.protocol)) return ''
-    return url.startsWith('/') ? url : parsed.href
-  } catch {
-    return ''
-  }
+  return sanitizeReference(url, ['http:', 'https:'])
 }
 
 /**
@@ -97,6 +73,17 @@ export function safePositiveInt(value: unknown, defaultVal: number, max = 4096):
     return Math.round(num)
   }
   return defaultVal
+}
+
+/** Ordered list counters can be zero or negative, and must stay integers. */
+export function sanitizeOrderedListStart(value: unknown): number {
+  const num =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string' && /^-?\d+$/.test(value)
+        ? Number(value)
+        : NaN
+  return Number.isInteger(num) && Math.abs(num) <= 999999999 ? num : 1
 }
 
 /**

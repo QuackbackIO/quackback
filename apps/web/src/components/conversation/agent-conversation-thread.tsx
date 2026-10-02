@@ -1530,7 +1530,7 @@ export function AgentConversationThread({
   // exposes no imperative insert, so every "insert at cursor" affordance (macros,
   // Copilot, the emoji picker) routes through the controlled value + remount key.
   // One seam per converter: plain text (macros/emoji — literal paragraphs) vs
-  // Copilot answer (markdown-lite → real editor nodes, citation markers
+  // Copilot answer (Markdown → real editor nodes, citation markers
   // stripped; see appendAnswerToDraft).
   const insertIntoDraft = useCallback(
     (mode: 'reply' | 'note', append: (prev: ComposerDraft) => ComposerDraft) => {

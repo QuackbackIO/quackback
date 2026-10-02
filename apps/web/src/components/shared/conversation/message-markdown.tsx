@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm'
 import type { Element, Root, RootContent } from 'hast'
 import { cn } from '@/lib/shared/utils'
 import { sanitizeImageUrl, sanitizeUrl } from '@/lib/shared/utils/sanitize'
+import { CITATION_MARKER_RE } from '@/lib/shared/assistant/citation-markers'
 
 /** Add citation placeholders after Markdown has resolved links and code. This
  * keeps numeric link labels intact and never inserts an anchor inside another
@@ -16,7 +17,7 @@ function citationPlaceholders() {
       for (const child of parent.children) {
         if (child.type === 'text') {
           let last = 0
-          for (const match of child.value.matchAll(/(?<!\w)\[(\d+)\]/g)) {
+          for (const match of child.value.matchAll(CITATION_MARKER_RE)) {
             const index = match.index
             if (index > last) children.push({ type: 'text', value: child.value.slice(last, index) })
             children.push({

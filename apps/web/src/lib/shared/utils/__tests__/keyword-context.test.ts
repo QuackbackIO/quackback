@@ -10,6 +10,18 @@ const marks = (segments: { text: string; match: boolean }[] | null) =>
   segments === null ? null : segments.filter((s) => s.match).map((s) => s.text)
 
 describe('splitByTerms', () => {
+  it('returns all text unmarked for an empty query', () => {
+    expect(splitByTerms('Hello world', '   ')).toEqual([{ text: 'Hello world', match: false }])
+  })
+
+  it('ignores single-character noise terms', () => {
+    expect(splitByTerms('a big cat', 'a big')).toEqual([
+      { text: 'a ', match: false },
+      { text: 'big', match: true },
+      { text: ' cat', match: false },
+    ])
+  })
+
   it('marks case-insensitive occurrences of every term', () => {
     expect(splitByTerms('Invite your Team today', 'team invite')).toEqual([
       { text: 'Invite', match: true },

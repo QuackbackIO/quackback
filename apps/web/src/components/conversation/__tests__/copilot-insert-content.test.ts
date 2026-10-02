@@ -1,20 +1,67 @@
-/**
- * answerToInsertContent: the Tiptap-facing half of the Copilot insert-fidelity
- * fix. The parse itself (markers/bold/italic/lists) is pinned by
- * copilot-format.test.ts and markdown-lite.test.ts; these tests pin the node
- * shapes the composer's StarterKit schema expects, plus the single-pass
- * markdown mirror.
- */
+/** Markdown insertion preserves the conversation editor node schema. */
 import { describe, it, expect } from 'vitest'
 import { answerToInsertContent } from '../copilot-insert-content'
 
 const answerToTiptapContent = (text: string) => answerToInsertContent(text).nodes
 
 describe('answerToInsertContent', () => {
-  it('builds one paragraph node per line, like the plain-text seam', () => {
+  it('keeps Markdown links intact when their label contains a numeric citation', () => {
+    const { nodes } = answerToInsertContent('Read [guide [1]](https://example.com/guide) [1].')
+    expect(nodes[0].content).toEqual([
+      { type: 'text', text: 'Read ' },
+      {
+        type: 'text',
+        text: 'guide [1]',
+        marks: [{ type: 'link', attrs: { href: 'https://example.com/guide' } }],
+      },
+      { type: 'text', text: '.' },
+    ])
+  })
+
+  it('preserves inline code and array indices while removing actual source markers', () => {
+    const { nodes } = answerToInsertContent('Use `array[1]` and array[1]. Read [1].')
+    expect(nodes[0].content).toEqual([
+      { type: 'text', text: 'Use ' },
+      { type: 'text', text: 'array[1]', marks: [{ type: 'code' }] },
+      { type: 'text', text: ' and array[1]. Read.' },
+    ])
+  })
+
+  it('parses nested bold and italic into combined marks', () => {
+    const { nodes } = answerToInsertContent('**Bold and *italic***')
+    expect(nodes[0].content).toEqual([
+      { type: 'text', text: 'Bold and ', marks: [{ type: 'bold' }] },
+      { type: 'text', text: 'italic', marks: [{ type: 'bold' }, { type: 'italic' }] },
+    ])
+  })
+
+  it('keeps nested lists and blockquotes as editor blocks', () => {
+    const { nodes } = answerToInsertContent('- Parent\n  - Child\n\n> Quoted advice')
+    expect(nodes[0].content?.[0].content?.[1].type).toBe('bulletList')
+    expect(nodes[1].type).toBe('blockquote')
+  })
+
+  it('keeps tildes and indented fences verbatim, including citation-looking code', () => {
+    const { nodes } = answerToInsertContent('~~~js\narray[1]\n~~~\n\n  ```sh\n  echo [1]\n  ```')
+    expect(nodes.map((node) => node.type)).toEqual(['codeBlock', 'codeBlock'])
+    expect(nodes[0].content?.[0].text).toBe('array[1]')
+    expect(nodes[1].content?.[0].text).toBe('echo [1]')
+  })
+
+  it('refuses executable link destinations when inserting an answer', () => {
+    const { nodes } = answerToInsertContent('[unsafe](javascript:alert%281%29)')
+    expect(nodes[0].content).toEqual([{ type: 'text', text: 'unsafe' }])
+  })
+  it('uses a hard break for consecutive lines in a chat paragraph', () => {
     expect(answerToTiptapContent('First line.\nSecond line.')).toEqual([
-      { type: 'paragraph', content: [{ type: 'text', text: 'First line.' }] },
-      { type: 'paragraph', content: [{ type: 'text', text: 'Second line.' }] },
+      {
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: 'First line.' },
+          { type: 'hardBreak' },
+          { type: 'text', text: 'Second line.' },
+        ],
+      },
     ])
   })
 
@@ -90,6 +137,10 @@ describe('answerToInsertContent', () => {
     expect(nodes[0].attrs).toEqual({ start: 2 })
   })
 
+  it('preserves a zero-based numbered list', () => {
+    expect(answerToTiptapContent('0. Zero\n1. One')[0].attrs).toEqual({ start: 0 })
+  })
+
   it('a numbered list split by a paragraph resumes at its own start', () => {
     const nodes = answerToTiptapContent('1. one\n2. two\n\nAn aside.\n\n3. three\n4. four')
     expect(nodes.map((n) => n.type)).toEqual(['orderedList', 'paragraph', 'orderedList'])
@@ -118,6 +169,7 @@ describe('answerToInsertContent', () => {
       { type: 'paragraph', content: [{ type: 'text', text: 'Fix:' }] },
       {
         type: 'codeBlock',
+        attrs: { language: 'sh' },
         content: [{ type: 'text', text: '* keep this literal [1]\nbun install' }],
       },
       { type: 'paragraph', content: [{ type: 'text', text: 'Done.' }] },
@@ -130,7 +182,7 @@ describe('answerToInsertContent', () => {
     const { nodes, markdown } = answerToInsertContent('Keep [2] and `code` as-is.', {
       stripCitations: false,
     })
-    expect(markdown).toBe('Keep [2] and `code` as-is.')
+    expect(markdown).toBe('Keep \\[2] and `code` as-is.')
     expect(nodes).toEqual([
       {
         type: 'paragraph',

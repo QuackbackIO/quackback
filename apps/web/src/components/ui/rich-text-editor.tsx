@@ -27,7 +27,6 @@ import { createSuggestionPopup, createSuggestionPositioner } from './suggestion-
 import { applySuggestionListKey } from './suggestion-list-keys'
 import { HighlightQuery, emojiSuggestionLabel } from './highlight-query'
 import { QuackbackEmbed } from './quackback-embed-extension'
-import { ConversationImage } from './conversation-image-node'
 import { UploadedVideo } from './uploaded-video-node'
 import { Markdown } from '@tiptap/markdown'
 import { Extension, getHTMLFromFragment } from '@tiptap/core'
@@ -65,10 +64,6 @@ import {
 import { cn } from '@/lib/shared/utils'
 import { resolveVideoMimeType, VIDEO_FILE_ACCEPT } from '@/lib/shared/storage-config'
 import { resizableImageInsertAttrs } from '@/lib/client/resizable-image-insert-attrs'
-// The read-only JSON→HTML serializer now lives in a browser-free shared module
-// so server-side consumers (e.g. outbound conversation email) can import it
-// without pulling in React/tiptap-react. Re-exported below for existing callers.
-import { generateContentHTML } from '@/lib/shared/content-html'
 // The emoji dataset + shortcode lookup live in their own module, which the
 // emoji node loads when an editor first needs it (see ./emoji-node).
 import type { EmojiItem } from '@/lib/shared/content-emoji'
@@ -80,10 +75,6 @@ import {
   recommendEmojiItems,
   recordRecentEmoji,
 } from '@/lib/shared/emoji-recommendations'
-// Read-only rendering (RichTextContent / isRichTextContent) lives in a sibling
-// module with only light deps. Re-exported below for backward compatibility;
-// read-only consumers should import from '@/components/ui/rich-text-content'.
-import { RichTextContent, isRichTextContent } from './rich-text-content'
 import { RichTextEditorEmptyState } from './lazy-rich-text-editor'
 import {
   Bold,
@@ -250,10 +241,6 @@ export function buildExtensions(
     // Always register so saved embed nodes round-trip in any editor; paste rules
     // only fire when quackbackEmbeds is enabled for this editor.
     QuackbackEmbed.configure({ enablePaste: !!features.quackbackEmbeds }),
-    // Always register so legacy inline conversation images (the `chatImage` node
-    // authored by the retired hand-rolled composers) still parse in the editor
-    // schema and round-trip. New images author as resizableImage.
-    ConversationImage,
     // Always register so previously saved native videos remain editable even
     // when uploads are disabled for the current viewer.
     UploadedVideo,
@@ -2871,17 +2858,3 @@ function MenuBar({
     </div>
   )
 }
-
-// ============================================================================
-// Read-only rendering (re-exports)
-// ============================================================================
-
-// The read-only renderer now lives in a sibling module with only light deps so
-// portal reading surfaces don't pull in this editor chunk. These re-exports keep
-// existing importers of this module working; NEW read-only consumers should
-// import from '@/components/ui/rich-text-content' directly.
-//
-// `generateContentHTML` (the JSON→HTML serializer) is defined in the browser-free
-// shared module `@/lib/shared/content-html`; re-exported here for existing callers.
-export { generateContentHTML }
-export { RichTextContent, isRichTextContent }

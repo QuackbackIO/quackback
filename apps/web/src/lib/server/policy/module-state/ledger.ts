@@ -440,14 +440,6 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'identical for every workspace.',
   },
   {
-    file: 'apps/web/src/lib/shared/assistant/markdown-lite.ts',
-    name: 'inlineReCache',
-    category: 'content-addressed',
-    reason:
-      'Compiled regexes keyed by their own source string. A cross-workspace hit returns the same ' +
-      'compiled pattern the requesting workspace would have built from the same characters.',
-  },
-  {
     file: 'apps/web/src/lib/shared/i18n.ts',
     name: 'messageCache',
     category: 'content-addressed',

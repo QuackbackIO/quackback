@@ -901,7 +901,7 @@ export function VisitorMessageBubble({
 }: VisitorMessageBubbleProps) {
   const self = side === 'self'
   const jumbo = isJumboEmojiMessage(content, contentJson)
-  // Quinn's turns render as markdown-lite (the prompt encourages lists/bold), with
+  // Quinn's turns render as Markdown, with
   // inline citation dots + a sources trace only when the answer was grounded.
   const isAiReply = !self && isAssistant
   const cited = isAiReply && citations && citations.length > 0 ? citations : null
