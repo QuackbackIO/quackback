@@ -3,6 +3,7 @@ import { XMarkIcon } from '@heroicons/react/24/solid'
 import { FileBadge } from '@/components/shared/files/file-badge'
 import { useFileViewer } from '@/components/shared/files/file-viewer-context'
 import { toViewerFile } from '@/components/shared/files/types'
+import { Progress } from '@/components/ui/progress'
 import { formatBytes, maxBytesForFamily } from '@/lib/shared/files/file-types'
 import { MAX_CONVERSATION_ATTACHMENTS } from '@/lib/shared/conversation/types'
 import { cn } from '@/lib/shared/utils/cn'
@@ -145,13 +146,12 @@ function ImageTile({ item, onRemove, onRetry, onOpen }: TileProps) {
         ))}
       {item.status === 'uploading' && (
         <>
-          <div className="absolute inset-x-0 bottom-0 h-1 bg-black/20" aria-hidden="true">
-            <div
-              data-progress={Math.round(item.progress * 100)}
-              className="h-full bg-white/90 transition-[width]"
-              style={{ width: `${Math.round(item.progress * 100)}%` }}
-            />
-          </div>
+          <Progress
+            aria-hidden="true"
+            value={Math.round(item.progress * 100)}
+            max={100}
+            className="absolute inset-x-0 bottom-0 h-1 rounded-none bg-black/20"
+          />
           <UploadingAnnouncement name={item.name} />
         </>
       )}
@@ -188,13 +188,12 @@ function FileTile({ item, onRemove, onRetry, onOpen }: TileProps) {
         )}
         {item.status === 'uploading' && (
           <>
-            <div className="h-1 overflow-hidden rounded-full bg-muted" aria-hidden="true">
-              <div
-                data-progress={Math.round(item.progress * 100)}
-                className="h-full rounded-full bg-foreground/60 transition-[width]"
-                style={{ width: `${Math.round(item.progress * 100)}%` }}
-              />
-            </div>
+            <Progress
+              aria-hidden="true"
+              value={Math.round(item.progress * 100)}
+              max={100}
+              className="h-1"
+            />
             <UploadingAnnouncement name={item.name} />
           </>
         )}
@@ -292,11 +291,13 @@ export function ComposerAttachmentTray({
   const { open } = useFileViewer()
   if (items.length === 0) return null
 
-  const readyItems = items.filter((it) => it.status === 'ready' && it.file)
-  const readyFiles = readyItems.map((it) => toViewerFile(it.file!))
+  // Only computed on open (not on every render, which an upload progress
+  // tick triggers for every tile in the tray) since nothing else needs it.
   const onOpen = (item: ComposerAttachmentItem) => {
+    const readyItems = items.filter((it) => it.status === 'ready' && it.file)
     const index = readyItems.findIndex((it) => it.localId === item.localId)
-    if (index >= 0) open(readyFiles, index)
+    if (index < 0) return
+    open(readyItems.map((it) => toViewerFile(it.file!)), index)
   }
 
   return (

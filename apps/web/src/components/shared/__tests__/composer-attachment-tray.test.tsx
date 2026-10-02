@@ -112,9 +112,8 @@ describe('ComposerAttachmentTray', () => {
       />
     )
     expect(screen.queryByText('1 KB')).not.toBeInTheDocument()
-    const bar = document.querySelector('[data-progress]')
-    expect(bar).not.toBeNull()
-    expect(bar?.getAttribute('data-progress')).toBe('40')
+    const bar = screen.getByRole('progressbar', { hidden: true })
+    expect(bar).toHaveAttribute('aria-valuenow', '40')
   })
 
   it('announces an uploading tile politely for a screen reader', () => {
