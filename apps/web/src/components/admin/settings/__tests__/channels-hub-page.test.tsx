@@ -83,12 +83,11 @@ const WORKING_GITHUB = {
 }
 
 describe('ChannelsHubPage', () => {
-  it('shows the Support / Channels breadcrumb', () => {
+  it('has no breadcrumb of its own, as a page of the Support module', () => {
     seed(WORKING_GITHUB)
     renderPage()
-    const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' })
-    expect(crumbs.textContent).toContain('Support')
-    expect(crumbs.textContent).toContain('Channels')
+    expect(screen.getByRole('heading', { level: 1, name: 'Channels' })).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull()
   })
 
   it('links each channel row to its page with a chevron and no badge when it works', () => {

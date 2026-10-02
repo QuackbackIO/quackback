@@ -5,27 +5,73 @@
  * (minified React errors 418, 423 and 425).
  *
  * Boots the production build against the bench database like bench.ts, loads
- * every server-rendered page in a browser set to a far time zone and another
- * locale, and fails on any hydration or page error.
+ * every server-rendered page as two visitors in far time zones and other
+ * locales, and fails on any hydration or page error. Between them the two
+ * zones move every UTC hour onto another day: UTC+14 moves 10:00 to 23:59 UTC
+ * into the next day and UTC-11 moves 00:00 to 10:59 UTC into the previous one,
+ * so a date formatted in the server's zone fails whatever time of day the
+ * bench data was seeded.
  *
  *   bun perf/hydration-check.ts
  */
 import { chromium, type BrowserContext } from '@playwright/test'
-import { BENCH_URL, signedInContext, startBenchServer } from './config'
+import postgres from 'postgres'
+import { fromUuid } from '@quackback/ids'
+import { BENCH_DATABASE_URL, BENCH_URL, signedInContext, startBenchServer } from './config'
 
 const appDir = process.env.PERF_APP_DIR ?? new URL('..', import.meta.url).pathname
 const baseURL = BENCH_URL
 
-const PAGES: { path: string; as: 'anon' | 'admin' }[] = [
+/**
+ * The inbox with a seeded conversation open, as a deep link renders it: the
+ * thread and its detail panel come with the document. Seeded ids differ per
+ * database, so the conversation is looked up by its subject.
+ */
+async function seededConversationPath(subject: string): Promise<string> {
+  const [row] = await query<{ id: string }>(
+    (sql) => sql`SELECT id FROM conversations WHERE subject = ${subject}`
+  )
+  if (!row) throw new Error(`no seeded conversation "${subject}"`)
+  return `/admin/inbox?i=${fromUuid('conversation', row.id)}`
+}
+
+/** The newest published changelog entry's public page. */
+async function latestChangelogPath(): Promise<string> {
+  const [row] = await query<{ id: string }>(
+    (sql) => sql`
+      SELECT id FROM changelog_entries
+      WHERE published_at <= now() AND deleted_at IS NULL
+      ORDER BY published_at DESC, id LIMIT 1`
+  )
+  if (!row) throw new Error('no published changelog entry')
+  return `/changelog/${fromUuid('changelog', row.id)}`
+}
+
+async function query<T>(run: (sql: postgres.Sql) => Promise<unknown>): Promise<T[]> {
+  const sql = postgres(BENCH_DATABASE_URL, { max: 1, onnotice: () => {} })
+  try {
+    return (await run(sql)) as T[]
+  } finally {
+    await sql.end()
+  }
+}
+
+const PAGES: { path: string | (() => Promise<string>); as: 'anon' | 'admin' }[] = [
   { path: '/?sort=trending', as: 'anon' },
   { path: '/roadmap', as: 'anon' },
   { path: '/changelog', as: 'anon' },
+  { path: latestChangelogPath, as: 'anon' },
   { path: '/hc', as: 'anon' },
   { path: '/?sort=trending', as: 'admin' },
   { path: '/admin/feedback', as: 'admin' },
+  // A date filter is a calendar day, the same for every visitor. The day is
+  // long past, so no relative preset ("Last 7 days") names it instead.
+  { path: '/admin/feedback?dateFrom=2025-01-15', as: 'admin' },
   { path: '/admin/inbox', as: 'admin' },
+  { path: () => seededConversationPath('Bench conversation 3'), as: 'admin' },
   { path: '/admin/roadmap', as: 'admin' },
   { path: '/admin/users?sort=newest', as: 'admin' },
+  { path: '/admin/users?dateFrom=2025-01-15&dateTo=2025-02-15', as: 'admin' },
   { path: '/admin/changelog', as: 'admin' },
   { path: '/admin/help-center', as: 'admin' },
   { path: '/admin/feedback/moderation', as: 'admin' },
@@ -37,6 +83,7 @@ const PAGES: { path: string; as: 'anon' | 'admin' }[] = [
   { path: '/admin/settings/skills', as: 'admin' },
   { path: '/admin/settings/workflows', as: 'admin' },
   { path: '/admin/settings/members', as: 'admin' },
+  { path: '/admin/settings/security/audit-log', as: 'admin' },
   { path: '/admin/settings/portal', as: 'admin' },
   { path: '/admin/settings/widget', as: 'admin' },
 ]
@@ -50,11 +97,26 @@ const server = await startBenchServer(appDir, { env: { TZ: 'UTC', LOG_LEVEL: 'wa
 let failures = 0
 try {
   const browser = await chromium.launch()
-  const visitor = { timezoneId: 'Pacific/Kiritimati', locale: 'de-DE' }
-  const contexts = {
-    anon: await browser.newContext({ ...visitor, baseURL }),
-    admin: await signedInContext(browser, baseURL, visitor),
-  }
+  const [east, west] = [
+    { timezoneId: 'Pacific/Kiritimati', locale: 'de-DE' },
+    { timezoneId: 'Pacific/Pago_Pago', locale: 'fr-FR' },
+  ]
+  const eastAdmin = await signedInContext(browser, baseURL, east)
+  // One sign-in serves both visitors, as the bench's one sign-in serves its
+  // journeys: sign-ins are rate limited per address.
+  const adminSession = await eastAdmin.storageState()
+  const visitors = [
+    {
+      name: 'UTC+14 de-DE',
+      anon: await browser.newContext({ ...east, baseURL }),
+      admin: eastAdmin,
+    },
+    {
+      name: 'UTC-11 fr-FR',
+      anon: await browser.newContext({ ...west, baseURL }),
+      admin: await browser.newContext({ ...west, baseURL, storageState: adminSession }),
+    },
+  ]
 
   const problemsLoading = async (context: BrowserContext, path: string, corrupt = false) => {
     const page = await context.newPage()
@@ -83,7 +145,7 @@ try {
 
   // The check must be able to fail: a deliberately mismatched document has to
   // be reported, or every pass below means nothing.
-  const selfTest = await problemsLoading(contexts.anon, '/?sort=trending', true)
+  const selfTest = await problemsLoading(visitors[0].anon, '/?sort=trending', true)
   const detected = selfTest.find((problem) => HYDRATION.test(problem))
   if (!detected) {
     console.log(`✗ self-test: a corrupted document was not reported as a hydration error`)
@@ -93,14 +155,17 @@ try {
     console.log(`✓ self-test: a corrupted document is reported (${detected.slice(0, 60)}...)`)
   }
 
-  for (const { path, as } of PAGES) {
-    const problems = await problemsLoading(contexts[as], path)
-    if (problems.length) {
-      failures++
-      console.log(`✗ ${as} ${path}`)
-      for (const p of problems) console.log(`    ${p}`)
-    } else {
-      console.log(`✓ ${as} ${path}`)
+  for (const { path: pathOrLookup, as } of PAGES) {
+    const path = typeof pathOrLookup === 'string' ? pathOrLookup : await pathOrLookup()
+    for (const visitor of visitors) {
+      const problems = await problemsLoading(visitor[as], path)
+      if (problems.length) {
+        failures++
+        console.log(`✗ ${as} ${path} (${visitor.name})`)
+        for (const p of problems) console.log(`    ${p}`)
+      } else {
+        console.log(`✓ ${as} ${path} (${visitor.name})`)
+      }
     }
   }
   await browser.close()

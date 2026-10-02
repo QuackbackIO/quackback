@@ -115,8 +115,8 @@ describe('navSectionsFor', () => {
     )
     const modules = sections.find((s) => s.label === 'Modules')!.items
     expect(modules).toHaveLength(1)
-    const support = modules[0] as unknown as { label: string; kids: { to: string }[] }
-    expect(support.kids.map((k) => k.to)).toEqual(['/admin/settings/office-hours'])
+    const support = modules[0] as unknown as { label: string; pages: { to: string }[] }
+    expect(support.pages.map((k) => k.to)).toEqual(['/admin/settings/office-hours'])
   })
 
   it('drops a module with no openable pages', () => {

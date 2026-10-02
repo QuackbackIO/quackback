@@ -19,7 +19,7 @@ import {
   BlockReplyTimeCaption,
 } from './block-affordance'
 import { BlockTicketForm } from './block-ticket-form'
-import { ConversationPresenceBadge } from './conversation-presence-badge'
+import { BackAtTime, ConversationPresenceBadge, hasBackAtTime } from './conversation-presence-badge'
 import { ConversationThreadSkeleton } from './conversation-thread-skeleton'
 import { SystemEventNotice } from './system-event-notice'
 import { conversationAvailable } from '@/lib/shared/conversation/presence'
@@ -68,11 +68,11 @@ import type { BlockReplyMetadata } from '@/lib/shared/db-types'
 import { useVisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
 import { getWidgetCapabilitiesFn } from '@/lib/server/functions/widget-capabilities'
 import { TicketHeaderCard } from './ticket-header-card'
+import { useLocalDateFormatter } from '@/components/ui/local-date'
 import type { RequesterTicketDTO } from '@/lib/server/domains/tickets'
 
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-}
+/** A message's time of day, e.g. "3:04 PM". */
+const TIME_LABEL: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' }
 
 const NO_HEADERS = (): Record<string, string> => ({})
 const ALWAYS_READY = async (): Promise<boolean> => true
@@ -203,6 +203,7 @@ export function VisitorConversationThread({
   compact = false,
 }: VisitorConversationThreadProps) {
   const intl = useIntl()
+  const formatDate = useLocalDateFormatter()
   const queryClient = useQueryClient()
   const rpc = useVisitorSurfaceRpc()
   const firstName = firstNameOf(currentUser?.name)
@@ -701,18 +702,6 @@ export function VisitorConversationThread({
   // when office hours are configured, the schedule also marks us available.
   const available = conversationAvailable(presence.agentsOnline, presence.withinOfficeHours)
 
-  // "Back at" time for the away state, formatted in the visitor's own locale.
-  const reopenLabel = useMemo(() => {
-    if (!presence.nextOpenAt) return null
-    const at = new Date(presence.nextOpenAt)
-    if (Number.isNaN(at.getTime())) return null
-    return new Intl.DateTimeFormat(intl.locale, {
-      weekday: 'long',
-      hour: 'numeric',
-      minute: '2-digit',
-    }).format(at)
-  }, [presence.nextOpenAt, intl.locale])
-
   // Show the offline hint when the team is away. When we can email a reply, only
   // echo the admin's message if one is set; when we can't, always show the
   // neutral "we'll reply here" note instead of a false email promise. With the
@@ -974,7 +963,7 @@ export function VisitorConversationThread({
             sentAt={m.createdAt}
             compact={compact}
             citations={m.citations}
-            time={formatTime(m.createdAt)}
+            time={formatDate(m.createdAt, TIME_LABEL)}
             editedLabel={
               m.editedAt
                 ? intl.formatMessage({ id: 'widget.messenger.edited', defaultMessage: '(edited)' })
@@ -1278,12 +1267,12 @@ export function VisitorConversationThread({
               />
             )}
           </p>
-          {reopenLabel && (
+          {hasBackAtTime(presence.nextOpenAt) && (
             <p className="mt-0.5">
               <FormattedMessage
                 id="widget.messenger.offline.backAt"
                 defaultMessage="Back {when}"
-                values={{ when: reopenLabel }}
+                values={{ when: <BackAtTime at={presence.nextOpenAt} /> }}
               />
             </p>
           )}

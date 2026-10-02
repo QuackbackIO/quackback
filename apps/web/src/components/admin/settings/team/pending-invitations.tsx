@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { CopyButton } from '@/components/shared/copy-button'
 import { TableCell, TableRow } from '@/components/ui/table'
+import { LocalDate } from '@/components/ui/local-date'
 import { cancelInvitationFn, resendInvitationFn } from '@/lib/server/functions/admin'
 import { formatDistanceToNow } from 'date-fns'
 import type { InviteId } from '@quackback/ids'
@@ -43,9 +44,11 @@ export function getExpiryText(expiresAt: string) {
   return { text, className, isExpired }
 }
 
-export function formatInviteDate(dateStr: string) {
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+const INVITE_DATE: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
+
+/** When an invitation was sent, e.g. "Oct 1", in the viewer's zone once hydrated. */
+export function InviteDate({ date }: { date: string }) {
+  return <LocalDate date={date} options={INVITE_DATE} locale="en-US" />
 }
 
 interface InvitationActionsProps {

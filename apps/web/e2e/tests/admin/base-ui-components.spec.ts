@@ -111,9 +111,9 @@ test.describe('Base UI component usability', () => {
     await expect(tagDialog).toBeHidden()
 
     await page.goto('/admin/settings/office-hours')
-    await expect(page.getByRole('heading', { name: 'Office hours' })).toBeVisible({
-      timeout: 15_000,
-    })
+    await expect(
+      page.getByRole('navigation', { name: 'Support' }).getByRole('link', { name: 'Office hours' })
+    ).toHaveAttribute('aria-current', 'page', { timeout: 15_000 })
     await expect(page.locator('#office-hours-enabled')).toBeVisible()
     if ((await page.getByRole('checkbox').count()) > 0) {
       await expect(page.getByRole('checkbox').first()).toBeEnabled()

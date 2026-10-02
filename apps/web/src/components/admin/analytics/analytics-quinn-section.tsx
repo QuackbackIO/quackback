@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useFormatNumber } from '@/components/ui/format-number'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   Table,
@@ -56,6 +57,7 @@ function OutcomeBar({
   pending: number
   systemErrors: number
 }) {
+  const formatNumber = useFormatNumber()
   const items = [
     { label: 'Resolved confirmed', value: confirmed, className: 'bg-success' },
     { label: 'Resolved assumed', value: assumed, className: 'bg-success/50' },
@@ -83,7 +85,7 @@ function OutcomeBar({
             <span className={cn('h-2 w-2 rounded-full', i.className)} />
             <span className="text-muted-foreground">{i.label}</span>
             <span className="font-medium tabular-nums text-foreground">
-              {i.value.toLocaleString()}
+              {formatNumber(i.value)}
             </span>
           </div>
         ))}
@@ -101,6 +103,7 @@ export function AnalyticsQuinnSection({
   range: DateRange
   periodLabel: string
 }) {
+  const formatNumber = useFormatNumber()
   const performance = useQuery(quinnPerformanceQuery(range.from, range.to))
   const tools = useQuery(quinnToolMetricsQuery(range.from, range.to))
   const copilot = useQuery(copilotUsageMetricsQuery(range.from, range.to))
@@ -131,18 +134,18 @@ export function AnalyticsQuinnSection({
               stats={[
                 {
                   label: 'Conversations involved',
-                  value: quinn.involvements.toLocaleString(),
+                  value: formatNumber(quinn.involvements),
                   caption: `${quinn.involvementRate}% of conversations`,
                 },
                 {
                   label: 'Resolved',
                   value: `${quinn.resolutionRate}%`,
-                  caption: `${quinn.resolvedConfirmed.toLocaleString()} confirmed, ${quinn.resolvedAssumed.toLocaleString()} assumed`,
+                  caption: `${formatNumber(quinn.resolvedConfirmed)} confirmed, ${formatNumber(quinn.resolvedAssumed)} assumed`,
                 },
                 {
                   label: 'Escalated',
                   value: `${quinn.escalationRate}%`,
-                  caption: `${quinn.handedOff.toLocaleString()} handed off`,
+                  caption: `${formatNumber(quinn.handedOff)} handed off`,
                 },
                 {
                   label: 'AI CSAT',
@@ -150,7 +153,7 @@ export function AnalyticsQuinnSection({
                   suffix: quinn.csat.responseCount > 0 ? '/ 5' : undefined,
                   caption:
                     quinn.csat.responseCount > 0
-                      ? `${quinn.csat.responseCount.toLocaleString()} ${quinn.csat.responseCount === 1 ? 'rating' : 'ratings'}`
+                      ? `${formatNumber(quinn.csat.responseCount)} ${quinn.csat.responseCount === 1 ? 'rating' : 'ratings'}`
                       : undefined,
                 },
               ]}
@@ -250,7 +253,7 @@ export function AnalyticsQuinnSection({
                     <TableRow key={label}>
                       <TableCell>{label}</TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {value === undefined ? '-' : value.toLocaleString()}
+                        {typeof value === 'number' ? formatNumber(value) : '-'}
                       </TableCell>
                     </TableRow>
                   ))}

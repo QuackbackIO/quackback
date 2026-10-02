@@ -24,11 +24,7 @@ function withIcon(page: SettingsModuleRowPage): SettingsModulePage {
   return { ...page, icon: SETTINGS_PAGE_ICONS[page.to] }
 }
 
-function pathIsUnder(pathname: string, to: string): boolean {
-  return pathname === to || pathname.startsWith(`${to}/`)
-}
-
-/** Product modules shown under Settings, Modules. A module with several pages expands in the nav. */
+/** Product modules shown under Settings, Modules. A module with several pages shows them as tabs. */
 export function buildSettingsModules(flags?: Partial<FeatureFlags>): SettingsModule[] {
   return buildSettingsModuleRows(flags).map(({ id, label, to, pages }) => ({
     id,
@@ -76,11 +72,4 @@ export function settingsModuleRedirectPath(
     (item) => item.id === id
   )
   return (module && settingsModuleLandingPath(module)) ?? '/admin/settings'
-}
-
-export function settingsModuleForPath(
-  pathname: string,
-  modules: SettingsModule[]
-): SettingsModule | undefined {
-  return modules.find((module) => module.pages.some((page) => pathIsUnder(pathname, page.to)))
 }

@@ -174,11 +174,7 @@ function SlaSettingsPage() {
   })
 
   return (
-    <SettingsPage
-      page="/admin/settings/sla"
-      description="Response and resolution targets."
-      crumbs={[{ label: 'Support' }]}
-    >
+    <SettingsPage page="/admin/settings/sla" description="Response and resolution targets.">
       <SettingsCard>
         <SettingRows>
           <SettingRow

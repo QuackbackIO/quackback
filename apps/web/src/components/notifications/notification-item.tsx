@@ -1,11 +1,12 @@
 'use client'
 
 import { Link } from '@tanstack/react-router'
-import { formatDistanceToNow, isToday, format } from 'date-fns'
 import { ArchiveBoxIcon } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/shared/utils'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
+import { useLocalDateFormatter } from '@/components/ui/local-date'
+import { TimeAgo } from '@/components/ui/time-ago'
 import { getNotificationTypeConfig } from './notification-type-config'
 import { getNotificationTarget } from './notification-target'
 import type { SerializedNotification } from '@/lib/client/hooks/use-notifications-queries'
@@ -194,6 +195,53 @@ function NotificationLeadingVisual({
   )
 }
 
+const STAMP: Intl.DateTimeFormatOptions = {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+}
+const EARLIER: Intl.DateTimeFormatOptions = {
+  month: 'short',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+}
+const CALENDAR_DAY: Intl.DateTimeFormatOptions = {
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+}
+
+/**
+ * A notification's time, with the full stamp ("Oct 1, 2026, 3:04 PM") in its
+ * title: relative ("5 minutes ago") always, or only for today with "Oct 1,
+ * 3:04 PM" before that. Today and the stamp follow the viewer's zone once
+ * hydrated; as a leaf, that switch re-renders only this text.
+ */
+function NotificationTime({
+  createdAt,
+  relative,
+  className,
+}: {
+  createdAt: string
+  relative: 'always' | 'today'
+  className: string
+}) {
+  const format = useLocalDateFormatter('en-US')
+  const isToday = format(createdAt, CALENDAR_DAY) === format(new Date(), CALENDAR_DAY)
+  return (
+    <time
+      className={className}
+      dateTime={new Date(createdAt).toISOString()}
+      title={format(createdAt, STAMP)}
+    >
+      {relative === 'always' || isToday ? <TimeAgo date={createdAt} /> : format(createdAt, EARLIER)}
+    </time>
+  )
+}
+
 function CompactContent({ notification, icon: Icon, iconClass, bgClass, isUnread }: ContentProps) {
   return (
     <div
@@ -221,13 +269,11 @@ function CompactContent({ notification, icon: Icon, iconClass, bgClass, isUnread
         {notification.body && (
           <p className="text-xs text-muted-foreground line-clamp-2">{notification.body}</p>
         )}
-        <time
+        <NotificationTime
+          createdAt={notification.createdAt}
+          relative="always"
           className="block text-xs text-muted-foreground/70"
-          dateTime={new Date(notification.createdAt).toISOString()}
-          title={format(new Date(notification.createdAt), 'MMM d, yyyy, h:mm a')}
-        >
-          {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
-        </time>
+        />
       </div>
 
       {isUnread && (
@@ -245,8 +291,6 @@ function FullContent({
   isUnread,
   onArchive,
 }: ContentProps) {
-  const createdAt = new Date(notification.createdAt)
-
   function handleArchiveClick(event: React.MouseEvent<HTMLButtonElement>): void {
     // The row itself is (or is wrapped by) a Link — stop the click from
     // bubbling into it so archiving never triggers a navigation.
@@ -290,15 +334,11 @@ function FullContent({
             {isUnread && (
               <span className="size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />
             )}
-            <time
+            <NotificationTime
+              createdAt={notification.createdAt}
+              relative="today"
               className="text-xs whitespace-nowrap text-muted-foreground"
-              dateTime={createdAt.toISOString()}
-              title={format(createdAt, 'MMM d, yyyy, h:mm a')}
-            >
-              {isToday(createdAt)
-                ? formatDistanceToNow(createdAt, { addSuffix: true })
-                : format(createdAt, 'MMM d, h:mm a')}
-            </time>
+            />
           </span>
         </div>
         {(notification.body || notification.post) && (

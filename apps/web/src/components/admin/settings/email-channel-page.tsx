@@ -5,10 +5,12 @@ import { channelSettingsQueries } from '@/lib/client/queries/channel-settings'
 import { useUpdateSpamFilterConfig } from '@/lib/client/mutations/settings'
 import { useUpdateEmailAutoAck } from '@/lib/client/mutations/channel-settings'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
+import { moduleCrumb } from '@/components/admin/settings/settings-nav-sections'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
+import { LocalDate, NUMERIC_DATE_TIME } from '@/components/ui/local-date'
 import { TrustedSendersCard } from '@/components/admin/settings/trusted-senders-card'
 import { EmailChannelSettings } from '@/components/admin/channels/email-channel-settings'
 import { EmailTransportCard } from '@/components/admin/channels/email-transport-card'
@@ -21,7 +23,10 @@ export function EmailChannelPage() {
     <SettingsPage
       page="/admin/settings/channels/email"
       description="Receive and send support conversations from the customer's mailbox."
-      crumbs={[{ label: 'Support' }, { label: 'Channels', to: '/admin/settings/channels' }]}
+      crumbs={[
+        moduleCrumb('/admin/settings/support'),
+        { label: 'Channels', to: '/admin/settings/channels' },
+      ]}
     >
       <EmailTransportCard />
       <EmailChannelSettings />
@@ -99,7 +104,7 @@ function EmailActivityCard() {
                 </td>
                 <td className="py-2.5">{row.status}</td>
                 <td className="px-4 py-2.5 text-right text-muted-foreground sm:px-6">
-                  {new Date(row.createdAt).toLocaleString()}
+                  <LocalDate date={row.createdAt} options={NUMERIC_DATE_TIME} />
                 </td>
               </tr>
             ))}

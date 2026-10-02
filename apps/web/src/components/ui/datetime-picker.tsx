@@ -1,13 +1,14 @@
 'use client'
 
 import * as React from 'react'
-import { format, isSameDay, parseISO, startOfDay } from 'date-fns'
+import { isSameDay, startOfDay } from 'date-fns'
 import { CalendarIcon, ClockIcon, XMarkIcon } from '@heroicons/react/24/outline'
 
 import { cn } from '@/lib/shared/utils'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { Input } from '@/components/ui/input'
+import { LocalDate } from '@/components/ui/local-date'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 interface DateTimePickerProps {
@@ -18,7 +19,7 @@ interface DateTimePickerProps {
   /** Maximum selectable date */
   maxDate?: Date
   /** Placeholder text when no date selected */
-  placeholder?: string
+  placeholder?: React.ReactNode
   /** Whether the picker is disabled */
   disabled?: boolean
   /** Date-only mode: calendar without time input */
@@ -27,6 +28,30 @@ interface DateTimePickerProps {
   onClear?: () => void
   /** Additional class names for trigger button */
   className?: string
+}
+
+const PICKED_DAY: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' }
+const PICKED_TIME: Intl.DateTimeFormatOptions = {
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+}
+
+/**
+ * The picked value: a date-only pick (noon UTC on its day) as that calendar
+ * day, formatted in UTC so every viewer sees it; a date and time as
+ * "Oct 1, 2026 · 14:05" in the viewer's zone once hydrated.
+ */
+function PickedValue({ value, dateOnly }: { value: Date; dateOnly: boolean }) {
+  if (dateOnly) {
+    return <LocalDate date={value} options={{ ...PICKED_DAY, timeZone: 'UTC' }} locale="en-US" />
+  }
+  return (
+    <>
+      <LocalDate date={value} options={PICKED_DAY} locale="en-US" /> ·{' '}
+      <LocalDate date={value} options={PICKED_TIME} locale="en-US" />
+    </>
+  )
 }
 
 function clampToBounds(date: Date, minDate?: Date, maxDate?: Date): Date {
@@ -58,7 +83,6 @@ export function DateTimePicker({
 
   const defaultPlaceholder = dateOnly ? 'Pick a date' : 'Pick date & time'
   const resolvedPlaceholder = placeholder ?? defaultPlaceholder
-  const displayFormat = dateOnly ? 'MMM d, yyyy' : 'MMM d, yyyy · HH:mm'
 
   const applyBounds = React.useCallback(
     (date: Date) => clampToBounds(date, minDate, maxDate),
@@ -74,7 +98,10 @@ export function DateTimePicker({
     if (!date) return
 
     if (dateOnly) {
-      onChange(applyBounds(parseISO(`${format(date, 'yyyy-MM-dd')}T12:00:00.000Z`)))
+      // Noon UTC on the picked day names that day in every zone from UTC-12 to UTC+11.
+      onChange(
+        applyBounds(new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), 12)))
+      )
       setOpen(false)
       return
     }
@@ -111,7 +138,7 @@ export function DateTimePicker({
     <>
       <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
       <span className="min-w-0 flex-1 truncate">
-        {value ? format(value, displayFormat) : resolvedPlaceholder}
+        {value ? <PickedValue value={value} dateOnly={dateOnly} /> : resolvedPlaceholder}
       </span>
     </>
   )

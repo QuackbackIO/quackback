@@ -6,16 +6,11 @@ import {
 } from '@/components/ui/chart'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { cn } from '@/lib/shared/utils'
-import { CHART_HEIGHT_CLASS, formatResponseTime } from './analytics-constants'
+import { CHART_HEIGHT_CLASS, formatResponseTime, formatBucketDay } from './analytics-constants'
 import type { TimeToCloseDay } from '@/lib/server/domains/analytics/time-to-close'
 
 interface AnalyticsTimeToCloseChartProps {
   days: TimeToCloseDay[]
-}
-
-function formatDate(dateStr: string) {
-  const date = new Date(dateStr + 'T00:00:00')
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 /** Compact axis variant: whole hours/days only, so ticks stay short. */
@@ -56,7 +51,7 @@ export function AnalyticsTimeToCloseChart({ days }: AnalyticsTimeToCloseChartPro
           axisLine={false}
           tickMargin={10}
           tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
-          tickFormatter={formatDate}
+          tickFormatter={formatBucketDay}
         />
         <YAxis
           tickLine={false}
@@ -69,7 +64,7 @@ export function AnalyticsTimeToCloseChart({ days }: AnalyticsTimeToCloseChartPro
         <ChartTooltip
           content={
             <ChartTooltipContent
-              labelFormatter={(label) => formatDate(String(label))}
+              labelFormatter={(label) => formatBucketDay(String(label))}
               formatter={(value) => formatResponseTime(Number(value))}
             />
           }

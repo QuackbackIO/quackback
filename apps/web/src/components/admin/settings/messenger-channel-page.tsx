@@ -4,6 +4,7 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { useUpdatePortalConfig, useUpdateWidgetConfig } from '@/lib/client/mutations/settings'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
+import { moduleCrumb } from '@/components/admin/settings/settings-nav-sections'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
 import { Button } from '@/components/ui/button'
@@ -63,7 +64,10 @@ export function MessengerChannelPage() {
     <SettingsPage
       page="/admin/settings/channels/messenger"
       description="Live chat in the widget and on the portal."
-      crumbs={[{ label: 'Support' }, { label: 'Channels', to: '/admin/settings/channels' }]}
+      crumbs={[
+        moduleCrumb('/admin/settings/support'),
+        { label: 'Channels', to: '/admin/settings/channels' },
+      ]}
     >
       <SettingsCard title="Surfaces" description="Where customers can start conversations.">
         <SettingRows>

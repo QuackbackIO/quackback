@@ -81,10 +81,11 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('StatusesSettingsPage', () => {
-  it('is titled Statuses with breadcrumbs and a New status button in the header', () => {
+  it('is the Statuses page with no breadcrumb of its own and a New status button in the header', () => {
     renderPage()
     expect(screen.getByRole('heading', { level: 1, name: 'Statuses' })).toBeInTheDocument()
-    expect(screen.getByText('Feedback & Roadmaps')).toBeInTheDocument()
+    // The settings layout titles it with its module and shows the module's tabs.
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull()
     expect(screen.getByRole('button', { name: 'New status' })).toBeInTheDocument()
     expect(screen.queryByText('Add new status')).toBeNull()
     expect(screen.queryByText(/selected/)).toBeNull()

@@ -52,3 +52,16 @@ export function formatResponseTime(minutes: number | null): string {
   }
   return `${(minutes / 1440).toFixed(1)}d`
 }
+
+const BUCKET_DAY = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  timeZone: 'UTC',
+})
+
+/** A daily bucket's label, e.g. "Oct 1". The server buckets by UTC day
+ *  ("2026-10-01"), so the label is formatted in UTC: it names the bucket it
+ *  covers, the same on the server and in every browser. */
+export function formatBucketDay(day: string): string {
+  return BUCKET_DAY.format(new Date(`${day}T00:00:00Z`))
+}

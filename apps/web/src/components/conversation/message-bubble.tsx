@@ -74,9 +74,24 @@ import {
   CONVERSATION_NOTE_FEATURES,
 } from '@/components/conversation/conversation-editor-features'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
+import { useLocalDateFormatter } from '@/components/ui/local-date'
 
-function timeLabel(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+/** A message's time of day, e.g. "3:04 PM". */
+const TIME_LABEL: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' }
+
+/**
+ * A message's time of day. The format switches after hydration, so it lives in
+ * a leaf and a bubble does not re-render for it.
+ */
+function MessageTime({ iso }: { iso: string }) {
+  const formatDate = useLocalDateFormatter()
+  return <span>{formatDate(iso, TIME_LABEL)}</span>
+}
+
+/** The "(edited)" mark, titled with the time of the edit. */
+function EditedAt({ iso }: { iso: string }) {
+  const formatDate = useLocalDateFormatter()
+  return <EditedMark title={`Edited ${formatDate(iso, TIME_LABEL)}`} />
 }
 
 /** Small grey "(edited)" beside the timestamp, the same mark Slack uses. */
@@ -849,8 +864,8 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
           {ticketProvenance && message.ticketId && !isNote && (
             <span className="shrink-0">· via ticket thread</span>
           )}
-          <span>{timeLabel(message.createdAt)}</span>
-          {message.editedAt && <EditedMark title={`Edited ${timeLabel(message.editedAt)}`} />}
+          <MessageTime iso={message.createdAt} />
+          {message.editedAt && <EditedAt iso={message.editedAt} />}
           {isAgent && !isNote && message.channelDelivery ? (
             <ChannelDeliveryTicks
               delivery={message.channelDelivery}

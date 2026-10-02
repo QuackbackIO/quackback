@@ -14,6 +14,7 @@ import { settingsQueries } from '@/lib/client/queries/settings'
 import { EnvelopeIcon, PlusIcon } from '@heroicons/react/24/solid'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
+import { NUMERIC_DATE_TIME, useLocalDateFormatter } from '@/components/ui/local-date'
 import {
   Table,
   TableBody,
@@ -31,7 +32,7 @@ import { InviteMemberDialog } from '@/components/auth/invite-member-dialog'
 import {
   type PendingInvitation,
   getExpiryText,
-  formatInviteDate,
+  InviteDate,
   InvitationActions,
   InviteLinkRow,
 } from '@/components/admin/settings/team/pending-invitations'
@@ -102,6 +103,41 @@ const teamFilterFn: FilterFn<typeof features, TeamRow> = (row, _columnId, filter
     name.toLowerCase().includes(query) ||
     (r.email?.toLowerCase().includes(query) ?? false) ||
     (r.role?.toLowerCase().includes(query) ?? false)
+  )
+}
+
+/**
+ * A member's last sign-in as days ago, or the date once it is a month old.
+ * The date formats in this leaf, so the switch from the first-render format to
+ * the viewer's after hydration re-renders only these labels, not the table.
+ */
+function SignInLabel({
+  at,
+  prefix = '',
+  withTitle = false,
+}: {
+  at: string
+  prefix?: string
+  withTitle?: boolean
+}) {
+  const formatDate = useLocalDateFormatter()
+  const date = new Date(at)
+  // Days-ago is enough granularity for a team list; the audit
+  // log has the timestamp if anyone needs the exact moment.
+  const daysAgo = Math.floor((Date.now() - date.getTime()) / (24 * 60 * 60 * 1000))
+  const label =
+    daysAgo === 0
+      ? 'Today'
+      : daysAgo === 1
+        ? 'Yesterday'
+        : daysAgo < 30
+          ? `${daysAgo}d ago`
+          : formatDate(date)
+  return (
+    <span title={withTitle ? formatDate(date, NUMERIC_DATE_TIME) : undefined}>
+      {prefix}
+      {label}
+    </span>
   )
 }
 
@@ -222,7 +258,7 @@ export function MembersTab({ currentMember }: MembersTabProps) {
                 </p>
                 {r.name && <p className="text-sm text-muted-foreground truncate">{r.email}</p>}
                 <p className="text-xs text-muted-foreground">
-                  Sent {formatInviteDate(r.lastSentAt || r.createdAt)}
+                  Sent <InviteDate date={r.lastSentAt || r.createdAt} />
                   <span className="mx-1">&middot;</span>
                   <span className={expiry.className}>{expiry.text}</span>
                 </p>
@@ -251,19 +287,7 @@ export function MembersTab({ currentMember }: MembersTabProps) {
           // name; skip the column.
           if (r.type !== 'member') return null
           if (!r.lastSignInAt) return <span className="text-muted-foreground">Never</span>
-          const date = new Date(r.lastSignInAt)
-          // Days-ago is enough granularity for a team list; the audit
-          // log has the timestamp if anyone needs the exact moment.
-          const daysAgo = Math.floor((Date.now() - date.getTime()) / (24 * 60 * 60 * 1000))
-          const label =
-            daysAgo === 0
-              ? 'Today'
-              : daysAgo === 1
-                ? 'Yesterday'
-                : daysAgo < 30
-                  ? `${daysAgo}d ago`
-                  : date.toLocaleDateString()
-          return <span title={date.toLocaleString()}>{label}</span>
+          return <SignInLabel at={r.lastSignInAt} withTitle />
         },
       },
       {
@@ -447,28 +471,16 @@ export function MembersTab({ currentMember }: MembersTabProps) {
                     {/* Secondary: last sign-in or invite expiry */}
                     {r.type === 'member' && (
                       <p className="text-xs text-muted-foreground">
-                        {r.lastSignInAt
-                          ? (() => {
-                              const date = new Date(r.lastSignInAt)
-                              const daysAgo = Math.floor(
-                                (Date.now() - date.getTime()) / (24 * 60 * 60 * 1000)
-                              )
-                              const label =
-                                daysAgo === 0
-                                  ? 'Today'
-                                  : daysAgo === 1
-                                    ? 'Yesterday'
-                                    : daysAgo < 30
-                                      ? `${daysAgo}d ago`
-                                      : date.toLocaleDateString()
-                              return `Last sign-in: ${label}`
-                            })()
-                          : 'Never signed in'}
+                        {r.lastSignInAt ? (
+                          <SignInLabel at={r.lastSignInAt} prefix="Last sign-in: " />
+                        ) : (
+                          'Never signed in'
+                        )}
                       </p>
                     )}
                     {r.type === 'invitation' && (
                       <p className="text-xs text-muted-foreground">
-                        Sent {formatInviteDate(r.lastSentAt || r.createdAt)}
+                        Sent <InviteDate date={r.lastSentAt || r.createdAt} />
                         <span className="mx-1">&middot;</span>
                         <span className={getExpiryText(r.expiresAt).className}>
                           {getExpiryText(r.expiresAt).text}

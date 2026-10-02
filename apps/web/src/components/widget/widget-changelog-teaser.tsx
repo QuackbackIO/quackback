@@ -1,16 +1,12 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { FormattedMessage } from 'react-intl'
 import { contentPreview } from '@/lib/shared/utils/string'
+import { LocalDate } from '@/components/ui/local-date'
 import { widgetChangelogListQuery } from './widget-changelog-query'
 import { useWidgetAuth } from './widget-auth-provider'
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
-}
+/** The entry's date, e.g. "Oct 1, 2026", in the reader's zone once hydrated. */
+const ENTRY_DATE: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' }
 
 interface WidgetChangelogTeaserProps {
   /** Open a single changelog entry (changelog-detail view). */
@@ -51,9 +47,12 @@ export function WidgetChangelogTeaser({ onOpenEntry, onSeeAll }: WidgetChangelog
         onClick={() => onOpenEntry(latest.id)}
         className="w-full rounded-xl px-2 py-2 text-start transition-colors hover:bg-accent"
       >
-        <time className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide">
-          {formatDate(latest.publishedAt)}
-        </time>
+        <LocalDate
+          date={latest.publishedAt}
+          options={ENTRY_DATE}
+          locale="en-US"
+          className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide"
+        />
         <h3 className="mt-0.5 text-sm font-semibold text-foreground line-clamp-1 leading-snug">
           {latest.title}
         </h3>

@@ -94,10 +94,11 @@ describe('<TagList> — portal visibility', () => {
     expect(within(internalRow as HTMLElement).getByText('Internal')).toBeTruthy()
   })
 
-  it('is titled Tags with a breadcrumb, and has a single card with no header', () => {
+  it('is the Tags page with no breadcrumb of its own, and has a single card with no header', () => {
     render(<TagList initialTags={[PUBLIC_TAG]} />)
     expect(screen.getByRole('heading', { level: 1, name: 'Tags' })).toBeTruthy()
-    expect(screen.getByText('Feedback & Roadmaps')).toBeTruthy()
+    // The settings layout titles it with its module and shows the module's tabs.
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull()
     expect(screen.queryByRole('heading', { level: 2, name: 'Tags' })).toBeNull()
     expect(screen.queryByText('Add new tag')).toBeNull()
   })

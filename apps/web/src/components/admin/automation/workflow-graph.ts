@@ -62,6 +62,7 @@ import type { ConditionOperator } from '@/lib/server/domains/workflows/condition
 import { CSAT_FACES, TICKET_STATUS_CATEGORIES } from '@/lib/shared/db-types'
 import type { TiptapContent, TicketStatusCategory } from '@/lib/shared/db-types'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
+import { formatFirstRenderDate, type LocalDateFormatter } from '@/components/ui/local-date'
 import { truncate } from '@/lib/shared/utils/string'
 
 // ---------------------------------------------------------------------------
@@ -2426,6 +2427,21 @@ export interface EntityLabels {
   /** Ticket-type id -> display name, for convert_to_ticket step summaries
    *  (convergence Phase 4). */
   ticketTypes?: ReadonlyMap<string, string>
+  /** Formats an absolute instant (a legacy snooze's wake time). The builder
+   *  passes `useLocalDateFormatter()`'s, so the server and the hydrating
+   *  browser render the same text; without one, the first-render format. */
+  formatDate?: LocalDateFormatter
+}
+
+/** A legacy absolute snooze's wake time, e.g. "Aug 1, 2026, 9:00 AM". */
+export const SNOOZE_UNTIL_FORMAT: Intl.DateTimeFormatOptions = {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+}
+
+/** A legacy absolute snooze's wake time, with the labels' formatter. */
+export function snoozeUntilLabel(untilIso: string, labels: EntityLabels): string {
+  return (labels.formatDate ?? formatFirstRenderDate)(untilIso, SNOOZE_UNTIL_FORMAT)
 }
 
 const shortId = (id: string): string => (id.length > 14 ? `${id.slice(0, 14)}…` : id)
@@ -2449,7 +2465,7 @@ export function actionSummary(action: GraphAction, labels: EntityLabels = {}): s
     case 'snooze':
       if ('seconds' in action) return `Snooze for ${durationPhrase(action.seconds)}`
       return action.untilIso
-        ? `Snooze until ${new Date(action.untilIso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`
+        ? `Snooze until ${snoozeUntilLabel(action.untilIso, labels)}`
         : 'Snooze until they reply'
     case 'close':
       return 'Close the conversation'

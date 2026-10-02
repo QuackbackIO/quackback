@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { toIsoString, toIsoStringOrNull, toIsoDateOnly } from '..'
+import {
+  formatCalendarDate,
+  parseCalendarDate,
+  toIsoString,
+  toIsoStringOrNull,
+  toIsoDateOnly,
+} from '..'
 
 describe('toIsoString', () => {
   it('converts a Date object to ISO string', () => {
@@ -54,5 +60,47 @@ describe('toIsoDateOnly', () => {
 
   it('handles end of day', () => {
     expect(toIsoDateOnly(new Date('2025-12-31T23:59:59.999Z'))).toBe('2025-12-31')
+  })
+})
+
+describe('parseCalendarDate', () => {
+  it('reads a date-only value as the UTC midnight that names it', () => {
+    expect(parseCalendarDate('2026-10-01')?.toISOString()).toBe('2026-10-01T00:00:00.000Z')
+  })
+
+  it('reads the date as written in an ISO timestamp', () => {
+    expect(parseCalendarDate('2026-10-01T23:30:00-07:00')?.toISOString()).toBe(
+      '2026-10-01T00:00:00.000Z'
+    )
+  })
+
+  it('is null for a value that is not a real calendar date', () => {
+    expect(parseCalendarDate('2026-02-31')).toBeNull()
+    expect(parseCalendarDate('October 1')).toBeNull()
+    expect(parseCalendarDate('')).toBeNull()
+  })
+})
+
+describe('formatCalendarDate', () => {
+  it('shows the same day in every runtime zone', () => {
+    const realTz = process.env.TZ
+    try {
+      for (const zone of ['America/Los_Angeles', 'Pacific/Kiritimati', 'UTC']) {
+        process.env.TZ = zone
+        expect(formatCalendarDate('2026-10-01')).toBe('Oct 1, 2026')
+      }
+    } finally {
+      process.env.TZ = realTz
+    }
+  })
+
+  it('takes options and a locale', () => {
+    expect(formatCalendarDate('2026-10-01', { month: 'long', day: 'numeric' }, 'de-DE')).toBe(
+      '1. Oktober'
+    )
+  })
+
+  it('is null for a value that is not a calendar date', () => {
+    expect(formatCalendarDate('soon')).toBeNull()
   })
 })

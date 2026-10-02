@@ -345,7 +345,6 @@ export function TagsSettingsPage({ initialTags, boards }: TagsSettingsPageProps)
   return (
     <SettingsPage
       page="/admin/settings/tags"
-      crumbs={[{ label: 'Feedback & Roadmaps' }]}
       actions={tags.length > 0 ? <NewButton noun="tag" onClick={openCreate} /> : undefined}
     >
       <SettingsCard flush>

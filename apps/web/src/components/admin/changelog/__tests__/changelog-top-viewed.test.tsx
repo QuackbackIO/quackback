@@ -39,7 +39,9 @@ describe('<ChangelogTopViewed>', () => {
     // must not silently drop entries past a fixed card count.
     for (const entry of ENTRIES) {
       expect(screen.getByText(entry.title)).toBeInTheDocument()
-      expect(screen.getByText(entry.viewCount.toLocaleString())).toBeInTheDocument()
+      expect(
+        screen.getByText(new Intl.NumberFormat('en').format(entry.viewCount))
+      ).toBeInTheDocument()
     }
   })
 

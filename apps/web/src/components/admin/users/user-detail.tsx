@@ -24,6 +24,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Avatar } from '@/components/ui/avatar'
+import { LocalDate } from '@/components/ui/local-date'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusBadge } from '@/components/ui/status-badge'
@@ -89,14 +90,11 @@ interface UserDetailProps {
   currentMemberRole: string
 }
 
-const dateFormatter = new Intl.DateTimeFormat('en-US', {
-  month: 'short',
-  day: 'numeric',
-  year: 'numeric',
-})
+const PROFILE_DATE: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' }
 
-function formatDate(date: Date | string): string {
-  return dateFormatter.format(new Date(date))
+/** A profile date, e.g. "Oct 1, 2026", in the viewer's zone once hydrated. */
+function ProfileDate({ date }: { date: Date | string }) {
+  return <LocalDate date={date} options={PROFILE_DATE} locale="en-US" />
 }
 
 function DetailSkeleton() {
@@ -808,7 +806,7 @@ export function UserDetail({
             label="Last seen"
             muted={!user.lastSeenAt}
           />
-          <FactCell value={formatDate(user.joinedAt)} label="Joined" />
+          <FactCell value={<ProfileDate date={user.joinedAt} />} label="Joined" />
           <FactCell
             value={user.country ? countryName(user.country) : NO_VALUE}
             label="Country"
@@ -888,7 +886,9 @@ export function UserDetail({
               )}
             </RailCard>
             <RailCard title="Account">
-              <KvRow label="Account created">{formatDate(user.createdAt)}</KvRow>
+              <KvRow label="Account created">
+                <ProfileDate date={user.createdAt} />
+              </KvRow>
               <KvRow label="External ID">
                 {externalId ? (
                   <span className="font-mono text-[11px]">{externalId}</span>

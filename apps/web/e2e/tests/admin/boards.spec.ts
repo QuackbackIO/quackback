@@ -76,7 +76,15 @@ test.describe('Admin Board Management', () => {
   })
 
   test('displays board settings page', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: 'Boards' })).toBeVisible({ timeout: 10000 })
+    // Boards is a tab of the Feedback & Roadmaps module, which titles the page.
+    await expect(page.getByRole('heading', { level: 1, name: 'Feedback & Roadmaps' })).toBeVisible({
+      timeout: 10000,
+    })
+    await expect(
+      page
+        .getByRole('navigation', { name: 'Feedback & Roadmaps' })
+        .getByRole('link', { name: 'Boards' })
+    ).toHaveAttribute('aria-current', 'page')
   })
 
   test('can access board general settings', async ({ page }) => {
@@ -357,7 +365,9 @@ test.describe('Create Board Dialog', () => {
 
     // Wait for page to be ready - either the boards list or empty state
     await expect(
-      page.getByRole('heading', { name: 'Boards' }).or(page.getByText('No boards yet'))
+      page
+        .getByRole('heading', { level: 1, name: 'Feedback & Roadmaps' })
+        .or(page.getByText('No boards yet'))
     ).toBeVisible({
       timeout: 10000,
     })
@@ -550,7 +560,9 @@ test.describe('Board Settings Tabs', () => {
     await page.goto('/admin/settings/boards')
     await page.waitForLoadState('networkidle')
     await expect(
-      page.getByRole('heading', { name: 'Boards' }).or(page.getByText('No boards yet'))
+      page
+        .getByRole('heading', { level: 1, name: 'Feedback & Roadmaps' })
+        .or(page.getByText('No boards yet'))
     ).toBeVisible({
       timeout: 10000,
     })
@@ -630,7 +642,9 @@ test.describe('Board Slug', () => {
     await page.goto('/admin/settings/boards')
     await page.waitForLoadState('networkidle')
     await expect(
-      page.getByRole('heading', { name: 'Boards' }).or(page.getByText('No boards yet'))
+      page
+        .getByRole('heading', { level: 1, name: 'Feedback & Roadmaps' })
+        .or(page.getByText('No boards yet'))
     ).toBeVisible({
       timeout: 10000,
     })

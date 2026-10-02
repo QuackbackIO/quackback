@@ -10,6 +10,7 @@ import {
   AdjustmentsHorizontalIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
+import { formatCalendarDate } from '@/lib/shared/utils/date'
 import { DATE_PRESETS, getDateFromDaysAgo } from '@/components/shared/filter-presets'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { FilterAddButton, FilterChip, type FilterOption } from '@/components/shared/filter-chip'
@@ -509,13 +510,9 @@ function getFilterIcon(type: string) {
   return icons[type] ?? AdjustmentsHorizontalIcon
 }
 
+/** A date filter ("2026-10-01") as the calendar day it names, for every viewer. */
 function formatDate(dateStr: string): string {
-  try {
-    const date = new Date(dateStr)
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  } catch {
-    return dateStr
-  }
+  return formatCalendarDate(dateStr) ?? dateStr
 }
 
 function computeActiveFilters(

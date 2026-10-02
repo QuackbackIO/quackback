@@ -21,6 +21,7 @@ import { StatusBadge } from '@/components/ui/status-badge'
 import { Avatar } from '@/components/ui/avatar'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useFormatNumber } from '@/components/ui/format-number'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
@@ -189,6 +190,7 @@ function CountsCard({
   loading: boolean
   onFilter: (filter: OverviewMetric['filter']) => void
 }) {
+  const formatNumber = useFormatNumber()
   if (loading) return <Skeleton className="h-24 w-full rounded-xl" />
   if (metrics.length === 0) return null
   return (
@@ -205,7 +207,7 @@ function CountsCard({
               {`${metric.label} ${metric.detail}`.replace(/^./, (c) => c.toUpperCase())}
             </span>
             <span className="text-2xl leading-none font-bold tabular-nums tracking-tight sm:text-3xl">
-              {metric.count.toLocaleString()}
+              {formatNumber(metric.count)}
             </span>
           </OverviewNavLink>
         ))}

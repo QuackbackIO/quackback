@@ -13,8 +13,6 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 
-const FEEDBACK_CRUMBS = [{ label: 'Feedback & Roadmaps' }]
-
 const searchSchema = z.object({
   board: z.string().optional(),
   tab: boardTabSearch,
@@ -48,7 +46,6 @@ function BoardsSettingsPage() {
   return (
     <SettingsPage
       page="/admin/settings/boards"
-      crumbs={FEEDBACK_CRUMBS}
       actions={boards.length > 0 ? <CreateBoardDialog /> : undefined}
     >
       <SettingsCard flush>

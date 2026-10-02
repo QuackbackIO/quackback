@@ -57,7 +57,7 @@ export function ChannelsHubPage() {
       : 'Issues as conversations'
 
   return (
-    <SettingsPage page="/admin/settings/channels" crumbs={[{ label: 'Support' }]}>
+    <SettingsPage page="/admin/settings/channels">
       <SettingsCard flush>
         <SettingsList>
           <SettingsListRow

@@ -8,6 +8,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
+import { useFormatNumber } from '@/components/ui/format-number'
+import { useLocalDateFormatter, type LocalDateFormatter } from '@/components/ui/local-date'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { cn } from '@/lib/shared/utils'
 import { formatUsd } from '@/lib/shared/format-usd'
@@ -248,6 +250,7 @@ function CurrentPlanCard(props: {
   onSubscribe: (planId: PaidPlanId) => void
 }) {
   const { overview, catalogue } = props
+  const format = useLocalDateFormatter()
   const purchased = overview.seats?.purchased ?? null
   const showSeats = purchased != null
   const trialPlanName =
@@ -276,17 +279,17 @@ function CurrentPlanCard(props: {
         : daysLeft === 0
           ? ' (ends today)'
           : ` (${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} left)`
-    renewalBits.push(`Trial ends ${formatDate(overview.trialExpiresAt)}${left}`)
+    renewalBits.push(`Trial ends ${formatDate(format, overview.trialExpiresAt)}${left}`)
   } else if (overview.trialEnded && overview.trialExpiresAt) {
     renewalBits.push(
       trialPlanName
-        ? `Your ${trialPlanName} trial ended ${formatDate(overview.trialExpiresAt)}. Everything you built is still here.`
-        : `Your trial ended ${formatDate(overview.trialExpiresAt)}. Everything you built is still here.`
+        ? `Your ${trialPlanName} trial ended ${formatDate(format, overview.trialExpiresAt)}. Everything you built is still here.`
+        : `Your trial ended ${formatDate(format, overview.trialExpiresAt)}. Everything you built is still here.`
     )
   } else if (overview.cancellationAt) {
-    renewalBits.push(`Paid through ${formatDate(overview.cancellationAt)}`)
+    renewalBits.push(`Paid through ${formatDate(format, overview.cancellationAt)}`)
   } else if (overview.renewalAt) {
-    renewalBits.push(`Renews ${formatDate(overview.renewalAt)}`)
+    renewalBits.push(`Renews ${formatDate(format, overview.renewalAt)}`)
   }
   return (
     <section
@@ -428,6 +431,7 @@ function UsageCard(props: {
   usage: Array<{ key: string; label: string; used: number; limit: number | null }>
   onTopUp: (meter: 'ai' | 'email') => void
 }) {
+  const format = useLocalDateFormatter()
   const emails = props.usage.find((line) => line.key === 'emailsPerMonth')
   const api = props.usage.find((line) => line.key === 'apiRequestsPerMonth')
   const inventory = props.usage.filter(
@@ -437,6 +441,7 @@ function UsageCard(props: {
       line.key !== 'emailsPerMonth' &&
       line.key !== 'apiRequestsPerMonth'
   )
+  const formatNumber = useFormatNumber()
   const ai = props.overview.ai
   const canTopUp = props.overview.canManageBilling
   const hasAi = ai != null && (ai.includedCents > 0 || ai.extraCents > 0)
@@ -444,7 +449,7 @@ function UsageCard(props: {
   const hasApi = api != null && api.limit != null
   if (!hasAi && !hasEmails && !hasApi && inventory.length === 0) return null
 
-  const reset = nextMonthResetLabel()
+  const reset = nextMonthResetLabel(format)
   const aiCap = ai ? (ai.includedCents > 0 ? ai.includedCents : ai.extraCents) : 0
   const aiUsed = ai ? Math.min(ai.usedCents, aiCap) : 0
   const aiPercent = aiCap > 0 ? Math.min(100, Math.round((aiUsed / aiCap) * 100)) : 0
@@ -494,7 +499,7 @@ function UsageCard(props: {
             <UsageMeter
               label="Emails"
               description={usageMeterDescription('emailsPerMonth')}
-              valueText={`${emails.used.toLocaleString()} of ${emails.limit.toLocaleString()}`}
+              valueText={`${formatNumber(emails.used)} of ${formatNumber(emails.limit)}`}
               used={emails.used}
               limit={emails.limit}
               action={
@@ -519,7 +524,7 @@ function UsageCard(props: {
             <UsageMeter
               label="API requests"
               description={usageMeterDescription('apiRequestsPerMonth')}
-              valueText={`${api.used.toLocaleString()} of ${api.limit.toLocaleString()}`}
+              valueText={`${formatNumber(api.used)} of ${formatNumber(api.limit)}`}
               used={api.used}
               limit={api.limit}
             />
@@ -531,7 +536,7 @@ function UsageCard(props: {
               <UsageMeter
                 label={usageMeterLabel(line)}
                 description={usageMeterDescription(line.key)}
-                valueText={`${line.used.toLocaleString()} of ${line.limit.toLocaleString()}`}
+                valueText={`${formatNumber(line.used)} of ${formatNumber(line.limit)}`}
                 used={line.used}
                 limit={line.limit}
               />
@@ -595,11 +600,11 @@ function AddOnsCard(props: {
   )
 }
 
-function nextMonthResetLabel(): string {
+function nextMonthResetLabel(format: LocalDateFormatter): string {
   const date = new Date()
   date.setUTCDate(1)
   date.setUTCMonth(date.getUTCMonth() + 1)
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  return format(date, { month: 'short', day: 'numeric' })
 }
 
 function PlanCard(props: {
@@ -834,6 +839,7 @@ function PeriodToggle(props: {
 }
 
 function InvoiceList({ invoices }: { invoices: CustomerInvoice[] }) {
+  const format = useLocalDateFormatter()
   return (
     <ul
       data-settings-card=""
@@ -843,7 +849,7 @@ function InvoiceList({ invoices }: { invoices: CustomerInvoice[] }) {
         <li key={invoice.id} className="flex items-center gap-3 px-4 py-2.5 text-[13px]">
           <span className="min-w-0 flex-1 truncate font-medium">{invoice.number ?? 'Invoice'}</span>
           <span className="hidden text-muted-foreground sm:inline">
-            {formatDate(invoice.createdAt)}
+            {formatDate(format, invoice.createdAt)}
           </span>
           <span className="tabular-nums">{formatUsd(invoice.amountCents, 2)}</span>
           <span className="hidden capitalize text-muted-foreground md:inline">
@@ -880,9 +886,7 @@ function PortalButton(props: { label: string }) {
   )
 }
 
-function formatDate(iso: string): string {
-  const date = new Date(iso)
-  return Number.isNaN(date.getTime())
-    ? iso
-    : date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+/** e.g. "Oct 1, 2026"; a value that is not a date reads as given. */
+function formatDate(format: LocalDateFormatter, iso: string): string {
+  return format(iso, { year: 'numeric', month: 'short', day: 'numeric' }) || iso
 }

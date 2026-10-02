@@ -21,6 +21,7 @@ import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
 import { DateTimePicker } from '@/components/ui/datetime-picker'
 import { TimeAgo } from '@/components/ui/time-ago'
+import { useFormatNumber } from '@/components/ui/format-number'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { ModalHeader } from '@/components/shared/modal-header'
 import { ModalFooter } from '@/components/shared/modal-footer'
@@ -523,6 +524,7 @@ function EditorSidebarContent({
 // ─── Timeline ───────────────────────────────────────────────────────────
 
 function IncidentTimeline({ incident }: { incident: StatusIncidentAdminDetail }) {
+  const formatNumber = useFormatNumber()
   const updates = useMemo(
     () =>
       [...incident.updates].sort(
@@ -563,7 +565,7 @@ function IncidentTimeline({ incident }: { incident: StatusIncidentAdminDetail })
                   Published
                   {typeof incident.notifiedSubscriberCount === 'number' &&
                     incident.notifiedSubscriberCount > 0 &&
-                    ` · emailed ~${incident.notifiedSubscriberCount.toLocaleString()} subscribers`}
+                    ` · emailed ~${formatNumber(incident.notifiedSubscriberCount)} subscribers`}
                 </span>
               )}
               {isPublishRow && incident.backfilled && (

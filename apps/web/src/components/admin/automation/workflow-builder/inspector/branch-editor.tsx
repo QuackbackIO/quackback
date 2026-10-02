@@ -10,7 +10,7 @@ import { ChevronDownIcon, ChevronUpIcon, PlusIcon } from '@heroicons/react/24/ou
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { useWorkflowEntities } from '../entities'
+import { useEntityLabels } from '../entities'
 import { ConditionEditor } from './condition-editor'
 import { Field, movePathAdjacent, usePathRemovalConfirm } from './shared'
 import {
@@ -27,7 +27,7 @@ export function BranchEditor({
   step: Extract<TreeStep, { kind: 'branch' }>
   onChange: (step: TreeStep) => void
 }) {
-  const { labels } = useWorkflowEntities()
+  const labels = useEntityLabels()
   const [expanded, setExpanded] = useState<number | null>(null)
 
   const updatePath = (i: number, path: BranchPath) =>

@@ -54,10 +54,11 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('Moderation page', () => {
-  it('has the standard header, with a breadcrumb and a link to the review queue', () => {
+  it('has the standard header, with no breadcrumb of its own and a link to the review queue', () => {
     renderPage()
     expect(screen.getByRole('heading', { level: 1, name: 'Moderation' })).toBeInTheDocument()
-    expect(screen.getByText('Feedback & Roadmaps')).toBeInTheDocument()
+    // The settings layout titles it with its module and shows the module's tabs.
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull()
     const queue = screen.getByRole('link', { name: /open queue/i })
     expect(queue.getAttribute('href')).toBe('/admin/feedback/moderation')
   })

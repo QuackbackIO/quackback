@@ -15,7 +15,9 @@ import { PageHeader } from '@/components/shared/page-header'
 import { AnalyticsStatRow } from '@/components/admin/analytics/analytics-stat-row'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useFormatNumber } from '@/components/ui/format-number'
 import { TimeAgo } from '@/components/ui/time-ago'
+import { useLocalDateFormatter, type LocalDateFormatter } from '@/components/ui/local-date'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { Route } from '@/routes/admin/status'
 import { statusOverviewQueries, type StatusOverview } from '@/lib/client/queries/status'
@@ -268,19 +270,24 @@ function ActiveIncidentsCard({ incidents }: { incidents: OverviewIncident[] }) {
   )
 }
 
-function formatWindow(startIso: string | null, endIso: string | null): string {
+function formatWindow(
+  format: LocalDateFormatter,
+  startIso: string | null,
+  endIso: string | null
+): string {
   if (!startIso) return 'Not scheduled'
-  const start = new Date(startIso)
-  const day = start.toLocaleDateString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  })
-  const time = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  return endIso ? `${day}, ${time(start)} to ${time(new Date(endIso))}` : `${day}, ${time(start)}`
+  const day = format(startIso, { weekday: 'short', month: 'short', day: 'numeric' })
+  const time = (iso: string) => format(iso, { hour: '2-digit', minute: '2-digit' })
+  return endIso ? `${day}, ${time(startIso)} to ${time(endIso)}` : `${day}, ${time(startIso)}`
+}
+
+/** The day of the month as plain digits ("2", never "2."), in the formatter's zone. */
+function dayOfMonth(format: LocalDateFormatter, date: Date): string {
+  return format(date, { day: 'numeric', numberingSystem: 'latn' }).replace(/\D/g, '')
 }
 
 function UpcomingMaintenanceCard({ windows }: { windows: OverviewIncident[] }) {
+  const formatDate = useLocalDateFormatter()
   const goToIncident = useGoToIncident()
   const startMutation = useStartStatusMaintenanceNow()
   const [startTarget, setStartTarget] = useState<OverviewIncident | null>(null)
@@ -298,10 +305,10 @@ function UpcomingMaintenanceCard({ windows }: { windows: OverviewIncident[] }) {
               <div key={w.id} className="px-4 py-3 flex items-center gap-3">
                 <div className="w-11 shrink-0 rounded-lg border border-border/60 text-center overflow-hidden">
                   <div className="text-[11px] font-medium bg-muted text-muted-foreground py-0.5">
-                    {start ? start.toLocaleDateString(undefined, { month: 'short' }) : '-'}
+                    {start ? formatDate(start, { month: 'short' }) : '-'}
                   </div>
                   <div className="text-base font-semibold py-0.5 tabular-nums">
-                    {start ? start.getDate() : '?'}
+                    {start ? dayOfMonth(formatDate, start) : '?'}
                   </div>
                 </div>
                 <div className="flex-1 min-w-0">
@@ -314,7 +321,7 @@ function UpcomingMaintenanceCard({ windows }: { windows: OverviewIncident[] }) {
                   </button>
                   <div className="flex items-center flex-wrap gap-2 text-[11px] text-muted-foreground mt-1">
                     <LifecycleBadge status={lifecycle} />
-                    <span>{formatWindow(w.scheduledStartAt, w.scheduledEndAt)}</span>
+                    <span>{formatWindow(formatDate, w.scheduledStartAt, w.scheduledEndAt)}</span>
                     {w.autoStart && (
                       <Badge variant="outline" size="sm">
                         Auto-start
@@ -375,6 +382,7 @@ function UpcomingMaintenanceCard({ windows }: { windows: OverviewIncident[] }) {
 }
 
 function StatTiles({ data }: { data: StatusOverview }) {
+  const formatNumber = useFormatNumber()
   return (
     <div className="rounded-xl border border-border/50 bg-card shadow-sm overflow-hidden">
       <AnalyticsStatRow
@@ -385,7 +393,7 @@ function StatTiles({ data }: { data: StatusOverview }) {
           },
           {
             label: 'Subscribers',
-            value: data.subscribers.active.toLocaleString(),
+            value: formatNumber(data.subscribers.active),
             caption:
               data.subscribers.newLast7d > 0
                 ? `+${data.subscribers.newLast7d} this week`

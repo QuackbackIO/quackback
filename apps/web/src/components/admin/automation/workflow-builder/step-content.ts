@@ -25,6 +25,7 @@ import {
   resolveConditionField,
   sendWindowSummary,
   waitSummary,
+  snoozeUntilLabel,
   type ActionType,
   type AttributeFieldDef,
   type PersonCompanyAttributeFieldDef,
@@ -147,10 +148,7 @@ function actionChips(action: GraphAction, labels: EntityLabels): ChipData[] {
             'seconds' in action
               ? `For ${durationPhrase(action.seconds)}`
               : action.untilIso
-                ? new Date(action.untilIso).toLocaleString(undefined, {
-                    dateStyle: 'medium',
-                    timeStyle: 'short',
-                  })
+                ? snoozeUntilLabel(action.untilIso, labels)
                 : 'Until they reply',
         },
       ]

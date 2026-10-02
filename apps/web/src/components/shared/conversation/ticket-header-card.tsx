@@ -23,6 +23,7 @@ import { readAttributeValue } from '@/lib/shared/conversation/attribute-values'
 import { StageChip, StageTracker } from '@/components/shared/ticket-stage'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
+import { formatCalendarDate } from '@/lib/shared/utils/date'
 import { useVisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
 
 const NO_HEADERS = (): Record<string, string> => ({})
@@ -30,7 +31,7 @@ const NO_HEADERS = (): Record<string, string> => ({})
 /** Render one stored intake answer as customer-facing text, keyed off the
  *  field's declared type (checkbox → Yes/No, date → localized day, lists →
  *  comma-joined). Null for an empty/unset answer so the row is skipped. */
-function formatIntakeValue(
+export function formatIntakeValue(
   field: TicketFormField,
   value: unknown,
   intl: ReturnType<typeof useIntl>
@@ -49,10 +50,10 @@ function formatIntakeValue(
       : intl.formatMessage({ id: 'portal.tickets.details.no', defaultMessage: 'No' })
   }
   if (field.type === 'date' && typeof v === 'string') {
-    const d = new Date(v)
-    return Number.isNaN(d.getTime())
-      ? v
-      : d.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })
+    // A calendar date: the day as written, in the visitor's language.
+    return (
+      formatCalendarDate(v, { year: 'numeric', month: 'short', day: 'numeric' }, intl.locale) ?? v
+    )
   }
   return String(v)
 }

@@ -27,7 +27,6 @@ function TicketTypesPage() {
     <SettingsPage
       page="/admin/settings/ticket-types"
       description="The fields a ticket captures."
-      crumbs={[{ label: 'Support' }]}
       actions={<NewButton noun="type" onClick={() => setCreating(true)} />}
     >
       <TicketTypesManager creating={creating} onCreatingChange={setCreating} />

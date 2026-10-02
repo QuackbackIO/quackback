@@ -25,18 +25,17 @@ export interface NavItem {
 }
 
 /**
- * A module with several pages. It has no page of its own: its pages are the
- * rows under it, the module of the current page is open, and opening a closed
- * one goes to its first page. `id` is the module's own page path, which keys
- * its icon.
+ * A product with several pages. It is one row in the nav that opens its first
+ * page, and its pages are tabs under the module title on each of them. `id` is
+ * the module's own page path, which keys its icon.
  */
-export interface NavGroup {
+export interface NavModule {
   label: string
   id: SettingsPagePath
-  kids: NavEntry[]
+  pages: NavItem[]
 }
 
-export type NavEntry = NavItem | NavGroup
+export type NavEntry = NavItem | NavModule
 
 export interface NavSection {
   label: string
@@ -90,7 +89,15 @@ function moduleHead(to: SettingsPagePath) {
   return { label, to }
 }
 
-/** Product modules shown under Settings, Modules. A module with several pages expands in the nav. */
+/**
+ * The breadcrumb a page under a module's page shows for the module. It links
+ * to the module, which opens the first of its pages the viewer can open.
+ */
+export function moduleCrumb(to: '/admin/settings/feedback' | '/admin/settings/support') {
+  return moduleHead(to)
+}
+
+/** Product modules shown under Settings, Modules. A module with several pages shows them as tabs. */
 export function buildSettingsModuleRows(flags?: Partial<FeatureFlags>): SettingsModuleRow[] {
   const modules: SettingsModuleRow[] = [
     {
@@ -172,14 +179,14 @@ function navAutomationPage(to: AutomationPagePath, permission: PermissionKey): N
   return { label: AUTOMATION_PAGES[to].defaultMessage, to, permission }
 }
 
-export function isNavGroup(entry: NavEntry): entry is NavGroup {
-  return 'kids' in entry
+export function isNavModule(entry: NavEntry): entry is NavModule {
+  return 'pages' in entry
 }
 
 /**
  * The settings IA (SETTINGS-IA-SPEC Option B): four stable sections (Modules,
  * AI & Automation, Workspace, Data). Flags hide ITEMS (or whole product
- * accordions), never sections, so the sidebar layout does not reflow when a
+ * modules), never sections, so the sidebar layout does not reflow when a
  * flag flips. A section a viewer holds no permission for is left out.
  *
  * @param billingEnabled Whether this workspace has a valid billing projection
@@ -200,7 +207,7 @@ export function buildNavSections(
     return {
       label: module.label,
       id: module.to,
-      kids: module.pages.map(({ label, to, permission }) => ({ label, to, permission })),
+      pages: module.pages.map(({ label, to, permission }) => ({ label, to, permission })),
     }
   })
 
@@ -309,12 +316,11 @@ export function navSectionsFor(
   sections: NavSection[],
   permissions: ReadonlySet<PermissionKey>
 ): NavSection[] {
+  const canOpen = (item: NavItem) => !item.permission || permissions.has(item.permission)
   const visible = (entry: NavEntry): NavEntry | null => {
-    if (!isNavGroup(entry)) {
-      return !entry.permission || permissions.has(entry.permission) ? entry : null
-    }
-    const kids = entry.kids.map(visible).filter((kid): kid is NavEntry => kid !== null)
-    return kids.length > 0 ? { ...entry, kids } : null
+    if (!isNavModule(entry)) return canOpen(entry) ? entry : null
+    const pages = entry.pages.filter(canOpen)
+    return pages.length > 0 ? { ...entry, pages } : null
   }
   return sections
     .map((section) => ({
@@ -333,9 +339,10 @@ export function canOpenSettings(
   sections: NavSection[],
   permissions: ReadonlySet<PermissionKey>
 ): boolean {
-  const gated = (entry: NavEntry): boolean =>
-    isNavGroup(entry) ? entry.kids.some(gated) : entry.permission !== undefined
-  return navSectionsFor(sections, permissions).some((section) => section.items.some(gated))
+  const gated = (item: NavItem) => item.permission !== undefined
+  const anyGated = (entry: NavEntry) =>
+    isNavModule(entry) ? entry.pages.some(gated) : gated(entry)
+  return navSectionsFor(sections, permissions).some((section) => section.items.some(anyGated))
 }
 
 const GENERAL_PATH = '/admin/settings/general'
@@ -351,12 +358,32 @@ export function firstSettingsPath(
   sections: NavSection[],
   permissions: ReadonlySet<PermissionKey>
 ): string {
-  const gatedPaths: string[] = []
-  const collect = (entry: NavEntry) => {
-    if (isNavGroup(entry)) entry.kids.forEach(collect)
-    else if (entry.permission !== undefined) gatedPaths.push(entry.to)
-  }
-  navSectionsFor(sections, permissions).forEach((section) => section.items.forEach(collect))
+  const gatedPaths = navSectionsFor(sections, permissions)
+    .flatMap((section) => section.items)
+    .flatMap((entry) => (isNavModule(entry) ? entry.pages : [entry]))
+    .filter((item) => item.permission !== undefined)
+    .map((item) => item.to)
   if (gatedPaths.includes(GENERAL_PATH)) return GENERAL_PATH
   return gatedPaths[0] ?? NOTIFICATIONS_PATH
+}
+
+/**
+ * The module whose tabs a settings page shows: the module that lists the page
+ * itself. A page under one of them (a board, a channel) is a child page with
+ * breadcrumbs instead, and a single-page product is a row of its own.
+ */
+export function moduleOfPage(
+  sections: NavSection[],
+  page: string | undefined
+): NavModule | undefined {
+  if (page === undefined) return undefined
+  return sections
+    .flatMap((section) => section.items)
+    .filter(isNavModule)
+    .find((module) => module.pages.some((item) => item.to === page))
+}
+
+/** Whether a path is the page itself or a page under it. */
+export function pathIsUnder(pathname: string, to: string): boolean {
+  return pathname === to || pathname.startsWith(`${to}/`)
 }
