@@ -390,6 +390,7 @@ async function resolveMatchingPrincipals(
     WHERE p.role = 'user'
       AND p.type = 'user'
       AND p.user_id IS NOT NULL
+      AND p.test_owner_principal_id IS NULL
       AND (${combinedWhere})
   `)
 

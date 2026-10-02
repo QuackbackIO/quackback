@@ -62,6 +62,7 @@ import type { SlaApplied } from '@/lib/server/domains/sla/sla.service'
 import { assistantPrincipalIdOnce } from '@/lib/server/messages/assistant-principal'
 import { hasLinkedCustomerTicketSql } from '@/lib/server/messages/pair-link'
 import { conversationFilter } from '@/lib/server/policy/conversations'
+import { isTestThreadSql } from './conversation.test-data'
 import type { Actor } from '@/lib/server/policy/types'
 import { priorityRankSql } from '@/lib/server/utils/priority-rank'
 import {
@@ -530,6 +531,7 @@ export function toConversationDTO(
     sla,
     customAttributes,
     translation,
+    isTest: customAttributes.test === true,
   }
 }
 
@@ -1175,6 +1177,9 @@ export interface ConversationListFilter {
    *  excluded from every other list (the triage facets, queues, and searches
    *  must never surface them) — this flag is the one opt-in that lists them. */
   spamOnly?: boolean
+  /** "Test" view: only test conversations (the try-it round trip, or a
+   *  teammate writing in as a customer). */
+  testOnly?: boolean
   /** Inbox ordering. Omitted = 'relevance' on a searched list, 'recent'
    *  otherwise; a pinned sort always wins. Keyset pagination adapts per sort. */
   sort?: ConversationSort
@@ -1642,11 +1647,13 @@ export async function listConversationsForAgent(
       translationEnabled: conversations.translationEnabled,
       detectedCustomerLanguage: conversations.detectedCustomerLanguage,
       translationDismissedAt: conversations.translationDismissedAt,
+      isTest: isTestThreadSql(conversations.customAttributes).mapWith(Boolean),
     })
     .from(conversations)
     .where(
       and(
         conversationFilter(actor),
+        filter.testOnly ? isTestThreadSql(conversations.customAttributes) : undefined,
         // Spam lifecycle: a spam-ended thread is out of every triage view.
         // The Spam view (spamOnly) is the single list that surfaces them.
         filter.spamOnly
@@ -1850,8 +1857,8 @@ export async function listConversationsForAgent(
   const tagMap = await loadConversationTagsForConversations(ids)
 
   return {
-    conversations: page.map((c) =>
-      toConversationDTO(
+    conversations: page.map((c) => ({
+      ...toConversationDTO(
         c,
         authors.get(c.visitorPrincipalId) ?? fallbackAuthor(c.visitorPrincipalId),
         c.assignedAgentPrincipalId
@@ -1869,8 +1876,9 @@ export async function listConversationsForAgent(
         undefined,
         translationStateFrom(c),
         (c.spamReason as ConversationSpamFiledBy | null) ?? null
-      )
-    ),
+      ),
+      isTest: c.isTest,
+    })),
     hasMore,
     // Opaque keyset cursor: the last conversation id, re-resolved on the next call.
     nextCursor: page[page.length - 1].id,

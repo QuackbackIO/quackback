@@ -42,8 +42,9 @@ const LOCKED_ANON_ACCESS = {
 // The fields the mocked board carries; tests swap this per case.
 const boardFields: { value: BoardCustomField[] } = { value: [REQUIRED_TEXT_FIELD] }
 
-vi.mock('@/lib/server/db', async () => {
+vi.mock('@/lib/server/db', async (importOriginal) => {
   const { sql: realSql } = await vi.importActual<typeof import('drizzle-orm')>('drizzle-orm')
+  const { isTestRecord, notTestRecord } = await importOriginal<typeof import('@/lib/server/db')>()
 
   function chain(label: string) {
     const c: Record<string, unknown> = {}
@@ -90,6 +91,11 @@ vi.mock('@/lib/server/db', async () => {
         postStatuses: {
           findFirst: vi.fn().mockResolvedValue({ id: 'post_status_open', name: 'Open' }),
         },
+        principal: {
+          findFirst: vi
+            .fn()
+            .mockResolvedValue({ testOwnerPrincipalId: null, type: 'user', role: 'user' }),
+        },
       },
       transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
         const tx = {
@@ -123,6 +129,8 @@ vi.mock('@/lib/server/db', async () => {
     eq: vi.fn((a: unknown, b: unknown) => [a, b]),
     inArray: vi.fn((a: unknown, b: unknown) => [a, b]),
     sql: realSql,
+    isTestRecord,
+    notTestRecord,
   }
 })
 

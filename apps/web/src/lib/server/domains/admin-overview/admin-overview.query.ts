@@ -58,6 +58,7 @@ import {
   type OverviewSectionState,
 } from '@/lib/shared/admin-overview'
 import type { ConversationPriority } from '@/lib/shared/conversation/types'
+import { notTestRecord, notTestPrincipal } from '@/lib/server/test-data'
 
 const log = logger.child({ component: 'admin-overview' })
 
@@ -138,19 +139,15 @@ export async function getAdminOverview(input: {
           columns: { id: true },
           where: and(
             conversationFilter(actor),
-            sql`coalesce(${conversations.customAttributes}->>'test', 'false') <> 'true'`,
-            sql`coalesce(${conversations.customAttributes}->>'onboardingGenerated', 'false') <> 'true'`
+            notTestRecord(conversations.customAttributes),
+            notTestPrincipal(conversations.visitorPrincipalId)
           ),
         })
       : undefined,
     feedbackOn
       ? db.query.posts.findFirst({
           columns: { id: true },
-          where: and(
-            isNull(posts.deletedAt),
-            sql`coalesce(${posts.widgetMetadata}->>'onboardingGenerated', 'false') <> 'true'`,
-            sql`coalesce(${posts.widgetMetadata}->>'test', 'false') <> 'true'`
-          ),
+          where: and(isNull(posts.deletedAt), notTestRecord(posts.widgetMetadata)),
         })
       : undefined,
     helpOn
@@ -260,6 +257,8 @@ async function loadSupport(actor: Actor, viewerId: PrincipalId | null, now: Date
 
   const conditions = and(
     visibility,
+    notTestRecord(conversations.customAttributes),
+    notTestPrincipal(conversations.visitorPrincipalId),
     isNotNull(conversations.waitingSince),
     ne(conversations.status, 'closed')
   )
@@ -423,7 +422,11 @@ async function loadFeedback(viewerId: PrincipalId | null, now: Date) {
     .from(postStatuses)
     .where(and(eq(postStatuses.category, 'complete'), isNull(postStatuses.deletedAt)))
 
-  const livePost = and(isNull(posts.deletedAt), isNull(posts.canonicalPostId))
+  const livePost = and(
+    isNull(posts.deletedAt),
+    isNull(posts.canonicalPostId),
+    notTestRecord(posts.widgetMetadata)
+  )
 
   const reviewLink: OverviewLink = defaultStatus
     ? { to: '/admin/feedback', search: { status: [defaultStatus.slug] } }
@@ -495,8 +498,21 @@ async function loadMomentum(now: Date): Promise<OverviewMomentumItem[]> {
   const rows = await db
     .select({ postId: posts.id, title: posts.title, votesLast7d: voteDelta })
     .from(posts)
-    .innerJoin(postVotes, and(eq(postVotes.postId, posts.id), gte(postVotes.createdAt, since)))
-    .where(and(isNull(posts.deletedAt), isNull(posts.canonicalPostId)))
+    .innerJoin(
+      postVotes,
+      and(
+        eq(postVotes.postId, posts.id),
+        gte(postVotes.createdAt, since),
+        notTestPrincipal(postVotes.principalId)
+      )
+    )
+    .where(
+      and(
+        isNull(posts.deletedAt),
+        isNull(posts.canonicalPostId),
+        notTestRecord(posts.widgetMetadata)
+      )
+    )
     .groupBy(posts.id, posts.title)
     .orderBy(desc(voteDelta))
     .limit(MOMENTUM_LIMIT)

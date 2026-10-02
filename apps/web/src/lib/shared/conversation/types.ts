@@ -386,6 +386,9 @@ export interface ConversationDTO {
    *  applicable. Agent-only — stripped (null) on visitor-facing payloads so
    *  the customer widget never sees it (it has no UI for this feature). */
   translation: ConversationTranslationStateDTO | null
+  /** Agent-only: a test thread (the try-it round trip, or a teammate writing
+   *  in as a customer). Kept out of every metric and deleted after a week. */
+  isTest?: boolean
 }
 
 /**

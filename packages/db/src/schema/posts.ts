@@ -148,6 +148,10 @@ export const posts = pgTable(
       .where(sql`"merged_by_principal_id" IS NOT NULL`),
     index('posts_tracked_by_principal_id_idx').on(table.trackedByPrincipalId),
     index('posts_created_at_idx').on(table.createdAt),
+    // The 7-day test-data sweep's candidate set (migration 0291).
+    index('posts_test_created_at_idx')
+      .on(table.createdAt)
+      .where(sql`coalesce(widget_metadata->>'test', 'false') = 'true'`),
     index('posts_vote_count_idx').on(table.voteCount),
     index('posts_embedding_hnsw_idx')
       .using('hnsw', sql`${table.embedding} vector_cosine_ops`)

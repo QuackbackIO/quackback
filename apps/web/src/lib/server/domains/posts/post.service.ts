@@ -60,6 +60,7 @@ import type { CustomFieldValues } from '@/lib/shared/db-types'
 import { buildPostUrl } from '@/lib/server/integrations/message-utils'
 import { getBaseUrl } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
+import { deriveTestAttributes, isTestRecord, notTestRecord } from '@/lib/server/test-data'
 
 const log = logger.child({ component: 'posts' })
 
@@ -87,7 +88,7 @@ export async function createPost(
     displayName?: string
     actor?: Actor
   },
-  options?: { skipDispatch?: boolean; headers?: Headers }
+  options?: { skipDispatch?: boolean; headers?: Headers; visitorIngress?: boolean }
 ): Promise<CreatePostResult> {
   log.info({ board_id: input.boardId }, 'create post')
 
@@ -108,19 +109,28 @@ export async function createPost(
 
   // Tier-limit gate (no-op in OSS — getTierLimits short-circuits to OSS_TIER_LIMITS
   // which has maxPosts: null, so enforceCountLimit returns immediately).
+  const attributes = await deriveTestAttributes(
+    author.principalId,
+    input.widgetMetadata,
+    options?.visitorIngress === true
+  )
+  const widgetMetadata = Object.fromEntries(
+    Object.entries(attributes).map(([key, value]) => [key, String(value)])
+  )
   const limits = await getTierLimits()
-  await enforceCountLimit({
-    limit: limits.maxPosts,
-    name: 'maxPosts',
-    friendly: 'posts',
-    currentCount: async () => {
-      const [row] = await db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(posts)
-        .where(isNull(posts.deletedAt))
-      return row?.count ?? 0
-    },
-  })
+  if (!isTestRecord(attributes))
+    await enforceCountLimit({
+      limit: limits.maxPosts,
+      name: 'maxPosts',
+      friendly: 'posts',
+      currentCount: async () => {
+        const [row] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(posts)
+          .where(and(isNull(posts.deletedAt), notTestRecord(posts.widgetMetadata)))
+        return row?.count ?? 0
+      },
+    })
 
   // Validate board exists and get status in parallel.
   // The deletedAt filter here is load-bearing: rehostExternalImages (below) uploads
@@ -246,7 +256,7 @@ export async function createPost(
         contentJson,
         statusId,
         principalId: author.principalId,
-        widgetMetadata: input.widgetMetadata ?? null,
+        widgetMetadata,
         customFieldValues,
         trackedByPrincipalId: input.trackedByPrincipalId ?? null,
         voteCount: 1,

@@ -38,6 +38,11 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
         },
       }),
     }),
+    query: {
+      principal: {
+        findFirst: async () => ({ testOwnerPrincipalId: null, type: 'anonymous', role: 'user' }),
+      },
+    },
   }
   return {
     ...original,

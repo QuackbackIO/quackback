@@ -126,7 +126,8 @@ const listConversationsSchema = z.object({
   // excludes them).
   // 'created_by_me' = only conversations the requesting agent started (their
   // first message is agent-authored by them).
-  view: z.enum(['all', 'mentions', 'quinn', 'spam', 'created_by_me']).optional(),
+  // 'test' = only test conversations.
+  view: z.enum(['all', 'mentions', 'quinn', 'spam', 'created_by_me', 'test']).optional(),
   // Quinn-inbox sub-filter by involvement outcome; omitted = any Quinn-engaged.
   ai: z.enum(['resolved', 'escalated', 'pending']).optional(),
   before: z.string().optional(),
@@ -246,9 +247,10 @@ const markUnreadFromMessageSchema = z.object({
   messageId: z.string(),
 })
 
-async function assertConversationsEnabled(): Promise<void> {
-  const { isConversationsEnabled } = await import('@/lib/server/domains/settings/settings.support')
-  if (!(await isConversationsEnabled())) {
+async function assertConversationsEnabled(principalId: PrincipalId): Promise<void> {
+  const { isConversationsEnabledFor } =
+    await import('@/lib/server/domains/settings/settings.support')
+  if (!(await isConversationsEnabledFor(principalId))) {
     throw new Error('Conversations are not enabled')
   }
 }
@@ -260,7 +262,7 @@ async function assertConversationsEnabled(): Promise<void> {
  * Team members bypass the portal check (admin inbox).
  */
 async function assertVisitorConversationAccess(ctx: AuthContext): Promise<void> {
-  await assertConversationsEnabled()
+  await assertConversationsEnabled(ctx.principal.id)
   if (isTeamMember(ctx.principal.role) || ctx.scope === 'widget') return
   const { resolvePortalAccessForRequest } = await import('./portal-access')
   const access = await resolvePortalAccessForRequest()
@@ -429,7 +431,8 @@ export const runGetMyConversation = createServerOnlyFn(async function runGetMyCo
 ) {
   const { getMessengerConfig, getWidgetConfig } =
     await import('@/lib/server/domains/settings/settings.widget')
-  const { isConversationsEnabled } = await import('@/lib/server/domains/settings/settings.support')
+  const { isConversationsEnabledFor } =
+    await import('@/lib/server/domains/settings/settings.support')
   const { getSettings } = await import('./workspace')
   const { isEmailConfigured } = await import('@quackback/email')
   const { canEmailVisitor } = await import('@/lib/shared/conversation/reply-capability')
@@ -437,7 +440,7 @@ export const runGetMyConversation = createServerOnlyFn(async function runGetMyCo
   const { assistantConfigSchema, DEFAULT_ASSISTANT_CONFIG } =
     await import('@/lib/shared/assistant/config')
   const [enabled, messengerConfig, appSettings, widgetConfig] = await Promise.all([
-    isConversationsEnabled(),
+    isConversationsEnabledFor(ctx?.principal.id),
     getMessengerConfig(),
     getSettings(),
     getWidgetConfig(),
@@ -577,8 +580,9 @@ export const runGetMyConversations = createServerOnlyFn(async function runGetMyC
     conversations: [],
     linkedTickets: {} as Record<string, ConversationTicketSummary>,
   }
-  const { isConversationsEnabled } = await import('@/lib/server/domains/settings/settings.support')
-  if (!(await isConversationsEnabled()) || !ctx?.principal) return empty
+  const { isConversationsEnabledFor } =
+    await import('@/lib/server/domains/settings/settings.support')
+  if (!ctx?.principal || !(await isConversationsEnabledFor(ctx.principal.id))) return empty
 
   if (!isTeamMember(ctx.principal.role) && ctx.scope !== 'widget') {
     const { resolvePortalAccessForRequest } = await import('./portal-access')
@@ -633,8 +637,9 @@ export const runGetMessengerUnread = createServerOnlyFn(async function runGetMes
   ctx: AuthContext | null
 ) {
   const zero = { conversations: 0, total: 0 }
-  const { isConversationsEnabled } = await import('@/lib/server/domains/settings/settings.support')
-  if (!(await isConversationsEnabled()) || !ctx?.principal) return zero
+  const { isConversationsEnabledFor } =
+    await import('@/lib/server/domains/settings/settings.support')
+  if (!ctx?.principal || !(await isConversationsEnabledFor(ctx.principal.id))) return zero
 
   if (!isTeamMember(ctx.principal.role) && ctx.scope !== 'widget') {
     const { resolvePortalAccessForRequest } = await import('./portal-access')
@@ -929,6 +934,7 @@ export const listConversationsFn = createServerFn({ method: 'GET' })
         startedByPrincipalId: data.view === 'created_by_me' ? ctx.principal.id : undefined,
         // Spam view: the only scope that lists spam-ended conversations.
         spamOnly: data.view === 'spam',
+        testOnly: data.view === 'test',
         // Quinn view: a chosen bucket narrows to its statuses; none = any Quinn
         // involvement (every bucket).
         assistantStatuses:

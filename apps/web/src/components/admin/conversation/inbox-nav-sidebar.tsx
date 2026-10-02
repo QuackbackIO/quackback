@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { FormattedMessage } from 'react-intl'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   InboxIcon,
@@ -16,6 +17,7 @@ import {
   RectangleStackIcon,
   NoSymbolIcon,
   PencilSquareIcon,
+  BeakerIcon,
 } from '@heroicons/react/24/solid'
 import { StarIcon as StarOutlineIcon } from '@heroicons/react/24/outline'
 import type { ConversationTagId, SegmentId, TeamId, ConversationViewId } from '@quackback/ids'
@@ -82,6 +84,17 @@ export const CONVERSATION_VIEWS = [
 ] as const
 
 const QUINN_VIEW = { view: 'quinn', label: 'Quinn activity', Icon: SparklesIcon } as const
+
+const TEST_ITEM: InboxNavItem = { kind: 'view', view: 'test' }
+
+/** The Test view only earns a row while there is test data to look at or clear. */
+export function showsTestView(counts: { test: number } | undefined, active: boolean): boolean {
+  return active || (counts?.test ?? 0) > 0
+}
+
+function TestViewLabel() {
+  return <FormattedMessage id="inbox.view.test" defaultMessage="Test conversations" />
+}
 
 /** The Tickets nav section (UNIFIED-INBOX-SPEC.md §2.3), visible only when
  *  `supportTickets` is enabled — see `useSupportTicketsEnabled`. */
@@ -169,6 +182,8 @@ export function scopeLabelFor(
       return 'Created by me'
     case 'spam':
       return 'Spam'
+    case 'test':
+      return 'Test conversations'
     case 'quinn':
       return 'Quinn activity'
     case 'saved':
@@ -495,6 +510,7 @@ export const InboxNavSidebar = memo(function InboxNavSidebar({
   const teamRows = teamNavRows(teams)
   const quinnItem: InboxNavItem = { kind: 'view', view: QUINN_VIEW.view }
   const quinnActive = activeKey === inboxNavKey(quinnItem)
+  const testActive = activeKey === inboxNavKey(TEST_ITEM)
 
   return (
     <nav
@@ -534,6 +550,20 @@ export const InboxNavSidebar = memo(function InboxNavSidebar({
                 <QUINN_VIEW.Icon className={cn('size-4 shrink-0', quinnActive && 'text-primary')} />
                 <span className="min-w-0 flex-1 truncate text-left">{QUINN_VIEW.label}</span>
               </button>
+              {showsTestView(counts, testActive) && (
+                <button
+                  type="button"
+                  onClick={() => onSelect(TEST_ITEM)}
+                  data-active={testActive || undefined}
+                  className={itemClass(testActive)}
+                >
+                  <BeakerIcon className={cn('size-4 shrink-0', testActive && 'text-primary')} />
+                  <span className="min-w-0 flex-1 truncate text-left">
+                    <TestViewLabel />
+                  </span>
+                  <NavRowCount count={counts?.test} />
+                </button>
+              )}
             </div>
           </FilterSection>
 
@@ -649,6 +679,18 @@ export function InboxScopeMenu({
             </DropdownMenuItem>
           )
         })}
+        {showsTestView(counts, activeKey === inboxNavKey(TEST_ITEM)) && (
+          <DropdownMenuItem
+            onClick={() => onSelect(TEST_ITEM)}
+            className={cn('gap-2', activeKey === inboxNavKey(TEST_ITEM) && 'text-primary')}
+          >
+            <BeakerIcon className="h-4 w-4" />
+            <span className="min-w-0 flex-1 truncate">
+              <TestViewLabel />
+            </span>
+            <NavRowCount count={counts?.test} />
+          </DropdownMenuItem>
+        )}
         {showTickets && (
           <>
             <DropdownMenuSeparator />

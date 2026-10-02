@@ -24,6 +24,7 @@ import {
 } from '@/components/admin/conversation/inbox-nav-sidebar'
 import { TicketStatusChip, TICKET_TYPE_CLASS } from '@/components/admin/inbox/ticket-chips'
 import { NewButton } from '@/components/shared/new-button'
+import { TryMessengerButton } from '@/components/onboarding/try-messenger-button'
 import { SearchInput } from '@/components/shared/search-input'
 import {
   ConversationListToolbar,
@@ -449,13 +450,21 @@ function EmptyList({
           </p>
           {/* Widget settings are admin-only; members get the message
               without a button they can't use. */}
-          {userRole === 'admin' && activationAction && (
-            <ActivationActionButton
-              action={activationAction}
-              surface="conversation_empty"
-              className="h-11 sm:h-9"
-            />
-          )}
+          <div className="flex flex-wrap justify-center gap-2">
+            {userRole === 'admin' && activationAction && (
+              <ActivationActionButton
+                action={activationAction}
+                surface="conversation_empty"
+                className="h-11 sm:h-9"
+              />
+            )}
+            <TryMessengerButton variant="outline" className="h-11 sm:h-9">
+              <FormattedMessage
+                id="onboarding.test.sendTest"
+                defaultMessage="Send a test message"
+              />
+            </TryMessengerButton>
+          </div>
         </>
       )}
     </div>
@@ -628,6 +637,11 @@ export const ConversationRow = memo(function ConversationRow({
                 {c.endReason === 'spam' && c.spamReason && (
                   <Badge size="sm" variant="outline">
                     {CONVERSATION_SPAM_FILED_BY_LABELS[c.spamReason]}
+                  </Badge>
+                )}
+                {c.isTest && (
+                  <Badge size="sm" variant="outline">
+                    <FormattedMessage id="inbox.row.test" defaultMessage="Test" />
                   </Badge>
                 )}
                 <TimeAgo date={c.lastMessageAt} short className="text-xs text-muted-foreground" />

@@ -132,6 +132,17 @@ describe('resolveOpenCommand', () => {
     expect(resolveOpenCommand({ view: 'chat' }, { feedback: true })).toBeNull()
   })
 
+  it('carries a chat body into the messenger as a draft', () => {
+    expect(resolveOpenCommand({ view: 'chat', body: 'Hi! Is anyone there?' }, allTabs)).toEqual({
+      type: 'messenger',
+      body: 'Hi! Is anyone there?',
+    })
+    expect(resolveOpenCommand({ view: 'chat', body: '   ' }, allTabs)).toStrictEqual({
+      type: 'messenger',
+      body: undefined,
+    })
+  })
+
   it('opens home for an empty payload when Home is enabled', () => {
     expect(resolveOpenCommand({}, allTabs)).toEqual({ type: 'home' })
     expect(resolveOpenCommand({ view: 'home' }, allTabs)).toEqual({ type: 'home' })

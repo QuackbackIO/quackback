@@ -451,7 +451,7 @@ export const runCreatePublicPost = createServerOnlyFn(async function runCreatePu
       customFields,
     },
     author,
-    { headers: getRequestHeaders() }
+    { headers: getRequestHeaders(), visitorIngress: true }
   )
 
   log.info({ post_id: post.id }, 'created public post')

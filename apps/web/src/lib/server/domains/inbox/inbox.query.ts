@@ -520,6 +520,8 @@ export interface InboxCounts {
    *  standalone customer tickets PLUS open pair conversations (each scope
    *  gated by its own kind's view permission, mirroring the list branches). */
   ticketsByType: { customer: number; back_office: number; tracker: number }
+  /** Test conversations in any status; the Test view shows only while nonzero. */
+  test: number
 }
 
 /**
@@ -602,13 +604,14 @@ export async function countInboxScopes(actor: Actor): Promise<InboxCounts> {
   const canConversations = canViewConversations(actor)
   const canTickets = canViewTickets(actor)
 
-  const [conversationScopes, ticketsByType] = await Promise.all([
+  const [conversationScopes, ticketsByType, test] = await Promise.all([
     canConversations
       ? countConversationScopes(actor, actor.principalId)
       : Promise.resolve({ mine: 0, unassigned: 0, pair: 0 }),
     canTickets
       ? countTicketScopesByType(actor)
       : Promise.resolve({ customer: 0, back_office: 0, tracker: 0 }),
+    canConversations ? countTestConversations(actor) : Promise.resolve(0),
   ])
 
   // The pair is ONE item: a linked customer ticket's share of the customer
@@ -616,7 +619,22 @@ export async function countInboxScopes(actor: Actor): Promise<InboxCounts> {
   // ticketsByType.customer via the ticket-table count).
   ticketsByType.customer += conversationScopes.pair
 
-  return { mine: conversationScopes.mine, unassigned: conversationScopes.unassigned, ticketsByType }
+  return {
+    mine: conversationScopes.mine,
+    unassigned: conversationScopes.unassigned,
+    ticketsByType,
+    test,
+  }
+}
+
+async function countTestConversations(actor: Actor): Promise<number> {
+  const { isTestThreadSql } =
+    await import('@/lib/server/domains/conversation/conversation.test-data')
+  const [row] = await db
+    .select({ c: sql<number>`count(*)::int` })
+    .from(conversations)
+    .where(and(conversationFilter(actor), isTestThreadSql(conversations.customAttributes)))
+  return row?.c ?? 0
 }
 
 // ---------------------------------------------------------------------------

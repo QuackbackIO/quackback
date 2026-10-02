@@ -45,6 +45,7 @@ import { NotFoundError, InternalError } from '@/lib/shared/errors'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { logger } from '@/lib/server/logger'
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
+import { notTestPrincipal } from '@/lib/server/test-data'
 import { EXTERNAL_ID_KEY } from '@/lib/server/domains/users/user.attributes'
 
 const log = logger.child({ component: 'users' })
@@ -189,7 +190,7 @@ export async function listPortalUsers(
     )`
 
     // Build conditions array - filter for role='user' (portal users only)
-    const conditions = [eq(principal.role, 'user')]
+    const conditions = [eq(principal.role, 'user'), notTestPrincipal(principal.id)]
 
     // Lifecycle view: identified users by default, engaged anonymous
     // principals (leads) on request. The two views never mix.

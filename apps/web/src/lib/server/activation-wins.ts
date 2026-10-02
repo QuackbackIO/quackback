@@ -19,6 +19,7 @@ import {
   type OnboardingOutcome,
   type SetupState,
 } from '@/lib/server/db'
+import { notTestRecord, notTestPrincipal } from '@/lib/server/test-data'
 
 export interface FirstWinFacts {
   customerOriginatedConversation?: boolean
@@ -55,8 +56,11 @@ export interface FirstWinResult {
   reachedAt: string | null
 }
 
-const notGeneratedPost = sql`coalesce(${posts.widgetMetadata}->>'onboardingGenerated', 'false') <> 'true'`
-const externalPrincipal = or(eq(principal.role, 'user'), eq(principal.type, 'anonymous'))
+const notGeneratedPost = notTestRecord(posts.widgetMetadata)
+const externalPrincipal = and(
+  or(eq(principal.role, 'user'), eq(principal.type, 'anonymous')),
+  notTestPrincipal(principal.id)
+)
 
 /** Query the first real outcome; onboarding-generated/test records never qualify. */
 export async function detectFirstWin(state: SetupState | null): Promise<FirstWinResult> {
@@ -76,8 +80,8 @@ export async function detectFirstWin(state: SetupState | null): Promise<FirstWin
           // is the question this actually asks.
           eq(conversations.source, 'widget'),
           isNotNull(conversations.visitorPrincipalId),
-          sql`coalesce(${conversations.customAttributes}->>'onboardingGenerated', 'false') <> 'true'`,
-          sql`coalesce(${conversations.customAttributes}->>'test', 'false') <> 'true'`
+          notTestRecord(conversations.customAttributes),
+          notTestPrincipal(conversations.visitorPrincipalId)
         )
       )
       .orderBy(asc(conversations.createdAt))

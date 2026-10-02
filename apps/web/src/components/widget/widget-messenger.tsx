@@ -21,6 +21,8 @@ interface WidgetMessengerProps {
   linkPreviews?: boolean
   /** Put the cursor in the composer on mount (new-thread landings on desktop). */
   autofocusComposer?: boolean
+  /** Text the composer starts with (a host's `open({ view: 'chat', body })`). */
+  initialDraft?: string
 }
 
 /**
@@ -35,6 +37,7 @@ export function WidgetMessenger({
   conversationTarget,
   linkPreviews = false,
   autofocusComposer = false,
+  initialDraft,
 }: WidgetMessengerProps = {}) {
   const queryClient = useQueryClient()
   const { user, ensureSession, sessionVersion } = useWidgetAuth()
@@ -79,6 +82,7 @@ export function WidgetMessenger({
         embedOpenMode="newTab"
         showHeader={false}
         autofocusComposer={autofocusComposer}
+        initialDraft={initialDraft}
         compact
       />
     </VisitorSurfaceRpcProvider>

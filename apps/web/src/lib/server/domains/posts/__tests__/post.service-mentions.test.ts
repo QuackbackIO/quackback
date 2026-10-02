@@ -29,8 +29,9 @@ let updatePostsFindFirstResult: {
 let updateReturningContentJson: JSONContent | null = null
 let updateReturningTitle = 'Updated title'
 
-vi.mock('@/lib/server/db', async () => {
+vi.mock('@/lib/server/db', async (importOriginal) => {
   const { sql: realSql } = await vi.importActual<typeof import('drizzle-orm')>('drizzle-orm')
+  const { isTestRecord, notTestRecord } = await importOriginal<typeof import('@/lib/server/db')>()
 
   function chain(label: string) {
     const c: Record<string, unknown> = {}
@@ -172,6 +173,8 @@ vi.mock('@/lib/server/db', async () => {
     inArray: vi.fn(),
     isNull: vi.fn(),
     sql: realSql,
+    isTestRecord,
+    notTestRecord,
   }
 })
 

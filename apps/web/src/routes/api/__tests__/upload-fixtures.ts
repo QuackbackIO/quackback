@@ -95,6 +95,7 @@ export function mockPrincipal(
     serviceMetadata: null,
     contactEmail: null,
     companyId: null,
+    testOwnerPrincipalId: null,
     blockedAt: null,
     blockedByPrincipalId: null,
     chatAvailability: 'online',

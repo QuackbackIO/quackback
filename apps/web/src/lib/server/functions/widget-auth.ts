@@ -110,7 +110,9 @@ export async function getWidgetSession(opts?: {
       role: sessionRole(principalRecord.role as Role, 'widget'),
       type: principalRecord.type ?? 'user',
     },
-    canPortalHandoff: !isTeamMember(principalRecord.role),
+    // A test customer must never reach a same-origin portal cookie: it would
+    // replace the teammate's own session in that browser.
+    canPortalHandoff: !isTeamMember(principalRecord.role) && !principalRecord.testOwnerPrincipalId,
   }
 }
 

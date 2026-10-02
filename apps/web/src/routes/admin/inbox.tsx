@@ -124,6 +124,7 @@ import {
 } from '@/lib/shared/types/settings'
 import { useFeatureFlag, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { QuinnViewHeader } from '@/components/admin/conversation/quinn-view-header'
+import { TestViewHeader } from '@/components/admin/conversation/test-view-header'
 
 // URL is the source of truth for open item + filters (refresh-safe, shareable).
 // `?c=` is the legacy alias for `?i=`, accepted forever.
@@ -799,6 +800,7 @@ function InboxPage() {
 
   // Quinn-view sub-filter counts (only fetched while that view is open).
   const isQuinnView = nav.kind === 'view' && nav.view === 'quinn'
+  const isTestView = nav.kind === 'view' && nav.view === 'test'
   const { data: assistantCounts } = useQuery({
     ...conversationInboxQueries.assistantCounts(),
     enabled: isQuinnView,
@@ -1469,8 +1471,15 @@ function InboxPage() {
           counts={assistantCounts}
           onChange={(ai) => updateSearch({ ai, i: undefined, m: undefined })}
         />
+      ) : isTestView ? (
+        <TestViewHeader
+          onDeleted={() => {
+            refreshInbox()
+            setNav({ kind: 'view', view: 'all' })
+          }}
+        />
       ) : undefined,
-    [isQuinnView, urlAi, assistantCounts, updateSearch]
+    [isQuinnView, isTestView, urlAi, assistantCounts, updateSearch, refreshInbox, setNav]
   )
 
   // The company refinement, offered only when the workspace has companies.

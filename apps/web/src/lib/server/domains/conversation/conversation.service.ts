@@ -128,6 +128,7 @@ import type {
   SendAgentMessageResult,
 } from './conversation.types'
 import { logger } from '@/lib/server/logger'
+import { deriveTestAttributes } from '@/lib/server/test-data'
 
 const log = logger.child({ component: 'conversation' })
 
@@ -368,6 +369,7 @@ export async function sendVisitorMessage(
           channel: 'messenger',
           status: 'open',
           subject: preview(content || fallbackLabel, attachments),
+          customAttributes: await deriveTestAttributes(author.principalId, {}, true, tx),
         })
         .returning()
       conversation = createdConv

@@ -139,6 +139,21 @@ describe('handleWidgetAccountMutationGate', () => {
     ).resolves.toBeUndefined()
   })
 
+  it.each([
+    '/get-session',
+    '/sign-in/anonymous',
+    '/one-time-token/generate',
+    '/one-time-token/verify',
+  ])('refuses test credentials on %s before any cookie-setting hook', async (path) => {
+    const c = ctx({
+      path,
+      token: 'customer-session-00000000-0000-0000-0000-000000000000',
+      scope: 'widget',
+    })
+    await expect(handleWidgetAccountMutationGate(c)).rejects.toThrow(/test session/i)
+    expect(c.context.internalAdapter.findSession).not.toHaveBeenCalled()
+  })
+
   it('skips the session lookup on allowlisted paths, whatever the credential', async () => {
     // `/get-session` runs on every authenticated request; the allowlist
     // decides the outcome there, so reading the session first is wasted work.

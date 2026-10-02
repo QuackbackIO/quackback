@@ -133,13 +133,15 @@ export const Route = createFileRoute('/api/chat/stream')({
         // messenger/portal-support conversation surfaces `isConversationsEnabled`
         // covers — so it passes when EITHER is on, not gated behind
         // conversations being enabled too.
-        const { isConversationsEnabled, isSupportTicketsEnabled } =
+        const { isConversationsEnabledFor, isSupportTicketsEnabled } =
           await import('@/lib/server/domains/settings/settings.support')
         if (ticketIdParam) {
-          if (!((await isSupportTicketsEnabled()) || (await isConversationsEnabled()))) {
+          if (!(
+            (await isSupportTicketsEnabled()) || (await isConversationsEnabledFor(me.principalId))
+          )) {
             return new Response('Not found', { status: 404 })
           }
-        } else if (!(await isConversationsEnabled())) {
+        } else if (!(await isConversationsEnabledFor(me.principalId))) {
           return new Response('Not found', { status: 404 })
         }
 

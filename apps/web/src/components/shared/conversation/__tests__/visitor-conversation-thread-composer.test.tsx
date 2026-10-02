@@ -24,6 +24,7 @@ const probe = vi.hoisted(() => ({
   editorMounts: 0,
   onDocumentChange: null as ((document: EditorDocumentStub) => void) | null,
   onSubmit: null as (() => void) | null,
+  editorValue: undefined as unknown,
   previewed: [] as string[],
 }))
 
@@ -33,11 +34,14 @@ vi.mock('@/components/ui/rich-text-editor', async () => {
     RichTextEditor: ({
       onDocumentChange,
       onSubmit,
+      value,
     }: {
       onDocumentChange?: (document: EditorDocumentStub) => void
       onSubmit?: () => void
+      value?: unknown
     }) => {
       probe.onDocumentChange = onDocumentChange ?? null
+      probe.editorValue = value
       probe.onSubmit = onSubmit ?? null
       useEffect(() => {
         probe.editorMounts++
@@ -159,10 +163,12 @@ async function renderThread({
   existing = false,
   helpSearch,
   linkPreviews = false,
+  initialDraft,
 }: {
   existing?: boolean
   helpSearch?: (q: string) => Promise<Array<{ slug: string; title: string }>>
   linkPreviews?: boolean
+  initialDraft?: string
 } = {}) {
   const rpc = makeRpc(existing)
   render(
@@ -182,6 +188,7 @@ async function renderThread({
             presence={{ agentsOnline: true, withinOfficeHours: null, nextOpenAt: null }}
             linkPreviews={linkPreviews}
             helpSearch={helpSearch ? { search: helpSearch, onSelect: () => {} } : undefined}
+            initialDraft={initialDraft}
           />
         </VisitorSurfaceRpcProvider>
       </IntlProvider>
@@ -195,6 +202,21 @@ async function renderThread({
 const sendButton = () => screen.getByRole('button', { name: 'Send' })
 
 describe('VisitorConversationThread composer', () => {
+  it('starts with an initial draft that sends as typed and then clears', async () => {
+    const rpc = await renderThread({ initialDraft: 'Hi! Is anyone there?' })
+    expect(probe.editorValue).toEqual(doc('Hi! Is anyone there?'))
+    expect(sendButton()).toBeEnabled()
+    fireEvent.click(sendButton())
+    await waitFor(() =>
+      expect(rpc.sendConversationMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ content: 'Hi! Is anyone there?' }),
+        })
+      )
+    )
+    await waitFor(() => expect(probe.editorValue).toBeUndefined())
+  })
+
   it('does not re-render the thread per keystroke', async () => {
     await renderThread()
     expect(sendButton()).toBeDisabled()

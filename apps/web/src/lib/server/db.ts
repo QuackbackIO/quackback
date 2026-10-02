@@ -508,6 +508,11 @@ export {
   // Types/constants
   REACTION_EMOJIS,
   USE_CASE_TYPES,
+  // Test-data markers kept out of every metric
+  isTestRecord,
+  notTestRecord,
+  notTestPrincipal,
+  notTestConversation,
 } from '@quackback/db'
 
 // Re-export schema types not covered by @quackback/db/types

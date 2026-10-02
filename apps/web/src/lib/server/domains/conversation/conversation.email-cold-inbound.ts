@@ -58,6 +58,7 @@ import {
 } from './conversation.email-inbound'
 import type { ConversationAuthorInput } from './conversation.types'
 import { emitConversationCreated, emitMessageCreated } from './conversation.webhooks'
+import { deriveTestAttributes } from '@/lib/server/test-data'
 
 export interface ColdInboundResolution {
   action: 'attach' | 'create'
@@ -230,7 +231,12 @@ export async function createEmailConversation(input: {
             }
           : {}),
         visitorEmail: normalizeSenderAddress(parsed.from),
-        customAttributes: unverified ? { unverifiedSender: true } : {},
+        customAttributes: await deriveTestAttributes(
+          principalId,
+          unverified ? { unverifiedSender: true } : {},
+          true,
+          tx
+        ),
       })
       .returning()
 

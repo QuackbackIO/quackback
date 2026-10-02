@@ -5,6 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { OverviewDashboard } from '@/components/admin/admin-overview'
 import { HomeActions } from '@/components/admin/home-actions'
 import { HomeGettingStarted } from '@/components/onboarding/home-launch-plan'
+import { HomeTryItYourself } from '@/components/onboarding/home-try-it'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { adminOverviewQueries } from '@/lib/client/queries/admin-overview'
 import { ensureOnboardingHomeReadyFn } from '@/lib/server/functions/onboarding'
@@ -69,6 +70,7 @@ function AdminOverviewPage() {
               admin ? (
                 <Suspense fallback={null}>
                   <HomeGettingStarted portalUrl={baseUrl} />
+                  <HomeTryItYourself flags={flags} />
                 </Suspense>
               ) : null
             }
