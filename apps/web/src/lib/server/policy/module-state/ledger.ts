@@ -454,6 +454,15 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     reason: 'Message catalogues keyed by locale, imported from static files in the bundle.',
   },
   {
+    file: 'apps/web/src/lib/shared/utils/date.ts',
+    name: 'monthYearFormatters',
+    category: 'content-addressed',
+    reason:
+      'Intl.DateTimeFormat instances keyed by locale. The formatter is a pure function of that ' +
+      'locale and the fixed month/year UTC options, so a cross-workspace hit returns the formatter ' +
+      'the requesting workspace would have built for the same locale.',
+  },
+  {
     file: 'apps/web/src/lib/shared/office-hours.ts',
     name: 'zonedFormatterCache',
     category: 'content-addressed',
