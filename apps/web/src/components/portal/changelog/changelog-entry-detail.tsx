@@ -62,7 +62,6 @@ export function ChangelogEntryDetail({
           <LocalDate
             date={publishedAt}
             options={ENTRY_DATE}
-            locale="en-US"
             className="text-sm text-muted-foreground"
           />
         </div>
@@ -73,7 +72,6 @@ export function ChangelogEntryDetail({
           <LocalDate
             date={publishedAt}
             options={ENTRY_DATE}
-            locale="en-US"
             className="md:hidden text-sm text-muted-foreground mb-4 block"
           />
 

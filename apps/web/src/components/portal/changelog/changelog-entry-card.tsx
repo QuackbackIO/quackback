@@ -56,7 +56,6 @@ export function ChangelogEntryCard({
         <LocalDate
           date={publishedAt}
           options={ENTRY_DATE}
-          locale="en-US"
           className="text-sm text-muted-foreground"
         />
       </div>
@@ -67,7 +66,6 @@ export function ChangelogEntryCard({
         <LocalDate
           date={publishedAt}
           options={ENTRY_DATE}
-          locale="en-US"
           className="md:hidden text-sm text-muted-foreground mb-4 block"
         />
 

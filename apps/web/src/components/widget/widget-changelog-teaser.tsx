@@ -50,7 +50,6 @@ export function WidgetChangelogTeaser({ onOpenEntry, onSeeAll }: WidgetChangelog
         <LocalDate
           date={latest.publishedAt}
           options={ENTRY_DATE}
-          locale="en-US"
           className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide"
         />
         <h3 className="mt-0.5 text-sm font-semibold text-foreground line-clamp-1 leading-snug">
