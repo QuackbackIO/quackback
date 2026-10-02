@@ -73,7 +73,10 @@ export function PublicRoadmapFiltersBar({
   return (
     <div
       role="region"
-      aria-label="Active filters"
+      aria-label={intl.formatMessage({
+        id: 'portal.roadmap.filter.activeFilters',
+        defaultMessage: 'Active filters',
+      })}
       className="flex flex-wrap gap-2 items-center py-0.5"
     >
       {activeChips.map(({ key, type, ...chipProps }) => (

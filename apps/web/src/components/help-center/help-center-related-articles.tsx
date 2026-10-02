@@ -1,4 +1,5 @@
 import { Link } from '@tanstack/react-router'
+import { FormattedMessage } from 'react-intl'
 import { ChevronRightIcon } from '@heroicons/react/24/outline'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import { hcArticlePath } from '@/lib/shared/help-center-url'
@@ -31,7 +32,7 @@ export function HelpCenterRelatedArticles({ articles, locale }: HelpCenterRelate
   return (
     <section aria-labelledby="hc-related" className="mt-10 pt-8 border-t border-border/40">
       <h2 id="hc-related" className="text-lg font-semibold tracking-tight text-foreground">
-        Related articles
+        <FormattedMessage id="portal.hc.relatedArticles.title" defaultMessage="Related articles" />
       </h2>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         {articles.map((article) => (

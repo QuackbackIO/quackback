@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { FormattedMessage } from 'react-intl'
 import { BellIcon } from '@heroicons/react/24/outline'
 import { BellIcon as BellIconSolid } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
@@ -51,7 +52,13 @@ export function ChangelogSubscribeButton({ enabled }: { enabled: boolean }) {
       ) : (
         <BellIcon className="h-4 w-4" />
       )}
-      <span className="hidden sm:inline">{subscribed ? 'Subscribed' : 'Subscribe'}</span>
+      <span className="hidden sm:inline">
+        {subscribed ? (
+          <FormattedMessage id="portal.changelog.subscribed" defaultMessage="Subscribed" />
+        ) : (
+          <FormattedMessage id="portal.changelog.subscribe" defaultMessage="Subscribe" />
+        )}
+      </span>
     </Button>
   )
 }

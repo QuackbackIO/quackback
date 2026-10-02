@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FormattedMessage } from 'react-intl'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { ChevronDownIcon, LockClosedIcon } from '@heroicons/react/24/solid'
 import { MagnifyingGlassIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/shared/utils'
@@ -43,11 +43,16 @@ export function CitationFreshness({
   updatedAt?: string
   className?: string
 }) {
-  const label = getTimeAgo(updatedAt)
+  const intl = useIntl()
+  const label = getTimeAgo(updatedAt, intl.locale)
   if (!label) return null
   return (
     <span className={cn('block text-[11px] text-muted-foreground', className)}>
-      Updated {label}
+      <FormattedMessage
+        id="widget.messenger.assistant.citationUpdated"
+        defaultMessage="Updated {time}"
+        values={{ time: label }}
+      />
     </span>
   )
 }
@@ -127,13 +132,23 @@ function CitationDot({
   citation: RenderableCitation
   onOpen?: CitationOpen
 }) {
+  const intl = useIntl()
   const isInternal = citation.internal === true
   const url = sanitizeUrl(citation.url)
   const hasUrl = !!url
   const source = citationHost(citation.url) || citation.title
   const label = isInternal
-    ? `Internal source ${n}: ${citation.title}`
-    : `Source ${n}: ${citation.title}`
+    ? intl.formatMessage(
+        {
+          id: 'widget.messenger.assistant.citationInternalLabel',
+          defaultMessage: 'Internal source {n}: {title}',
+        },
+        { n, title: citation.title }
+      )
+    : intl.formatMessage(
+        { id: 'widget.messenger.assistant.citationLabel', defaultMessage: 'Source {n}: {title}' },
+        { n, title: citation.title }
+      )
   const dotClass = cn(CITATION_DOT_CLASS, isInternal && CITATION_DOT_INTERNAL_CLASS)
   return (
     <span className="relative inline-block align-[1px]">
@@ -174,7 +189,10 @@ function CitationDot({
           {isInternal && !hasUrl ? (
             <span className="flex items-center gap-1.5 text-[12px] text-amber-700 dark:text-amber-300">
               <LockClosedIcon className="h-3 w-3 shrink-0" />
-              Internal
+              <FormattedMessage
+                id="widget.messenger.assistant.citationInternal"
+                defaultMessage="Internal"
+              />
             </span>
           ) : (
             <span className="flex items-center gap-1.5 text-[12px] text-muted-foreground">

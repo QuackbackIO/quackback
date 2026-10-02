@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import { TooltipProvider } from '@/components/ui/tooltip'
 
 vi.mock('@/lib/client/hooks/use-notifications-queries', () => ({
@@ -15,9 +16,11 @@ afterEach(cleanup)
 describe('NotificationBell', () => {
   it('draws a solid icon, like every other rail item', () => {
     render(
-      <TooltipProvider>
-        <NotificationBell />
-      </TooltipProvider>
+      <IntlProvider locale="en" defaultLocale="en">
+        <TooltipProvider>
+          <NotificationBell />
+        </TooltipProvider>
+      </IntlProvider>
     )
     const svg = screen.getByRole('button', { name: 'Notifications' }).querySelector('svg')!
     expect(svg.getAttribute('fill')).toBe('currentColor')
@@ -25,9 +28,11 @@ describe('NotificationBell', () => {
 
   it('marks the labeled rail item active on the notifications page', () => {
     render(
-      <TooltipProvider>
-        <NotificationBell labeled active />
-      </TooltipProvider>
+      <IntlProvider locale="en" defaultLocale="en">
+        <TooltipProvider>
+          <NotificationBell labeled active />
+        </TooltipProvider>
+      </IntlProvider>
     )
     const button = screen.getByRole('button', { name: 'Notifications' })
     expect(button.getAttribute('data-active')).toBe('true')
@@ -36,9 +41,11 @@ describe('NotificationBell', () => {
 
   it('is not active by default', () => {
     render(
-      <TooltipProvider>
-        <NotificationBell labeled />
-      </TooltipProvider>
+      <IntlProvider locale="en" defaultLocale="en">
+        <TooltipProvider>
+          <NotificationBell labeled />
+        </TooltipProvider>
+      </IntlProvider>
     )
     expect(
       screen.getByRole('button', { name: 'Notifications' }).getAttribute('data-active')

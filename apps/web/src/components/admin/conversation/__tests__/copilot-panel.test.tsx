@@ -11,6 +11,7 @@
 import { describe, it, expect, vi, beforeEach, beforeAll, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { IntlProvider } from 'react-intl'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ConversationId } from '@quackback/ids'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
@@ -87,11 +88,13 @@ function renderPanel(
   const onInsert = props.onInsert ?? vi.fn()
   render(
     <QueryClientProvider client={client}>
-      <CopilotPanel
-        item={{ kind: 'conversation', id: CONVERSATION_ID }}
-        flags={props.flags ?? ALL_FLAGS_ON}
-        onInsert={onInsert}
-      />
+      <IntlProvider locale="en" defaultLocale="en">
+        <CopilotPanel
+          item={{ kind: 'conversation', id: CONVERSATION_ID }}
+          flags={props.flags ?? ALL_FLAGS_ON}
+          onInsert={onInsert}
+        />
+      </IntlProvider>
     </QueryClientProvider>
   )
   return { onInsert }
