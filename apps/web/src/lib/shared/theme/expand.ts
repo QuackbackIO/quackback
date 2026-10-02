@@ -52,7 +52,7 @@ export const DEFAULT_DARK_BASE: ThemeColorBase = {
   primary: 'oklch(0.886 0.176 86)',
   background: '#0a0a0a',
   foreground: '#fafafa',
-  card: '#0a0a0a',
+  card: '#141414',
   muted: '#181818',
   mutedForeground: '#a1a1a1',
   border: '#262626',

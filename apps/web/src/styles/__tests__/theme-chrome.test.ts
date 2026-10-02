@@ -149,7 +149,7 @@ describe('theme dark sheet', () => {
 
   it('keeps the portal and widget on the document-level dark tokens, apart from the admin sheet', () => {
     expect(darkTokens).toContain('--background: #0a0a0a;')
-    expect(darkTokens).toContain('--card: #0a0a0a;')
+    expect(darkTokens).toContain('--card: #141414;')
     expect(darkTokens).toContain('--popover: #101010;')
     expect(darkTokens).toContain('--muted: #181818;')
     expect(darkTokens).toContain('--border: #262626;')

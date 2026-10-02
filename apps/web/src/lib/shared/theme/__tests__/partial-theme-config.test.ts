@@ -115,7 +115,7 @@ describe('generateThemeCSS with a partially-specified config', () => {
     // The dark gaps fill from the dark base, not the light one.
     expect(readVar(css, DARK, '--background')).toBe('#0a0a0a')
     expect(readVar(css, DARK, '--foreground')).toBe('#fafafa')
-    expect(readVar(css, DARK, '--card')).toBe('#0a0a0a')
+    expect(readVar(css, DARK, '--card')).toBe('#141414')
     expect(readVar(css, DARK, '--muted')).toBe('#181818')
     expect(readVar(css, DARK, '--muted-foreground')).toBe('#a1a1a1')
     expect(readVar(css, DARK, '--border')).toBe('#262626')
