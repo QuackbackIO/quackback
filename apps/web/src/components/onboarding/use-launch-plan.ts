@@ -3,16 +3,24 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { setLaunchTaskResolutionFn } from '@/lib/server/functions/admin'
+import {
+  isLaunchPlanActive,
+  launchChecklistSummary,
+  type LaunchStatus,
+} from '@/lib/shared/launch-checklist'
 
-/** The launch status for Home and the Launch plan page, kept fresh while a win is pending. */
+/** Poll only while the plan is open: a resolved plan has nothing left to watch for. */
+export function launchStatusRefetchInterval(data: LaunchStatus | undefined): number | false {
+  if (!data) return false
+  return isLaunchPlanActive(launchChecklistSummary(data)) ? 15_000 : false
+}
+
+/** The launch status for Home and the Launch plan page, kept fresh while the plan is open. */
 export function launchStatusQuery() {
   return {
     ...adminQueries.onboardingStatus(),
-    refetchInterval: (query: { state: { data?: { hasFirstWin?: boolean } } }) => {
-      const data = query.state.data
-      if (!data) return false
-      return !data.hasFirstWin ? 15_000 : false
-    },
+    refetchInterval: (query: { state: { data?: LaunchStatus } }) =>
+      launchStatusRefetchInterval(query.state.data),
   }
 }
 
