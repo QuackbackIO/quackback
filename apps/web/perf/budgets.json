@@ -48,7 +48,7 @@
     },
     "doc:admin-roadmap": {
       "dbQueries": 20,
-      "htmlKB": 271.7
+      "htmlKB": 258.7
     },
     "doc:admin-changelog": {
       "dbQueries": 6,
@@ -418,7 +418,7 @@
     },
     "sweep:doc:admin:/admin/roadmap": {
       "dbQueries": 20,
-      "htmlKB": 271.7
+      "htmlKB": 258.7
     },
     "sweep:ui:admin:/admin/roadmap": {
       "dbQueries": 20,
@@ -841,7 +841,7 @@
       "serverRequests": 1,
       "requests": 128,
       "jsRequests": 124,
-      "jsKB": 483.9,
+      "jsKB": 474.4,
       "htmlTransferKB": 32.5,
       "componentRenders": 451
     },
