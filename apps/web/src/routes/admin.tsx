@@ -1,8 +1,7 @@
 import { useEffect, type ComponentProps } from 'react'
 import { createFileRoute, Outlet, redirect, useRouterState } from '@tanstack/react-router'
 import { IntlProvider } from 'react-intl'
-import { WorkspaceCopilotProvider } from '@/components/admin/ask/workspace-copilot'
-import { useWorkspaceCopilotFocused } from '@/components/admin/ask/workspace-copilot-context'
+import { SearchPaletteProvider } from '@/components/admin/ask/search-palette'
 import { AdminWorkspaceFrame } from '@/components/admin/admin-workspace-frame'
 import { useAdminPresence } from '@/lib/client/hooks/use-admin-presence'
 import { DEFAULT_LOCALE, loadMessages, withoutViewerMessages } from '@/lib/shared/i18n'
@@ -256,8 +255,7 @@ function AdminLayout() {
 
   return (
     <IntlProvider locale={locale} defaultLocale={DEFAULT_LOCALE} messages={messages}>
-      <CloudQuackbackWidget />
-      <WorkspaceCopilotProvider>
+      <SearchPaletteProvider>
         <ProductTourProvider>
           <TooltipProvider delay={0}>
             <AdminContent
@@ -269,7 +267,7 @@ function AdminLayout() {
             />
           </TooltipProvider>
         </ProductTourProvider>
-      </WorkspaceCopilotProvider>
+      </SearchPaletteProvider>
     </IntlProvider>
   )
 }
@@ -288,9 +286,17 @@ function AdminContent({
   | 'planNotice'
   | 'currentUser'
 >) {
-  const focused = useWorkspaceCopilotFocused()
+  // A started Home chat is full screen: its thread is in the URL.
+  const canUseCopilot = useHasPermission(PERMISSIONS.COPILOT_USE)
+  const chatOpen = useRouterState({
+    select: (state) =>
+      /^\/admin\/?$/.test(state.location.pathname) &&
+      typeof (state.location.search as { copilotThread?: unknown }).copilotThread === 'string',
+  })
+  const focused = canUseCopilot && chatOpen
   return (
     <>
+      <CloudQuackbackWidget launcherHidden={focused} />
       <AdminWorkspaceFrame
         focused={focused}
         sidebar={

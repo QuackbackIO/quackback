@@ -22,15 +22,9 @@ import {
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { DEFAULT_FEATURE_FLAGS, getProductFlagUpdate } from '@/lib/shared/types/settings'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { WorkspaceCopilotContext } from '../ask/workspace-copilot-context'
+import { SearchPaletteContext } from '../ask/search-palette'
 
-const copilotContext = {
-  composer: null,
-  conversation: null,
-  starters: null,
-  focusedConversation: null,
-  openPalette: vi.fn(),
-}
+const searchContext = { open: vi.fn() }
 
 vi.stubGlobal('__APP_VERSION__', '0.0.0-test')
 
@@ -138,9 +132,9 @@ async function mount() {
     <QueryClientProvider client={new QueryClient()}>
       <IntlProvider locale="en" messages={{}}>
         <TooltipProvider>
-          <WorkspaceCopilotContext.Provider value={copilotContext}>
+          <SearchPaletteContext.Provider value={searchContext}>
             <RouterProvider router={router} />
-          </WorkspaceCopilotContext.Provider>
+          </SearchPaletteContext.Provider>
         </TooltipProvider>
       </IntlProvider>
     </QueryClientProvider>
