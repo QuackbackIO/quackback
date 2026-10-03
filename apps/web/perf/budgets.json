@@ -152,8 +152,8 @@
       "serverRequests": 1,
       "requests": 226,
       "jsRequests": 221,
-      "jsKB": 866.6,
-      "htmlTransferKB": 34.1,
+      "jsKB": 884,
+      "htmlTransferKB": 35.9,
       "componentRenders": 632
     },
     "ui:admin-nav-feedback-to-roadmap": {
@@ -399,7 +399,7 @@
       "serverRequests": 1,
       "requests": 226,
       "jsRequests": 221,
-      "jsKB": 866.6,
+      "jsKB": 884,
       "htmlTransferKB": 35.9,
       "componentRenders": 632
     },
