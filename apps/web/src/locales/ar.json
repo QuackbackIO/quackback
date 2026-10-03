@@ -1398,6 +1398,7 @@
   "ask.settings.undone": "تم التراجع عن التغييرات",
   "ask.settings.proposed": "التغييرات المقترحة",
   "ask.settings.open": "فتح الإعدادات",
+  "ask.settings.openArea": "إعدادات {area}",
   "ask.settings.apply": "{count, plural, zero {تطبيق # تغييرات} one {تطبيق تغيير واحد} two {تطبيق تغييرين} few {تطبيق # تغييرات} many {تطبيق # تغييرًا} other {تطبيق # تغيير}}",
   "ask.settings.permissionRequired": "اطلب من مالك مساحة العمل إجراء هذا التغيير.",
   "ask.settings.changed": "تغيّرت هذه الإعدادات. اسأل Copilot مجددًا.",

@@ -1380,6 +1380,7 @@
   "ask.settings.undone": "Alterações desfeitas",
   "ask.settings.proposed": "Alterações propostas",
   "ask.settings.open": "Abrir nas configurações",
+  "ask.settings.openArea": "Configurações de {area}",
   "ask.settings.apply": "Aplicar {count, plural, one {# alteração} other {# alterações}}",
   "ask.settings.undo": "Desfazer",
   "ask.settings.permissionRequired": "Peça a um proprietário do espaço de trabalho para fazer esta alteração.",

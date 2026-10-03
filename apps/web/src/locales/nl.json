@@ -1398,6 +1398,7 @@
   "ask.settings.undone": "Wijzigingen ongedaan gemaakt",
   "ask.settings.proposed": "Voorgestelde wijzigingen",
   "ask.settings.open": "Openen in instellingen",
+  "ask.settings.openArea": "Instellingen voor {area}",
   "ask.settings.apply": "{count, plural, one {# wijziging} other {# wijzigingen}} toepassen",
   "ask.settings.permissionRequired": "Vraag een eigenaar van de werkruimte om deze wijziging te maken.",
   "ask.settings.changed": "Deze instellingen zijn gewijzigd. Vraag Copilot opnieuw.",

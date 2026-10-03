@@ -1398,6 +1398,7 @@
   "ask.settings.undone": "Cofnięto zmiany",
   "ask.settings.proposed": "Proponowane zmiany",
   "ask.settings.open": "Otwórz w ustawieniach",
+  "ask.settings.openArea": "Ustawienia: {area}",
   "ask.settings.apply": "Zastosuj {count, plural, one {# zmianę} few {# zmiany} many {# zmian} other {# zmiany}}",
   "ask.settings.permissionRequired": "Poproś właściciela przestrzeni roboczej o wprowadzenie tej zmiany.",
   "ask.settings.changed": "Te ustawienia się zmieniły. Zapytaj Copilot ponownie.",

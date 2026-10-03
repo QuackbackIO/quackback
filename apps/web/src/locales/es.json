@@ -1398,6 +1398,7 @@
   "ask.settings.undone": "Cambios deshechos",
   "ask.settings.proposed": "Cambios propuestos",
   "ask.settings.open": "Abrir en configuración",
+  "ask.settings.openArea": "Ajustes de {area}",
   "ask.settings.apply": "Aplicar {count, plural, one {# cambio} other {# cambios}}",
   "ask.settings.permissionRequired": "Pide a un propietario del espacio de trabajo que haga este cambio.",
   "ask.settings.changed": "Esta configuración ha cambiado. Vuelve a preguntarle a Copilot.",

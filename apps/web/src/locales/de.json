@@ -1398,6 +1398,7 @@
   "ask.settings.undone": "Änderungen rückgängig gemacht",
   "ask.settings.proposed": "Vorgeschlagene Änderungen",
   "ask.settings.open": "In den Einstellungen öffnen",
+  "ask.settings.openArea": "Einstellungen: {area}",
   "ask.settings.apply": "{count, plural, one {# Änderung} other {# Änderungen}} anwenden",
   "ask.settings.permissionRequired": "Bitte einen Workspace-Eigentümer, diese Änderung vorzunehmen.",
   "ask.settings.changed": "Diese Einstellungen wurden geändert. Frag Copilot erneut.",

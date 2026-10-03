@@ -1380,6 +1380,7 @@
   "ask.settings.undone": "已復原變更",
   "ask.settings.proposed": "建議的變更",
   "ask.settings.open": "在設定中開啟",
+  "ask.settings.openArea": "{area}設定",
   "ask.settings.apply": "套用 {count, plural, other {# 項變更}}",
   "ask.settings.undo": "復原",
   "ask.settings.permissionRequired": "請工作區擁有者進行此變更。",

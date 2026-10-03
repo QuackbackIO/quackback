@@ -1380,6 +1380,7 @@
   "ask.settings.undone": "已撤销更改",
   "ask.settings.proposed": "建议的更改",
   "ask.settings.open": "在设置中打开",
+  "ask.settings.openArea": "{area}设置",
   "ask.settings.apply": "应用 {count, plural, other {# 项更改}}",
   "ask.settings.undo": "撤销",
   "ask.settings.permissionRequired": "请工作区所有者进行此更改。",

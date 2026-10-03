@@ -29,7 +29,7 @@ export async function resolveMcpActor(
     )
       throw new ForbiddenError(
         'MCP_SETTINGS_OWNER_REQUIRED',
-        'A current workspace Owner must review this request.'
+        'A current workspace owner must review this request.'
       )
     const [owner] = await db
       .select({ id: principal.id, role: principal.role, type: principal.type })
@@ -39,7 +39,7 @@ export async function resolveMcpActor(
     if (!owner || owner.type !== 'user' || (owner.role !== 'admin' && owner.role !== 'member'))
       throw new ForbiddenError(
         'MCP_SETTINGS_OWNER_REQUIRED',
-        'A current workspace Owner must review this request.'
+        'A current workspace owner must review this request.'
       )
     person = owner
   }

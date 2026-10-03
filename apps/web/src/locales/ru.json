@@ -1398,6 +1398,7 @@
   "ask.settings.undone": "Изменения отменены",
   "ask.settings.proposed": "Предложенные изменения",
   "ask.settings.open": "Открыть настройки",
+  "ask.settings.openArea": "Настройки: {area}",
   "ask.settings.apply": "Применить {count, plural, one {# изменение} few {# изменения} many {# изменений} other {# изменения}}",
   "ask.settings.permissionRequired": "Попросите владельца рабочего пространства внести это изменение.",
   "ask.settings.changed": "Эти настройки изменились. Спросите Copilot ещё раз.",

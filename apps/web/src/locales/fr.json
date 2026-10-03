@@ -1398,6 +1398,7 @@
   "ask.settings.undone": "Modifications annulées",
   "ask.settings.proposed": "Modifications proposées",
   "ask.settings.open": "Ouvrir dans les paramètres",
+  "ask.settings.openArea": "Paramètres : {area}",
   "ask.settings.apply": "Appliquer {count, plural, one {# modification} other {# modifications}}",
   "ask.settings.permissionRequired": "Demandez à un propriétaire de l’espace de travail d’effectuer cette modification.",
   "ask.settings.changed": "Ces paramètres ont changé. Demandez à nouveau à Copilot.",

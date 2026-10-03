@@ -173,6 +173,21 @@ export function SettingsChangeCard({
   const [selection, setSelection] = useState<Set<string> | null>(null)
   const selected = selection ?? new Set(changes.map((change) => change.id))
   const count = changes.filter((change) => selected.has(change.id)).length
+  // One way into settings per card: a link per page the changes live on.
+  const pages = [
+    ...new Map(
+      changes.map((change) => [
+        change.settingsHref,
+        {
+          href: change.settingsHref,
+          area: intl.formatMessage({
+            id: `ask.settings.area.${change.area}`,
+            defaultMessage: SETTINGS_CARD_AREA_COPY[change.area],
+          }),
+        },
+      ])
+    ).values(),
+  ]
   const title =
     status === 'executed'
       ? intl.formatMessage({ id: 'ask.settings.applied', defaultMessage: 'Changes applied' })
@@ -229,18 +244,6 @@ export function SettingsChangeCard({
                 )}
                 <span className="truncate font-medium">{changeLabel}</span>
               </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="shrink-0 text-xs focus-visible:ring-foreground/25"
-                onClick={() => onOpenSettings(change.settingsHref)}
-              >
-                {intl.formatMessage({
-                  id: 'ask.settings.open',
-                  defaultMessage: 'Open in settings',
-                })}
-              </Button>
             </div>
             <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 text-xs">
               <SettingsValue
@@ -269,40 +272,59 @@ export function SettingsChangeCard({
           </div>
         )
       })}
-      {status === 'proposed' && (
-        <Button
-          type="button"
-          size="sm"
-          disabled={busy || count === 0}
-          className="focus-visible:ring-foreground/25"
-          onClick={() => {
-            if (count > 0)
-              onApply(
-                changes.filter((change) => selected.has(change.id)).map((change) => change.id)
-              )
-          }}
-        >
-          {intl.formatMessage(
-            {
-              id: 'ask.settings.apply',
-              defaultMessage: 'Apply {count, plural, one {# change} other {# changes}}',
-            },
-            { count }
-          )}
-        </Button>
-      )}
-      {status === 'executed' && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={busy}
-          onClick={onUndo}
-          className="focus-visible:ring-foreground/25"
-        >
-          {intl.formatMessage({ id: 'ask.settings.undo', defaultMessage: 'Undo' })}
-        </Button>
-      )}
+      <div className="flex flex-wrap items-center gap-2">
+        {status === 'proposed' && (
+          <Button
+            type="button"
+            size="sm"
+            disabled={busy || count === 0}
+            className="focus-visible:ring-foreground/25"
+            onClick={() => {
+              if (count > 0)
+                onApply(
+                  changes.filter((change) => selected.has(change.id)).map((change) => change.id)
+                )
+            }}
+          >
+            {intl.formatMessage(
+              {
+                id: 'ask.settings.apply',
+                defaultMessage: 'Apply {count, plural, one {# change} other {# changes}}',
+              },
+              { count }
+            )}
+          </Button>
+        )}
+        {status === 'executed' && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={onUndo}
+            className="focus-visible:ring-foreground/25"
+          >
+            {intl.formatMessage({ id: 'ask.settings.undo', defaultMessage: 'Undo' })}
+          </Button>
+        )}
+        {pages.map((page) => (
+          <Button
+            key={page.href}
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-xs focus-visible:ring-foreground/25"
+            onClick={() => onOpenSettings(page.href)}
+          >
+            {pages.length === 1
+              ? intl.formatMessage({ id: 'ask.settings.open', defaultMessage: 'Open in settings' })
+              : intl.formatMessage(
+                  { id: 'ask.settings.openArea', defaultMessage: '{area} settings' },
+                  { area: page.area }
+                )}
+          </Button>
+        ))}
+      </div>
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}
@@ -329,7 +351,7 @@ export function WorkspaceSettingsProposalCard({ action }: { action: CopilotPropo
       },
       SETTINGS_PERMISSION_REQUIRED: {
         id: 'ask.settings.permissionRequired',
-        defaultMessage: 'Ask a workspace Owner to make this change.',
+        defaultMessage: 'Ask a workspace owner to make this change.',
       },
       SETTINGS_CHANGED: {
         id: 'ask.settings.changed',

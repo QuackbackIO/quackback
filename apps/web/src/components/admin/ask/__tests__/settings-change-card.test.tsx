@@ -137,9 +137,35 @@ describe('settings change cards', () => {
     expect(screen.queryByText('Turns on the widget')).toBeNull()
     expect(screen.queryByText(/support inbox/i)).toBeNull()
   })
-  it('links each area to its actual settings page', () => {
+  it('links once to each settings page the card changes', () => {
     const props = mount()
-    fireEvent.click(screen.getAllByRole('button', { name: 'Open in settings' })[1]!)
+    expect(screen.queryByRole('button', { name: 'Open in settings' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Messenger settings' }))
     expect(props.onOpenSettings).toHaveBeenCalledWith('/admin/settings/channels/messenger')
+    expect(screen.getByRole('button', { name: 'Branding settings' })).toBeTruthy()
+    cleanup()
+    const single = mount({
+      changes: [
+        {
+          id: 'branding.light.primary',
+          area: 'branding',
+          path: ['light', 'primary'],
+          before: '#FFFF00',
+          after: '#0F766E',
+          settingsHref: '/admin/settings/portal',
+        },
+        {
+          id: 'branding.themeMode',
+          area: 'branding',
+          path: ['themeMode'],
+          before: 'user',
+          after: 'dark',
+          settingsHref: '/admin/settings/portal',
+        },
+      ],
+    })
+    expect(screen.getAllByRole('button', { name: 'Open in settings' })).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Open in settings' }))
+    expect(single.onOpenSettings).toHaveBeenCalledWith('/admin/settings/portal')
   })
 })
