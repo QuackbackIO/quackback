@@ -1,4 +1,5 @@
 import { CheckIcon } from '@heroicons/react/24/solid'
+import type { ReactNode } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
@@ -17,6 +18,7 @@ export function GettingStartedCard({
   full = false,
   portalUrl,
   compact = false,
+  brandingNotice,
 }: {
   status: LaunchStatus
   pending: boolean
@@ -25,11 +27,12 @@ export function GettingStartedCard({
   full?: boolean
   portalUrl?: string
   compact?: boolean
+  brandingNotice?: ReactNode
 }) {
   const intl = useIntl()
   const summary = launchChecklistSummary(status)
   const rows = compact && !full
-  if (summary.resolved && !full) return null
+  if (summary.resolved && !full && !brandingNotice) return null
   const tasks = full
     ? summary.tasks
     : summary.tasks
@@ -97,6 +100,9 @@ export function GettingStartedCard({
                   {new URL(portalUrl).host}
                 </a>
               </div>
+            )}
+            {brandingNotice && (
+              <div className={rows ? 'w-full ps-7' : undefined}>{brandingNotice}</div>
             )}
           </li>
         )}

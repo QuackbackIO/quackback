@@ -42,6 +42,8 @@ export type { JsonValue }
  * change — never reuse a retired identifier.
  */
 export type AuditEventType =
+  | 'branding.website.applied'
+  | 'branding.website.undone'
   | 'copilot.settings.applied'
   | 'copilot.settings.undone'
   | 'sso.enforcement.domain.enabled'

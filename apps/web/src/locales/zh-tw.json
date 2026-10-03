@@ -1460,5 +1460,7 @@
   "ask.settings.field.shadowLg": "陰影 L",
   "ask.settings.field.shadowXl": "陰影 XL",
   "ask.settings.field.shadow2xl": "陰影 2XL",
-  "ask.settings.nameManaged": "開啟一般設定以變更此工作區的名稱。"
+  "ask.settings.nameManaged": "開啟一般設定以變更此工作區的名稱。",
+  "onboarding.branding.fromWebsite": "標誌來自 {domain}",
+  "ask.settings.websiteUnavailable": "選擇其他網站，或在入口網站設定中上傳標誌。"
 }

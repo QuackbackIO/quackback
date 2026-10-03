@@ -18,12 +18,17 @@ import {
   type SettingsProposal,
 } from '@/lib/shared/assistant/settings-proposals'
 import {
-  prepareSettingsChanges,
   applySettingsChangesInTransaction,
   undoSettingsChangesInTransaction,
   invalidateSettingsCache,
   type SettingsApplyReceipt,
 } from './settings-proposals.service'
+import { requireAreaPermission } from './settings-proposals.areas'
+import {
+  resolveWebsiteSettingsInputs,
+  prepareResolvedWebsiteSettingsChanges,
+} from './website-settings-proposal'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertWorkspaceThreadOwned, createWorkspaceThread } from './workspace-threads.service'
 import { publishWorkspaceProposalReviewInTransaction } from './workspace-proposal-review'
 import type { AssistantPendingAction } from './pending-actions.service'
@@ -34,13 +39,23 @@ export async function enqueueWorkspaceSettingsProposal(
   inputs: unknown[],
   threadKey?: string,
   turnId?: string
-): Promise<AssistantPendingAction & { reviewHref?: string }> {
+): Promise<
+  AssistantPendingAction & {
+    reviewHref?: string
+    preparationNotes?: Array<'website_color_unavailable'>
+  }
+> {
   const parsed = settingsProposalInputSchema.parse({ changes: inputs }).changes
-  return db.transaction(async (tx) => {
+  if (parsed.some((input) => input.area === 'branding' && input.patch.website !== undefined)) {
+    await requireAreaPermission(actor, 'branding', db, PERMISSIONS.COPILOT_USE)
+    if (threadKey) await assertWorkspaceThreadOwned(threadKey, actor)
+  }
+  const resolved = await resolveWebsiteSettingsInputs(actor, parsed)
+  const result = await db.transaction(async (tx) => {
     // A dedicated review keeps external proposals out of an active chat's history.
     const key = threadKey ?? (await createWorkspaceThread(actor, '', tx)).key
     await assertWorkspaceThreadOwned(key, actor, tx, true)
-    const proposal = await prepareSettingsChanges(actor, parsed, tx)
+    const proposal = await prepareResolvedWebsiteSettingsChanges(actor, resolved, tx)
     const idempotencyKey = `workspace-settings:${key}:${turnId ?? randomUUID()}`
     const [existing] = await tx
       .select()
@@ -98,6 +113,9 @@ export async function enqueueWorkspaceSettingsProposal(
       ? row
       : { ...row, reviewHref: await publishWorkspaceProposalReviewInTransaction(tx, actor, row) }
   })
+  return resolved.preparationNotes.length
+    ? { ...result, preparationNotes: resolved.preparationNotes }
+    : result
 }
 async function lockedOwnedAction(
   id: AssistantPendingActionId,

@@ -1460,5 +1460,7 @@
   "ask.settings.field.shadowLg": "Ombre L",
   "ask.settings.field.shadowXl": "Ombre XL",
   "ask.settings.field.shadow2xl": "Ombre 2XL",
-  "ask.settings.nameManaged": "Ouvrez les paramètres généraux pour modifier le nom de cet espace de travail."
+  "ask.settings.nameManaged": "Ouvrez les paramètres généraux pour modifier le nom de cet espace de travail.",
+  "onboarding.branding.fromWebsite": "Logo de {domain}",
+  "ask.settings.websiteUnavailable": "Choisissez un autre site ou ajoutez un logo dans les paramètres du portail."
 }

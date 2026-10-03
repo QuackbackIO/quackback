@@ -230,7 +230,7 @@ async function runWithPipeline(
       await import('./workspace-settings-actions.service')
     const { settingsProposalInputSchema } =
       await import('@/lib/shared/assistant/settings-proposals')
-    let pending: AssistantPendingAction
+    let pending: Awaited<ReturnType<typeof enqueueWorkspaceSettingsProposal>>
     try {
       pending = await enqueueWorkspaceSettingsProposal(
         ctx.actor,
@@ -253,7 +253,17 @@ async function runWithPipeline(
       label: spec.label,
     })
     ctx.ledger.toolOutcomes.push({ name: spec.name, outcome: 'proposed' })
-    return { status: 'pending_approval', note: PENDING_APPROVAL_NOTE }
+    return {
+      status: 'pending_approval',
+      note: [
+        PENDING_APPROVAL_NOTE,
+        RETRIEVED_CONTENT_NOTE,
+        JSON.stringify({
+          proposal: pending.args,
+          preparationNotes: pending.preparationNotes ?? [],
+        }),
+      ].join('\n'),
+    }
   }
 
   if (mode === 'propose') {

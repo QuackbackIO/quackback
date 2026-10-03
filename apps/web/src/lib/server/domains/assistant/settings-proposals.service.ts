@@ -285,7 +285,7 @@ async function verifyRehostedLogoKey(key: unknown): Promise<void> {
     throw new ValidationError('INVALID_BRANDING_LOGO', 'Choose a workspace logo in settings.')
   const stored = await getS3Object(key, 'bytes=0-0')
   await stored.body.cancel()
-  if (!/^image\/(?:png|jpeg|webp|gif|avif|svg\+xml)$/i.test(stored.contentType))
+  if (!/^image\/(?:png|jpeg|webp|gif|avif|x-icon|svg\+xml)$/i.test(stored.contentType))
     throw new ValidationError('INVALID_BRANDING_LOGO', 'Choose an image for the workspace logo.')
 }
 

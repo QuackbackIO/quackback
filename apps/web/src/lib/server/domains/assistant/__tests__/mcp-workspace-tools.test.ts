@@ -71,11 +71,20 @@ describe('workspace MCP tools', () => {
         ],
       })
     ).not.toThrow()
+    expect(
+      validate(propose, {
+        changes: [
+          { area: 'branding', patch: { website: 'https://example.com' } },
+          { area: 'messenger', patch: { enabled: true } },
+        ],
+      })
+    ).not.toThrow()
     for (const change of [
       { area: 'billing', patch: { plan: 'business' } },
       { area: 'modules', patch: { supportTickets: 'yes' } },
       { area: 'messenger', patch: { supportTickets: true } },
       { area: 'portal', patch: { deletedAt: '2026-10-03' } },
+      { area: 'branding', patch: { website: 'example.com', logoKey: 'logos/other.png' } },
     ])
       expect(validate(propose, { changes: [change] })).toThrow()
     expect(validate(propose, { changes: [] })).toThrow()
@@ -87,6 +96,11 @@ describe('workspace MCP tools', () => {
     expect(modelSchema).toContain('supportTickets')
     expect(modelSchema).toContain('modules')
     expect(modelSchema).toContain('primary')
+    expect(modelSchema).toContain('website')
+    const proposalTool = opened.specs.find((spec) => spec.name === 'propose_settings_change')!
+    const examples = proposalTool.definition.description?.match(/^\{.*\}$/gm) ?? []
+    expect(examples).toHaveLength(4)
+    for (const example of examples) expect(validate(propose, JSON.parse(example))).not.toThrow()
     expect(modelSchema).not.toContain('\\p{L}')
     expect(modelSchema).not.toContain('\\p{N}')
     expect(modelSchema).toContain('oklch')

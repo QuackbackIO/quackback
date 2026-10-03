@@ -17,6 +17,7 @@ describe('parseOpenGraph', () => {
       siteName: 'My Site',
       imageUrl: 'https://example.com/img.jpg',
       faviconUrl: 'https://example.com/favicon.ico',
+      themeColor: null,
     })
   })
 
@@ -102,6 +103,7 @@ describe('parseOpenGraph', () => {
       siteName: null,
       imageUrl: null,
       faviconUrl: 'https://example.com/favicon.ico',
+      themeColor: null,
     })
   })
 
@@ -179,5 +181,64 @@ describe('faviconUrl parsing', () => {
   it('matches rel tokens regardless of order (e.g. rel="icon shortcut")', () => {
     const html = `<html><head><link rel="icon shortcut" href="/fav.ico" /></head></html>`
     expect(parseOpenGraph(html, BASE).faviconUrl).toBe('https://example.com/fav.ico')
+  })
+})
+
+describe('theme-color parsing', () => {
+  it('normalizes opaque hex, attribute order, case and entities', () => {
+    expect(
+      parseOpenGraph('<head><META CONTENT="&#35;aBc" NAME="THEME-COLOR"></head>', BASE).themeColor
+    ).toBe('#AABBCC')
+  })
+  it('prefers an unqualified color to light-specific and never takes dark-only', () => {
+    expect(
+      parseOpenGraph(
+        '<head><meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="#eeeeee" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#abcdef"></head>',
+        BASE
+      ).themeColor
+    ).toBe('#ABCDEF')
+    expect(
+      parseOpenGraph(
+        '<meta name="theme-color" content="#eeeeee" media="(prefers-color-scheme: light)">',
+        BASE
+      ).themeColor
+    ).toBe('#EEEEEE')
+    expect(
+      parseOpenGraph(
+        '<meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)">',
+        BASE
+      ).themeColor
+    ).toBeNull()
+  })
+  it('skips invalid declarations and attributes that only contain the name', () => {
+    for (const color of [
+      'transparent',
+      '#fff0',
+      '#ffffff80',
+      'var(--primary)',
+      'url(https://example.com)',
+      'red',
+    ])
+      expect(
+        parseOpenGraph('<meta name="theme-color" content="' + color + '">', BASE).themeColor
+      ).toBeNull()
+    expect(
+      parseOpenGraph('<meta data-name="theme-color" content="#ffffff">', BASE).themeColor
+    ).toBeNull()
+    expect(
+      parseOpenGraph(
+        '<meta name="theme-color" content="bad"><meta name="theme-color" content="#fff">',
+        BASE
+      ).themeColor
+    ).toBe('#FFFFFF')
+  })
+  it('ignores color after the head and after its existing scan budget', () => {
+    expect(
+      parseOpenGraph('</head><meta name="theme-color" content="#ffffff">', BASE).themeColor
+    ).toBeNull()
+    expect(
+      parseOpenGraph(' '.repeat(205000) + '<meta name="theme-color" content="#ffffff">', BASE)
+        .themeColor
+    ).toBeNull()
   })
 })

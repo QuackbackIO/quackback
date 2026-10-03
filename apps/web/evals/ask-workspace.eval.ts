@@ -120,7 +120,13 @@ describe('Ask workspace model golden selection', () => {
       ).toEqual([])
       if (scenario.expected === 'denied') {
         expect(result.proposedActions).toEqual([])
-        expect(result.text).toMatch(/owner|admin/i)
+        if (scenario.denialReason === 'unavailable') {
+          expect(result.trace.toolCalls.map((call) => call.name)).toContain(scenario.tool)
+          expect(result.navigation ?? []).toEqual([])
+          expect(result.text).toMatch(/unavailable|not available|isn[’']t available|not enabled/i)
+        } else {
+          expect(result.text).toMatch(/owner|admin/i)
+        }
       } else {
         expect(
           result.trace.toolCalls.map((call) => call.name),

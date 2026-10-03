@@ -1460,5 +1460,7 @@
   "ask.settings.field.shadowLg": "Schaduw L",
   "ask.settings.field.shadowXl": "Schaduw XL",
   "ask.settings.field.shadow2xl": "Schaduw 2XL",
-  "ask.settings.nameManaged": "Open de algemene instellingen om de naam van deze werkruimte te wijzigen."
+  "ask.settings.nameManaged": "Open de algemene instellingen om de naam van deze werkruimte te wijzigen.",
+  "onboarding.branding.fromWebsite": "Logo van {domain}",
+  "ask.settings.websiteUnavailable": "Kies een andere website of upload een logo in de portalinstellingen."
 }

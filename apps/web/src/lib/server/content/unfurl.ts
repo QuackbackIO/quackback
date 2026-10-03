@@ -44,7 +44,7 @@ const FAVICON_NONE = '__none'
  * Each redirect hop is independently SSRF-validated by safeFetch.
  * Returns the final Response and the final URL, or null on any failure.
  */
-async function fetchFollowingRedirects(
+export async function fetchFollowingRedirects(
   rawUrl: string
 ): Promise<{ response: Response; finalUrl: string } | null> {
   let currentUrl = rawUrl
@@ -90,52 +90,88 @@ async function fetchFollowingRedirects(
 
 /**
  * Fetch an image/favicon URL, magic-byte verify it against its declared
- * Content-Type, and upload to our storage. Rejects SVG. Returns the proxied URL
- * on success, null on any failure. Uploads are content-addressed so the same
+ * Content-Type, and upload to workspace storage. Rejects SVG. Returns the key
+ * and URL on success, null on any failure. Uploads are content-addressed so the same
  * bytes (a favicon shared across a site, a repeated OG image) collapse to one
  * stored object instead of accumulating a copy per unfurl.
  */
-async function proxyRehostedImage(
+export interface RehostedImage {
+  key: string
+  url: string
+}
+
+export interface RehostImageOptions {
+  timeoutMs: number
+  maxBytes: number
+  storagePrefix?: 'link-previews' | 'logos'
+  followRedirects?: boolean
+}
+
+async function fetchImageResponse(
   rawUrl: string,
-  opts: { timeoutMs: number; maxBytes: number }
-): Promise<string | null> {
-  let response: Response
-  try {
-    response = await safeFetch(rawUrl, {
-      method: 'GET',
-      timeoutMs: opts.timeoutMs,
-      maxResponseBytes: opts.maxBytes,
-      onOverflow: 'error',
-    })
-  } catch {
-    return null
+  opts: RehostImageOptions
+): Promise<Response | null> {
+  const deadline = Date.now() + opts.timeoutMs
+  let currentUrl = rawUrl,
+    remainingBytes = opts.maxBytes
+  for (let hop = 0; hop <= (opts.followRedirects ? MAX_REDIRECTS : 0); hop++) {
+    const timeoutMs = deadline - Date.now()
+    if (timeoutMs <= 0 || remainingBytes <= 0) return null
+    let response: Response
+    try {
+      response = await safeFetch(currentUrl, {
+        method: 'GET',
+        timeoutMs,
+        maxResponseBytes: remainingBytes,
+        onOverflow: 'error',
+      })
+      if (response.status < 300 || response.status >= 400) return response
+      if (!opts.followRedirects || hop === MAX_REDIRECTS) return null
+      remainingBytes -= (await response.arrayBuffer()).byteLength
+      const location = response.headers.get('location')
+      if (!location) return null
+      const next = new URL(location, currentUrl)
+      if (next.protocol !== 'http:' && next.protocol !== 'https:') return null
+      currentUrl = next.href
+    } catch {
+      return null
+    }
   }
+  return null
+}
 
-  if (!response.ok) return null
-
+/** Rehost verified raster bytes, with optional independently validated redirects. */
+export async function rehostImageFromUrl(
+  rawUrl: string,
+  opts: RehostImageOptions
+): Promise<RehostedImage | null> {
+  const response = await fetchImageResponse(rawUrl, opts)
+  if (!response?.ok) return null
   const rawMime = (response.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase()
   const headerMime = canonicalizeImageMime(rawMime)
-  if (headerMime === 'image/svg+xml') return null
-  if (!ALLOWED_REHOST_MIMES.has(headerMime)) return null
-
+  if (headerMime === 'image/svg+xml' || !ALLOWED_REHOST_MIMES.has(headerMime)) return null
   let buffer: Buffer
   try {
     buffer = Buffer.from(await response.arrayBuffer())
   } catch {
     return null
   }
-
   const sniffed = sniffImageMime(buffer)
   if (sniffed === null || sniffed !== headerMime) return null
-
   try {
-    const { url } = await uploadImageBuffer(buffer, sniffed, 'link-previews', {
+    return await uploadImageBuffer(buffer, sniffed, opts.storagePrefix ?? 'link-previews', {
       contentAddressed: true,
     })
-    return url
   } catch {
     return null
   }
+}
+
+async function proxyRehostedImage(
+  rawUrl: string,
+  opts: { timeoutMs: number; maxBytes: number }
+): Promise<string | null> {
+  return (await rehostImageFromUrl(rawUrl, opts))?.url ?? null
 }
 
 const proxyImage = (rawImageUrl: string) =>

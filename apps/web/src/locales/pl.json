@@ -1460,5 +1460,7 @@
   "ask.settings.field.shadowLg": "Cień L",
   "ask.settings.field.shadowXl": "Cień XL",
   "ask.settings.field.shadow2xl": "Cień 2XL",
-  "ask.settings.nameManaged": "Otwórz ustawienia ogólne, aby zmienić nazwę tego obszaru roboczego."
+  "ask.settings.nameManaged": "Otwórz ustawienia ogólne, aby zmienić nazwę tego obszaru roboczego.",
+  "onboarding.branding.fromWebsite": "Logo z {domain}",
+  "ask.settings.websiteUnavailable": "Wybierz inną stronę lub prześlij logo w ustawieniach portalu."
 }

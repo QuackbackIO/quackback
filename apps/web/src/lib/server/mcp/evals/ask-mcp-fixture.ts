@@ -10,9 +10,16 @@ import {
   makeWorkspaceDescriptor,
   makeWorkspaceSecrets,
 } from '@/lib/server/__tests__/workspace-scope'
+import type { WorkspaceDescriptor } from '@/lib/server/workspaces/registry'
+import type { ResolvedWorkspaceSecrets } from '@/lib/server/workspaces/vendor/workspace-secret-resolution'
+
+interface AskMcpFixtureOptions {
+  storage?: Partial<WorkspaceDescriptor['storage']>
+  secrets?: Partial<ResolvedWorkspaceSecrets>
+}
 
 /** Real migrated tables and foreign keys, isolated from every other suite's rows. */
-export async function createAskMcpFixture() {
+export async function createAskMcpFixture(options: AskMcpFixtureOptions = {}) {
   const url =
     process.env.DATABASE_URL ?? 'postgresql://postgres:password@localhost:5432/quackback_test'
   if (new URL(url).pathname !== '/quackback_test')
@@ -58,8 +65,8 @@ export async function createAskMcpFixture() {
         await connection.transaction(async (transaction) => {
           const workspaceKey = schema.replaceAll('_', '-')
           const scope = createWorkspaceScope({
-            workspace: makeWorkspaceDescriptor(workspaceKey),
-            secrets: makeWorkspaceSecrets(workspaceKey),
+            workspace: makeWorkspaceDescriptor(workspaceKey, { storage: options.storage }),
+            secrets: makeWorkspaceSecrets(workspaceKey, options.secrets),
             db: transaction as unknown as Database,
             sql: raw,
             origin: 'test',
