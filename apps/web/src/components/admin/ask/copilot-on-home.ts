@@ -2,13 +2,17 @@ import { useQuery } from '@tanstack/react-query'
 import { useFeatureFlags, usePrincipalId } from '@/lib/client/hooks/use-root-context'
 import { useHasPermission } from '@/lib/client/use-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { getWorkspaceCopilotAvailabilityFn } from '@/lib/server/functions/workspace-copilot'
 
 /** Whether this teammate gets the Copilot chat on Home (flag, model and permission). */
 export function copilotAvailabilityQuery(principalId: string | null | undefined) {
   return {
     queryKey: ['admin', 'workspace-copilot', 'availability', principalId ?? null] as const,
-    queryFn: () => getWorkspaceCopilotAvailabilityFn(),
+    // Loaded on use: the hook sits in the admin layout (the tour), and the
+    // Home loader has usually warmed the answer already.
+    queryFn: async () =>
+      (
+        await import('@/lib/server/functions/workspace-copilot')
+      ).getWorkspaceCopilotAvailabilityFn(),
     staleTime: 30_000,
   }
 }
