@@ -87,6 +87,16 @@ function renderWithProviders(node: React.ReactElement) {
 }
 
 describe('CopilotKnowledgeCard', () => {
+  it('says the Home chat uses these sources across conversations the teammate can see', async () => {
+    renderWithProviders(<CopilotKnowledgeCard />)
+    expect(await screen.findByText("Home uses these too, with Copilot's connectors.")).toBeTruthy()
+    expect(
+      screen.getByText('Earlier conversations with the same customer. On Home, any you can see.')
+    ).toBeTruthy()
+    expect(
+      screen.getByText('Private teammate notes. On Home, any you can see. Never used in drafts.')
+    ).toBeTruthy()
+  })
   it('lists all seven live sources (toggles are wired into the runtime)', async () => {
     renderWithProviders(<CopilotKnowledgeCard />)
     expect(await screen.findByText('Help center')).toBeInTheDocument()

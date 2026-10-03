@@ -72,6 +72,52 @@ const DYNAMIC_PERMISSION = (
 ): Classification => ({ intent: 'DYNAMIC_PERMISSION', resolvesToAny, why })
 
 export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
+  'lib/server/functions/ask-search.ts::searchAskEntitiesFn': DYNAMIC_PERMISSION(
+    [
+      PERMISSIONS.POST_VIEW_PRIVATE,
+      PERMISSIONS.HELP_CENTER_MANAGE,
+      PERMISSIONS.CHANGELOG_VIEW_DRAFT,
+      PERMISSIONS.CHANGELOG_MANAGE,
+      PERMISSIONS.CONVERSATION_VIEW,
+      PERMISSIONS.TICKET_VIEW,
+    ],
+    'team dashboard search checks each product permission and scopes every entity query to the actor'
+  ),
+  'lib/server/functions/workspace-copilot.ts::getWorkspaceCopilotAvailabilityFn': END_USER(
+    'returns only whether this caller has Copilot permission and the enabled capability'
+  ),
+  'lib/server/functions/workspace-copilot.ts::listWorkspaceCopilotThreadsFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.COPILOT_USE],
+    'human team member with Copilot permission reads only their own threads'
+  ),
+  'lib/server/functions/workspace-copilot.ts::createWorkspaceCopilotThreadFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.COPILOT_USE],
+    'human team member creates only their own thread after the capability gate'
+  ),
+  'lib/server/functions/workspace-copilot.ts::getWorkspaceCopilotThreadFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.COPILOT_USE],
+    'human team member with Copilot permission must own the requested thread'
+  ),
+  'lib/server/functions/workspace-copilot.ts::applyWorkspaceSettingsProposalFn': DYNAMIC_PERMISSION(
+    [
+      PERMISSIONS.COPILOT_USE,
+      PERMISSIONS.SETTINGS_MANAGE,
+      PERMISSIONS.SETTINGS_BRANDING,
+      PERMISSIONS.OFFICE_HOURS_MANAGE,
+      PERMISSIONS.CHANGELOG_MANAGE,
+    ],
+    'caller owns the proposal thread and holds every current permission required by its selected changes'
+  ),
+  'lib/server/functions/workspace-copilot.ts::undoWorkspaceSettingsProposalFn': DYNAMIC_PERMISSION(
+    [
+      PERMISSIONS.COPILOT_USE,
+      PERMISSIONS.SETTINGS_MANAGE,
+      PERMISSIONS.SETTINGS_BRANDING,
+      PERMISSIONS.OFFICE_HOURS_MANAGE,
+      PERMISSIONS.CHANGELOG_MANAGE,
+    ],
+    'caller owns the proposal thread and holds every current permission required to restore its applied changes'
+  ),
   // Anyone signed in acts only on their OWN address here: the principal comes
   // from the session, never from the request, so there is no object whose
   // visibility could be checked and no permission that would mean anything.
@@ -94,17 +140,22 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   // every permission declared by the current Writer tool specification.
   'lib/server/functions/assistant-pending-actions.ts::getAssistantPendingActionFn':
     DYNAMIC_PERMISSION(
-      [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW],
+      [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW, PERMISSIONS.COPILOT_USE],
       'caller must be able to view the pending action parent'
     ),
   'lib/server/functions/assistant-actions.ts::rejectAssistantActionFn': DYNAMIC_PERMISSION(
-    [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW],
+    [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW, PERMISSIONS.COPILOT_USE],
     'caller must be able to view the pending action parent'
   ),
   'lib/server/functions/assistant-actions.ts::approveAssistantActionFn': DYNAMIC_PERMISSION(
     [
       PERMISSIONS.CONVERSATION_VIEW,
       PERMISSIONS.TICKET_VIEW,
+      PERMISSIONS.COPILOT_USE,
+      PERMISSIONS.SETTINGS_MANAGE,
+      PERMISSIONS.SETTINGS_BRANDING,
+      PERMISSIONS.OFFICE_HOURS_MANAGE,
+      PERMISSIONS.CHANGELOG_MANAGE,
       PERMISSIONS.CONVERSATION_SET_ATTRIBUTES,
       PERMISSIONS.CONVERSATION_SET_STATUS,
       PERMISSIONS.TICKET_CREATE,

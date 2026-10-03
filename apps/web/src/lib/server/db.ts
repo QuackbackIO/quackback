@@ -298,6 +298,7 @@ export {
   conversations,
   conversationsRelations,
   conversationMessages,
+  workspaceAssistantThreads,
   conversationMessagesRelations,
   conversationTags,
   conversationTagsRelations,

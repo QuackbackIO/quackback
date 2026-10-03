@@ -444,11 +444,13 @@ export interface ThemeColors {
   mutedForeground?: string
   accent?: string
   accentForeground?: string
+  accentInk?: string
   destructive?: string
   destructiveForeground?: string
   border?: string
   input?: string
   ring?: string
+  success?: string
   sidebarBackground?: string
   sidebarForeground?: string
   sidebarPrimary?: string
@@ -462,6 +464,15 @@ export interface ThemeColors {
   chart3?: string
   chart4?: string
   chart5?: string
+  fontSans?: string
+  shadow2xs?: string
+  shadowXs?: string
+  shadowSm?: string
+  shadow?: string
+  shadowMd?: string
+  shadowLg?: string
+  shadowXl?: string
+  shadow2xl?: string
   /** Border radius CSS variable value */
   radius?: string
 }
@@ -1119,6 +1130,9 @@ export interface FeatureFlags {
   /** Status page: public/private/segment-scoped service status with incidents,
    *  maintenance windows, uptime history, and subscriber notifications. */
   statusPage: boolean
+  /** Copilot on Home: the Home chat that answers from Copilot's knowledge and
+   *  proposes reversible settings changes. A Labs switch; on for new workspaces. */
+  copilotHome: boolean
 }
 
 /**
@@ -1194,6 +1208,16 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   supportInbox: false,
   supportTickets: false,
   statusPage: false,
+  copilotHome: false,
+}
+
+/** Flags that are Labs switches rather than products (Settings › Labs). */
+export const LABS_FEATURE_FLAGS = ['copilotHome'] as const satisfies readonly (keyof FeatureFlags)[]
+
+/** Flags a workspace is created with: the defaults plus Copilot on Home. */
+export const NEW_WORKSPACE_FEATURE_FLAGS: FeatureFlags = {
+  ...DEFAULT_FEATURE_FLAGS,
+  copilotHome: true,
 }
 
 /** Onboarding outcomes that may turn extra products on. Kept local so this

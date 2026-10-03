@@ -1,3 +1,4 @@
+import { useCopilotOnHome } from '@/components/admin/ask/copilot-on-home'
 import { useCallback, type ReactNode } from 'react'
 import { FormattedMessage } from 'react-intl'
 import { useSuspenseQuery } from '@tanstack/react-query'
@@ -78,6 +79,8 @@ function TourEndTestAction({
 /** The admin's guided tour, ending on the next test action and owning its one sheet. */
 export function AdminProductTourProvider({ children }: { children: ReactNode }) {
   const { open, sheet } = useTryMessengerSheet()
+  // Home is the Copilot chat for this teammate, so the tour opens on it.
+  const copilotOnHome = useCopilotOnHome()
   const endAction = useCallback<TourEndAction>(
     ({ feedbackPrivate, close }) => (
       <TourEndTestAction
@@ -91,7 +94,7 @@ export function AdminProductTourProvider({ children }: { children: ReactNode }) 
     [open]
   )
   return (
-    <ProductTourProvider endAction={endAction}>
+    <ProductTourProvider endAction={endAction} copilotOnHome={copilotOnHome}>
       {children}
       {sheet}
     </ProductTourProvider>

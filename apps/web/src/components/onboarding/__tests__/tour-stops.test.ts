@@ -37,7 +37,7 @@ describe('resolveTourStops', () => {
       'feedback:feedback-empty@/admin/feedback',
       'support:support-empty@/admin/inbox',
       'view-portal:view-portal@/admin',
-      'search:search@/admin/feedback',
+      'search:search',
     ])
     expect(stops[1]!.line.defaultMessage).toBe(
       'Ideas from customers land here. Share the board link to get the first one.'
@@ -60,7 +60,7 @@ describe('resolveTourStops', () => {
       'feedback:nav-feedback',
       'roadmap:nav-roadmap',
       'view-portal:view-portal@/admin',
-      'search:search@/admin/feedback',
+      'search:search',
     ])
     expect(ids(resolveTourStops(context({ goals: ['product_feedback', 'status_page'] })))).toEqual([
       'products',
@@ -106,14 +106,14 @@ describe('resolveTourStops', () => {
     expect(ids(resolveTourStops(context({ permissions: new Set() })))).toContain('feedback')
   })
 
-  it('searches on Users when Feedback is off', () => {
+  it('ends on the sidebar Search row, which every page has, whatever the modules', () => {
     const stops = resolveTourStops(
       context({
         goals: ['status_page'],
         modules: { feedback: false, support: false, helpCenter: false, status: true },
       })
     )
-    expect(brief(stops).at(-1)).toBe('search:search@/admin/users')
+    expect(brief(stops).at(-1)).toBe('search:search')
   })
 
   it('leaves sidebar stops out on a phone but keeps empty states', () => {
@@ -127,7 +127,7 @@ describe('resolveTourStops', () => {
           })
         )
       )
-    ).toEqual(['support:support-empty@/admin/inbox', 'search:search@/admin/feedback'])
+    ).toEqual(['support:support-empty@/admin/inbox'])
   })
 
   it('never has more than five stops', () => {

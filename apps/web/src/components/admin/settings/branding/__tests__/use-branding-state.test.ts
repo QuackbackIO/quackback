@@ -20,12 +20,36 @@ vi.mock('@/lib/client/mutations/settings', () => ({
 }))
 
 import { useBrandingState } from '../use-branding-state'
+import { updateThemeSchema } from '@/lib/shared/schemas/settings'
 
 beforeEach(() => {
   saveBrandingTheme.mockClear()
 })
 
 describe('useBrandingState setThemeMode', () => {
+  it('saves both palettes through the shared settings validator', async () => {
+    const { result } = renderHook(() =>
+      useBrandingState({
+        initialLogoUrl: null,
+        initialThemeConfig: { themeMode: 'user' },
+        initialCustomCss: '',
+      })
+    )
+    await act(async () => {
+      await result.current.saveTheme()
+    })
+    const payload = saveBrandingTheme.mock.calls[0]![0]
+    const parsed = updateThemeSchema.parse({ brandingConfig: payload.brandingConfig })
+    expect(parsed.brandingConfig.light).toMatchObject({
+      success: 'oklch(0.49 0.115 165.6)',
+      fontSans: '"Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif',
+      radius: '0.5rem',
+    })
+    expect(parsed.brandingConfig.dark).toMatchObject({
+      success: 'oklch(0.696 0.149 163)',
+      fontSans: '"Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif',
+    })
+  })
   it('keeps both palettes in cssText when switching from user to light', () => {
     const { result } = renderHook(() =>
       useBrandingState({

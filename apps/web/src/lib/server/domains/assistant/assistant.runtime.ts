@@ -26,9 +26,9 @@ import { logger } from '@/lib/server/logger'
 import type { AssistantHandoffReason } from '@/lib/server/db'
 import type { PrincipalId, ConversationId, TicketId, AssistantInvolvementId } from '@quackback/ids'
 import type { AssistantSurface } from '@/lib/shared/assistant/surfaces'
+import { agentKindForTurn, isHomeThreadKey, isHomeTurn } from './workspace-safety'
 import {
   DEFAULT_ASSISTANT_CONFIG,
-  roleToAgent,
   type AssistantConfig,
   type AssistantIdentity,
   type AssistantRole,
@@ -182,6 +182,7 @@ interface AssistantDeliveredFields {
    * caller that never resolves a write tool to 'approval').
    */
   proposedActions: AssistantProposedAction[]
+  navigation?: { href: string; label: string; messageId?: string }[]
   identity: AssistantIdentity
   trace: AssistantTurnTrace
   escalation?: EscalationOutcome
@@ -354,7 +355,7 @@ const citationInputSchema = z.object({
   id: z.string(),
 })
 
-const assistantOutputSchema = z.object({
+export const assistantOutputSchema = z.object({
   text: z.string(),
   citations: z.array(citationInputSchema).default([]),
   // Copilot-only intent tag (see buildCopilotFramingPrompt). Optional: the
@@ -832,6 +833,15 @@ function deriveAnswerKind(
 export async function runAssistantTurn(input: AssistantTurnInput): Promise<AssistantTurnResult> {
   const surface = input.surface
   const role = input.role
+  // One Home-turn detector: a Home turn is the web surface on a Home thread,
+  // and a Home thread never runs on another surface.
+  if (
+    role === 'workspace_assistant' &&
+    (surface === 'workspace') !== isHomeThreadKey(input.workspaceThreadKey)
+  )
+    throw new Error('Workspace assistant surface and thread disagree')
+  const agentKind = agentKindForTurn(role, input.workspaceThreadKey)
+  const homeTurn = isHomeTurn({ role, agentKind })
   const rolePolicy = resolveAssistantRolePolicy(role)
   const messages = input.messages
 
@@ -873,9 +883,10 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   // registers iff ≥1 source is enabled, get_status iff `status` is on, and the
   // enabled set both scopes retrieval and drives the tool's source enumeration.
   const knowledgeSnapshot = resolveAssistantKnowledgeSnapshot(
-    roleToAgent(role),
+    agentKind,
     runtimeConfig.config,
-    audience
+    audience,
+    homeTurn
   )
 
   // Customer voice always resolves from the Agent's sub-config: the
@@ -969,7 +980,6 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
 
   // Shared construction point (simulate derives from the null conversation =
   // sandbox; actor defaults to Quinn's bounded set).
-  const agentKind = roleToAgent(role)
   let skillCount = 0
   try {
     skillCount = await countAssignedSkills(agentKind, execDb)
@@ -982,6 +992,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     assistantPrincipalId: input.assistantPrincipalId,
     assistantName: runtimeConfig.config.identity.name,
     role,
+    agentKind,
     audience,
     conversationId,
     ticketId,
@@ -1000,7 +1011,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   const guidanceChannel = surface
   let guidanceCandidates: AssistantGuidanceRule[] = []
   try {
-    guidanceCandidates = await listEnabledGuidanceCandidates({ agent: roleToAgent(role) })
+    guidanceCandidates = await listEnabledGuidanceCandidates({ agent: agentKind })
   } catch (error) {
     log.warn({ err: error }, 'guidance candidate loading failed; continuing without guidance')
   }
@@ -1049,6 +1060,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   if (role === 'workspace_assistant') {
     try {
       const auth = await mcpAuthFromActor(input.actor, runtimeConfig.config.identity.name)
+      if (auth && homeTurn) auth.workspaceThreadKey = input.workspaceThreadKey
       if (auth) {
         const opened = await openWorkspaceMcp(auth)
         closeWorkspaceMcp = opened.close
@@ -1231,6 +1243,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
       trustedRuntimeContext: trustedContextParts.join('\n') || null,
       channel: promptChannel,
       surface,
+      agentKind,
       guidance: selectedGuidance.map((rule) => rule.instruction),
       workflowInstructions: input.stepInstructions,
       attributeCatalogue: attributeDefinitions,
@@ -1436,6 +1449,7 @@ ${runtimeConfig.config.agents.workspace.instructions}`)
         contextInternallySourced ||
         [...toolContext.ledger.sources.values()].some((source) => source.internal === true),
       proposedActions: [...toolContext.ledger.proposedActions],
+      ...(homeTurn ? { navigation: [...(toolContext.ledger.navigation ?? [])] } : {}),
       identity: runtimeConfig.config.identity,
       trace,
       ...(escalation && { escalation }),
@@ -1473,7 +1487,7 @@ export interface StreamAssistantTurnOptions {
    * the turn fully completes — citations relinked, completion validated — so
    * the payload is the enriched result, never the raw model object.
    */
-  buildFinalPayload: (result: AssistantTurnResult) => unknown
+  buildFinalPayload: (result: AssistantTurnResult) => unknown | Promise<unknown>
   /** Maps a turn failure to the wire error frame. Defaults to
    *  not_configured / turn_failed. */
   mapError?: (error: unknown) => { code: string; message: string }
@@ -1545,10 +1559,11 @@ export function streamAssistantTurn(
 
   queue.push(runStartedChunk(options.wire))
   void runAssistantTurn({ ...options.input, onActivity, wireSink })
-    .then((result) => {
+    .then(async (result) => {
+      const payload = await options.buildFinalPayload(result)
       pairing.closeOpen()
       closeOpenStep()
-      queue.push(runFinishedChunk(options.wire, options.buildFinalPayload(result)))
+      queue.push(runFinishedChunk(options.wire, payload))
       queue.end()
     })
     .catch((error: unknown) => {

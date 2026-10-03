@@ -39,6 +39,7 @@ import {
   type SegmentId,
 } from '@quackback/ids'
 import { type ContentAudience } from './audience'
+import { agentKindForTurn, isHomeTurn } from './workspace-safety'
 import type { AssistantAttributeCatalogueEntry } from './prompt-catalogues'
 import {
   retrieveKnowledge,
@@ -51,6 +52,7 @@ import { TICKET_TYPES, CONVERSATION_PRIORITIES } from '@/lib/shared/db-types'
 import type { Actor } from '@/lib/server/policy/types'
 import {
   DEFAULT_ASSISTANT_CONFIG,
+  type AssistantAgentKind,
   type AssistantRole,
   type AssistantToolRules,
 } from '@/lib/shared/assistant/config'
@@ -178,6 +180,7 @@ export interface AssistantToolLedger {
    * attempt's proposals. See `AssistantProposedAction`.
    */
   proposedActions: AssistantProposedAction[]
+  navigation?: { href: string; label: string; messageId?: string }[]
   /** search calls made this attempt, for the server-side search budget. */
   searchCalls: number
 }
@@ -196,6 +199,7 @@ export function makeAssistantToolLedger(): AssistantToolLedger {
     handoffRequest: null,
     inabilityReport: null,
     proposedActions: [],
+    navigation: [],
     searchCalls: 0,
   }
 }
@@ -216,6 +220,11 @@ export interface AssistantToolContext {
   assistantName: string
   /** Trust profile that originated this tool call and any pending action. */
   role: AssistantRole
+  /**
+   * The agent whose configuration this turn runs with. Home turns are the
+   * workspace assistant running as Copilot (see `isHomeTurn`).
+   */
+  agentKind: AssistantAgentKind
   /**
    * The turn's retrieval ceiling, minted exclusively by `resolveContentAudience`
    * (see `./audience`). Never construct this from a raw string literal.
@@ -328,6 +337,7 @@ export function makeAssistantToolContext(init: {
   assistantName?: string
   workspaceThreadKey?: string
   role?: AssistantRole
+  agentKind?: AssistantAgentKind
   audience: ContentAudience
   conversationId: ConversationId | null
   ticketId?: TicketId | null
@@ -350,6 +360,8 @@ export function makeAssistantToolContext(init: {
     assistantName: init.assistantName ?? DEFAULT_ASSISTANT_CONFIG.identity.name,
     workspaceThreadKey: init.workspaceThreadKey,
     role: init.role ?? 'customer_support',
+    agentKind:
+      init.agentKind ?? agentKindForTurn(init.role ?? 'customer_support', init.workspaceThreadKey),
     audience: init.audience,
     conversationId: init.conversationId,
     ticketId: init.ticketId ?? null,
@@ -565,7 +577,7 @@ async function executeSearchKnowledge(
     sourceTypes: narrowing,
     enabledSources: ctx.knowledge.sources,
     actor: ctx.actor,
-    workspaceSearch: ctx.role === 'workspace_assistant',
+    workspaceSearch: isHomeTurn(ctx),
     includeInternalNotes: ctx.knowledge.internalNotes,
     notesOnly: ctx.knowledge.pastConversations === false,
   })
@@ -1298,8 +1310,7 @@ async function executeUseSkill(
     }
   }
   const { getSkillBody } = await import('./skills.service')
-  const { roleToAgent } = await import('@/lib/shared/assistant/config')
-  const body = await getSkillBody(args.name, roleToAgent(ctx.role), ctx.db)
+  const body = await getSkillBody(args.name, ctx.agentKind, ctx.db)
   skills.loads += 1
   ctx.skills = skills
   if (!body) {

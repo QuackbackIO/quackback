@@ -74,6 +74,16 @@ export function setSupportSurfaces(enabled: boolean = true): void {
   runScript('set-support-surfaces.ts', [enabled ? 'on' : 'off'], 'set support surfaces')
 }
 
+/** Switch Copilot on Home on or off, and bust the cached workspace settings. */
+export function setCopilotHome(enabled: boolean = true): void {
+  runScript('set-copilot-home.ts', [enabled ? 'on' : 'off'], 'set Copilot on Home')
+}
+
+/** Whether the e2e server's environment configures a chat model for Copilot. */
+export function isCopilotModelConfigured(): boolean {
+  return JSON.parse(runScript('check-model.ts', [], 'check the model configuration')).configured
+}
+
 /** Enable (or disable) widget Help/Changelog/Messages tabs plus product flags. */
 export function setWidgetSurfaces(enabled: boolean = true): void {
   runScript('set-widget-surfaces.ts', [enabled ? 'on' : 'off'], 'set widget surfaces')

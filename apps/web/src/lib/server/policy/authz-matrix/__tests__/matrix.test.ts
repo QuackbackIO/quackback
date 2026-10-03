@@ -96,6 +96,20 @@ describe('API-route channel reachability', () => {
   })
 })
 
+describe('workspace Copilot session route', () => {
+  it('requires a teammate session with Copilot permission and excludes API keys', () => {
+    const route = surfaces.find(
+      (surface) => surface.file === 'routes/api/admin/assistant/workspace.ts'
+    )!
+    expect(route.channel).toBe('session-route')
+    expect(route.authz).toEqual({ type: 'permission', permission: 'copilot.use' })
+    expect(evaluate(byId('admin'), route)).toBe('allow')
+    expect(evaluate(byId('member'), route)).toBe('allow')
+    expect(evaluate(byId('portal_user'), route)).toBe('deny')
+    expect(evaluate(byId('full_api_key'), route)).toBe('n/a')
+  })
+})
+
 describe('API key scope enforcement (owner permissions ∩ key scopes)', () => {
   it('a read-only scoped key is denied every write tool a full key passes', () => {
     const writeTools = tools.filter((t) => t.scopes.every((s) => s.startsWith('write:')))

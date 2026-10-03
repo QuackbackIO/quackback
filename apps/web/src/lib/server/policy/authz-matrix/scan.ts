@@ -235,6 +235,51 @@ export function scanSourceFile(relPath: string, text: string): ScanResult {
 export function scanMcpTools(relPath: string, text: string): ScannedMcpTool[] {
   const sf = ts.createSourceFile(relPath, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
   const tools: ScannedMcpTool[] = []
+  const bindings = new Map<string, ts.Expression[]>()
+  const collectBindings = (node: ts.Node): void => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+      const values = bindings.get(node.name.text) ?? []
+      values.push(node.initializer)
+      bindings.set(node.name.text, values)
+    }
+    ts.forEachChild(node, collectBindings)
+  }
+  collectBindings(sf)
+  const resolveLocal = (expression: ts.Expression, seen = new Set<string>()): ts.Expression => {
+    if (
+      ts.isAsExpression(expression) ||
+      ts.isSatisfiesExpression(expression) ||
+      ts.isParenthesizedExpression(expression)
+    )
+      return resolveLocal(expression.expression, seen)
+    if (ts.isIdentifier(expression) && !seen.has(expression.text)) {
+      const values = bindings.get(expression.text)
+      if (values?.length === 1) {
+        seen.add(expression.text)
+        return resolveLocal(values[0], seen)
+      }
+    }
+    return expression
+  }
+  const guardedMapScopes = (argument: ts.Expression): string[] => {
+    if (!ts.isPropertyAccessExpression(argument) || argument.name.text !== 'scope') return []
+    const entry = resolveLocal(argument.expression)
+    if (!ts.isElementAccessExpression(entry)) return []
+    const map = resolveLocal(entry.expression)
+    if (!ts.isObjectLiteralExpression(map)) return []
+    return map.properties.flatMap((property) => {
+      if (!ts.isPropertyAssignment(property)) return []
+      const value = resolveLocal(property.initializer)
+      if (!ts.isObjectLiteralExpression(value)) return []
+      const scope = value.properties.find(
+        (candidate): candidate is ts.PropertyAssignment =>
+          ts.isPropertyAssignment(candidate) &&
+          ts.isIdentifier(candidate.name) &&
+          candidate.name.text === 'scope'
+      )?.initializer
+      return scope && ts.isStringLiteral(scope) ? [scope.text] : []
+    })
+  }
 
   /** Union in guard calls found anywhere under `node` (handler branches). */
   const collectGuardCalls = (node: ts.Node, scopes: Set<string>, team: { value: boolean }) => {
@@ -244,6 +289,8 @@ export function scanMcpTools(relPath: string, text: string): ScannedMcpTool[] {
         const scopeArg = n.arguments[1]
         if (callee === 'requireScope' && scopeArg && ts.isStringLiteral(scopeArg)) {
           scopes.add(scopeArg.text)
+        } else if (callee === 'requireScope' && scopeArg) {
+          for (const scope of guardedMapScopes(scopeArg)) scopes.add(scope)
         } else if (callee === 'requireTeamRole') {
           team.value = true
         }

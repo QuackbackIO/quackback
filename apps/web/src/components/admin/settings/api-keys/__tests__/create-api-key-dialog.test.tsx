@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, cleanup, fireEvent, waitFor } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { API_KEY_SCOPES } from '@/lib/server/domains/api-keys/api-key-scopes'
 
 const { mockCreateApiKeyFn } = vi.hoisted(() => ({
@@ -9,10 +11,6 @@ const { mockCreateApiKeyFn } = vi.hoisted(() => ({
 
 vi.mock('@/lib/server/functions/api-keys', () => ({
   createApiKeyFn: mockCreateApiKeyFn,
-}))
-
-vi.mock('@tanstack/react-query', () => ({
-  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -25,7 +23,11 @@ function renderDialog(onKeyCreated = vi.fn()) {
   return {
     onKeyCreated,
     ...render(
-      <CreateApiKeyDialog open={true} onOpenChange={vi.fn()} onKeyCreated={onKeyCreated} />
+      <IntlProvider locale="en">
+        <QueryClientProvider client={new QueryClient()}>
+          <CreateApiKeyDialog open={true} onOpenChange={vi.fn()} onKeyCreated={onKeyCreated} />
+        </QueryClientProvider>
+      </IntlProvider>
     ),
   }
 }
@@ -54,13 +56,17 @@ describe('CreateApiKeyDialog scopes', () => {
       'aria-pressed',
       'true'
     )
+    expect(getByRole('button', { name: 'Settings: Read and write' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
     expect(getByRole('button', { name: 'Feedback: Read' })).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('submits the selected scopes with the key name', async () => {
-    mockCreateApiKeyFn.mockResolvedValue({
-      apiKey: { id: 'api_key_1', name: 'CI' },
-      plainTextKey: 'qb_secret',
+    mockCreateApiKeyFn.mockImplementation(async ({ data }) => {
+      expect(data).toEqual({ name: 'CI', scopes: [...API_KEY_SCOPES] })
+      return { apiKey: { id: 'api_key_1', name: data.name }, plainTextKey: 'qb_secret' }
     })
     const { getByLabelText, getByRole, onKeyCreated } = renderDialog()
 
@@ -73,10 +79,13 @@ describe('CreateApiKeyDialog scopes', () => {
     })
   })
 
-  it('stores only the three reads after downgrading every domain from Read and write', async () => {
-    mockCreateApiKeyFn.mockResolvedValue({
-      apiKey: { id: 'api_key_1', name: 'Read bot' },
-      plainTextKey: 'qb_secret',
+  it('stores only the four reads after downgrading every domain from Read and write', async () => {
+    mockCreateApiKeyFn.mockImplementation(async ({ data }) => {
+      expect(data).toEqual({
+        name: 'Read bot',
+        scopes: ['read:feedback', 'read:article', 'read:chat', 'read:settings'],
+      })
+      return { apiKey: { id: 'api_key_1', name: data.name }, plainTextKey: 'qb_secret' }
     })
     const { getByLabelText, getByRole, onKeyCreated } = renderDialog()
 
@@ -85,11 +94,12 @@ describe('CreateApiKeyDialog scopes', () => {
     fireEvent.click(getByRole('button', { name: 'Help Center: Read' }))
     fireEvent.click(getByRole('button', { name: 'Conversations: Read' }))
     fireEvent.click(getByRole('button', { name: 'Changelog: Write' }))
+    fireEvent.click(getByRole('button', { name: 'Settings: Read' }))
     fireEvent.click(getByRole('button', { name: 'Create API key' }))
 
     await waitFor(() => expect(onKeyCreated).toHaveBeenCalled())
     const sent = mockCreateApiKeyFn.mock.calls[0][0].data.scopes as string[]
-    expect(sent).toEqual(['read:feedback', 'read:article', 'read:chat'])
+    expect(sent).toEqual(['read:feedback', 'read:article', 'read:chat', 'read:settings'])
   })
 
   it('disables submit when every domain is off', () => {
@@ -99,6 +109,7 @@ describe('CreateApiKeyDialog scopes', () => {
     fireEvent.click(getByRole('button', { name: 'Help Center: Read and write' }))
     fireEvent.click(getByRole('button', { name: 'Conversations: Read and write' }))
     fireEvent.click(getByRole('button', { name: 'Changelog: Write' }))
+    fireEvent.click(getByRole('button', { name: 'Settings: Read and write' }))
     expect(getByRole('button', { name: 'Create API key' })).toBeDisabled()
     expect(mockCreateApiKeyFn).not.toHaveBeenCalled()
   })

@@ -19,6 +19,7 @@ const hoisted = vi.hoisted(() => ({
   canConverse: true,
   status: null as unknown,
   progress: {} as Record<string, string>,
+  copilotOnHome: false,
 }))
 
 const router = vi.hoisted(() => ({
@@ -55,6 +56,9 @@ vi.mock('@/lib/client/queries/admin', () => ({
   },
 }))
 vi.mock('@/lib/client/hooks/use-root-context', () => ({ useFeatureFlags: () => hoisted.flags }))
+vi.mock('@/components/admin/ask/copilot-on-home', () => ({
+  useCopilotOnHome: () => hoisted.copilotOnHome,
+}))
 vi.mock('@/lib/client/use-permissions', () => ({
   usePermissions: () => new Set([PERMISSIONS.MEMBER_VIEW, PERMISSIONS.CONVERSATION_VIEW]),
 }))
@@ -124,6 +128,7 @@ async function finishTour() {
       <AdminProductTourProvider>
         <StartTour />
         {[
+          'copilot',
           'products',
           'feedback-empty',
           'nav-feedback',
@@ -162,6 +167,7 @@ beforeEach(() => {
   hoisted.canConverse = true
   hoisted.status = status()
   hoisted.progress = {}
+  hoisted.copilotOnHome = false
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
     () =>
       ({
@@ -202,6 +208,34 @@ describe('choosing the test action', () => {
     expect(firstWinTestStart('support', { message: true, idea: true })).toBe('message')
     expect(firstWinTestStart('support', { message: false, idea: true })).toBeNull()
     expect(firstWinTestStart('helpCenter', { message: true, idea: true })).toBeNull()
+  })
+})
+
+describe('the admin tour', () => {
+  it('opens on the Copilot chat when Home is the chat, and on the products otherwise', async () => {
+    for (const [copilotOnHome, lead] of [
+      [true, 'Copilot.'],
+      [false, 'Your products.'],
+    ] as const) {
+      hoisted.copilotOnHome = copilotOnHome
+      render(
+        providers(
+          <AdminProductTourProvider>
+            <StartTour />
+            {['copilot', 'products', 'nav-feedback', 'nav-roadmap', 'view-portal', 'search'].map(
+              (target) => (
+                <div key={target} data-tour={target} />
+              )
+            )}
+          </AdminProductTourProvider>
+        )
+      )
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Start tour' }))
+      })
+      await waitFor(() => expect(screen.getByRole('dialog')).toHaveTextContent(lead))
+      cleanup()
+    }
   })
 })
 

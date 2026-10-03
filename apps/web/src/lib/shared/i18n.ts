@@ -166,11 +166,30 @@ export function isViewerMessage(key: string): boolean {
   return VIEWER_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
 }
 
+/**
+ * Copilot and search strings. Their chunks (the Home chat and the search
+ * dialog) load them as they open (see `AskMessages`); only the sidebar Search
+ * row renders on every page, so its strings stay in the seed.
+ */
+export function isAskMessage(key: string): boolean {
+  return key.startsWith('ask.') && !key.startsWith('ask.search.')
+}
+
 /** A catalog without the viewer's strings, for seeding a page. */
 export function withoutViewerMessages(all: Record<string, string>): Record<string, string> {
   const subset: Record<string, string> = {}
   for (const [key, value] of Object.entries(all)) {
     if (!isViewerMessage(key)) subset[key] = value
+  }
+  return subset
+}
+
+/** The Copilot and search strings in a locale. */
+export async function loadAskMessages(locale: SupportedLocale): Promise<Record<string, string>> {
+  const all = await loadMessages(locale)
+  const subset: Record<string, string> = {}
+  for (const [key, value] of Object.entries(all)) {
+    if (isAskMessage(key)) subset[key] = value
   }
   return subset
 }
@@ -227,12 +246,13 @@ const WIZARD_ONLY_MESSAGE_PREFIXES = [
 
 /**
  * The catalog an admin page seeds: everything but the strings that load with
- * a lazy surface (the file viewer, the product tour) and the wizard's own.
+ * a lazy surface (the file viewer, the product tour, Copilot and search) and
+ * the wizard's own.
  */
 export function adminSeedMessages(all: Record<string, string>): Record<string, string> {
   const subset: Record<string, string> = {}
   for (const [key, value] of Object.entries(all)) {
-    if (isViewerMessage(key) || isTourMessage(key)) continue
+    if (isViewerMessage(key) || isTourMessage(key) || isAskMessage(key)) continue
     if (WIZARD_ONLY_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))) continue
     subset[key] = value
   }

@@ -11,6 +11,8 @@ import {
   loadViewerMessages,
   loadWidgetMessages,
   withoutViewerMessages,
+  loadAskMessages,
+  isAskMessage,
   adminSeedMessages,
   isTourMessage,
   loadTourMessages,
@@ -189,6 +191,18 @@ describe('viewer strings', () => {
     expect(Object.keys(viewer).length + Object.keys(withoutViewerMessages(all)).length).toBe(
       Object.keys(all).length
     )
+  })
+
+  it('leaves Copilot and search strings to the chunks that render them', async () => {
+    const all = await loadMessages('fr')
+    const seeded = adminSeedMessages(all)
+    const ask = await loadAskMessages('fr')
+    expect(Object.keys(seeded).filter(isAskMessage)).toEqual([])
+    // The sidebar Search row renders on every admin page.
+    expect(seeded['ask.search.row']).toBe(all['ask.search.row'])
+    expect(ask['ask.chat.newChat']).toBe(all['ask.chat.newChat'])
+    expect(ask['ask.destination.settings_portal']).toBe(all['ask.destination.settings_portal'])
+    expect(Object.keys(ask).every(isAskMessage)).toBe(true)
   })
 })
 

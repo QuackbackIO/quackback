@@ -69,6 +69,7 @@ import {
   readSettingsRow,
   type SettingsFreshness,
   type SettingsRecord,
+  type SettingsWriteOptions,
 } from './settings.helpers'
 import { withCurrentStorageReadTokens } from '@/lib/server/content/storage-read-urls'
 
@@ -1079,18 +1080,22 @@ export async function isCopilotCapabilityEnabled(
 /**
  * Update feature flags (partial update, merges with existing)
  */
-export async function updateFeatureFlags(input: Partial<FeatureFlags>): Promise<FeatureFlags> {
+export async function updateFeatureFlags(
+  input: Partial<FeatureFlags>,
+  options: SettingsWriteOptions = {}
+): Promise<FeatureFlags> {
   // The patch rewrites columns it was computed from (flags, metadata, widget
   // and portal config), so the row is read under its lock: a concurrent write
   // to any of them is read here rather than overwritten.
-  const flags = await db.transaction(async (tx) => {
+  const write = async (tx: Database | Transaction) => {
     const [org] = await tx.select().from(settings).limit(1).for('update')
     if (!org) throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
     const { updated, patch } = featureFlagsWrite(org, input)
     await tx.update(settings).set(patch).where(eq(settings.id, org.id))
     return updated
-  })
-  await invalidateSettingsCache()
+  }
+  const flags = options.executor ? await write(options.executor) : await db.transaction(write)
+  if (!options.executor) await invalidateSettingsCache()
   return flags
 }
 

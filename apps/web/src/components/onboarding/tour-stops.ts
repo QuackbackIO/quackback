@@ -170,19 +170,15 @@ function goalStop(goal: OnboardingOutcome, ctx: TourContext): TourStop | null {
   }
 }
 
-/**
- * The search stop. The list header's search is the search this page has; it
- * lives on product pages, so the stop opens Feedback, or Users when Feedback
- * is off.
- */
-function searchStop(ctx: TourContext): TourStop {
-  return stop('search', 'search', ctx.modules.feedback ? '/admin/feedback' : '/admin/users')
+/** The search stop: the sidebar Search row, on every page, so the tour stays put. */
+function searchStop(): TourStop {
+  return stop('search', 'search')
 }
 
 /**
  * The tour for this workspace and viewer: Copilot (or Your products), up to
  * two goal stops in goal order, Your portal back on Home, then Search. At most
- * five; sidebar stops are left out on a phone.
+ * five; sidebar stops, Search among them, are left out on a phone.
  */
 export function resolveTourStops(ctx: TourContext): TourStop[] {
   const stops: TourStop[] = []
@@ -201,7 +197,7 @@ export function resolveTourStops(ctx: TourContext): TourStop[] {
   stops.push(...goalStops.slice(0, 2))
 
   if (!ctx.narrow) stops.push(stop('view-portal', 'view-portal', '/admin'))
-  stops.push(searchStop(ctx))
+  if (!ctx.narrow) stops.push(searchStop())
   return stops.slice(0, MAX_TOUR_STOPS)
 }
 

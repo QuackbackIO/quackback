@@ -380,6 +380,13 @@ describe('assistant role catalogue', () => {
 })
 
 describe('roleToAgent', () => {
+  it('uses the existing Copilot configuration for workspace chat while preserving Slack', () => {
+    expect(roleToAgent('workspace_assistant', 'workspace')).toBe('copilot')
+    expect(roleToAgent('workspace_assistant', 'slack')).toBe('workspace')
+    expect(roleToAgent('workspace_assistant')).toBe('workspace')
+    expect(roleToAgent('copilot_qa', 'copilot')).toBe('copilot')
+    expect(roleToAgent('customer_support', 'widget')).toBe('agent')
+  })
   it('maps customer-facing roles to the Agent and copilot_qa to the Copilot (D9)', () => {
     expect(roleToAgent('customer_support')).toBe('agent')
     expect(roleToAgent('copilot_qa')).toBe('copilot')

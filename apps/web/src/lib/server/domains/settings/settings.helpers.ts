@@ -2,7 +2,7 @@
  * Internal shared helpers for settings sub-modules.
  * NOT part of the public API — import from settings.service instead.
  */
-import { db, eq, settings } from '@/lib/server/db'
+import { db, eq, settings, type Database, type Transaction } from '@/lib/server/db'
 import { cacheDel, CACHE_KEYS } from '@/lib/server/cache'
 import { DomainException, InternalError, NotFoundError } from '@/lib/shared/errors'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
@@ -117,8 +117,10 @@ export function deepMerge<T extends object>(target: T, source: Partial<T>): T {
  */
 
 /** @internal */
-export async function requireSettings(): Promise<SettingsRecord> {
-  const org = await db.query.settings.findFirst()
+export async function requireSettings(
+  executor: Database | Transaction = db
+): Promise<SettingsRecord> {
+  const org = await executor.query.settings.findFirst()
   if (!org) throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
   return org
 }
@@ -226,9 +228,10 @@ export function parseMetadataBag(
  */
 export async function writeMetadataKey<T>(
   key: string,
-  value: T | ((storedMetadata: string | null) => T)
+  value: T | ((storedMetadata: string | null) => T),
+  options: SettingsWriteOptions = {}
 ): Promise<T> {
-  const next = await db.transaction(async (tx) => {
+  const write = async (tx: Database | Transaction) => {
     const [row] = await tx
       .select({ id: settings.id, metadata: settings.metadata })
       .from(settings)
@@ -247,8 +250,9 @@ export async function writeMetadataKey<T>(
       .set({ metadata: JSON.stringify(bag) })
       .where(eq(settings.id, row.id))
     return computed
-  })
-  await invalidateSettingsCache()
+  }
+  const next = options.executor ? await write(options.executor) : await db.transaction(write)
+  if (!options.executor) await invalidateSettingsCache()
   return next
 }
 
@@ -359,4 +363,9 @@ export function normalizeWelcomeCardInput(
     normalized.body = sanitizeTiptapContent(input.body)
   }
   return normalized
+}
+
+/** A caller transaction owns commit and cache invalidation. */
+export interface SettingsWriteOptions {
+  executor?: Database | Transaction
 }

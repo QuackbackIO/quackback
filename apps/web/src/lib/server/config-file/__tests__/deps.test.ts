@@ -97,6 +97,7 @@ describe('createSettings', () => {
       supportInbox: false,
       supportTickets: false,
       statusPage: false,
+      copilotHome: true,
     })
   })
 

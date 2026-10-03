@@ -78,13 +78,7 @@ function extractFontSansFromCss(css: string): string | null {
 /**
  * Reads `fontSans` off a persisted BrandingConfig.light/dark blob.
  *
- * The server-side `ThemeColors` type (settings.types.ts) doesn't declare a
- * `fontSans` field, but the branding editor's saveTheme() does write one onto
- * that same JSON blob (brandingConfig is persisted as a loose
- * Record<string, unknown>, not validated against ThemeColors) — so the value
- * is there at runtime even though the server type omits it. Route loaders use
- * this instead of reading `.fontSans` directly so they don't need a `ThemeColors
- * doesn't have fontSans` type error at every call site.
+ * Route loaders use this helper for settings values and legacy JSON blobs.
  */
 export function readFontSans(colors: object | null | undefined): string | null {
   return (colors as { fontSans?: string } | null | undefined)?.fontSans ?? null

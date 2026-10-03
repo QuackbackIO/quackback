@@ -1,4 +1,5 @@
 import { LaunchPlanDock } from '@/components/onboarding/launch-plan-dock'
+import { SearchTrigger } from '@/components/admin/ask/search-palette'
 import { useProductTour } from '@/components/onboarding/product-tour'
 import { FormattedMessage } from 'react-intl'
 import { railControlClass } from '@/components/admin/rail-item'
@@ -369,6 +370,9 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
             </Link>
 
             {/* Main Navigation */}
+            <div className="mb-2 px-2">
+              <SearchTrigger tour className={railControlClass()} />
+            </div>
             <nav data-tour="products" className="flex flex-col gap-0.5 px-2">
               {railItems.map((item) => (
                 <NavItem
@@ -644,6 +648,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
         </Link>
 
         <div className="flex items-center gap-1">
+          <SearchTrigger className="flex size-9 items-center justify-center rounded-md hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/25 [&>span]:hidden [&>kbd]:hidden" />
           <NotificationBell className="h-9 w-9" />
 
           <DropdownMenu>

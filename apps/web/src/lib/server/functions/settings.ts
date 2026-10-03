@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { tiptapContentSchema } from '@/lib/shared/schemas/posts'
+import { updateThemeSchema } from '@/lib/shared/schemas/settings'
 // Import types from barrel export (client-safe)
 import {
   DEFAULT_PORTAL_CONFIG,
@@ -323,10 +324,6 @@ export const fetchUserProfile = createServerFn({ method: 'GET' })
 // ============================================
 // Write Operations
 // ============================================
-
-const updateThemeSchema = z.object({
-  brandingConfig: z.record(z.string(), z.unknown()),
-})
 
 export const updatePortalConfigSchema = z.object({
   features: z

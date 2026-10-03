@@ -430,7 +430,7 @@ describe('MCP HTTP Handler', () => {
       expect(response.status).toBe(401)
       const challenge = response.headers.get('www-authenticate') ?? ''
       expect(challenge).toContain('resource_metadata=')
-      expect(challenge).toContain('scope="read:feedback read:article read:chat"')
+      expect(challenge).toContain('scope="read:feedback read:article read:chat read:settings"')
     })
 
     it('should return 401 when API key is invalid', async () => {
@@ -682,7 +682,10 @@ describe('MCP HTTP Handler', () => {
       expect(toolNames).toContain('unlink_ticket')
       expect(toolNames).toContain('upload_file')
       expect(toolNames).toContain('widget_install_status')
-      expect(toolNames).toHaveLength(40)
+      expect(toolNames).toContain('get_settings')
+      expect(toolNames).toContain('propose_settings_change')
+      expect(toolNames).toContain('navigate_workspace')
+      expect(toolNames).toHaveLength(43)
     })
 
     it('should handle resources/list request', async () => {

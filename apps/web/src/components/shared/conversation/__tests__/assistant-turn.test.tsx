@@ -3,11 +3,26 @@
  * Citation dots retain public/internal styling and show source details and
  * freshness in a viewport-aware tooltip on hover.
  */
-import { describe, expect, it } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it } from 'vitest'
+import { cleanup, render as renderRTL, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { AssistantAnswer, type RenderableCitation } from '../assistant-turn'
+import { IntlProvider } from 'react-intl'
+import { AssistantAnswer, AssistantSourcesTrace, type RenderableCitation } from '../assistant-turn'
 import type { ConversationMessageCitation } from '@/lib/shared/conversation/types'
+import en from '@/locales/en.json'
+import de from '@/locales/de.json'
+
+afterEach(cleanup)
+
+function render(ui: React.ReactNode) {
+  return renderRTL(ui, {
+    wrapper: ({ children }) => (
+      <IntlProvider locale="en" messages={en}>
+        {children}
+      </IntlProvider>
+    ),
+  })
+}
 
 const publicCitation: ConversationMessageCitation = {
   type: 'article',
@@ -117,5 +132,54 @@ describe('<AssistantAnswer> hovercard freshness line', () => {
     await userEvent.hover(screen.getByLabelText('Internal source 1: Refund policy (internal)'))
     expect(await screen.findByText('Internal')).toBeInTheDocument()
     expect(await screen.findByText('Updated 8 days ago')).toBeInTheDocument()
+  })
+})
+
+describe('citation localization', () => {
+  it('localizes accessible public and internal source labels', () => {
+    renderRTL(
+      <IntlProvider locale="de" messages={de}>
+        <AssistantAnswer text="Read [1] and [2]." citations={[publicCitation, internalCitation]} />
+      </IntlProvider>
+    )
+    expect(
+      screen.getByRole('link', { name: 'Quelle 1: Resetting your password' })
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Interne Quelle 2: Refund policy (internal)')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Source 1: Resetting your password')).not.toBeInTheDocument()
+  })
+
+  it('uses the same locale for source freshness and the internal tag', async () => {
+    const cited = {
+      ...internalCitation,
+      updatedAt: new Date(Date.now() - 8 * 86400000).toISOString(),
+    }
+    renderRTL(
+      <IntlProvider locale="de" messages={de}>
+        <AssistantAnswer text="Read [1]." citations={[cited]} />
+      </IntlProvider>
+    )
+    await userEvent.hover(screen.getByLabelText('Interne Quelle 1: Refund policy (internal)'))
+    expect(await screen.findByText('Intern')).toBeInTheDocument()
+    expect(await screen.findByText('Aktualisiert vor 8 Tagen')).toBeInTheDocument()
+    expect(screen.queryByText(/Updated|days ago/)).not.toBeInTheDocument()
+  })
+
+  it('localizes the knowledge trace and exposes its expanded state', async () => {
+    renderRTL(
+      <IntlProvider locale="de" messages={de}>
+        <AssistantSourcesTrace citations={[publicCitation]} />
+      </IntlProvider>
+    )
+    const trigger = screen.getByRole('button', {
+      name: 'Wissensdatenbank durchsucht · 1 Quelle',
+    })
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    await userEvent.click(trigger)
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('link', { name: /Resetting your password/ })).toHaveAttribute(
+      'href',
+      publicCitation.url
+    )
   })
 })

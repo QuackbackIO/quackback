@@ -292,6 +292,9 @@ describe('the real corpus', () => {
     // by lineage-double-apply and migrator-gap-heal.
     // 0288 rebuilds kb_article_translations.search_vector only while its
     // expression lacks the Dutch config, so a second run changes nothing.
+    // 0292 widens the parent check once, guarded by its existing definition,
+    // and adds the internal-only check once, guarded by its exact name. Its
+    // migration regression also verifies existing parent rows and constraint OIDs.
     const vouching = files.filter(
       (f) => assessReplaySafety(f, readFileSync(join(MIGRATIONS_DIR, f), 'utf8')).vouched.length > 0
     )
@@ -310,6 +313,8 @@ describe('the real corpus', () => {
       '0284_integration_sync.sql',
       '0285_integration_link_scope.sql',
       '0288_kb_translations_dutch_search.sql',
+      '0292_workspace_copilot.sql',
+      '0294_validate_workspace_copilot_checks.sql',
     ])
   })
 

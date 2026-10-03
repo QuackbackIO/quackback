@@ -43,6 +43,14 @@ describe('parseApiKeyScopes', () => {
 })
 
 describe('scopeForPermission', () => {
+  it('gates supported settings permissions without widening adjacent configuration areas', () => {
+    expect(scopeForPermission(PERMISSIONS.SETTINGS_MANAGE)).toBe('write:settings')
+    expect(scopeForPermission(PERMISSIONS.SETTINGS_BRANDING)).toBe('write:settings')
+    expect(scopeForPermission(PERMISSIONS.OFFICE_HOURS_MANAGE)).toBe('write:settings')
+    expect(scopeForPermission(PERMISSIONS.AUTH_MANAGE)).toBe('write:feedback')
+    expect(scopeForPermission(PERMISSIONS.SETTINGS_CUSTOM_DOMAIN)).toBe('write:feedback')
+    expect(expandWriteGrants(['write:settings'])).toEqual(['read:settings', 'write:settings'])
+  })
   it('maps every catalogue permission to a vocabulary scope', () => {
     for (const permission of ALL_PERMISSIONS) {
       expect(API_KEY_SCOPES, permission).toContain(scopeForPermission(permission))
@@ -122,6 +130,7 @@ describe('domainAccessLevels', () => {
       changelog: 'off',
       article: 'read',
       chat: 'read',
+      settings: 'off',
     })
   })
 
@@ -135,6 +144,7 @@ describe('domainAccessLevels', () => {
       changelog: 'write',
       article: 'read',
       chat: 'off',
+      settings: 'off',
     } as const
     expect(scopesFromDomainLevels(levels)).toEqual([
       'read:feedback',

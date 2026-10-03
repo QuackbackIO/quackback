@@ -21,6 +21,8 @@ import {
   isNull,
   isNotNull,
 } from '@/lib/server/db'
+import { postViewFilter } from '@/lib/server/policy/posts'
+import type { Actor } from '@/lib/server/policy/types'
 import { toUuid, type PostId, type PrincipalId } from '@quackback/ids'
 import { notTestPrincipal } from '@/lib/server/test-data'
 import type {
@@ -211,10 +213,14 @@ const priorityScoreSql = sql<number>`
  * @param params - Query parameters including filters, sort, and pagination
  * @returns Result containing inbox post list or an error
  */
-export async function listInboxPosts(params: InboxPostListParams): Promise<InboxPostListResult> {
+export async function listInboxPosts(
+  params: InboxPostListParams,
+  actor?: Actor
+): Promise<InboxPostListResult> {
   const { sort = 'newest', cursor, limit = 20 } = params
 
   const conditions = inboxFilterConditions(params)
+  if (actor) conditions.push(postViewFilter(actor))
 
   // Cursor-based keyset pagination: resolve cursor to sort-field values
   if (cursor) {

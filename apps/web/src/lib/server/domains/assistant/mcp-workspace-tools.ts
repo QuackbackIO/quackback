@@ -7,17 +7,23 @@
  */
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { toolDefinition } from '@tanstack/ai'
+import { z } from 'zod'
+import { modelInputSchema } from './model-input-schema'
 import { db, principal, user, eq } from '@/lib/server/db'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { Actor } from '@/lib/server/policy/types'
+import { RETRIEVED_CONTENT_NOTE } from './injection-guard'
+import { resolveActorPermissions } from '@/lib/server/policy/permissions'
+import { expandWriteGrants } from '@/lib/shared/api-key-scopes'
 import { isTeamMember } from '@/lib/shared/roles'
-import {
-  API_KEY_SCOPES,
-  orderScopes,
-  scopeForPermission,
-  type ApiKeyScope,
-} from '@/lib/shared/api-key-scopes'
+import { orderScopes, scopeForPermission, type ApiKeyScope } from '@/lib/shared/api-key-scopes'
 import { toolGroupFromAnnotations } from '@/lib/shared/assistant/connectors'
 import type { McpAuthContext } from '@/lib/server/mcp/types'
+import { workspaceNavigationInputSchema } from '@/lib/server/mcp/tools/navigation'
+import {
+  settingsAreaSchema,
+  settingsProposalInputSchema,
+} from '@/lib/shared/assistant/settings-proposals'
 import {
   withGateEnvelope,
   type AssistantToolContext,
@@ -31,10 +37,21 @@ import {
 } from './connectors/mcp-client'
 
 function scopesFromActor(actor: Actor): ApiKeyScope[] {
-  if (!actor.permissions || actor.permissions.size === 0) {
-    return isTeamMember(actor.role) ? [...API_KEY_SCOPES] : []
-  }
-  return orderScopes([...actor.permissions].map(scopeForPermission))
+  const permissions = actor.permissions ?? resolveActorPermissions(actor.role)
+  const scopes = [...permissions].map(scopeForPermission)
+  if (permissions.has(PERMISSIONS.CHANGELOG_MANAGE)) scopes.push('write:settings')
+  const navigationPermissions = [
+    PERMISSIONS.AUTH_MANAGE,
+    PERMISSIONS.BILLING_MANAGE,
+    PERMISSIONS.SETTINGS_CUSTOM_DOMAIN,
+    PERMISSIONS.MEMBER_MANAGE,
+    PERMISSIONS.API_KEY_MANAGE,
+    PERMISSIONS.INTEGRATION_MANAGE,
+    PERMISSIONS.STATUS_PAGE_MANAGE,
+  ]
+  if (navigationPermissions.some((permission) => permissions.has(permission)))
+    scopes.push('read:settings')
+  return orderScopes(expandWriteGrants(scopes))
 }
 
 async function teammateProfile(principalId: Actor['principalId']) {
@@ -97,6 +114,7 @@ export async function mcpAuthFromActor(
     email: row?.email ?? undefined,
     role: actor.role,
     authMethod: 'oauth',
+    permissions: actor.permissions,
     scopes,
   }
 }
@@ -116,12 +134,38 @@ async function callWorkspaceMcpTool(
   ctx: AssistantToolContext
 ): Promise<{ ok: boolean; data: string; note?: string }> {
   const payload = (args ?? {}) as Record<string, unknown>
-  if (ctx.mcpSession) return ctx.mcpSession.callTool(name, payload)
+  const frame = (result: { ok: boolean; data: string; note?: string }) => {
+    if (name === 'navigate_workspace' && result.ok) {
+      try {
+        const serialized = JSON.parse(result.data)
+        const content =
+          serialized.structured ??
+          JSON.parse(
+            serialized.content?.find((item: { type: string }) => item.type === 'text')?.text ?? '{}'
+          )
+        const card = content.navigation
+        if (
+          card &&
+          typeof card.href === 'string' &&
+          card.href.startsWith('/admin/') &&
+          typeof card.label === 'string'
+        ) {
+          ctx.ledger.navigation ??= []
+          if (!ctx.ledger.navigation.some((item) => item.href === card.href))
+            ctx.ledger.navigation.push(card)
+        }
+      } catch {
+        /* A malformed result remains data and never supplies a navigation target. */
+      }
+    }
+    return { ...result, note: [result.note, RETRIEVED_CONTENT_NOTE].filter(Boolean).join(' ') }
+  }
+  if (ctx.mcpSession) return frame(await ctx.mcpSession.callTool(name, payload))
   const auth = await mcpAuthFromActor(ctx.actor, ctx.assistantName)
   if (!auth) return { ok: false, data: '', note: 'Not authorized for workspace tools.' }
   const opened = await openWorkspaceMcp(auth)
   try {
-    return await opened.session.callTool(name, payload)
+    return frame(await opened.session.callTool(name, payload))
   } finally {
     await opened.close()
   }
@@ -166,7 +210,14 @@ function buildWorkspaceMcpSpec(tool: DiscoveredMcpTool): AssistantToolSpec {
     definition: toolDefinition({
       name: tool.name,
       description,
-      inputSchema: jsonSchemaToZod(tool.inputSchema),
+      inputSchema:
+        tool.name === 'propose_settings_change'
+          ? modelInputSchema(settingsProposalInputSchema)
+          : tool.name === 'get_settings'
+            ? z.object({ area: settingsAreaSchema }).strict()
+            : tool.name === 'navigate_workspace'
+              ? workspaceNavigationInputSchema
+              : jsonSchemaToZod(tool.inputSchema),
       outputSchema: withGateEnvelope(connectorToolOutputSchema),
     }),
     execute: (args, ctx) => callWorkspaceMcpTool(tool.name, args, ctx),

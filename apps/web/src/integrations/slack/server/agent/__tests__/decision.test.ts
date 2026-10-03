@@ -15,7 +15,9 @@ vi.mock('../identity', () => ({
 vi.mock('@/lib/server/domains/assistant/pending-actions.service', () => ({
   getPendingActionById: mocks.pending,
 }))
-vi.mock('@/lib/server/functions/assistant-actions', () => ({ decideAssistantAction: mocks.decide }))
+vi.mock('@/lib/server/domains/assistant/assistant-actions.service', () => ({
+  decideAssistantAction: mocks.decide,
+}))
 vi.mock('@/lib/server/domains/assistant/assistant.toolspec', () => ({
   getToolSpecByName: mocks.spec,
 }))
@@ -88,7 +90,13 @@ it('cannot transplant a proposal to a different Slack team, channel, or thread',
 })
 it('executes through the shared approval service with the member actor', async () => {
   await handleSlackDecision(payload, client, 'T')
-  expect(mocks.decide).toHaveBeenCalledWith(id, 'approved', member.id, actor)
+  expect(mocks.decide).toHaveBeenCalledWith(
+    id,
+    'approved',
+    member.id,
+    actor,
+    JSON.stringify(['T', 'C', '1'])
+  )
   expect(client.chat.update).toHaveBeenCalled()
 })
 it('retries a failed Slack update from the settled result without re-executing the write', async () => {

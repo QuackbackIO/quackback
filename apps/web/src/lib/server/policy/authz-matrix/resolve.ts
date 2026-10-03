@@ -61,7 +61,11 @@ function channelOf(file: string): Channel {
   // routes/api/ but present a session, not an API key, so grouping them with
   // the key-authenticated REST surface would say the wrong thing about which
   // principal classes can reach them.
-  if (file.startsWith('routes/api/plg-events')) return 'session-route'
+  if (
+    file.startsWith('routes/api/plg-events') ||
+    file === 'routes/api/admin/assistant/workspace.ts'
+  )
+    return 'session-route'
   if (file === 'lib/server/mcp/handler.ts') return 'mcp'
   if (file.startsWith('routes/api/')) return 'api-route'
   return 'server-fn'

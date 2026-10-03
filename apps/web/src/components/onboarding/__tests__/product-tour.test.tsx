@@ -228,7 +228,7 @@ describe('guided tour', () => {
     hoisted.narrow = true
     mount()
     await startTour()
-    expect(dialog()).toHaveTextContent('1 of 2')
+    expect(dialog()).toHaveTextContent('1 of 1')
     expect(dialog()).toHaveTextContent('Feedback.')
   })
 
