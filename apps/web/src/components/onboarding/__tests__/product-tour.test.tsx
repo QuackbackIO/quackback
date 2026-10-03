@@ -1,56 +1,82 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import en from '@/locales/en.json'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 
-const testState = vi.hoisted(() => ({ feedback: true, navigate: vi.fn(async () => {}) }))
-vi.mock('@tanstack/react-router', () => ({ useNavigate: () => testState.navigate }))
-vi.mock('@/lib/client/hooks/use-root-context', () => ({
-  useFeatureFlags: () => ({ feedback: testState.feedback }),
+const hoisted = vi.hoisted(() => ({
+  context: {
+    goals: ['product_feedback'] as string[],
+    feedbackPrivate: false,
+    empty: { feedback: true, support: true, helpCenter: true, status: true },
+  },
+  flags: { feedback: true, supportInbox: true, helpCenter: true, statusPage: true } as Record<
+    string,
+    boolean
+  >,
+  permissions: new Set<string>(),
+  narrow: false,
+  seen: 0,
 }))
-vi.mock('@/lib/client/use-permissions', () => ({
-  usePermissions: () => new Set([PERMISSIONS.POST_VIEW_PRIVATE]),
+
+// The router is one object for the app's life, as the real one is.
+const router = vi.hoisted(() => ({
+  state: {
+    get location() {
+      return { pathname: hoistedPath.current }
+    },
+  },
+  navigate: async ({ to }: { to: string }) => {
+    hoistedPath.navigations.push(to)
+    hoistedPath.current = to
+  },
 }))
+const hoistedPath = vi.hoisted(() => ({ current: '/admin', navigations: [] as string[] }))
+vi.mock('@tanstack/react-router', () => ({ useRouter: () => router }))
 vi.mock('@/lib/server/functions/onboarding-progress', () => ({
-  markTourSeenFn: vi.fn(async () => ({ ok: true })),
+  getTourContextFn: async () => hoisted.context,
+  markTourSeenFn: async () => {
+    hoisted.seen++
+    return { ok: true }
+  },
 }))
+vi.mock('@/lib/client/hooks/use-root-context', () => ({ useFeatureFlags: () => hoisted.flags }))
+vi.mock('@/lib/client/use-permissions', () => ({ usePermissions: () => hoisted.permissions }))
 
-import { ProductTourProvider, TOUR_STOPS, useProductTour } from '../product-tour'
+import { ProductTourProvider, useProductTour, type TourEndAction } from '../product-tour'
 
-afterEach(() => {
-  cleanup()
-  vi.restoreAllMocks()
-})
+const TARGETS = [
+  'products',
+  'feedback-empty',
+  'nav-feedback',
+  'nav-roadmap',
+  'support-empty',
+  'nav-support',
+  'help-center-empty',
+  'status-empty',
+  'view-portal',
+  'search',
+]
+
 function Start() {
   const tour = useProductTour()
-  return <button onClick={() => tour?.start()}>Start tour</button>
+  return (
+    <button type="button" onClick={() => tour?.start()}>
+      Start tour
+    </button>
+  )
 }
-function mount() {
-  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
-    this: HTMLElement
-  ) {
-    return {
-      x: 10,
-      y: 10,
-      top: 10,
-      left: 10,
-      bottom: 60,
-      right: 110,
-      width: 100,
-      height: 50,
-      toJSON: () => ({}),
-    }
-  })
-  HTMLElement.prototype.scrollIntoView = vi.fn()
-  render(
-    <IntlProvider locale="en">
+
+function mount(endAction?: TourEndAction) {
+  return render(
+    <IntlProvider locale="en" messages={en}>
       <QueryClientProvider client={new QueryClient()}>
-        <ProductTourProvider>
+        <ProductTourProvider endAction={endAction}>
           <Start />
-          {TOUR_STOPS.map((stop) => (
-            <div key={stop.target} data-tour={stop.target} />
+          {TARGETS.map((target) => (
+            <div key={target} data-tour={target} />
           ))}
         </ProductTourProvider>
       </QueryClientProvider>
@@ -58,54 +84,172 @@ function mount() {
   )
 }
 
-it('never starts automatically and runs all five stops with keyboard navigation and Escape', async () => {
-  testState.feedback = true
-  mount()
-  expect(screen.queryByRole('dialog')).toBeNull()
+const dialog = () => screen.getByRole('dialog')
+
+async function startTour() {
   const start = screen.getByRole('button', { name: 'Start tour' })
   start.focus()
-  fireEvent.click(start)
-  await waitFor(() =>
-    expect(screen.getByRole('dialog')).toHaveAttribute('aria-label', 'Step 1 of 5')
-  )
-  await waitFor(() => expect(screen.getByRole('dialog')).toHaveFocus())
-  for (let step = 2; step <= 5; step++) {
-    fireEvent.keyDown(document, { key: 'ArrowRight' })
-    await waitFor(() =>
-      expect(screen.getByRole('dialog')).toHaveAttribute('aria-label', `Step ${step} of 5`)
-    )
+  await act(async () => {
+    fireEvent.click(start)
+  })
+  await waitFor(() => expect(dialog()).toHaveTextContent(/^.*1 of \d/))
+  return start
+}
+
+async function press(key: string) {
+  await act(async () => {
+    fireEvent.keyDown(document, { key })
+  })
+}
+
+beforeEach(() => {
+  hoistedPath.current = '/admin'
+  hoistedPath.navigations = []
+  hoisted.context = {
+    goals: ['product_feedback'],
+    feedbackPrivate: false,
+    empty: { feedback: true, support: true, helpCenter: true, status: true },
   }
-  fireEvent.keyDown(document, { key: 'ArrowLeft' })
-  await waitFor(() =>
-    expect(screen.getByRole('dialog')).toHaveAttribute('aria-label', 'Step 4 of 5')
+  hoisted.permissions = new Set([PERMISSIONS.MEMBER_VIEW, PERMISSIONS.CONVERSATION_VIEW])
+  hoisted.narrow = false
+  hoisted.seen = 0
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+    () =>
+      ({
+        x: 10,
+        y: 100,
+        left: 10,
+        top: 100,
+        right: 230,
+        bottom: 140,
+        width: 220,
+        height: 40,
+        toJSON: () => ({}),
+      }) as DOMRect
   )
-  fireEvent.keyDown(document, { key: 'Escape' })
-  expect(screen.queryByRole('dialog')).toBeNull()
-  expect(start).toHaveFocus()
+  HTMLElement.prototype.scrollIntoView = vi.fn()
+  window.matchMedia = ((query: string) => ({
+    matches: hoisted.narrow && query.includes('max-width'),
+    media: query,
+  })) as unknown as typeof window.matchMedia
+})
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
 })
 
-it('skips products that are disabled and announces the remaining count', async () => {
-  testState.feedback = false
-  mount()
-  fireEvent.click(screen.getByRole('button', { name: 'Start tour' }))
-  await waitFor(() =>
-    expect(screen.getByRole('dialog')).toHaveAttribute('aria-label', 'Step 1 of 2')
-  )
-  fireEvent.keyDown(document, { key: 'ArrowRight' })
-  await waitFor(() =>
-    expect(screen.getByRole('dialog')).toHaveAttribute('aria-label', 'Step 2 of 2')
-  )
-  expect(screen.getByText('Open your portal to see what customers see.')).toBeVisible()
-})
+describe('guided tour', () => {
+  it('never starts on its own and walks five stops with the keyboard to the end card', async () => {
+    mount()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    const start = await startTour()
 
-it('shows the current step count next to the progress dots', async () => {
-  testState.feedback = true
-  mount()
-  fireEvent.click(screen.getByRole('button', { name: 'Start tour' }))
-  const count = await screen.findByText('Step 1 of 5')
-  expect(count).toBeVisible()
-  expect(count).not.toHaveClass('sr-only')
-  fireEvent.keyDown(document, { key: 'ArrowRight' })
-  const nextCount = await screen.findByText('Step 2 of 5')
-  expect(nextCount).not.toHaveClass('sr-only')
+    expect(dialog()).toHaveTextContent('Your products. Everything you turned on lives here.')
+    expect(dialog()).toHaveTextContent('1 of 5')
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull()
+    await waitFor(() => expect(dialog()).toHaveFocus())
+
+    await press('ArrowRight')
+    await waitFor(() => expect(dialog()).toHaveTextContent('2 of 5'))
+    expect(dialog()).toHaveTextContent(
+      'Feedback. Ideas from customers land here. Share the board link to get the first one.'
+    )
+    expect(hoistedPath.navigations).toContain('/admin/feedback')
+
+    await press('ArrowLeft')
+    await waitFor(() => expect(dialog()).toHaveTextContent('1 of 5'))
+    for (const step of [2, 3, 4, 5]) {
+      await press('ArrowRight')
+      await waitFor(() => expect(dialog()).toHaveTextContent(`${step} of 5`))
+    }
+    expect(dialog()).toHaveTextContent('Search. Jump to any page or record from anywhere with')
+    expect(screen.getByRole('button', { name: 'Finish' })).toBeVisible()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Finish' }))
+    })
+    await waitFor(() =>
+      expect(screen.getByRole('dialog', { name: "That's the tour" })).toBeVisible()
+    )
+    expect(hoistedPath.current).toBe('/admin')
+    expect(screen.getByText('Replay it any time from Help.')).toBeVisible()
+    expect(screen.getAllByRole('button').filter((b) => b.closest('[role="dialog"]'))).toHaveLength(
+      1
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(start).toHaveFocus()
+    expect(hoisted.seen).toBe(1)
+  })
+
+  it('skips with Escape, without the end card, and returns focus', async () => {
+    mount()
+    const start = await startTour()
+    await press('ArrowRight')
+    await press('Escape')
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(start).toHaveFocus()
+  })
+
+  it('keeps Tab inside the coachmark', async () => {
+    mount()
+    await startTour()
+    await press('ArrowRight')
+    await waitFor(() => expect(dialog()).toHaveTextContent('2 of 5'))
+    const buttons = Array.from(dialog().querySelectorAll('button'))
+    buttons.at(-1)!.focus()
+    await press('Tab')
+    expect(buttons[0]).toHaveFocus()
+  })
+
+  it('builds the stops from the goals before it opens', async () => {
+    hoisted.context = {
+      goals: ['customer_support'],
+      feedbackPrivate: false,
+      empty: { feedback: false, support: true, helpCenter: false, status: false },
+    }
+    mount()
+    await startTour()
+    expect(dialog()).toHaveTextContent('1 of 4')
+    await press('ArrowRight')
+    await waitFor(() =>
+      expect(dialog()).toHaveTextContent('Support. Messages from Messenger and email arrive here.')
+    )
+    expect(hoistedPath.navigations).toContain('/admin/inbox')
+  })
+
+  it('leaves sidebar stops out on a phone', async () => {
+    hoisted.narrow = true
+    mount()
+    await startTour()
+    expect(dialog()).toHaveTextContent('1 of 2')
+    expect(dialog()).toHaveTextContent('Feedback.')
+  })
+
+  it('offers the end card next step from the slot, with the private-feedback choice', async () => {
+    hoisted.context = { ...hoisted.context, feedbackPrivate: true }
+    const endAction = vi.fn<TourEndAction>(({ feedbackPrivate, close }) => (
+      <button type="button" onClick={close}>
+        {feedbackPrivate ? 'Post a test idea' : 'Send a test message'}
+      </button>
+    ))
+    mount(endAction)
+    await startTour()
+    for (let step = 0; step < 4; step++) await press('ArrowRight')
+    await press('ArrowRight')
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Post a test idea' })).toBeVisible()
+    )
+    expect(screen.getByRole('button', { name: 'Done' })).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Post a test idea' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('does not record the tour as seen for someone who cannot see the team', async () => {
+    hoisted.permissions = new Set([PERMISSIONS.CONVERSATION_VIEW])
+    mount()
+    await startTour()
+    expect(hoisted.seen).toBe(0)
+  })
 })

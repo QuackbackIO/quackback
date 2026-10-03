@@ -1,5 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
-import { eq, db, user } from '@/lib/server/db'
+import { db, eq, helpCenterArticles, isNull, posts, statusComponents, user } from '@/lib/server/db'
 import { requireAuth } from './auth-helpers'
 import { readOnboardingProgress, markOnboardingProgress } from '@/lib/server/onboarding-progress'
 import { detectFirstWin } from '@/lib/server/activation-wins'
@@ -46,4 +46,39 @@ export const claimFirstWinMomentFn = createServerFn({ method: 'POST' }).handler(
   const win = await detectFirstWin(setupState)
   if (!win.reached || !isFirstWinInLaunchWindow(win.reachedAt, window)) return { show: false }
   return { show: await markOnboardingProgress(auth.user.id, 'firstWinShownAt') }
+})
+
+/**
+ * What the guided tour is built from: the workspace's goals, and which products
+ * have nothing in them yet, so a stop can point at the empty state's one action.
+ * Asked once, when the tour starts.
+ */
+export const getTourContextFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
+  const settings = await getSettings()
+  const setupState = getSetupState(settings?.setupState ?? null)
+  const [post, conversation, article, service] = await Promise.all([
+    db.query.posts.findFirst({ columns: { id: true }, where: isNull(posts.deletedAt) }),
+    db.query.conversations.findFirst({ columns: { id: true } }),
+    db.query.helpCenterArticles.findFirst({
+      columns: { id: true },
+      where: isNull(helpCenterArticles.deletedAt),
+    }),
+    db.query.statusComponents.findFirst({
+      columns: { id: true },
+      where: isNull(statusComponents.deletedAt),
+    }),
+  ])
+  return {
+    goals: setupState?.goals?.length
+      ? setupState.goals
+      : [setupState?.useCase ?? ('product_feedback' as const)],
+    feedbackPrivate: setupState?.feedbackPrivate === true,
+    empty: {
+      feedback: !post,
+      support: !conversation,
+      helpCenter: !article,
+      status: !service,
+    },
+  }
 })

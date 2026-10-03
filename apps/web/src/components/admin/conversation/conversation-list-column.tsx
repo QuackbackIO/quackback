@@ -424,7 +424,10 @@ function EmptyList({
   // First-run CTA on the unfiltered main queues (not tickets/labels).
   const showMessengerCta = isMainConversationQueue && !isFiltered && !isAllClear
   return (
-    <div className="px-4 py-10 text-center space-y-3">
+    <div
+      className="px-4 py-10 text-center space-y-3"
+      data-tour={isMainConversationQueue && !isFiltered ? 'support-empty' : undefined}
+    >
       <p className="text-sm font-medium text-foreground">{emptyMsg}</p>
       {isFiltered && (
         <p className="mx-auto max-w-[16rem] text-xs text-muted-foreground">
