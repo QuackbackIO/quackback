@@ -15,8 +15,8 @@ import {
 export async function createAskMcpFixture() {
   const url =
     process.env.DATABASE_URL ?? 'postgresql://postgres:password@localhost:5432/quackback_test'
-  if (new URL(url).pathname !== '/quackback_test')
-    throw new Error('Ask evaluations require quackback_test')
+  if (!new URL(url).pathname.startsWith('/quackback_test'))
+    throw new Error('Ask evaluations require a quackback_test database')
   const schema = `ask_golden_${randomUUID().replaceAll('-', '')}`
   const raw = postgres(url, { max: 1, prepare: false })
   const [version] = await raw`select workspace_thread_key from conversation_messages limit 0`

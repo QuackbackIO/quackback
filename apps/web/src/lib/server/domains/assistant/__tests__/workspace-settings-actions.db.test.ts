@@ -61,7 +61,8 @@ beforeEach(async () => {
       brandingConfig: '{}',
       widgetConfig: '{}',
       metadata: '{}',
-      featureFlags: '{}',
+      // Settings tools follow Copilot on Home.
+      featureFlags: JSON.stringify({ copilotHome: true }),
       portalConfig: '{}',
     })
     .returning()
