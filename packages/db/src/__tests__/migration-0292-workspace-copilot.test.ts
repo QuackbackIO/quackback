@@ -9,6 +9,13 @@ const migration = readFileSync(
   .split('--> statement-breakpoint')
   .map((s) => s.trim())
   .filter(Boolean)
+const validation = readFileSync(
+  new URL('../../drizzle/0294_validate_workspace_copilot_checks.sql', import.meta.url),
+  'utf8'
+)
+  .split('--> statement-breakpoint')
+  .map((s) => s.trim())
+  .filter(Boolean)
 it('replays without changing data or constraints and enforces private run dedupe', async () => {
   const db = createDb(
     process.env.DATABASE_URL ?? 'postgresql://postgres:password@localhost:5432/quackback_test',
@@ -87,7 +94,11 @@ it('replays without changing data or constraints and enforces private run dedupe
           )
         })
       ).rejects.toMatchObject({ cause: { code: '23514' } })
-      // Added NOT VALID, then validated: both checks end up enforced on existing rows.
+      // 0292 adds the checks NOT VALID and leaves the scan to 0294.
+      expect(migration.join('\n')).not.toContain('VALIDATE CONSTRAINT')
+      expect(migration.filter((statement) => statement.includes('NOT VALID'))).toHaveLength(2)
+      for (const statement of validation) await tx.execute(sql.raw(statement))
+      for (const statement of validation) await tx.execute(sql.raw(statement))
       expect(
         await tx.execute(
           sql`SELECT conname, convalidated FROM pg_constraint WHERE conrelid='conversation_messages'::regclass AND conname IN ('conversation_messages_parent_check','conversation_messages_workspace_internal_check') ORDER BY conname`

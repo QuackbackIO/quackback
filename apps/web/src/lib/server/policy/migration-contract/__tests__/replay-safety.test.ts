@@ -314,6 +314,7 @@ describe('the real corpus', () => {
       '0285_integration_link_scope.sql',
       '0288_kb_translations_dutch_search.sql',
       '0292_workspace_copilot.sql',
+      '0294_validate_workspace_copilot_checks.sql',
     ])
   })
 

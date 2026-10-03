@@ -23,25 +23,10 @@ DO $$ BEGIN
   END IF;
 END $$;
 --> statement-breakpoint
--- Validated in its own statement once the check exists.
--- @replay: guarded-by the check already being validated; nothing is scanned on replay
-DO $$ BEGIN
-  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'conversation_messages_parent_check' AND conrelid = 'conversation_messages'::regclass AND NOT convalidated) THEN
-    ALTER TABLE "conversation_messages" VALIDATE CONSTRAINT "conversation_messages_parent_check";
-  END IF;
-END $$;
---> statement-breakpoint
 -- @replay: guarded-by the workspace internal check already existing; no constraint is changed on replay
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'conversation_messages_workspace_internal_check' AND conrelid = 'conversation_messages'::regclass) THEN
     ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_workspace_internal_check" CHECK ("workspace_thread_key" IS NULL OR "is_internal" = true) NOT VALID;
-  END IF;
-END $$;
---> statement-breakpoint
--- @replay: guarded-by the check already being validated; nothing is scanned on replay
-DO $$ BEGIN
-  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'conversation_messages_workspace_internal_check' AND conrelid = 'conversation_messages'::regclass AND NOT convalidated) THEN
-    ALTER TABLE "conversation_messages" VALIDATE CONSTRAINT "conversation_messages_workspace_internal_check";
   END IF;
 END $$;
 --> statement-breakpoint
