@@ -1250,6 +1250,7 @@
   "onboarding.test.customer": "测试客户",
   "onboarding.test.badge": "测试",
   "inbox.row.test": "测试",
+  "inbox.empty.firstRun.title": "暂无对话",
   "inbox.test.confirm": "删除",
   "inbox.test.confirmBody": "真实会话不受影响。",
   "inbox.test.confirmTitle": "删除所有测试会话？",
@@ -1264,7 +1265,7 @@
   "inbox.convert.error.testConversation": "测试对话不能记录为反馈。",
   "onboarding.test.done": "这就是完整的往返流程",
   "onboarding.test.draft": "你好！有人在吗？",
-  "onboarding.test.email": "或者发邮件到你的收件箱",
+  "onboarding.test.email": "或者发邮件到这个地址",
   "onboarding.test.frameExpired": "测试会话已结束。",
   "onboarding.test.frameTitle": "以测试客户身份使用 Messenger",
   "onboarding.test.inboxSide": "你的收件箱",
@@ -1288,7 +1289,7 @@
   "onboarding.test.tryTitle": "亲自试试",
   "onboarding.test.waiting": "发送左侧的消息。它会出现在这里。",
   "widget.test.frameTitle": "以测试客户身份使用 Messenger",
+  "widget.test.sessionBanner": "测试会话 · 请保持此标签页打开",
   "widget.test.phoneExpired": "此链接已被使用。请重新扫描二维码。",
-  "conversationAttributes.reservedKey": "此属性由 Quackback 管理。",
   "support.ticket.createDialog.testDataLinkConflict": "测试对话和真实对话需要使用不同的工单。"
 }

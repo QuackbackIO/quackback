@@ -1250,6 +1250,7 @@
   "onboarding.test.customer": "Test customer",
   "onboarding.test.badge": "Test",
   "inbox.row.test": "Test",
+  "inbox.empty.firstRun.title": "No conversations yet",
   "inbox.test.confirm": "Delete",
   "inbox.test.confirmBody": "Real conversations are not affected.",
   "inbox.test.confirmTitle": "Delete all test conversations?",
@@ -1264,7 +1265,7 @@
   "inbox.convert.error.testConversation": "Test conversations cannot be tracked as feedback.",
   "onboarding.test.done": "That's the round trip",
   "onboarding.test.draft": "Hi! Is anyone there?",
-  "onboarding.test.email": "Or email from your inbox",
+  "onboarding.test.email": "Or email this address",
   "onboarding.test.frameExpired": "The test session ended.",
   "onboarding.test.frameTitle": "Messenger as a test customer",
   "onboarding.test.inboxSide": "Your inbox",
@@ -1288,7 +1289,7 @@
   "onboarding.test.tryTitle": "Try it yourself",
   "onboarding.test.waiting": "Send the message on the left. It lands here.",
   "widget.test.frameTitle": "Messenger as a test customer",
+  "widget.test.sessionBanner": "Test session · keep this tab open",
   "widget.test.phoneExpired": "This link was already used. Scan the code again.",
-  "conversationAttributes.reservedKey": "Quackback manages this attribute.",
   "support.ticket.createDialog.testDataLinkConflict": "Test and real conversations need separate tickets."
 }

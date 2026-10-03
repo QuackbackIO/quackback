@@ -1250,6 +1250,7 @@
   "onboarding.test.customer": "Cliente de teste",
   "onboarding.test.badge": "Teste",
   "inbox.row.test": "Teste",
+  "inbox.empty.firstRun.title": "Nenhuma conversa ainda",
   "inbox.test.confirm": "Excluir",
   "inbox.test.confirmBody": "Conversas reais não são afetadas.",
   "inbox.test.confirmTitle": "Excluir todas as conversas de teste?",
@@ -1264,7 +1265,7 @@
   "inbox.convert.error.testConversation": "Conversas de teste não podem ser registradas como feedback.",
   "onboarding.test.done": "Esse é o caminho completo",
   "onboarding.test.draft": "Oi! Tem alguém aí?",
-  "onboarding.test.email": "Ou envie um e-mail para sua caixa de entrada",
+  "onboarding.test.email": "Ou envie um e-mail para este endereço",
   "onboarding.test.frameExpired": "A sessão de teste terminou.",
   "onboarding.test.frameTitle": "Messenger como cliente de teste",
   "onboarding.test.inboxSide": "Sua caixa de entrada",
@@ -1288,7 +1289,7 @@
   "onboarding.test.tryTitle": "Experimente você mesmo",
   "onboarding.test.waiting": "Envie a mensagem à esquerda. Ela chega aqui.",
   "widget.test.frameTitle": "Messenger como cliente de teste",
+  "widget.test.sessionBanner": "Sessão de teste · mantenha esta aba aberta",
   "widget.test.phoneExpired": "Este link já foi usado. Escaneie o código novamente.",
-  "conversationAttributes.reservedKey": "O Quackback gerencia este atributo.",
   "support.ticket.createDialog.testDataLinkConflict": "Conversas de teste e conversas reais precisam de tickets separados."
 }

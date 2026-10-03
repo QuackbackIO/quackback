@@ -1250,6 +1250,7 @@
   "onboarding.test.customer": "عميل تجريبي",
   "onboarding.test.badge": "تجربة",
   "inbox.row.test": "تجربة",
+  "inbox.empty.firstRun.title": "لا توجد محادثات بعد",
   "inbox.test.confirm": "حذف",
   "inbox.test.confirmBody": "لن تتأثر المحادثات الحقيقية.",
   "inbox.test.confirmTitle": "حذف جميع المحادثات التجريبية؟",
@@ -1264,7 +1265,7 @@
   "inbox.convert.error.testConversation": "لا يمكن تتبع المحادثات التجريبية كملاحظات.",
   "onboarding.test.done": "هذه هي الرحلة الكاملة",
   "onboarding.test.draft": "مرحبًا! هل يوجد أحد هنا؟",
-  "onboarding.test.email": "أو راسل صندوق الوارد بالبريد",
+  "onboarding.test.email": "أو راسل هذا العنوان",
   "onboarding.test.frameExpired": "انتهت الجلسة التجريبية.",
   "onboarding.test.frameTitle": "Messenger كعميل تجريبي",
   "onboarding.test.inboxSide": "صندوق الوارد",
@@ -1288,7 +1289,7 @@
   "onboarding.test.tryTitle": "جرّبه بنفسك",
   "onboarding.test.waiting": "أرسل الرسالة على اليسار. ستصل إلى هنا.",
   "widget.test.frameTitle": "Messenger كعميل تجريبي",
+  "widget.test.sessionBanner": "جلسة تجريبية · أبقِ علامة التبويب هذه مفتوحة",
   "widget.test.phoneExpired": "تم استخدام هذا الرابط بالفعل. امسح الرمز مرة أخرى.",
-  "conversationAttributes.reservedKey": "تدير Quackback هذه السمة.",
   "support.ticket.createDialog.testDataLinkConflict": "تحتاج المحادثات التجريبية والفعلية إلى تذاكر منفصلة."
 }

@@ -1250,6 +1250,7 @@
   "onboarding.test.customer": "Klient testowy",
   "onboarding.test.badge": "Test",
   "inbox.row.test": "Test",
+  "inbox.empty.firstRun.title": "Nie ma jeszcze rozmów",
   "inbox.test.confirm": "Usuń",
   "inbox.test.confirmBody": "Prawdziwe rozmowy pozostaną bez zmian.",
   "inbox.test.confirmTitle": "Usunąć wszystkie rozmowy testowe?",
@@ -1264,7 +1265,7 @@
   "inbox.convert.error.testConversation": "Rozmów testowych nie można rejestrować jako opinii.",
   "onboarding.test.done": "Tak wygląda cała droga wiadomości",
   "onboarding.test.draft": "Cześć! Jest tu ktoś?",
-  "onboarding.test.email": "Albo napisz e-mail do swojej skrzynki",
+  "onboarding.test.email": "Albo napisz na ten adres",
   "onboarding.test.frameExpired": "Sesja testowa się zakończyła.",
   "onboarding.test.frameTitle": "Messenger jako klient testowy",
   "onboarding.test.inboxSide": "Twoja skrzynka",
@@ -1288,7 +1289,7 @@
   "onboarding.test.tryTitle": "Wypróbuj sam",
   "onboarding.test.waiting": "Wyślij wiadomość po lewej. Trafi tutaj.",
   "widget.test.frameTitle": "Messenger jako klient testowy",
+  "widget.test.sessionBanner": "Sesja testowa · nie zamykaj tej karty",
   "widget.test.phoneExpired": "Ten link został już użyty. Zeskanuj kod ponownie.",
-  "conversationAttributes.reservedKey": "Quackback zarządza tym atrybutem.",
   "support.ticket.createDialog.testDataLinkConflict": "Rozmowy testowe i rzeczywiste wymagają osobnych zgłoszeń."
 }

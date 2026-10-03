@@ -32,13 +32,14 @@ export const mintTestCustomerPhoneLinkFn = createServerFn({ method: 'POST' })
 export const getTestCustomerOverviewFn = createServerFn({ method: 'GET' }).handler(async () => {
   const auth = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
   const { latestTestConversationId } = await import('@/lib/server/test-customer')
-  const { platformInboxAddress } =
+  const { testEmailAlias } =
     await import('@/lib/server/domains/conversation/conversation.email-channel')
   const { currentMailSlug } =
     await import('@/lib/server/domains/conversation/conversation.mail-slug')
   return {
     conversationId: await latestTestConversationId(auth.principal.id),
-    platformInboxAddress: platformInboxAddress(currentMailSlug()),
+    // The caller's own test alias: mail to it lands as their test customer.
+    testEmailAddress: testEmailAlias(auth.principal.id, currentMailSlug()),
   }
 })
 

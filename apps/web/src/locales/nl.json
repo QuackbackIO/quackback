@@ -1250,6 +1250,7 @@
   "onboarding.test.customer": "Testklant",
   "onboarding.test.badge": "Test",
   "inbox.row.test": "Test",
+  "inbox.empty.firstRun.title": "Nog geen gesprekken",
   "inbox.test.confirm": "Verwijderen",
   "inbox.test.confirmBody": "Echte gesprekken worden niet geraakt.",
   "inbox.test.confirmTitle": "Alle testgesprekken verwijderen?",
@@ -1264,7 +1265,7 @@
   "inbox.convert.error.testConversation": "Testgesprekken kunnen niet als feedback worden vastgelegd.",
   "onboarding.test.done": "Dat is de hele rondgang",
   "onboarding.test.draft": "Hoi! Is daar iemand?",
-  "onboarding.test.email": "Of mail naar je inbox",
+  "onboarding.test.email": "Of mail naar dit adres",
   "onboarding.test.frameExpired": "De testsessie is afgelopen.",
   "onboarding.test.frameTitle": "Messenger als testklant",
   "onboarding.test.inboxSide": "Je inbox",
@@ -1288,7 +1289,7 @@
   "onboarding.test.tryTitle": "Probeer het zelf",
   "onboarding.test.waiting": "Stuur het bericht links. Het komt hier binnen.",
   "widget.test.frameTitle": "Messenger als testklant",
+  "widget.test.sessionBanner": "Testsessie · houd dit tabblad open",
   "widget.test.phoneExpired": "Deze link is al gebruikt. Scan de code opnieuw.",
-  "conversationAttributes.reservedKey": "Quackback beheert dit kenmerk.",
   "support.ticket.createDialog.testDataLinkConflict": "Testgesprekken en echte gesprekken hebben aparte tickets nodig."
 }

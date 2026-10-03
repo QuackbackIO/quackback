@@ -1250,6 +1250,7 @@
   "onboarding.test.customer": "Testkunde",
   "onboarding.test.badge": "Test",
   "inbox.row.test": "Test",
+  "inbox.empty.firstRun.title": "Noch keine Unterhaltungen",
   "inbox.test.confirm": "Löschen",
   "inbox.test.confirmBody": "Echte Unterhaltungen sind nicht betroffen.",
   "inbox.test.confirmTitle": "Alle Testunterhaltungen löschen?",
@@ -1264,7 +1265,7 @@
   "inbox.convert.error.testConversation": "Testunterhaltungen können nicht als Feedback erfasst werden.",
   "onboarding.test.done": "Das war der komplette Ablauf",
   "onboarding.test.draft": "Hallo! Ist da jemand?",
-  "onboarding.test.email": "Oder schreib eine E-Mail an dein Postfach",
+  "onboarding.test.email": "Oder schreib eine E-Mail an diese Adresse",
   "onboarding.test.frameExpired": "Die Testsitzung ist beendet.",
   "onboarding.test.frameTitle": "Messenger als Testkunde",
   "onboarding.test.inboxSide": "Dein Posteingang",
@@ -1288,7 +1289,7 @@
   "onboarding.test.tryTitle": "Selbst ausprobieren",
   "onboarding.test.waiting": "Sende die Nachricht links. Sie landet hier.",
   "widget.test.frameTitle": "Messenger als Testkunde",
+  "widget.test.sessionBanner": "Testsitzung · lass diesen Tab offen",
   "widget.test.phoneExpired": "Dieser Link wurde bereits verwendet. Scanne den Code erneut.",
-  "conversationAttributes.reservedKey": "Quackback verwaltet dieses Attribut.",
   "support.ticket.createDialog.testDataLinkConflict": "Testunterhaltungen und echte Unterhaltungen benötigen separate Tickets."
 }

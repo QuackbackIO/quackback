@@ -1250,6 +1250,7 @@
   "onboarding.test.customer": "Client de test",
   "onboarding.test.badge": "Test",
   "inbox.row.test": "Test",
+  "inbox.empty.firstRun.title": "Aucune conversation pour le moment",
   "inbox.test.confirm": "Supprimer",
   "inbox.test.confirmBody": "Les vraies conversations ne sont pas concernées.",
   "inbox.test.confirmTitle": "Supprimer toutes les conversations de test ?",
@@ -1264,7 +1265,7 @@
   "inbox.convert.error.testConversation": "Les conversations de test ne peuvent pas être enregistrées comme feedback.",
   "onboarding.test.done": "Voilà l'aller-retour complet",
   "onboarding.test.draft": "Bonjour ! Il y a quelqu'un ?",
-  "onboarding.test.email": "Ou écrivez à votre boîte de réception",
+  "onboarding.test.email": "Ou écrivez à cette adresse",
   "onboarding.test.frameExpired": "La session de test est terminée.",
   "onboarding.test.frameTitle": "Messenger en tant que client test",
   "onboarding.test.inboxSide": "Votre boîte de réception",
@@ -1288,7 +1289,7 @@
   "onboarding.test.tryTitle": "Essayez vous-même",
   "onboarding.test.waiting": "Envoyez le message à gauche. Il arrive ici.",
   "widget.test.frameTitle": "Messenger en tant que client test",
+  "widget.test.sessionBanner": "Session de test · gardez cet onglet ouvert",
   "widget.test.phoneExpired": "Ce lien a déjà été utilisé. Scannez à nouveau le code.",
-  "conversationAttributes.reservedKey": "Quackback gère cet attribut.",
   "support.ticket.createDialog.testDataLinkConflict": "Les conversations de test et les conversations réelles nécessitent des tickets distincts."
 }

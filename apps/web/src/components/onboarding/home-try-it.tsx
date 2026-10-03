@@ -10,7 +10,7 @@ import { TryMessengerButton } from './try-messenger-button'
 export function HomeTryItYourself({ flags }: { flags: FeatureFlags | undefined }) {
   const { data } = useSuspenseQuery(adminQueries.onboardingStatus())
   const canTryMessage = !!flags?.supportInbox
-  const canTryIdea = (flags?.feedback ?? true) && data.hasBoards
+  const canTryIdea = (flags?.feedback ?? true) && data.canPostTestIdea
   if (!isLaunchPlanActive(launchChecklistSummary(data)) || !(canTryMessage || canTryIdea)) {
     return null
   }

@@ -71,17 +71,26 @@ function TryMessengerPage() {
     )
   }
 
+  // The session lives in this tab only: a reload would need a fresh code.
   return (
-    <main className="h-dvh bg-background">
-      <TestCustomerFrame
-        getToken={getToken}
-        open={{ view: 'chat' }}
-        onStatusChange={setStatus}
-        title={intl.formatMessage({
-          id: 'widget.test.frameTitle',
-          defaultMessage: 'Messenger as a test customer',
-        })}
-      />
+    <main className="flex h-dvh flex-col bg-background">
+      <p className="shrink-0 border-b px-4 py-1.5 text-center text-xs text-muted-foreground">
+        <FormattedMessage
+          id="widget.test.sessionBanner"
+          defaultMessage="Test session · keep this tab open"
+        />
+      </p>
+      <div className="min-h-0 flex-1">
+        <TestCustomerFrame
+          getToken={getToken}
+          open={{ view: 'chat' }}
+          onStatusChange={setStatus}
+          title={intl.formatMessage({
+            id: 'widget.test.frameTitle',
+            defaultMessage: 'Messenger as a test customer',
+          })}
+        />
+      </div>
     </main>
   )
 }

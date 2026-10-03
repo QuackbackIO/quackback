@@ -43,7 +43,7 @@
       "htmlKB": 226
     },
     "doc:admin-inbox": {
-      "dbQueries": 23,
+      "dbQueries": 22,
       "htmlKB": 162
     },
     "doc:admin-roadmap": {
@@ -148,7 +148,7 @@
       "componentRenders": 599
     },
     "ui:admin-inbox-load": {
-      "dbQueries": 23,
+      "dbQueries": 22,
       "serverRequests": 1,
       "requests": 225,
       "jsRequests": 220,
@@ -391,11 +391,11 @@
       "componentRenders": 340
     },
     "sweep:doc:admin:/admin/inbox": {
-      "dbQueries": 23,
+      "dbQueries": 22,
       "htmlKB": 162
     },
     "sweep:ui:admin:/admin/inbox": {
-      "dbQueries": 23,
+      "dbQueries": 22,
       "serverRequests": 1,
       "requests": 225,
       "jsRequests": 220,

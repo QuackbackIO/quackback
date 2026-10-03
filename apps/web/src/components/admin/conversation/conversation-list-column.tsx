@@ -415,7 +415,7 @@ function EmptyList({
       })
     : activationAction && isMainConversationQueue
       ? intl.formatMessage({
-          id: 'widget.messages.empty',
+          id: 'inbox.empty.firstRun.title',
           defaultMessage: 'No conversations yet',
         })
       : isAllClear
