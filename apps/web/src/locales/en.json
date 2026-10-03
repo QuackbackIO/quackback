@@ -1246,5 +1246,6 @@
   "onboarding.workspace.name": "Workspace name",
   "onboarding.workspace.nameManaged": "Your workspace admin manages this name.",
   "onboarding.workspace.saving": "Saving…",
-  "onboarding.workspace.open": "Open workspace"
+  "onboarding.workspace.open": "Open workspace",
+  "onboarding.goals.managed": "Set by your config file"
 }

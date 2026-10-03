@@ -1246,5 +1246,6 @@
   "onboarding.workspace.name": "Название пространства",
   "onboarding.workspace.nameManaged": "Этим названием управляет администратор пространства.",
   "onboarding.workspace.saving": "Сохранение…",
-  "onboarding.workspace.open": "Открыть пространство"
+  "onboarding.workspace.open": "Открыть пространство",
+  "onboarding.goals.managed": "Задано в файле конфигурации"
 }

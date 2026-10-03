@@ -1246,5 +1246,6 @@
   "onboarding.workspace.name": "Nom de l’espace",
   "onboarding.workspace.nameManaged": "L’administrateur de votre espace gère ce nom.",
   "onboarding.workspace.saving": "Enregistrement…",
-  "onboarding.workspace.open": "Ouvrir l’espace"
+  "onboarding.workspace.open": "Ouvrir l’espace",
+  "onboarding.goals.managed": "Défini par votre fichier de configuration"
 }

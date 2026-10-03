@@ -1246,5 +1246,6 @@
   "onboarding.workspace.name": "Workspace-Name",
   "onboarding.workspace.nameManaged": "Dein Workspace-Admin verwaltet diesen Namen.",
   "onboarding.workspace.saving": "Wird gespeichert…",
-  "onboarding.workspace.open": "Workspace öffnen"
+  "onboarding.workspace.open": "Workspace öffnen",
+  "onboarding.goals.managed": "Durch deine Konfigurationsdatei festgelegt"
 }

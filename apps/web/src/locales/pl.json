@@ -1246,5 +1246,6 @@
   "onboarding.workspace.name": "Nazwa obszaru roboczego",
   "onboarding.workspace.nameManaged": "Administrator obszaru zarządza tą nazwą.",
   "onboarding.workspace.saving": "Zapisywanie…",
-  "onboarding.workspace.open": "Otwórz obszar"
+  "onboarding.workspace.open": "Otwórz obszar",
+  "onboarding.goals.managed": "Ustawione w pliku konfiguracyjnym"
 }
