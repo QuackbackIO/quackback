@@ -1460,5 +1460,7 @@
   "ask.settings.field.shadowLg": "الظل L",
   "ask.settings.field.shadowXl": "الظل XL",
   "ask.settings.field.shadow2xl": "الظل 2XL",
-  "ask.settings.nameManaged": "افتح الإعدادات العامة لتغيير اسم مساحة العمل هذه."
+  "ask.settings.nameManaged": "افتح الإعدادات العامة لتغيير اسم مساحة العمل هذه.",
+  "onboarding.branding.fromWebsite": "شعار من {domain}",
+  "ask.settings.websiteUnavailable": "اختر موقعًا آخر أو حمّل شعارًا في إعدادات البوابة."
 }

@@ -305,6 +305,10 @@ export function WorkspaceSettingsProposalCard({ action }: { action: CopilotPropo
     const code =
       failure && typeof failure === 'object' && 'code' in failure ? String(failure.code) : ''
     const messages: Record<string, { id: string; defaultMessage: string }> = {
+      WEBSITE_BRANDING_UNAVAILABLE: {
+        id: 'ask.settings.websiteUnavailable',
+        defaultMessage: 'Choose another website or upload a logo in Portal settings.',
+      },
       SETTINGS_NAME_MANAGED: {
         id: 'ask.settings.nameManaged',
         defaultMessage: 'Open General settings to change this workspace name.',

@@ -11,6 +11,8 @@ import {
 } from '@/lib/server/functions/onboarding-progress'
 import { GettingStartedCard } from '@/components/admin/getting-started-card'
 import { CreateBoardDialog } from '@/components/admin/settings/boards/create-board-dialog'
+import { AutomaticBrandingNotice } from '@/components/admin/branding/automatic-branding-notice'
+import { useAutomaticWebsiteBranding } from '@/components/admin/branding/use-automatic-website-branding'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { setLaunchTaskResolutionFn } from '@/lib/server/functions/admin'
 import {
@@ -32,6 +34,16 @@ export function HomeGettingStarted({
 }) {
   const intl = useIntl()
   const tour = useProductTour()
+  const branding = useAutomaticWebsiteBranding({ enabled: !full })
+  const brandingNotice =
+    !full && branding.status?.status === 'applied' ? (
+      <AutomaticBrandingNotice
+        status={branding.status}
+        pending={branding.pending}
+        error={branding.error}
+        onUndo={branding.undo}
+      />
+    ) : undefined
   const progress = useQuery({
     queryKey: ['onboarding', 'progress'],
     queryFn: () => getOnboardingProgressFn(),
@@ -95,12 +107,13 @@ export function HomeGettingStarted({
           </Button>
         </section>
       )}
-      {full || isLaunchPlanActive(launchChecklistSummary(statusQuery.data)) ? (
+      {full || brandingNotice || isLaunchPlanActive(launchChecklistSummary(statusQuery.data)) ? (
         <GettingStartedCard
           full={full}
           portalUrl={portalUrl}
           compact={compact}
           status={statusQuery.data}
+          brandingNotice={brandingNotice}
           pending={resolutionMutation.isPending}
           onSkip={(taskId) => resolutionMutation.mutate({ taskId, resolution: 'dismissed' })}
           onCreateBoard={() => setCreateBoardOpen(true)}

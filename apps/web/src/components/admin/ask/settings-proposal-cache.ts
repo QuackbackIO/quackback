@@ -41,10 +41,16 @@ export async function refreshSettingsProposalQueries(queryClient: QueryClient, r
     version: value?.version,
     changes: value?.changes,
   })
+  await refreshSettingsAreaQueries(
+    queryClient,
+    proposal.success ? proposal.data.changes.map((change) => change.area) : []
+  )
+}
+
+export async function refreshSettingsAreaQueries(queryClient: QueryClient, areas: SettingsArea[]) {
   const keys = new Map<string, readonly string[]>([['onboarding', ['admin', 'onboarding']]])
-  if (proposal.success)
-    for (const change of proposal.data.changes)
-      for (const key of AREA_QUERY_KEYS[change.area]) keys.set(JSON.stringify(key), key)
+  for (const area of areas)
+    for (const key of AREA_QUERY_KEYS[area]) keys.set(JSON.stringify(key), key)
 
   // Route loaders seed local form state from cached data, including inactive
   // queries. Await fresh values before routing so a warm form reads the write.

@@ -1460,5 +1460,7 @@
   "ask.settings.field.shadowLg": "阴影 L",
   "ask.settings.field.shadowXl": "阴影 XL",
   "ask.settings.field.shadow2xl": "阴影 2XL",
-  "ask.settings.nameManaged": "打开常规设置以更改此工作区的名称。"
+  "ask.settings.nameManaged": "打开常规设置以更改此工作区的名称。",
+  "onboarding.branding.fromWebsite": "标志来自 {domain}",
+  "ask.settings.websiteUnavailable": "选择另一个网站，或在门户设置中上传标志。"
 }

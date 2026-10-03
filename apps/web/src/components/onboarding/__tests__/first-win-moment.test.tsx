@@ -5,6 +5,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, expect, it, vi } from 'vitest'
 
 const state = vi.hoisted(() => ({ shown: false, claims: 0 }))
+vi.mock('@/lib/client/hooks/use-root-context', () => ({ useSessionContext: () => null }))
+vi.mock('@tanstack/react-router', () => ({
+  useRouter: () => ({
+    invalidate: async (...args: unknown[]) => {
+      expect(args).toHaveLength(0)
+    },
+  }),
+}))
 vi.mock('@/lib/server/functions/onboarding-progress', () => ({
   getOnboardingProgressFn: async () => ({ tourSeenAt: '2026-01-01' }),
   claimFirstWinMomentFn: async () => {

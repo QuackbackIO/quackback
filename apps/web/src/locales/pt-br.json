@@ -1460,5 +1460,7 @@
   "ask.settings.field.shadowLg": "Sombra L",
   "ask.settings.field.shadowXl": "Sombra XL",
   "ask.settings.field.shadow2xl": "Sombra 2XL",
-  "ask.settings.nameManaged": "Abra as configurações gerais para alterar o nome deste espaço de trabalho."
+  "ask.settings.nameManaged": "Abra as configurações gerais para alterar o nome deste espaço de trabalho.",
+  "onboarding.branding.fromWebsite": "Logo de {domain}",
+  "ask.settings.websiteUnavailable": "Escolha outro site ou envie um logo nas configurações do Portal."
 }

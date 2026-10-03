@@ -1460,5 +1460,7 @@
   "ask.settings.field.shadowLg": "Тень L",
   "ask.settings.field.shadowXl": "Тень XL",
   "ask.settings.field.shadow2xl": "Тень 2XL",
-  "ask.settings.nameManaged": "Откройте общие настройки, чтобы изменить название этого рабочего пространства."
+  "ask.settings.nameManaged": "Откройте общие настройки, чтобы изменить название этого рабочего пространства.",
+  "onboarding.branding.fromWebsite": "Логотип с {domain}",
+  "ask.settings.websiteUnavailable": "Выберите другой сайт или загрузите логотип в настройках портала."
 }

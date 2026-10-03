@@ -1460,5 +1460,7 @@
   "ask.settings.field.shadowLg": "Shadow L",
   "ask.settings.field.shadowXl": "Shadow XL",
   "ask.settings.field.shadow2xl": "Shadow 2XL",
-  "ask.settings.nameManaged": "Open General settings to change this workspace name."
+  "ask.settings.nameManaged": "Open General settings to change this workspace name.",
+  "onboarding.branding.fromWebsite": "Logo from {domain}",
+  "ask.settings.websiteUnavailable": "Choose another website or upload a logo in Portal settings."
 }

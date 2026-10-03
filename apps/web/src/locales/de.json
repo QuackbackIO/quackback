@@ -1460,5 +1460,7 @@
   "ask.settings.field.shadowLg": "Schatten L",
   "ask.settings.field.shadowXl": "Schatten XL",
   "ask.settings.field.shadow2xl": "Schatten 2XL",
-  "ask.settings.nameManaged": "Öffne die allgemeinen Einstellungen, um den Namen dieses Arbeitsbereichs zu ändern."
+  "ask.settings.nameManaged": "Öffne die allgemeinen Einstellungen, um den Namen dieses Arbeitsbereichs zu ändern.",
+  "onboarding.branding.fromWebsite": "Logo von {domain}",
+  "ask.settings.websiteUnavailable": "Wähle eine andere Website oder lade ein Logo in den Portal-Einstellungen hoch."
 }

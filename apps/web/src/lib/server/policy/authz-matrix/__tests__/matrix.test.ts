@@ -110,6 +110,28 @@ describe('workspace Copilot session route', () => {
   })
 })
 
+describe('automatic website branding authorization', () => {
+  it('requires current settings management before lookup, private status or Undo', () => {
+    const brandingOnly = {
+      ...byId('admin'),
+      permissions: new Set<PermissionKey>(['settings.branding']),
+    }
+    for (const name of [
+      'startAutomaticWebsiteBrandingFn',
+      'getAutomaticWebsiteBrandingStatusFn',
+      'undoAutomaticWebsiteBrandingFn',
+    ]) {
+      const surface = surfaces.find(
+        (item) => item.file === 'lib/server/functions/website-branding.ts' && item.surface === name
+      )
+      expect(surface, name).toBeDefined()
+      expect(evaluate(byId('admin'), surface!), name).toBe('allow')
+      expect(evaluate(brandingOnly, surface!), name).toBe('deny')
+      expect(evaluate(byId('portal_user'), surface!), name).toBe('deny')
+    }
+  })
+})
+
 describe('API key scope enforcement (owner permissions ∩ key scopes)', () => {
   it('a read-only scoped key is denied every write tool a full key passes', () => {
     const writeTools = tools.filter((t) => t.scopes.every((s) => s.startsWith('write:')))

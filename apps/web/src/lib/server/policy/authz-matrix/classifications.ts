@@ -72,6 +72,19 @@ const DYNAMIC_PERMISSION = (
 ): Classification => ({ intent: 'DYNAMIC_PERMISSION', resolvesToAny, why })
 
 export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
+  'lib/server/functions/website-branding.ts::startAutomaticWebsiteBrandingFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.SETTINGS_MANAGE],
+    'lookup and logo writes require current settings management; color writes additionally require branding permission'
+  ),
+  'lib/server/functions/website-branding.ts::getAutomaticWebsiteBrandingStatusFn':
+    DYNAMIC_PERMISSION(
+      [PERMISSIONS.SETTINGS_MANAGE],
+      'private lookup status requires current settings management; ineligible callers receive no status'
+    ),
+  'lib/server/functions/website-branding.ts::undoAutomaticWebsiteBrandingFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.SETTINGS_MANAGE],
+    'Undo requires current settings management and every permission required by the stored receipt'
+  ),
   'lib/server/functions/ask-search.ts::searchAskEntitiesFn': DYNAMIC_PERMISSION(
     [
       PERMISSIONS.POST_VIEW_PRIVATE,

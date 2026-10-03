@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   settingsChangeInputSchema,
+  settingsProposalInputSchema,
   selectSettingsChanges,
   settingsProposalSchema,
 } from '../settings-proposals'
@@ -26,6 +27,46 @@ const changes = [
 ]
 
 describe('settings proposals', () => {
+  it('accepts a website only as proposal input and keeps persisted settings website-free', () => {
+    const input = {
+      changes: [
+        { area: 'branding', patch: { website: 'https://example.com/docs' } },
+        { area: 'messenger', patch: { enabled: true } },
+      ],
+    }
+    expect(settingsProposalInputSchema.parse(input)).toEqual(input)
+    expect(settingsChangeInputSchema.safeParse(input.changes[0]).success).toBe(false)
+    for (const website of ['javascript:alert(1)', 'https://you:password@example.com', ''])
+      expect(
+        settingsProposalInputSchema.safeParse({
+          changes: [{ area: 'branding', patch: { website } }],
+        }).success
+      ).toBe(false)
+    expect(
+      settingsProposalInputSchema.safeParse({
+        changes: [
+          { area: 'branding', patch: { website: 'example.com', logoKey: 'logos/other.png' } },
+        ],
+      }).success
+    ).toBe(false)
+    expect(
+      settingsProposalInputSchema.safeParse({
+        changes: [
+          { area: 'branding', patch: { website: 'example.com' } },
+          { area: 'branding', patch: { website: 'https://other.example.com' } },
+        ],
+      }).success
+    ).toBe(false)
+    expect(
+      settingsProposalSchema.safeParse({
+        kind: 'settings',
+        version: 1,
+        changes: [
+          { ...changes[0], id: 'branding.website', path: ['website'], after: 'example.com' },
+        ],
+      }).success
+    ).toBe(false)
+  })
   it('accepts the existing theme variables and rejects injected font and shadow CSS', () => {
     expect(
       updateThemeSchema.parse({

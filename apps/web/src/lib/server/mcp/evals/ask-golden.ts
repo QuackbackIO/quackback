@@ -5,6 +5,7 @@ export interface AskGoldenCase {
   tool: 'get_settings' | 'propose_settings_change' | 'navigate_workspace'
   arguments: Record<string, unknown>
   expected: 'read' | 'proposal' | 'navigation' | 'denied'
+  denialReason?: 'permission' | 'unavailable'
   expectedAreas?: string[]
   expectedHref?: string
   operatorManagedName?: boolean
@@ -170,6 +171,7 @@ export const ASK_GOLDEN_CASES: readonly AskGoldenCase[] = [
     tool: 'navigate_workspace',
     arguments: { destination: 'billing' },
     expected: 'denied',
+    denialReason: 'unavailable',
   },
   {
     id: '17',
@@ -187,6 +189,7 @@ export const ASK_GOLDEN_CASES: readonly AskGoldenCase[] = [
     tool: 'navigate_workspace',
     arguments: { destination: 'domains' },
     expected: 'denied',
+    denialReason: 'unavailable',
   },
   {
     id: '19',

@@ -34,10 +34,45 @@ export const settingsChangeInputSchema = z.discriminatedUnion('area', [
   z.object({ area: z.literal('office_hours'), patch: settingsPatchSchemas.office_hours }).strict(),
   z.object({ area: z.literal('changelog'), patch: settingsPatchSchemas.changelog }).strict(),
 ])
+const [, ...nonBrandingSettingsChangeInputs] = settingsChangeInputSchema.options
+export const websiteBrandingInputSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(2048)
+  .refine((site) => {
+    try {
+      const url = new URL(/^[a-z][a-z\d+.-]*:/i.test(site) ? site : `https://${site}`)
+      return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password
+    } catch {
+      return false
+    }
+  })
+export const settingsProposalChangeInputSchema = z.discriminatedUnion('area', [
+  z
+    .object({
+      area: z.literal('branding'),
+      patch: settingsPatchSchemas.branding
+        .extend({
+          website: websiteBrandingInputSchema
+            .optional()
+            .describe('Fetch a website logo and safe brand color; never provide a logo key.'),
+        })
+        .strict(),
+    })
+    .strict(),
+  ...nonBrandingSettingsChangeInputs,
+])
 export const settingsProposalInputSchema = z
-  .object({ changes: z.array(settingsChangeInputSchema).min(1).max(20) })
+  .object({ changes: z.array(settingsProposalChangeInputSchema).min(1).max(20) })
   .strict()
+  .refine(
+    (input) =>
+      input.changes.filter((change) => change.area === 'branding' && change.patch.website).length <=
+      1
+  )
 export type SettingsChangeInput = z.infer<typeof settingsChangeInputSchema>
+export type SettingsProposalChangeInput = z.infer<typeof settingsProposalChangeInputSchema>
 const jsonValue: z.ZodType<unknown> = z.lazy(() =>
   z.union([
     z.string(),
@@ -69,6 +104,7 @@ const changeSchema = z
   })
   .strict()
   .refine((change) => change.id === `${change.area}.${change.path.join('.')}`)
+  .refine((change) => change.area !== 'branding' || change.path[0] !== 'website')
 export const settingsProposalSchema = z
   .object({
     kind: z.literal('settings'),
