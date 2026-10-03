@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { waitForHydration } from '../../utils/helpers'
 
 test.describe('onboarding launch plan', () => {
   test('the Launch plan page lists the plan with progress and a replay', async ({ page }) => {
@@ -32,7 +33,7 @@ test.describe('onboarding launch plan', () => {
     await page.goto('/admin')
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
     const actions = page.getByRole('button', { name: 'Actions' })
-    await expect(actions).toBeVisible()
+    await waitForHydration(actions)
     await actions.click()
     await expect(page.getByRole('menuitem', { name: 'New post' })).toBeVisible()
     await expect(page.getByRole('menuitem', { name: 'New changelog' })).toBeVisible()

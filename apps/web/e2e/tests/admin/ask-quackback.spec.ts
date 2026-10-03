@@ -40,6 +40,9 @@ async function stubCopilot(page: Page) {
   return turns
 }
 
+// The first open loads the dialog and its strings, which a cold dev server compiles.
+const FIRST_OPEN = { timeout: 15_000 }
+
 const searchRow = (page: Page) => page.getByRole('button', { name: 'Search', exact: true }).first()
 const homeComposer = (page: Page) =>
   page.getByRole('textbox', { name: 'Ask or tell Quackback anything', exact: true })
@@ -59,7 +62,7 @@ test.describe('search with Copilot off', () => {
     await page.keyboard.press('Control+k')
     const dialog = page.getByRole('dialog')
     const input = dialog.getByRole('combobox')
-    await expect(input).toBeFocused()
+    await expect(input).toBeFocused(FIRST_OPEN)
     await input.fill('logo')
     const portal = dialog.getByRole('option', { name: 'Portal', exact: true })
     await expect(portal).toBeVisible()
@@ -86,7 +89,7 @@ test.describe('search with Copilot off', () => {
     await page.keyboard.press('Control+k')
     const dialog = page.getByRole('dialog')
     const input = dialog.getByRole('combobox')
-    await expect(input).toBeFocused()
+    await expect(input).toBeFocused(FIRST_OPEN)
     await input.fill('tags')
     await expect(dialog.getByRole('option', { name: 'Tags', exact: true })).toBeVisible()
     await input.press('Enter')
@@ -94,27 +97,26 @@ test.describe('search with Copilot off', () => {
     await expect(dialog).not.toBeVisible()
   })
 
-  test('the keyboard tour ends at the sidebar Search row', async ({ page }) => {
+  test('the tour ends on the sidebar Search row without leaving Home', async ({ page }) => {
     await page.goto('/admin')
     const help = page.getByRole('button', { name: 'Help', exact: true }).first()
     await waitForHydration(help)
     await expect(page.locator('[data-tour="search"]')).toHaveCount(1)
     await help.focus()
-    await help.press('Enter')
-    const replay = page.getByRole('menuitem', { name: 'Replay the tour', exact: true })
-    await replay.focus()
-    await replay.press('Enter')
-    const coachmark = page.getByRole('dialog', { name: /^Step \d+ of \d+$/ })
+    await page.keyboard.press('ArrowDown')
+    await page.getByRole('menuitem', { name: 'Replay the tour', exact: true }).focus()
+    await page.keyboard.press('Enter')
+    const coachmark = page.getByRole('dialog')
+    await expect(coachmark).toBeFocused(FIRST_OPEN)
     for (let stop = 0; stop < 5; stop++) {
-      await expect(coachmark).toBeFocused()
-      if (await coachmark.getByText('Search from any page.', { exact: true }).isVisible()) {
+      if (await coachmark.getByText('Search.', { exact: true }).isVisible()) {
+        await expect(page).toHaveURL(/\/admin\/?$/)
         await page.keyboard.press('Escape')
         await expect(coachmark).not.toBeVisible()
         return
       }
-      const previous = await coachmark.getAttribute('aria-label')
       await page.keyboard.press('ArrowRight')
-      await expect(coachmark).not.toHaveAttribute('aria-label', previous!)
+      await expect(coachmark).toBeFocused()
     }
     throw new Error('The tour did not reach the Search row')
   })
@@ -160,7 +162,7 @@ test.describe('Copilot on Home', () => {
     await startChat(page, `Find our refund policy ${Date.now()}`)
     await page.keyboard.press('Control+k')
     const dialog = page.getByRole('dialog')
-    await expect(dialog.getByRole('combobox')).toBeFocused()
+    await expect(dialog.getByRole('combobox')).toBeFocused(FIRST_OPEN)
     await page.keyboard.press('Escape')
     await expect(dialog).not.toBeVisible()
     await expect(page).toHaveURL(/copilotThread=/)
