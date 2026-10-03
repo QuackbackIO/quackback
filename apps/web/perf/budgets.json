@@ -296,7 +296,7 @@
       "requests": 128,
       "jsRequests": 124,
       "jsKB": 454.7,
-      "htmlTransferKB": 28.2,
+      "htmlTransferKB": 30,
       "componentRenders": 548
     },
     "sweep:doc:admin:/admin/settings/connectors": {
@@ -309,7 +309,7 @@
       "requests": 106,
       "jsRequests": 102,
       "jsKB": 392,
-      "htmlTransferKB": 28.8,
+      "htmlTransferKB": 30.3,
       "componentRenders": 405
     },
     "sweep:doc:admin:/admin/settings/copilot": {
@@ -322,7 +322,7 @@
       "requests": 125,
       "jsRequests": 119,
       "jsKB": 436.6,
-      "htmlTransferKB": 27.9,
+      "htmlTransferKB": 29.3,
       "componentRenders": 467
     },
     "sweep:doc:admin:/admin/settings/skills": {
@@ -335,7 +335,7 @@
       "requests": 106,
       "jsRequests": 102,
       "jsKB": 392.3,
-      "htmlTransferKB": 27.3,
+      "htmlTransferKB": 29.1,
       "componentRenders": 375
     },
     "sweep:doc:admin:/admin/settings/workflows": {
@@ -691,7 +691,7 @@
     },
     "sweep:doc:admin:/admin/settings/moderation": {
       "dbQueries": 6,
-      "htmlKB": 135.6
+      "htmlKB": 142.4
     },
     "sweep:ui:admin:/admin/settings/moderation": {
       "dbQueries": 6,

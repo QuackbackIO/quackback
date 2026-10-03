@@ -31,3 +31,12 @@ describe('PLG event allowlist', () => {
     ).toBeNull()
   })
 })
+
+describe('PLG event outcomes', () => {
+  it.each(['status_page', 'internal'])('accepts the %s outcome', (outcome) => {
+    expect(parsePlgEventInput({ name: 'first_win_reached', outcome })).toEqual({
+      name: 'first_win_reached',
+      outcome,
+    })
+  })
+})

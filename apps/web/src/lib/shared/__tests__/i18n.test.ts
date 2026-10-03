@@ -11,6 +11,9 @@ import {
   loadViewerMessages,
   loadWidgetMessages,
   withoutViewerMessages,
+  adminSeedMessages,
+  isTourMessage,
+  loadTourMessages,
 } from '../i18n'
 
 describe('normalizeLocale', () => {
@@ -186,5 +189,23 @@ describe('viewer strings', () => {
     expect(Object.keys(viewer).length + Object.keys(withoutViewerMessages(all)).length).toBe(
       Object.keys(all).length
     )
+  })
+})
+
+describe('admin seed', () => {
+  it('leaves out the viewer, tour overlay and wizard strings and keeps the rest', async () => {
+    const [all, tour] = await Promise.all([loadMessages('de'), loadTourMessages('de')])
+    const seeded = adminSeedMessages(all)
+    expect(Object.keys(seeded).filter(isViewerMessage)).toEqual([])
+    expect(Object.keys(seeded).filter(isTourMessage)).toEqual([])
+    expect(seeded['onboarding.goals.title']).toBeUndefined()
+    expect(seeded['onboarding.workspace.title']).toBeUndefined()
+    // The tour's entry points and the launch plan stay seeded.
+    expect(seeded['onboarding.tour.replay']).toBe(all['onboarding.tour.replay'])
+    expect(seeded['onboarding.launch.title']).toBe(all['onboarding.launch.title'])
+    expect(seeded['files.download']).toBe(all['files.download'])
+    expect(tour['onboarding.tour.next']).toBe(all['onboarding.tour.next'])
+    expect(Object.keys(tour).every(isTourMessage)).toBe(true)
+    expect(Object.keys(tour).length).toBeGreaterThan(20)
   })
 })

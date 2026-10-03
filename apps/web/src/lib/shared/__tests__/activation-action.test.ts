@@ -23,6 +23,36 @@ function action(surface: ActivationSurface, overrides: Partial<LaunchStatus> = {
 }
 
 describe('selectActivationAction', () => {
+  it('asks a private team to invite a teammate, never to share the board', () => {
+    const privateBoard = {
+      goals: ['product_feedback' as const],
+      feedbackPrivate: true,
+      hasBoards: true,
+      hasInternalBoard: true,
+    }
+    expect(action('feedback_empty', privateBoard)).toMatchObject({
+      id: 'invite-teammate',
+      label: 'Invite a teammate',
+      kind: 'link',
+      destination: '/admin/settings/members',
+    })
+    expect(action('feedback_empty', { ...privateBoard, memberCount: 2 })).toBeNull()
+    expect(
+      action('feedback_empty', {
+        ...privateBoard,
+        permissions: {
+          settingsManage: false,
+          boardManage: true,
+          memberManage: false,
+          brandingManage: false,
+          integrationManage: false,
+          helpCenterManage: false,
+          assistantManage: false,
+        },
+      })
+    ).toBeNull()
+  })
+
   it('creates a board before offering distribution', () => {
     expect(action('feedback_empty')).toMatchObject({
       id: 'create-feedback-board',

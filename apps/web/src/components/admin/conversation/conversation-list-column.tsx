@@ -424,7 +424,10 @@ function EmptyList({
   // First-run CTA on the unfiltered main queues (not tickets/labels).
   const showMessengerCta = isMainConversationQueue && !isFiltered && !isAllClear
   return (
-    <div className="px-4 py-10 text-center space-y-3">
+    <div
+      className="px-4 py-10 text-center space-y-3"
+      data-tour={isMainConversationQueue && !isFiltered ? 'support-empty' : undefined}
+    >
       <p className="text-sm font-medium text-foreground">{emptyMsg}</p>
       {isFiltered && (
         <p className="mx-auto max-w-[16rem] text-xs text-muted-foreground">
@@ -442,21 +445,14 @@ function EmptyList({
           />
         </p>
       )}
-      {showMessengerCta && (
-        <>
-          <p className="text-xs text-muted-foreground max-w-[16rem] mx-auto">
-            When customers message you, conversations show up here.
-          </p>
-          {/* Widget settings are admin-only; members get the message
-              without a button they can't use. */}
-          {userRole === 'admin' && activationAction && (
-            <ActivationActionButton
-              action={activationAction}
-              surface="conversation_empty"
-              className="h-11 sm:h-9"
-            />
-          )}
-        </>
+      {/* Widget settings are admin-only; members get the title without a
+          button they can't use. */}
+      {showMessengerCta && userRole === 'admin' && activationAction && (
+        <ActivationActionButton
+          action={activationAction}
+          surface="conversation_empty"
+          className="h-11 sm:h-9"
+        />
       )}
     </div>
   )

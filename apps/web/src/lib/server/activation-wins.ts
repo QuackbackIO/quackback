@@ -4,9 +4,11 @@ import {
   and,
   asc,
   boards,
+  conversationMessages,
   conversations,
   eq,
   helpCenterArticles,
+  inArray,
   isNotNull,
   isNull,
   lte,
@@ -15,12 +17,14 @@ import {
   postVotes,
   principal,
   sql,
+  statusComponents,
   type OnboardingOutcome,
   type SetupState,
 } from '@/lib/server/db'
 
 export interface FirstWinFacts {
   customerOriginatedConversation?: boolean
+  serviceAdded?: boolean
   publishedArticle?: boolean
   deleted?: boolean
   externalPost?: boolean
@@ -36,6 +40,8 @@ export function qualifiesAsFirstWin(outcome: OnboardingOutcome, facts: FirstWinF
   switch (outcome) {
     case 'customer_support':
       return facts.customerOriginatedConversation === true
+    case 'status_page':
+      return facts.serviceAdded === true
     case 'help_center':
       return facts.publishedArticle === true
     case 'internal':
@@ -56,7 +62,8 @@ const externalPrincipal = or(eq(principal.role, 'user'), eq(principal.type, 'ano
 
 /** Query the first real outcome; onboarding-generated/test records never qualify. */
 export async function detectFirstWin(state: SetupState | null): Promise<FirstWinResult> {
-  const outcome = state?.useCase ?? 'product_feedback'
+  const primary = state?.goals?.[0] ?? state?.useCase ?? 'product_feedback'
+  const outcome = primary === 'product_feedback' && state?.feedbackPrivate ? 'internal' : primary
   if (outcome === 'customer_support') {
     const [row] = await db
       .select({ reachedAt: conversations.createdAt })
@@ -69,13 +76,29 @@ export async function detectFirstWin(state: SetupState | null): Promise<FirstWin
           // silently UN-REACH a genuine first win the moment that customer
           // answered from their inbox. `source` is immutable provenance, which
           // is the question this actually asks.
-          eq(conversations.source, 'widget'),
+          // A conversation the customer opened, by Messenger or email: its
+          // first message is theirs. One a teammate starts does not count.
+          inArray(conversations.source, ['widget', 'email']),
+          sql`(select ${conversationMessages.senderType} from ${conversationMessages}
+            where ${conversationMessages.conversationId} = ${conversations.id}
+            order by ${conversationMessages.createdAt} asc, ${conversationMessages.id} asc
+            limit 1) = 'visitor'`,
           isNotNull(conversations.visitorPrincipalId),
           sql`coalesce(${conversations.customAttributes}->>'onboardingGenerated', 'false') <> 'true'`,
           sql`coalesce(${conversations.customAttributes}->>'test', 'false') <> 'true'`
         )
       )
       .orderBy(asc(conversations.createdAt))
+      .limit(1)
+    return { reached: Boolean(row), reachedAt: row?.reachedAt.toISOString() ?? null }
+  }
+
+  if (outcome === 'status_page') {
+    const [row] = await db
+      .select({ reachedAt: statusComponents.createdAt })
+      .from(statusComponents)
+      .where(isNull(statusComponents.deletedAt))
+      .orderBy(asc(statusComponents.createdAt))
       .limit(1)
     return { reached: Boolean(row), reachedAt: row?.reachedAt.toISOString() ?? null }
   }

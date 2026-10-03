@@ -1,187 +1,143 @@
 import { CheckIcon } from '@heroicons/react/24/solid'
-import { FormattedMessage } from 'react-intl'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import { ActivationActionButton } from '@/components/admin/activation-action-button'
+import { LaunchTaskLabel, launchTaskMessage } from '@/components/onboarding/launch-task-label'
 import { copyBoardLinkAction } from '@/lib/shared/activation-action'
-import {
-  launchChecklistSummary,
-  type LaunchStatus,
-  type LaunchTask,
-} from '@/lib/shared/launch-checklist'
-import { cn } from '@/lib/shared/utils'
+import { launchChecklistSummary, type LaunchStatus } from '@/lib/shared/launch-checklist'
 
 export function GettingStartedCard({
   status,
   pending,
   onSkip,
   onCreateBoard,
+  portalUrl,
 }: {
   status: LaunchStatus
   pending: boolean
   onSkip: (taskId: string) => void
   onCreateBoard: () => void
+  portalUrl?: string
 }) {
+  const intl = useIntl()
   const summary = launchChecklistSummary(status)
   if (summary.resolved) return null
-
-  const essentials = summary.tasks.filter(
-    (task) => task.classification === 'prerequisite' && !task.isSkipped
-  )
-  const currentTask = essentials.find((task) => !task.isCompleted)
-  const percent = summary.percent
-
+  const tasks = summary.tasks
+    .filter((task) => task.classification !== 'first_win' && !task.isCompleted && !task.isSkipped)
+    .slice(0, 2)
   return (
-    <section
+    <Card
+      role="region"
       aria-labelledby="getting-started-title"
-      className="rounded-xl border border-primary/35 bg-card px-5 pb-2 pt-5"
+      className="gap-4 rounded-xl p-4 [--ring:var(--muted-foreground)]"
     >
-      <div className="mb-3 flex items-center justify-between gap-4">
-        <h2 id="getting-started-title" className="text-[15px] font-semibold">
-          <FormattedMessage id="activation.card.title" defaultMessage="Getting started" />
+      <div className="flex items-center justify-between">
+        <h2 id="getting-started-title" className="text-sm font-semibold">
+          <FormattedMessage id="onboarding.launch.title" defaultMessage="Your launch plan" />
         </h2>
-        <p className="text-[13px] font-medium text-muted-foreground">
-          <FormattedMessage
-            id="activation.card.percent"
-            defaultMessage="{percent}% completed"
-            values={{ percent }}
-          />
-        </p>
+        <Link to="/admin/getting-started" className="text-xs text-muted-foreground hover:underline">
+          <FormattedMessage id="onboarding.launch.all" defaultMessage="See all" />
+        </Link>
       </div>
-      <div
-        role="progressbar"
-        aria-label="Setup progress"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={percent}
-        className="mb-2 h-1 overflow-hidden rounded-full bg-muted"
-      >
-        <span className="block h-full rounded-full bg-primary" style={{ width: `${percent}%` }} />
-      </div>
-      <ol>
-        {essentials.map((task, index) => {
-          const kind = task.isCompleted ? 'done' : currentTask?.id === task.id ? 'now' : 'later'
+      <ol className="grid gap-3 sm:grid-cols-3">
+        <li className="flex flex-col gap-4 rounded-xl border bg-muted/30 p-3">
+          <div className="flex items-center gap-2">
+            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-foreground text-background">
+              <CheckIcon className="size-3.5" aria-hidden="true" />
+            </span>
+            <h3 className="text-sm font-medium text-muted-foreground">
+              <FormattedMessage id="onboarding.launch.live" defaultMessage="Portal is live" />
+            </h3>
+          </div>
+          {portalUrl && (
+            <div className="overflow-hidden rounded-lg border bg-background">
+              <div className="h-5 bg-primary" aria-hidden="true" />
+              <a
+                href={portalUrl}
+                className="block truncate px-3 py-4 text-xs text-muted-foreground hover:underline"
+              >
+                {new URL(portalUrl).host}
+              </a>
+            </div>
+          )}
+        </li>
+        {tasks.map((task, index) => {
+          const copy =
+            task.id === 'distribute-feedback' ? copyBoardLinkAction(summary.outcome, status) : null
           return (
-            <GettingStartedRow
-              key={task.id}
-              task={task}
-              index={index}
-              kind={kind}
-              status={status}
-              outcome={summary.outcome}
-              pending={pending}
-              onSkip={onSkip}
-              onCreateBoard={onCreateBoard}
-            />
+            <li key={task.id} className="flex flex-col gap-4 rounded-xl border bg-background p-3">
+              <div className="flex items-center gap-2">
+                <span
+                  className="flex size-5 shrink-0 items-center justify-center rounded-full border text-xs text-muted-foreground"
+                  aria-hidden="true"
+                >
+                  {index + 2}
+                </span>
+                <h3 className="text-sm font-medium">
+                  <LaunchTaskLabel task={task} />
+                </h3>
+              </div>
+              {copy?.kind === 'copy' && portalUrl && (
+                <code className="truncate rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+                  {new URL(copy.payload.path, portalUrl).href.replace(/^https?:\/\//, '')}
+                </code>
+              )}
+              {task.availability === 'blocked' && (
+                <p className="text-xs text-muted-foreground">
+                  <FormattedMessage
+                    id="onboarding.launch.adminNeeded"
+                    defaultMessage="Ask a workspace admin to complete this step."
+                  />
+                </p>
+              )}
+              <div className="mt-auto flex flex-wrap items-center gap-2">
+                {task.isCompleted ? (
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <CheckIcon className="size-4" />
+                    <FormattedMessage id="onboarding.launch.done" defaultMessage="Done" />
+                  </span>
+                ) : task.isSkipped ? (
+                  <span className="text-xs text-muted-foreground">
+                    <FormattedMessage id="onboarding.launch.skipped" defaultMessage="Skipped" />
+                  </span>
+                ) : copy ? (
+                  <ActivationActionButton action={copy} surface="launch_plan" className="h-8" />
+                ) : task.id === 'create-board' ? (
+                  <Button
+                    size="sm"
+                    disabled={pending || task.availability === 'blocked'}
+                    onClick={onCreateBoard}
+                  >
+                    <FormattedMessage id="onboarding.launch.start" defaultMessage="Start" />
+                  </Button>
+                ) : task.href && task.availability !== 'blocked' ? (
+                  <Button asChild size="sm">
+                    <Link to={task.href}>
+                      <FormattedMessage id="onboarding.launch.start" defaultMessage="Start" />
+                    </Link>
+                  </Button>
+                ) : null}
+                {!task.isCompleted && task.classification !== 'first_win' && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={pending}
+                    onClick={() => onSkip(task.id)}
+                    aria-label={intl.formatMessage(
+                      { id: 'onboarding.launch.skipTask', defaultMessage: 'Skip {task}' },
+                      { task: intl.formatMessage(launchTaskMessage(task)) }
+                    )}
+                  >
+                    <FormattedMessage id="onboarding.launch.skip" defaultMessage="Skip" />
+                  </Button>
+                )}
+              </div>
+            </li>
           )
         })}
       </ol>
-    </section>
-  )
-}
-
-function GettingStartedRow({
-  task,
-  index,
-  kind,
-  status,
-  outcome,
-  pending,
-  onSkip,
-  onCreateBoard,
-}: {
-  task: LaunchTask
-  index: number
-  kind: 'done' | 'now' | 'later'
-  status: LaunchStatus
-  outcome: ReturnType<typeof launchChecklistSummary>['outcome']
-  pending: boolean
-  onSkip: (taskId: string) => void
-  onCreateBoard: () => void
-}) {
-  const copyAction =
-    kind === 'now' && task.id === 'distribute-feedback'
-      ? copyBoardLinkAction(outcome, status)
-      : null
-
-  return (
-    <li
-      className={cn(
-        'flex items-start gap-3 border-t border-border/70 py-3.5 first:border-t-0',
-        kind === 'now' && 'items-center'
-      )}
-    >
-      <StepMark kind={kind} index={index} />
-      <div className="min-w-0 flex-1">
-        <h3
-          className={cn(
-            'text-sm font-medium',
-            kind !== 'now' && 'font-normal text-muted-foreground'
-          )}
-        >
-          {task.title}
-        </h3>
-        {kind === 'now' && (
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {task.blockedReason ?? task.description}
-          </p>
-        )}
-      </div>
-      {kind === 'now' && (
-        <div className="ml-auto flex shrink-0 items-center gap-3">
-          {!task.isCompleted && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 px-3 text-[13px] text-muted-foreground"
-              disabled={pending}
-              onClick={() => onSkip(task.id)}
-            >
-              <FormattedMessage id="activation.action.skip" defaultMessage="Skip" />
-            </Button>
-          )}
-          {copyAction ? (
-            <ActivationActionButton
-              action={copyAction}
-              surface="launch_plan"
-              className="h-8 px-3.5"
-            />
-          ) : task.id === 'create-board' ? (
-            <Button
-              type="button"
-              size="sm"
-              className="h-8 px-3.5 text-[13px]"
-              disabled={pending || task.availability === 'blocked'}
-              onClick={onCreateBoard}
-            >
-              <FormattedMessage id="activation.action.start" defaultMessage="Start" />
-            </Button>
-          ) : task.href && task.availability !== 'blocked' ? (
-            <Button asChild size="sm" className="h-8 px-3.5 text-[13px]">
-              <Link to={task.href}>
-                <FormattedMessage id="activation.action.start" defaultMessage="Start" />
-              </Link>
-            </Button>
-          ) : null}
-        </div>
-      )}
-    </li>
-  )
-}
-
-function StepMark({ kind, index }: { kind: 'done' | 'now' | 'later'; index: number }) {
-  return (
-    <span
-      className={cn(
-        'mt-0.5 grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full border-[1.5px] text-[11px] font-semibold',
-        kind === 'done' && 'border-primary bg-primary text-primary-foreground',
-        kind === 'now' && 'border-primary text-primary shadow-[0_0_0_3px] shadow-primary/20',
-        kind === 'later' && 'border-border bg-background text-muted-foreground'
-      )}
-      aria-hidden="true"
-    >
-      {kind === 'done' ? <CheckIcon className="h-3 w-3" /> : index + 1}
-    </span>
+    </Card>
   )
 }

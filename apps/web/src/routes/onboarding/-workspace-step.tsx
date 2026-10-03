@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import { FormattedMessage, useIntl } from 'react-intl'
+import { GoalSelector } from '@/components/onboarding/goal-selector'
+import { getSetupState, type OnboardingOutcome } from '@/lib/shared/db-types'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { saveWorkspaceAndGoalFn } from '@/lib/server/functions/onboarding'
@@ -18,11 +20,18 @@ const DRAFT_KEY = 'quackback:onboarding:workspace-name'
 
 type CloudIdentity = NonNullable<Awaited<ReturnType<typeof getCloudIdentityFn>>>
 
+/** The goals already in setup state: a config file's, or an earlier save's. */
+export interface WorkspaceSetupGoals {
+  goals?: OnboardingOutcome[]
+  feedbackPrivate?: boolean
+}
+
 export interface WorkspaceStepProps {
   isCloudProvisioned: boolean
   cloudIdentity: CloudIdentity | null
   existingWorkspaceName: string
   managedFieldPaths: string[]
+  setupGoals?: WorkspaceSetupGoals
 }
 
 export function WorkspaceStep({
@@ -30,12 +39,14 @@ export function WorkspaceStep({
   cloudIdentity,
   existingWorkspaceName,
   managedFieldPaths,
+  setupGoals,
 }: WorkspaceStepProps) {
   if (!isCloudProvisioned) {
     return (
       <WorkspaceNameStep
         existingWorkspaceName={existingWorkspaceName}
         managedFieldPaths={managedFieldPaths}
+        setupGoals={setupGoals}
       />
     )
   }
@@ -122,7 +133,10 @@ export function CloudWorkspaceDetailsForm(props: {
   }
 
   return (
-    <form onSubmit={submit} className="mx-auto flex w-full max-w-xl flex-col gap-7 pb-24 sm:pb-0">
+    <form
+      onSubmit={submit}
+      className="mx-auto flex w-full max-w-xl flex-col gap-7 [--ring:var(--muted-foreground)] pb-24 sm:pb-0"
+    >
       <header className="text-center">
         <h1 className="text-2xl font-bold">Make this workspace yours</h1>
         <p className="mx-auto mt-2 max-w-lg text-sm text-muted-foreground">
@@ -195,11 +209,18 @@ export function CloudWorkspaceDetailsForm(props: {
 function WorkspaceNameStep({
   existingWorkspaceName,
   managedFieldPaths,
+  setupGoals,
 }: {
   existingWorkspaceName: string
   managedFieldPaths: string[]
+  setupGoals?: WorkspaceSetupGoals
 }) {
   const intl = useIntl()
+  const goalsManaged = isPathManagedFromBootstrap('workspace.useCase', managedFieldPaths)
+  const [goals, setGoals] = useState<OnboardingOutcome[]>(
+    setupGoals?.goals?.length || goalsManaged ? (setupGoals?.goals ?? []) : ['product_feedback']
+  )
+  const [feedbackPrivate, setFeedbackPrivate] = useState(setupGoals?.feedbackPrivate ?? false)
   const navigate = useNavigate()
   const nameManaged = isPathManagedFromBootstrap(MANAGED_PATHS.WORKSPACE_NAME, managedFieldPaths)
 
@@ -212,18 +233,27 @@ function WorkspaceNameStep({
     try {
       const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) ?? 'null') as {
         workspaceName?: string
+        goals?: OnboardingOutcome[]
+        feedbackPrivate?: boolean
       } | null
+      if (!goalsManaged && draft?.goals) {
+        const normalized = getSetupState(
+          JSON.stringify({ version: 2, goals: draft.goals, feedbackPrivate: draft.feedbackPrivate })
+        )
+        if (normalized?.goals?.length) setGoals(normalized.goals)
+        setFeedbackPrivate(normalized?.feedbackPrivate ?? false)
+      }
       if (!nameManaged && typeof draft?.workspaceName === 'string') {
         setWorkspaceName(draft.workspaceName)
       }
     } catch {
       localStorage.removeItem(DRAFT_KEY)
     }
-  }, [nameManaged])
+  }, [nameManaged, goalsManaged])
 
   useEffect(() => {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify({ workspaceName }))
-  }, [workspaceName])
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ workspaceName, goals, feedbackPrivate }))
+  }, [workspaceName, goals, feedbackPrivate])
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
@@ -239,8 +269,11 @@ function WorkspaceNameStep({
     setIsLoading(true)
     setError('')
     try {
+      // A config file owns managed goals: sending them would only be refused.
       const result = await saveWorkspaceAndGoalFn({
-        data: { workspaceName: workspaceName.trim() },
+        data: goalsManaged
+          ? { workspaceName: workspaceName.trim() }
+          : { workspaceName: workspaceName.trim(), goals, feedbackPrivate },
       })
       toastEnabledModules(result.enabledModules)
       localStorage.removeItem(DRAFT_KEY)
@@ -262,7 +295,7 @@ function WorkspaceNameStep({
   return (
     <form
       onSubmit={handleSubmit}
-      className="mx-auto flex w-full max-w-2xl flex-col gap-8 pb-24 sm:pb-0"
+      className="mx-auto flex w-full max-w-2xl flex-col gap-8 [--ring:var(--muted-foreground)] pb-24 sm:pb-0"
     >
       <header className="text-center">
         <h1 className="text-2xl font-bold">
@@ -271,12 +304,6 @@ function WorkspaceNameStep({
             defaultMessage="Create your workspace"
           />
         </h1>
-        <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
-          <FormattedMessage
-            id="onboarding.workspace.description"
-            defaultMessage="Give your team a home in Quackback."
-          />
-        </p>
       </header>
 
       <div className="space-y-3">
@@ -304,6 +331,15 @@ function WorkspaceNameStep({
         ) : null}
       </div>
 
+      <GoalSelector
+        goals={goals}
+        onGoalsChange={setGoals}
+        feedbackPrivate={feedbackPrivate}
+        onPrivateChange={setFeedbackPrivate}
+        disabled={isLoading}
+        managed={goalsManaged}
+      />
+
       <div aria-live="polite" aria-atomic="true">
         {error && (
           <p
@@ -318,7 +354,7 @@ function WorkspaceNameStep({
       <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 p-4 sm:static sm:border-0 sm:bg-transparent sm:p-0">
         <Button
           type="submit"
-          disabled={isLoading || !nameValid}
+          disabled={isLoading || !nameValid || (!goalsManaged && goals.length === 0)}
           className="mx-auto h-11 w-full max-w-sm"
         >
           {isLoading ? (

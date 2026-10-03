@@ -115,6 +115,37 @@ vi.mock('@tanstack/react-router', () => ({
 import { OverviewDashboard } from '../admin-overview'
 
 describe('OverviewDashboard', () => {
+  it('keeps a fresh workspace quiet until real data exists', () => {
+    const previous = state.data
+    state.data = {
+      ...state.data,
+      hasRealData: false,
+      metrics: state.data.metrics.map((metric) => ({ ...metric, count: 0 })),
+      attention: [],
+    }
+    try {
+      const { unmount } = render(<OverviewDashboard />)
+      expect(screen.queryByText('Conversations waiting for reply')).toBeNull()
+      expect(screen.queryByText('Nothing to review')).toBeNull()
+      expect(screen.queryByText('0')).toBeNull()
+      unmount()
+    } finally {
+      state.data = previous
+    }
+  })
+
+  it('keeps the create actions beside a custom Home header', () => {
+    render(
+      <OverviewDashboard
+        header={<h1>Welcome, Acme</h1>}
+        actions={<button type="button">Actions</button>}
+      />
+    )
+    expect(screen.getByRole('heading', { level: 1, name: 'Welcome, Acme' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Actions' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Home' })).toBeNull()
+  })
+
   it('renders each count under a single-line label', () => {
     const { container } = render(<OverviewDashboard />)
 

@@ -1,10 +1,12 @@
 import {
   normalizeOnboardingOutcome,
+  type LaunchTaskResolution,
   type OnboardingOutcome,
   type OutcomeTaskResolutions,
   type UseCaseType,
 } from '@/lib/shared/db-types'
 import type { ProductId } from '@/lib/shared/types/settings'
+import type { LaunchWindow } from '@/lib/shared/launch-window'
 
 export interface LaunchPermissions {
   settingsManage: boolean
@@ -44,6 +46,12 @@ export interface LaunchStatus {
   hasIntegration?: boolean
   hasFirstWin?: boolean
   firstWinAt?: string | null
+  /** The first weeks after setup; null for an established workspace. */
+  launchWindow?: LaunchWindow | null
+  /** Whether the launch window is open now, by the server's clock. */
+  inLaunchWindow?: boolean
+  goals?: OnboardingOutcome[]
+  feedbackPrivate?: boolean
   useCase?: UseCaseType | null
   taskResolutions?: OutcomeTaskResolutions
   permissions?: LaunchPermissions
@@ -82,6 +90,8 @@ export interface LaunchTaskBlocked {
 
 export interface LaunchTask {
   id: string
+  /** Which wording of the step this plan uses, when it depends on the goal. */
+  variant?: string
   title: string
   description: string
   availability: LaunchTaskAvailability
@@ -130,6 +140,7 @@ export const OUTCOME_TAB_LABEL: Record<OnboardingOutcome, string> = {
   customer_support: 'Customer support',
   help_center: 'Help Center',
   internal: 'Internal feedback',
+  status_page: 'Status page',
 }
 
 export const OUTCOME_HOME: Record<OnboardingOutcome, { label: string; href: LaunchTaskHref }> = {
@@ -137,6 +148,7 @@ export const OUTCOME_HOME: Record<OnboardingOutcome, { label: string; href: Laun
   customer_support: { label: 'Open support', href: '/admin/inbox' },
   help_center: { label: 'Open Help Center', href: '/admin/help-center' },
   internal: { label: 'Open feedback', href: '/admin/feedback' },
+  status_page: { label: 'Open status', href: '/admin/status' },
 }
 
 export const FIRST_WIN_NOUN: Record<OnboardingOutcome, string> = {
@@ -144,6 +156,16 @@ export const FIRST_WIN_NOUN: Record<OnboardingOutcome, string> = {
   customer_support: 'customer conversation',
   help_center: 'published article',
   internal: 'team idea',
+  status_page: 'service',
+}
+
+/** The first win names what it is for the primary goal. */
+const FIRST_WIN_WORDING: Record<OnboardingOutcome, { variant: string; title: string }> = {
+  product_feedback: { variant: 'feedback', title: 'Get your first idea' },
+  internal: { variant: 'feedback', title: 'Get your first idea' },
+  customer_support: { variant: 'support', title: 'Get your first conversation' },
+  help_center: { variant: 'helpCenter', title: 'Publish your first article' },
+  status_page: { variant: 'status', title: 'Add your first service' },
 }
 
 const ALLOW_ALL: LaunchPermissions = {
@@ -167,12 +189,57 @@ function resolvedFeatures(features?: LaunchStatus['features']) {
   }
 }
 
-function materializeTask(
-  task: LaunchTaskInput,
-  outcome: OnboardingOutcome,
-  resolutions: OutcomeTaskResolutions | undefined
-): LaunchTask {
-  const stored = resolutions?.[outcome]?.[task.id]
+type TaskResolutionMap = Record<string, LaunchTaskResolution>
+
+interface ResolutionIntent {
+  goals?: readonly OnboardingOutcome[]
+  useCase?: UseCaseType | null
+  feedbackPrivate?: boolean
+  taskResolutions?: OutcomeTaskResolutions
+}
+
+/** The one setup-state key every launch-plan skip is stored under: the primary goal. */
+export function launchResolutionKey(intent: ResolutionIntent): OnboardingOutcome {
+  return intent.goals?.[0] ?? normalizeOutcome(intent.useCase)
+}
+
+/** Private team feedback kept its skips under `internal` before goals existed. */
+function legacyResolutionKeys(intent: ResolutionIntent, key: OnboardingOutcome) {
+  return key === 'product_feedback' && intent.feedbackPrivate ? (['internal'] as const) : []
+}
+
+function taskResolutionsFor(intent: ResolutionIntent, key: OnboardingOutcome): TaskResolutionMap {
+  const merged: TaskResolutionMap = {}
+  for (const legacy of legacyResolutionKeys(intent, key)) {
+    Object.assign(merged, intent.taskResolutions?.[legacy])
+  }
+  return Object.assign(merged, intent.taskResolutions?.[key])
+}
+
+/**
+ * Save or clear one skip under the primary goal. Clearing also removes a skip
+ * stored under the legacy private-feedback key, so Undo always restores it.
+ */
+export function withLaunchTaskResolution(
+  intent: ResolutionIntent,
+  taskId: string,
+  resolution: LaunchTaskResolution | null
+): OutcomeTaskResolutions | undefined {
+  const key = launchResolutionKey(intent)
+  const all: OutcomeTaskResolutions = { ...(intent.taskResolutions ?? {}) }
+  const keys: OnboardingOutcome[] = resolution ? [key] : [key, ...legacyResolutionKeys(intent, key)]
+  for (const target of keys) {
+    const tasks = { ...(all[target] ?? {}) }
+    if (resolution && target === key) tasks[taskId] = resolution
+    else delete tasks[taskId]
+    if (Object.keys(tasks).length > 0) all[target] = tasks
+    else delete all[target]
+  }
+  return Object.keys(all).length > 0 ? all : undefined
+}
+
+function materializeTask(task: LaunchTaskInput, resolutions: TaskResolutionMap): LaunchTask {
+  const stored = resolutions[task.id]
   const isSkipped =
     !task.completed && (stored?.resolution === 'dismissed' || stored?.resolution === 'deferred')
   const blocked: LaunchTaskBlocked | undefined =
@@ -182,6 +249,7 @@ function materializeTask(
   const blockedReason = blocked ? (task.unavailableReason ?? blockedReasonFrom(blocked)) : undefined
   return {
     id: task.id,
+    ...(task.variant ? { variant: task.variant } : {}),
     title: task.title,
     description: task.description,
     classification: task.classification,
@@ -196,17 +264,21 @@ function materializeTask(
   }
 }
 
-export function buildLaunchTasks(
+function buildOutcomeTasks(
   status: LaunchStatus,
-  outcomeOverride?: OnboardingOutcome
+  outcomeOverride: OnboardingOutcome | undefined,
+  resolutions: TaskResolutionMap
 ): LaunchTask[] {
-  const outcome = outcomeOverride ?? normalizeOutcome(status.useCase)
+  const selectedOutcome = outcomeOverride ?? normalizeOutcome(status.useCase)
+  const outcome =
+    selectedOutcome === 'product_feedback' && status.feedbackPrivate ? 'internal' : selectedOutcome
   const permissions = status.permissions ?? ALLOW_ALL
   const features = resolvedFeatures(status.features)
   const boardCapacityBlocked =
     !status.hasBoards && status.maxBoards != null && (status.boardCount ?? 0) >= status.maxBoards
   const board: LaunchTaskInput = {
     id: 'create-board',
+    ...(outcome === 'internal' ? { variant: 'private' } : {}),
     title: outcome === 'internal' ? 'Create a private team board' : 'Create a feedback board',
     description:
       outcome === 'internal'
@@ -309,7 +381,8 @@ export function buildLaunchTasks(
     description: 'Bring in someone to help respond, publish, or manage feedback.',
     completed: status.memberCount > 1,
     canAct: permissions.memberManage,
-    classification: 'polish',
+    // A private team board is only useful once the team is in it.
+    classification: outcome === 'internal' ? 'prerequisite' : 'polish',
     href: '/admin/settings/members',
     actionLabel: 'Invite teammate',
     completedLabel: 'Manage team',
@@ -344,14 +417,7 @@ export function buildLaunchTasks(
   }
   const firstWin: LaunchTaskInput = {
     id: 'first-win',
-    title:
-      outcome === 'customer_support'
-        ? 'Receive your first customer conversation'
-        : outcome === 'help_center'
-          ? 'Publish your first article'
-          : outcome === 'internal'
-            ? 'Collect your first team idea'
-            : 'Receive your first customer post or vote',
+    ...FIRST_WIN_WORDING[outcome],
     description: 'We’ll mark this complete automatically when it happens.',
     completed: Boolean(status.hasFirstWin),
     classification: 'first_win',
@@ -367,7 +433,60 @@ export function buildLaunchTasks(
   if (features.statusPage) inputs.push(addStatusService)
   inputs.push(invite, branding, integration, firstWin)
 
-  return inputs.map((task) => materializeTask(task, outcome, status.taskResolutions))
+  return inputs.map((task) => materializeTask(task, resolutions))
+}
+
+/** Merge selected product work in goal order, then shared polish and the primary win. */
+export function buildLaunchTasks(
+  status: LaunchStatus,
+  goalsOverride?: readonly OnboardingOutcome[] | OnboardingOutcome
+): LaunchTask[] {
+  if (typeof goalsOverride === 'string') {
+    return buildOutcomeTasks(status, goalsOverride, taskResolutionsFor(status, goalsOverride))
+  }
+  const goals = goalsOverride ?? status.goals
+  if (!goals?.length) {
+    return buildOutcomeTasks(
+      status,
+      undefined,
+      taskResolutionsFor(status, launchResolutionKey(status))
+    )
+  }
+  // Every skip is read from one key, whichever goal's set a task came from.
+  const resolutions = taskResolutionsFor(status, launchResolutionKey({ ...status, goals }))
+  const taskIds: Record<OnboardingOutcome, readonly string[]> = {
+    product_feedback: ['create-board', 'distribute-feedback'],
+    internal: ['create-board', 'invite-team'],
+    customer_support: ['connect-messenger', 'set-up-quinn'],
+    help_center: ['help-article'],
+    status_page: ['add-status-service'],
+  }
+  const tasks: LaunchTask[] = []
+  const seen = new Set<string>()
+  for (const goal of goals) {
+    const outcome = goal === 'product_feedback' && status.feedbackPrivate ? 'internal' : goal
+    for (const task of buildOutcomeTasks(status, outcome, resolutions)) {
+      if (!taskIds[outcome].includes(task.id) || seen.has(task.id)) continue
+      tasks.push(task.id === 'set-up-quinn' ? { ...task, classification: 'polish' } : task)
+      seen.add(task.id)
+    }
+  }
+  const shared = buildOutcomeTasks(status, goals[0], resolutions).filter(
+    (task) =>
+      task.classification === 'polish' ||
+      task.classification === 'first_win' ||
+      (task.id === 'publish-changelog' && goals.includes('product_feedback'))
+  )
+  for (const task of shared) {
+    if (seen.has(task.id)) continue
+    tasks.push(task.id === 'publish-changelog' ? { ...task, classification: 'polish' } : task)
+    seen.add(task.id)
+  }
+  return [
+    ...tasks.filter((task) => task.classification === 'prerequisite'),
+    ...tasks.filter((task) => task.classification === 'polish'),
+    ...tasks.filter((task) => task.classification === 'first_win'),
+  ]
 }
 
 export function launchChecklistSummary(
@@ -387,8 +506,10 @@ export function launchChecklistSummary(
   headline: string
   percent: number
 } {
-  const outcome = outcomeOverride ?? normalizeOutcome(status.useCase)
-  const tasks = buildLaunchTasks(status, outcome)
+  const selectedOutcome = outcomeOverride ?? status.goals?.[0] ?? normalizeOutcome(status.useCase)
+  const outcome =
+    selectedOutcome === 'product_feedback' && status.feedbackPrivate ? 'internal' : selectedOutcome
+  const tasks = buildLaunchTasks(status, outcomeOverride)
   const prerequisites = tasks.filter((task) => task.classification === 'prerequisite')
   const skippedTasks = tasks.filter((task) => task.isSkipped && task.classification !== 'first_win')
   const counted = prerequisites.filter((task) => !task.isSkipped)
@@ -423,6 +544,68 @@ export function launchChecklistSummary(
           ? `You’re ready for your first ${winNoun}`
           : `${remaining} step${remaining === 1 ? '' : 's'} to your first ${winNoun}`,
   }
+}
+
+/**
+ * Progress as the sidebar dock and the Launch plan page show it: every row of
+ * the plan, done or skipped, out of all rows. `resolved` hides the dock.
+ */
+export function launchPlanProgress(status: LaunchStatus): {
+  done: number
+  total: number
+  resolved: boolean
+} {
+  const summary = launchChecklistSummary(status)
+  return {
+    done: summary.tasks.filter((task) => task.isCompleted || task.isSkipped).length,
+    total: summary.tasks.length,
+    resolved: summary.resolved,
+  }
+}
+
+export type LaunchPlanGroupId =
+  'product_feedback' | 'customer_support' | 'help_center' | 'status_page' | 'polish'
+
+/** The goal whose work a task is. Anything else is polish. */
+const TASK_GROUP: Record<string, Exclude<LaunchPlanGroupId, 'polish'>> = {
+  'create-board': 'product_feedback',
+  'distribute-feedback': 'product_feedback',
+  'connect-messenger': 'customer_support',
+  'set-up-quinn': 'customer_support',
+  'help-article': 'help_center',
+  'add-status-service': 'status_page',
+}
+
+const GOAL_GROUPS = ['product_feedback', 'customer_support', 'help_center', 'status_page'] as const
+
+/**
+ * The plan as the Launch plan page lists it: a group for each goal in the
+ * order chosen, the first win under the primary goal, then Polish.
+ */
+export function launchPlanGroups(
+  status: LaunchStatus
+): { id: LaunchPlanGroupId; tasks: LaunchTask[] }[] {
+  const { tasks } = launchChecklistSummary(status)
+  const primary = launchResolutionKey(status)
+  const asGroup = (goal: OnboardingOutcome): LaunchPlanGroupId =>
+    goal === 'internal' ? 'product_feedback' : goal
+  const groupOf = (task: LaunchTask): LaunchPlanGroupId =>
+    task.classification === 'first_win'
+      ? asGroup(primary)
+      : task.classification === 'prerequisite' && task.id === 'invite-team'
+        ? 'product_feedback'
+        : (TASK_GROUP[task.id] ?? 'polish')
+  const order: LaunchPlanGroupId[] = []
+  for (const id of [
+    ...(status.goals?.length ? status.goals : [primary]).map(asGroup),
+    ...GOAL_GROUPS,
+    'polish' as const,
+  ]) {
+    if (!order.includes(id)) order.push(id)
+  }
+  return order
+    .map((id) => ({ id, tasks: tasks.filter((task) => groupOf(task) === id) }))
+    .filter((group) => group.tasks.length > 0)
 }
 
 /** Home card visibility. First win no longer holds this. */

@@ -18,6 +18,7 @@ const useCaseSchema = z.enum([
   'product_feedback',
   'customer_support',
   'help_center',
+  'status_page',
   'internal',
   // Legacy values still accepted in config files
   'saas',

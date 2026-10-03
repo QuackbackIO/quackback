@@ -35,7 +35,11 @@ export function AdminListHeader({
   return (
     <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-2">
-        <div data-slot="admin-list-search" className="flex min-w-[160px] max-w-[360px] flex-1">
+        <div
+          data-slot="admin-list-search"
+          data-tour="search"
+          className="flex min-w-[160px] max-w-[360px] flex-1"
+        >
           <SearchInput
             value={searchValue}
             onChange={onSearchChange}
