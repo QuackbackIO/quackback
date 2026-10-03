@@ -23,8 +23,13 @@ DO $$ BEGIN
   END IF;
 END $$;
 --> statement-breakpoint
--- Validated separately so existing rows are checked without blocking writes.
-ALTER TABLE "conversation_messages" VALIDATE CONSTRAINT "conversation_messages_parent_check";
+-- Validated in its own statement once the check exists.
+-- @replay: guarded-by the check already being validated; nothing is scanned on replay
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'conversation_messages_parent_check' AND conrelid = 'conversation_messages'::regclass AND NOT convalidated) THEN
+    ALTER TABLE "conversation_messages" VALIDATE CONSTRAINT "conversation_messages_parent_check";
+  END IF;
+END $$;
 --> statement-breakpoint
 -- @replay: guarded-by the workspace internal check already existing; no constraint is changed on replay
 DO $$ BEGIN
@@ -33,7 +38,12 @@ DO $$ BEGIN
   END IF;
 END $$;
 --> statement-breakpoint
-ALTER TABLE "conversation_messages" VALIDATE CONSTRAINT "conversation_messages_workspace_internal_check";
+-- @replay: guarded-by the check already being validated; nothing is scanned on replay
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'conversation_messages_workspace_internal_check' AND conrelid = 'conversation_messages'::regclass AND NOT convalidated) THEN
+    ALTER TABLE "conversation_messages" VALIDATE CONSTRAINT "conversation_messages_workspace_internal_check";
+  END IF;
+END $$;
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "conversation_messages_workspace_created_idx" ON "conversation_messages" ("workspace_thread_key", "created_at", "id") WHERE "workspace_thread_key" IS NOT NULL;
 --> statement-breakpoint
