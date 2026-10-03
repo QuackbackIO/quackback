@@ -1248,5 +1248,7 @@
   "onboarding.workspace.saving": "正在儲存…",
   "onboarding.workspace.open": "開啟工作區",
   "onboarding.goals.managed": "由你的設定檔設定",
-  "onboarding.tour.notNow": "暫不"
+  "onboarding.tour.notNow": "暫不",
+  "onboarding.launch.name": "啟動計畫",
+  "onboarding.launch.progress": "{done}/{total}"
 }

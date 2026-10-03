@@ -1248,5 +1248,7 @@
   "onboarding.workspace.saving": "正在保存…",
   "onboarding.workspace.open": "打开工作区",
   "onboarding.goals.managed": "由你的配置文件设置",
-  "onboarding.tour.notNow": "暂不"
+  "onboarding.tour.notNow": "暂不",
+  "onboarding.launch.name": "启动计划",
+  "onboarding.launch.progress": "{done}/{total}"
 }

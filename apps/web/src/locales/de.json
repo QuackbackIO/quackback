@@ -1248,5 +1248,7 @@
   "onboarding.workspace.saving": "Wird gespeichert…",
   "onboarding.workspace.open": "Workspace öffnen",
   "onboarding.goals.managed": "Durch deine Konfigurationsdatei festgelegt",
-  "onboarding.tour.notNow": "Nicht jetzt"
+  "onboarding.tour.notNow": "Nicht jetzt",
+  "onboarding.launch.name": "Startplan",
+  "onboarding.launch.progress": "{done} von {total}"
 }

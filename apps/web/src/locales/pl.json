@@ -1248,5 +1248,7 @@
   "onboarding.workspace.saving": "Zapisywanie…",
   "onboarding.workspace.open": "Otwórz obszar",
   "onboarding.goals.managed": "Ustawione w pliku konfiguracyjnym",
-  "onboarding.tour.notNow": "Nie teraz"
+  "onboarding.tour.notNow": "Nie teraz",
+  "onboarding.launch.name": "Plan uruchomienia",
+  "onboarding.launch.progress": "{done} z {total}"
 }

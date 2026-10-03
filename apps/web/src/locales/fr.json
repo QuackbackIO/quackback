@@ -1248,5 +1248,7 @@
   "onboarding.workspace.saving": "Enregistrement…",
   "onboarding.workspace.open": "Ouvrir l’espace",
   "onboarding.goals.managed": "Défini par votre fichier de configuration",
-  "onboarding.tour.notNow": "Pas maintenant"
+  "onboarding.tour.notNow": "Pas maintenant",
+  "onboarding.launch.name": "Plan de lancement",
+  "onboarding.launch.progress": "{done} sur {total}"
 }

@@ -1248,5 +1248,7 @@
   "onboarding.workspace.saving": "Сохранение…",
   "onboarding.workspace.open": "Открыть пространство",
   "onboarding.goals.managed": "Задано в файле конфигурации",
-  "onboarding.tour.notNow": "Не сейчас"
+  "onboarding.tour.notNow": "Не сейчас",
+  "onboarding.launch.name": "План запуска",
+  "onboarding.launch.progress": "{done} из {total}"
 }

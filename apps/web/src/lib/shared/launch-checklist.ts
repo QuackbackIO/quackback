@@ -541,6 +541,23 @@ export function launchChecklistSummary(
   }
 }
 
+/**
+ * Progress as the sidebar dock and the Launch plan page show it: every row of
+ * the plan, done or skipped, out of all rows. `resolved` hides the dock.
+ */
+export function launchPlanProgress(status: LaunchStatus): {
+  done: number
+  total: number
+  resolved: boolean
+} {
+  const summary = launchChecklistSummary(status)
+  return {
+    done: summary.tasks.filter((task) => task.isCompleted || task.isSkipped).length,
+    total: summary.tasks.length,
+    resolved: summary.resolved,
+  }
+}
+
 /** Home card visibility. First win no longer holds this. */
 export function isLaunchPlanActive(summary: {
   resolved: boolean

@@ -1248,5 +1248,7 @@
   "onboarding.workspace.saving": "جارٍ الحفظ…",
   "onboarding.workspace.open": "فتح مساحة العمل",
   "onboarding.goals.managed": "يحددها ملف الإعدادات",
-  "onboarding.tour.notNow": "ليس الآن"
+  "onboarding.tour.notNow": "ليس الآن",
+  "onboarding.launch.name": "خطة الإطلاق",
+  "onboarding.launch.progress": "{done} من {total}"
 }

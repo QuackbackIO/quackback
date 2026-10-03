@@ -1248,5 +1248,7 @@
   "onboarding.workspace.saving": "Opslaan…",
   "onboarding.workspace.open": "Werkruimte openen",
   "onboarding.goals.managed": "Ingesteld door je configuratiebestand",
-  "onboarding.tour.notNow": "Niet nu"
+  "onboarding.tour.notNow": "Niet nu",
+  "onboarding.launch.name": "Startplan",
+  "onboarding.launch.progress": "{done} van {total}"
 }
