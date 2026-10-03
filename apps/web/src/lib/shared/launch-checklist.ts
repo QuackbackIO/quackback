@@ -381,7 +381,8 @@ function buildOutcomeTasks(
     description: 'Bring in someone to help respond, publish, or manage feedback.',
     completed: status.memberCount > 1,
     canAct: permissions.memberManage,
-    classification: 'polish',
+    // A private team board is only useful once the team is in it.
+    classification: outcome === 'internal' ? 'prerequisite' : 'polish',
     href: '/admin/settings/members',
     actionLabel: 'Invite teammate',
     completedLabel: 'Manage team',
@@ -455,7 +456,7 @@ export function buildLaunchTasks(
   const resolutions = taskResolutionsFor(status, launchResolutionKey({ ...status, goals }))
   const taskIds: Record<OnboardingOutcome, readonly string[]> = {
     product_feedback: ['create-board', 'distribute-feedback'],
-    internal: ['create-board'],
+    internal: ['create-board', 'invite-team'],
     customer_support: ['connect-messenger', 'set-up-quinn'],
     help_center: ['help-article'],
     status_page: ['add-status-service'],

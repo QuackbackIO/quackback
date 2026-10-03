@@ -314,14 +314,14 @@ describe('buildLaunchTasks', () => {
     expect(isLaunchPlanActive({ resolved: true, firstWinComplete: true })).toBe(false)
   })
 
-  it('keeps invite as polish', () => {
+  it('keeps invite as polish, except for private team feedback, where it is the first step', () => {
     expect(
       buildLaunchTasks(base, 'product_feedback').find((task) => task.id === 'invite-team')
         ?.classification
     ).toBe('polish')
     expect(
       buildLaunchTasks(base, 'internal').find((task) => task.id === 'invite-team')?.classification
-    ).toBe('polish')
+    ).toBe('prerequisite')
   })
 
   it.each([

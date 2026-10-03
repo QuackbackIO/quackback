@@ -77,7 +77,7 @@ it('names the first win and summary for private team feedback, including legacy 
     )
     expect(launchChecklistSummary(privateStatus)).toMatchObject({
       outcome: 'internal',
-      headline: '1 step to your first team idea',
+      headline: '2 steps to your first team idea',
     })
   }
 })
@@ -102,4 +102,26 @@ it('keeps the primary goal when private feedback is secondary and keeps public f
     'Publish your first article'
   )
   expect(launchChecklistSummary(helpStatus).outcome).toBe('help_center')
+})
+
+it('keeps a private feedback plan open until a teammate joins, though the board is seeded', () => {
+  const privateOnly: LaunchStatus = {
+    ...status,
+    hasBoards: true,
+    hasInternalBoard: true,
+    goals: ['product_feedback'],
+    feedbackPrivate: true,
+    features: { ...status.features!, supportInbox: false, helpCenter: false, statusPage: false },
+  }
+  const summary = launchChecklistSummary(privateOnly)
+  expect(
+    summary.tasks.filter((task) => task.classification === 'prerequisite').map((task) => task.id)
+  ).toEqual(['create-board', 'invite-team'])
+  expect(summary.resolved).toBe(false)
+  expect(launchChecklistSummary({ ...privateOnly, memberCount: 2 }).resolved).toBe(true)
+  expect(
+    buildLaunchTasks({ ...privateOnly, goals: ['product_feedback', 'customer_support'] })
+      .filter((task) => task.classification === 'prerequisite')
+      .map((task) => task.id)
+  ).toEqual(['create-board', 'invite-team'])
 })
