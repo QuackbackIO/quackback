@@ -445,21 +445,14 @@ function EmptyList({
           />
         </p>
       )}
-      {showMessengerCta && (
-        <>
-          <p className="text-xs text-muted-foreground max-w-[16rem] mx-auto">
-            When customers message you, conversations show up here.
-          </p>
-          {/* Widget settings are admin-only; members get the message
-              without a button they can't use. */}
-          {userRole === 'admin' && activationAction && (
-            <ActivationActionButton
-              action={activationAction}
-              surface="conversation_empty"
-              className="h-11 sm:h-9"
-            />
-          )}
-        </>
+      {/* Widget settings are admin-only; members get the title without a
+          button they can't use. */}
+      {showMessengerCta && userRole === 'admin' && activationAction && (
+        <ActivationActionButton
+          action={activationAction}
+          surface="conversation_empty"
+          className="h-11 sm:h-9"
+        />
       )}
     </div>
   )
