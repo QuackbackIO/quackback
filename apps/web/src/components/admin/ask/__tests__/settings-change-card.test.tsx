@@ -73,6 +73,41 @@ describe('settings change cards', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
     expect(props.onUndo).toHaveBeenCalledOnce()
   })
+  it('lists every effect of turning Messenger on or off', () => {
+    mount({
+      changes: [
+        {
+          id: 'messenger.enabled',
+          area: 'messenger',
+          path: ['enabled'],
+          before: false,
+          after: true,
+          effects: ['messengerTab', 'widget', 'supportInbox'],
+          settingsHref: '/admin/settings/channels/messenger',
+        },
+      ],
+    })
+    expect(screen.getByText('Shows the Messages tab in the widget')).toBeTruthy()
+    expect(screen.getByText('Turns on the widget')).toBeTruthy()
+    expect(screen.getByText('Turns on the support inbox and portal chats')).toBeTruthy()
+    cleanup()
+    mount({
+      changes: [
+        {
+          id: 'messenger.enabled',
+          area: 'messenger',
+          path: ['enabled'],
+          before: true,
+          after: false,
+          effects: ['messengerTab'],
+          settingsHref: '/admin/settings/channels/messenger',
+        },
+      ],
+    })
+    expect(screen.getByText('Hides the Messages tab in the widget')).toBeTruthy()
+    expect(screen.queryByText('Turns on the widget')).toBeNull()
+    expect(screen.queryByText(/support inbox/i)).toBeNull()
+  })
   it('links each area to its actual settings page', () => {
     const props = mount()
     fireEvent.click(screen.getAllByRole('button', { name: 'Open in settings' })[1]!)

@@ -48,6 +48,9 @@ const jsonValue: z.ZodType<unknown> = z.lazy(() =>
     z.record(z.string(), jsonValue),
   ])
 )
+/** What turning Messenger on or off writes besides the derived switch. */
+export const MESSENGER_EFFECTS = ['messengerTab', 'widget', 'supportInbox'] as const
+export type MessengerEffect = (typeof MESSENGER_EFFECTS)[number]
 const changeSchema = z
   .object({
     id: z.string(),
@@ -66,6 +69,7 @@ const changeSchema = z
     settingsHref: z.string().startsWith('/admin/settings/'),
     beforePreview: z.string().nullable().optional(),
     afterPreview: z.string().nullable().optional(),
+    effects: z.array(z.enum(MESSENGER_EFFECTS)).max(MESSENGER_EFFECTS.length).optional(),
   })
   .strict()
   .refine((change) => change.id === `${change.area}.${change.path.join('.')}`)

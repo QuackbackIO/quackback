@@ -17,7 +17,6 @@ import { ALL_PERMISSIONS, PERMISSIONS } from '@/lib/shared/permissions'
 import type { Actor } from '@/lib/server/policy/types'
 import { expandTheme } from '@/lib/shared/theme/expand'
 import { generateThemeCSS } from '@/lib/shared/theme/generator'
-import { brandingConfigSchema } from '@/lib/shared/schemas/settings'
 
 const guards = vi.hoisted(() => ({
   managed: new Set<string>(),
@@ -69,8 +68,8 @@ const fixture = await createDbTestFixture({
     const current = getExecuteRows<{ name: string }>(
       await db.execute(sql`select current_database() as name`)
     )[0]
-    if (current?.name !== 'quackback_test')
-      throw new Error('Settings proposals tests require quackback_test')
+    if (!current?.name.startsWith('quackback_test'))
+      throw new Error('Settings proposals tests require a quackback_test database')
     await db.select({ id: settings.id }).from(settings).limit(0)
   },
 })
@@ -287,16 +286,16 @@ describe.skipIf(!fixture.available)('settings proposal adapters (real Postgres)'
     expect((await read()).brandingConfig).toBeNull()
   })
   it('writes an effective theme token while retaining the full branding form values for Undo', async () => {
-    const stored = brandingConfigSchema.parse({
+    const stored = {
       preset: 'custom',
-      themeMode: 'light',
+      themeMode: 'light' as const,
       light: {
         primary: '#123456',
         primaryForeground: '#fefefe',
         shadowMd: '0 1px 2px #111111',
         fontSans: 'Inter',
       },
-    })
+    }
     await testDb
       .update(settings)
       .set({ brandingConfig: JSON.stringify(stored) })
@@ -307,7 +306,7 @@ describe.skipIf(!fixture.available)('settings proposal adapters (real Postgres)'
     const receipt = await applySettingsChangesInTransaction(tx(), actor, proposal, [
       'branding.light.primary',
     ])
-    const applied = brandingConfigSchema.parse(JSON.parse((await read()).brandingConfig!))
+    const applied = JSON.parse((await read()).brandingConfig!)
     expect(applied).toEqual({
       ...stored,
       light: { ...stored.light, primary: '#0F766E' },
@@ -319,6 +318,35 @@ describe.skipIf(!fixture.available)('settings proposal adapters (real Postgres)'
     expect(generateThemeCSS(JSON.parse((await read()).brandingConfig!))).toBe(
       generateThemeCSS(stored)
     )
+  })
+  it('applies a model patch over a page-saved config the model could not propose', async () => {
+    const stored = {
+      preset: 'retired-preset',
+      themeMode: 'user',
+      light: {
+        primary: 'var(--brand)',
+        background: 'white',
+        accent: 'color-mix(in oklch, white 40%, black)',
+        legacyToken: 'lab(52% 40 59)',
+        radius: '0',
+      },
+    }
+    await testDb
+      .update(settings)
+      .set({ brandingConfig: JSON.stringify(stored) })
+      .where(eq(settings.id, settingsId))
+    const proposal = await prepareSettingsChanges(actor, [
+      { area: 'branding', patch: { dark: { primary: '#0F766E' } } },
+    ])
+    const receipt = await applySettingsChangesInTransaction(tx(), actor, proposal, [
+      'branding.dark.primary',
+    ])
+    expect(JSON.parse((await read()).brandingConfig!)).toEqual({
+      ...stored,
+      dark: { primary: '#0F766E' },
+    })
+    await undoSettingsChangesInTransaction(tx(), actor, receipt)
+    expect(JSON.parse((await read()).brandingConfig!)).toEqual(stored)
   })
   it('prepares without writing and applies only the checked stored field', async () => {
     const proposal = await prepareSettingsChanges(actor, [
@@ -333,6 +361,72 @@ describe.skipIf(!fixture.available)('settings proposal adapters (real Postgres)'
     expect(JSON.parse((await read()).featureFlags!).supportInbox).toBe(false)
     await undoSettingsChangesInTransaction(tx(), actor, receipt)
     expect((await read()).name).toBe('Acme')
+  })
+  it('turns Messenger off with its own switch and leaves Support on', async () => {
+    const liveWidget = { enabled: true, tabs: { messenger: true, feedback: true } }
+    await testDb
+      .update(settings)
+      .set({
+        featureFlags: JSON.stringify({ supportInbox: true, supportTickets: true }),
+        widgetConfig: JSON.stringify(liveWidget),
+      })
+      .where(eq(settings.id, settingsId))
+    const proposal = await prepareSettingsChanges(actor, [
+      { area: 'messenger', patch: { enabled: false } },
+    ])
+    expect(proposal.changes).toEqual([
+      expect.objectContaining({ id: 'messenger.enabled', effects: ['messengerTab'] }),
+    ])
+    const receipt = await applySettingsChangesInTransaction(tx(), actor, proposal, [
+      'messenger.enabled',
+    ])
+    const applied = await read()
+    expect(JSON.parse(applied.featureFlags!)).toMatchObject({
+      supportInbox: true,
+      supportTickets: true,
+    })
+    expect(JSON.parse(applied.widgetConfig!)).toMatchObject({
+      enabled: true,
+      tabs: { messenger: false, feedback: true },
+    })
+    await undoSettingsChangesInTransaction(tx(), actor, receipt)
+    expect(JSON.parse((await read()).widgetConfig!)).toMatchObject(liveWidget)
+  })
+  it('turns Messenger on with the widget and Support it needs, and lists them', async () => {
+    const proposal = await prepareSettingsChanges(actor, [
+      { area: 'messenger', patch: { enabled: true } },
+    ])
+    expect(proposal.changes[0]!.effects).toEqual(['messengerTab', 'widget', 'supportInbox'])
+    const receipt = await applySettingsChangesInTransaction(tx(), actor, proposal, [
+      'messenger.enabled',
+    ])
+    const applied = await read()
+    expect(JSON.parse(applied.featureFlags!).supportInbox).toBe(true)
+    expect(JSON.parse(applied.widgetConfig!)).toMatchObject({
+      enabled: true,
+      tabs: { messenger: true },
+    })
+    await undoSettingsChangesInTransaction(tx(), actor, receipt)
+    expect(JSON.parse((await read()).featureFlags!).supportInbox).toBe(false)
+    expect(JSON.parse((await read()).widgetConfig!)).toEqual({})
+  })
+  it('refuses Messenger on when what it needs changed after the card was shown', async () => {
+    await testDb
+      .update(settings)
+      .set({ featureFlags: JSON.stringify({ supportInbox: true }) })
+      .where(eq(settings.id, settingsId))
+    const proposal = await prepareSettingsChanges(actor, [
+      { area: 'messenger', patch: { enabled: true } },
+    ])
+    expect(proposal.changes[0]!.effects).toEqual(['messengerTab', 'widget'])
+    await testDb
+      .update(settings)
+      .set({ featureFlags: JSON.stringify({ supportInbox: false }) })
+      .where(eq(settings.id, settingsId))
+    await expect(
+      applySettingsChangesInTransaction(tx(), actor, proposal, ['messenger.enabled'])
+    ).rejects.toMatchObject({ code: 'SETTINGS_CHANGED' })
+    expect(JSON.parse((await read()).featureFlags!).supportInbox).toBe(false)
   })
   it('undo restores coupled module activation and preserves unrelated settings', async () => {
     const proposal = await prepareSettingsChanges(actor, [

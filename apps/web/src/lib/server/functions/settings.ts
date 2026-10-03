@@ -1,15 +1,13 @@
-import {
-  updateThemeSchema,
-  updateWorkspaceNameSchema,
-  updateHeaderDisplayModeSchema,
-  updateHeaderDisplayNameSchema,
-  messengerBasicsSchema,
-} from '@/lib/shared/schemas/settings'
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { tiptapContentSchema } from '@/lib/shared/schemas/posts'
+import { updateThemeSchema } from '@/lib/shared/schemas/settings'
 // Import types from barrel export (client-safe)
-import { DEFAULT_PORTAL_CONFIG, type UpdatePortalConfigInput } from '@/lib/server/domains/settings'
+import {
+  DEFAULT_PORTAL_CONFIG,
+  type BrandingConfig,
+  type UpdatePortalConfigInput,
+} from '@/lib/server/domains/settings'
 import { userIdSchema, type UserId } from '@quackback/ids'
 import {
   getPortalConfig,
@@ -379,6 +377,14 @@ const saveLogoKeySchema = z.object({
   key: z.string(),
 })
 
+const updateHeaderDisplayModeSchema = z.object({
+  mode: z.enum(['logo_and_name', 'logo_only', 'custom_logo']),
+})
+
+const updateHeaderDisplayNameSchema = z.object({
+  name: z.string().nullable(),
+})
+
 export type UpdateThemeInput = z.infer<typeof updateThemeSchema>
 export type UpdatePortalConfigActionInput = z.infer<typeof updatePortalConfigSchema>
 export type SaveLogoKeyInput = z.infer<typeof saveLogoKeySchema>
@@ -390,7 +396,7 @@ export const updateThemeFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info('update theme')
     await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-    return await updateBrandingConfig(data.brandingConfig)
+    return await updateBrandingConfig(data.brandingConfig as BrandingConfig)
   })
 
 export const updatePortalConfigFn = createServerFn({ method: 'POST' })
@@ -655,6 +661,10 @@ export const updateHeaderDisplayNameFn = createServerFn({ method: 'POST' })
     return await updateHeaderDisplayName(data.name)
   })
 
+const updateWorkspaceNameSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(100, 'Name too long'),
+})
+
 export type UpdateWorkspaceNameInput = z.infer<typeof updateWorkspaceNameSchema>
 
 export const updateWorkspaceNameFn = createServerFn({ method: 'POST' })
@@ -731,7 +741,9 @@ export const fetchWidgetSecret = createServerFn({ method: 'GET' }).handler(async
   return await ensureWidgetSecret()
 })
 
-const messengerConfigInputSchema = messengerBasicsSchema.extend({
+const messengerConfigInputSchema = z.object({
+  enabled: z.boolean().optional(),
+  welcomeMessage: z.string().max(500).optional(),
   offlineMessage: z.string().max(500).optional(),
   teamName: z.string().max(80).optional(),
   // Refuse visitor replies to closed conversations (Messenger only; §4.3).

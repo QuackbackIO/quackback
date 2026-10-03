@@ -9,6 +9,7 @@ import { assistantPendingActionQueries } from '@/lib/client/queries/assistant-pe
 import type { CopilotProposedAction } from '@/lib/shared/assistant/copilot-contract'
 import {
   settingsProposalSchema,
+  type MessengerEffect,
   type SettingsChange,
 } from '@/lib/shared/assistant/settings-proposals'
 import {
@@ -90,6 +91,22 @@ export const SETTINGS_CARD_FIELD_COPY: Record<string, string> = {
   shadowXl: 'Shadow XL',
   shadow2xl: 'Shadow 2XL',
 }
+const MESSENGER_EFFECT_COPY: Record<MessengerEffect, { id: string; defaultMessage: string }> = {
+  messengerTab: {
+    id: 'ask.settings.effect.messengerTabOn',
+    defaultMessage: 'Shows the Messages tab in the widget',
+  },
+  widget: { id: 'ask.settings.effect.widget', defaultMessage: 'Turns on the widget' },
+  supportInbox: {
+    id: 'ask.settings.effect.supportInbox',
+    defaultMessage: 'Turns on the support inbox and portal chats',
+  },
+}
+const MESSENGER_TAB_OFF_COPY = {
+  id: 'ask.settings.effect.messengerTabOff',
+  defaultMessage: 'Hides the Messages tab in the widget',
+}
+
 export interface SettingsChangeCardProps {
   changes: readonly SettingsChange[]
   status: 'proposed' | 'executed' | 'undone' | 'unavailable'
@@ -248,6 +265,19 @@ export function SettingsChangeCard({
                 preview={status === 'undone' ? change.beforePreview : change.afterPreview}
               />
             </div>
+            {status !== 'undone' && change.effects && change.effects.length > 0 && (
+              <ul className="space-y-0.5 text-xs text-muted-foreground">
+                {change.effects.map((effect) => (
+                  <li key={effect}>
+                    {intl.formatMessage(
+                      effect === 'messengerTab' && change.after !== true
+                        ? MESSENGER_TAB_OFF_COPY
+                        : MESSENGER_EFFECT_COPY[effect]
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )
       })}

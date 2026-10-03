@@ -18,7 +18,7 @@ import {
   type SettingsStorageColumn,
 } from './settings-proposals.storage'
 export type { SettingsApplyReceipt } from './settings-proposals.storage'
-import { brandingConfigSchema } from '@/lib/shared/schemas/settings'
+import type { BrandingConfig } from '@/lib/server/domains/settings/settings.types'
 import { assertNotManaged } from '@/lib/server/config-file/managed-guard'
 import { db, eq, settings, type Database, type Transaction } from '@/lib/server/db'
 import type { Actor } from '@/lib/server/policy/types'
@@ -29,6 +29,7 @@ import {
   settingsPatchSchemas,
   settingsProposalSchema,
   selectSettingsChanges,
+  type MessengerEffect,
   type SettingsArea,
   type SettingsChange,
   type SettingsChangeInput,
@@ -46,8 +47,11 @@ import { updateChangelogSettings } from '@/lib/server/domains/settings/settings.
 import {
   deepMerge,
   parseJsonOrNull,
+  parseWidgetConfig,
   requireSettings,
+  type SettingsRecord,
 } from '@/lib/server/domains/settings/settings.helpers'
+import { resolveFeatureFlags } from '@/lib/server/domains/settings/settings.types'
 import { getS3Object, getPublicUrlOrNull } from '@/lib/server/storage/s3'
 
 export type { SettingsChangeInput, SettingsProposal }
@@ -79,6 +83,9 @@ export async function prepareSettingsChanges(
         before: previous,
         after: entry.value,
         settingsHref: AREAS[area].href,
+        ...(id === MESSENGER_SWITCH
+          ? { effects: messengerEffects(row, entry.value === true) }
+          : {}),
       })
     }
   }
@@ -91,22 +98,43 @@ export async function prepareSettingsChanges(
   })
 }
 
-async function writeArea(tx: Transaction, area: SettingsArea, patch: Record<string, unknown>) {
+const MESSENGER_SWITCH = 'messenger.enabled'
+
+/**
+ * Messenger is live when Support is on, the widget is on and its Messages tab
+ * is shown. Turning it off flips only the Messages tab, as the Messenger
+ * page's own switch does; turning it on also turns on what it needs.
+ */
+function messengerEffects(row: SettingsRecord, enabled: boolean): MessengerEffect[] {
+  if (!enabled) return ['messengerTab']
+  const effects: MessengerEffect[] = ['messengerTab']
+  if (!parseWidgetConfig(row.widgetConfig).enabled) effects.push('widget')
+  if (!resolveFeatureFlags(row.featureFlags).supportInbox) effects.push('supportInbox')
+  return effects
+}
+
+async function writeArea(
+  tx: Transaction,
+  area: SettingsArea,
+  patch: Record<string, unknown>,
+  effects: ReadonlySet<MessengerEffect>
+) {
   const options = { executor: tx }
   switch (area) {
     case 'branding': {
-      const row = await requireSettings(tx)
       const { logoKey, ...configPatch } = patch
-      if (Object.keys(configPatch).length > 0)
+      // Only the patch is validated: the stored config keeps whatever the
+      // branding page saved, including values the model may not propose.
+      if (Object.keys(configPatch).length > 0) {
+        const row = await requireSettings(tx)
         await updateBrandingConfig(
-          brandingConfigSchema.parse(
-            deepMerge(
-              parseJsonOrNull<Record<string, unknown>>(row.brandingConfig) ?? {},
-              configPatch
-            )
+          deepMerge(
+            parseJsonOrNull<BrandingConfig>(row.brandingConfig) ?? {},
+            settingsPatchSchemas.branding.parse(configPatch) as BrandingConfig
           ),
           options
         )
+      }
       if (logoKey !== undefined) {
         await verifyRehostedLogoKey(logoKey)
         await saveLogoKey(logoKey as string, options)
@@ -119,13 +147,14 @@ async function writeArea(tx: Transaction, area: SettingsArea, patch: Record<stri
       break
     }
     case 'messenger': {
-      const data = settingsPatchSchemas.messenger.parse(patch)
-      if (data.enabled !== undefined)
-        await updateFeatureFlags({ supportInbox: data.enabled }, options)
+      const { enabled, welcomeMessage } = settingsPatchSchemas.messenger.parse(patch)
+      if (enabled === true && effects.has('supportInbox'))
+        await updateFeatureFlags({ supportInbox: true }, options)
       await updateWidgetConfig(
         {
-          ...(data.enabled === true ? { enabled: true, tabs: { messenger: true } } : {}),
-          messenger: data,
+          ...(enabled !== undefined ? { tabs: { messenger: enabled } } : {}),
+          ...(enabled === true && effects.has('widget') ? { enabled: true } : {}),
+          ...(welcomeMessage !== undefined ? { messenger: { welcomeMessage } } : {}),
         },
         options
       )
@@ -169,23 +198,22 @@ export async function applySettingsChangesInTransaction(
         : AREAS[change.area].permission
     )
     if (change.area === 'portal') assertWorkspaceNameWritable(before)
-    if (!equal(at(areaValues(before, change.area), change.path) ?? null, change.before))
+    if (
+      !equal(at(areaValues(before, change.area), change.path) ?? null, change.before) ||
+      (change.id === MESSENGER_SWITCH &&
+        !equal(messengerEffects(before, change.after === true), change.effects ?? null))
+    )
       throw new ValidationError('SETTINGS_CHANGED', 'These settings changed. Ask Copilot again.')
     const patch = patches.get(change.area) ?? {}
     put(patch, change.path, change.after)
     patches.set(change.area, patch)
   }
-  const moduleSupport = patches.get('modules')?.supportInbox
-  const messengerSupport = patches.get('messenger')?.enabled
-  if (
-    moduleSupport !== undefined &&
-    messengerSupport !== undefined &&
-    moduleSupport !== messengerSupport
-  )
+  if (patches.get('modules')?.supportInbox === false && patches.get('messenger')?.enabled === true)
     throw new ValidationError(
       'INVALID_SETTINGS_PROPOSAL',
       'Choose matching Messenger and Support settings.'
     )
+  const effects = new Set(selected.flatMap((change) => change.effects ?? []))
   // Validate every selected area before the first write.
   for (const [area, patch] of patches) {
     if (area === 'branding' && 'logoKey' in patch) {
@@ -197,7 +225,7 @@ export async function applySettingsChangesInTransaction(
         area === 'office_hours' ? { ...areaValues(before, area), ...patch } : patch
       )
   }
-  for (const [area, patch] of patches) await writeArea(tx, area, patch)
+  for (const [area, patch] of patches) await writeArea(tx, area, patch, effects)
   const after = await requireSettings(tx)
   return {
     kind: 'settings',
@@ -255,7 +283,7 @@ export async function undoSettingsChangesInTransaction(
   }
   if (values.has('name')) await assertNotManaged('workspace.name')
   if (values.has('brandingConfig')) {
-    const restored = brandingConfigSchema.parse(values.get('brandingConfig') ?? {})
+    const restored = (values.get('brandingConfig') ?? {}) as BrandingConfig
     if (restored.light !== undefined || restored.dark !== undefined) {
       const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
       await assertTierFeature('customColors', 'Custom colours')
