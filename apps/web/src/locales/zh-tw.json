@@ -1247,5 +1247,6 @@
   "onboarding.workspace.nameManaged": "此名稱由工作區管理員管理。",
   "onboarding.workspace.saving": "正在儲存…",
   "onboarding.workspace.open": "開啟工作區",
-  "onboarding.goals.managed": "由你的設定檔設定"
+  "onboarding.goals.managed": "由你的設定檔設定",
+  "onboarding.tour.notNow": "暫不"
 }

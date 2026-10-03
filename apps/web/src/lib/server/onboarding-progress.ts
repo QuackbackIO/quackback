@@ -3,18 +3,21 @@ import { db, eq, user } from '@/lib/server/db'
 
 export interface OnboardingProgress {
   tourSeenAt?: string
+  /** The viewer chose Not now on the tour offer. */
+  tourDismissedAt?: string
   firstWinShownAt?: string
 }
+
+const PROGRESS_KEYS = ['tourSeenAt', 'tourDismissedAt', 'firstWinShownAt'] as const
 
 export function readOnboardingProgress(metadata: string | null): OnboardingProgress {
   try {
     const value = JSON.parse(metadata ?? '{}')?.onboarding
-    return {
-      ...(typeof value?.tourSeenAt === 'string' ? { tourSeenAt: value.tourSeenAt } : {}),
-      ...(typeof value?.firstWinShownAt === 'string'
-        ? { firstWinShownAt: value.firstWinShownAt }
-        : {}),
+    const progress: OnboardingProgress = {}
+    for (const key of PROGRESS_KEYS) {
+      if (typeof value?.[key] === 'string') progress[key] = value[key]
     }
+    return progress
   } catch {
     return {}
   }

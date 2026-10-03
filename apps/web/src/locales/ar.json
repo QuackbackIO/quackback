@@ -1247,5 +1247,6 @@
   "onboarding.workspace.nameManaged": "يدير مسؤول مساحة العمل هذا الاسم.",
   "onboarding.workspace.saving": "جارٍ الحفظ…",
   "onboarding.workspace.open": "فتح مساحة العمل",
-  "onboarding.goals.managed": "يحددها ملف الإعدادات"
+  "onboarding.goals.managed": "يحددها ملف الإعدادات",
+  "onboarding.tour.notNow": "ليس الآن"
 }

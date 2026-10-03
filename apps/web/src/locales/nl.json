@@ -1247,5 +1247,6 @@
   "onboarding.workspace.nameManaged": "Je werkruimtebeheerder beheert deze naam.",
   "onboarding.workspace.saving": "Opslaan…",
   "onboarding.workspace.open": "Werkruimte openen",
-  "onboarding.goals.managed": "Ingesteld door je configuratiebestand"
+  "onboarding.goals.managed": "Ingesteld door je configuratiebestand",
+  "onboarding.tour.notNow": "Niet nu"
 }

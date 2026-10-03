@@ -1247,5 +1247,6 @@
   "onboarding.workspace.nameManaged": "Этим названием управляет администратор пространства.",
   "onboarding.workspace.saving": "Сохранение…",
   "onboarding.workspace.open": "Открыть пространство",
-  "onboarding.goals.managed": "Задано в файле конфигурации"
+  "onboarding.goals.managed": "Задано в файле конфигурации",
+  "onboarding.tour.notNow": "Не сейчас"
 }

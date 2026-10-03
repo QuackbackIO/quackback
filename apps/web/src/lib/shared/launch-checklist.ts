@@ -5,6 +5,7 @@ import {
   type UseCaseType,
 } from '@/lib/shared/db-types'
 import type { ProductId } from '@/lib/shared/types/settings'
+import type { LaunchWindow } from '@/lib/shared/launch-window'
 
 export interface LaunchPermissions {
   settingsManage: boolean
@@ -44,6 +45,10 @@ export interface LaunchStatus {
   hasIntegration?: boolean
   hasFirstWin?: boolean
   firstWinAt?: string | null
+  /** The first weeks after setup; null for an established workspace. */
+  launchWindow?: LaunchWindow | null
+  /** Whether the launch window is open now, by the server's clock. */
+  inLaunchWindow?: boolean
   goals?: OnboardingOutcome[]
   feedbackPrivate?: boolean
   useCase?: UseCaseType | null

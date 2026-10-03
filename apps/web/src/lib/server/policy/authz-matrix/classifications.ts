@@ -241,12 +241,6 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
     'update own subscription level'
   ),
   'lib/server/functions/uploads.ts::getAvatarUploadUrlFn': END_USER('own avatar upload URL'),
-  'lib/server/functions/onboarding-progress.ts::getOnboardingProgressFn': END_USER(
-    'reads only the caller own tour and celebration markers'
-  ),
-  'lib/server/functions/onboarding-progress.ts::markTourSeenFn': END_USER(
-    'writes only the caller own tour marker; no input is taken'
-  ),
   'lib/server/functions/user.ts::requirePrincipalId': END_USER(
     'own-profile helper — resolves the caller principal'
   ),

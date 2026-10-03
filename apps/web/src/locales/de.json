@@ -1247,5 +1247,6 @@
   "onboarding.workspace.nameManaged": "Dein Workspace-Admin verwaltet diesen Namen.",
   "onboarding.workspace.saving": "Wird gespeichert…",
   "onboarding.workspace.open": "Workspace öffnen",
-  "onboarding.goals.managed": "Durch deine Konfigurationsdatei festgelegt"
+  "onboarding.goals.managed": "Durch deine Konfigurationsdatei festgelegt",
+  "onboarding.tour.notNow": "Nicht jetzt"
 }

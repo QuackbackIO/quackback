@@ -398,6 +398,8 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
 
   const setupState = getSetupState(orgSettings?.setupState ?? null)
   const firstWin = await (await import('@/lib/server/activation-wins')).detectFirstWin(setupState)
+  const { launchWindowFor, isLaunchWindowOpen } = await import('@/lib/shared/launch-window')
+  const launchWindow = launchWindowFor({ setupState, workspaceCreatedAt: orgSettings?.createdAt })
   const flags = resolveFeatureFlags(orgSettings?.featureFlags)
   const permissions = permissionsForLegacyRole(auth.principal.role)
   const hasBranding = Boolean(orgSettings?.logoKey)
@@ -456,6 +458,8 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
     hasIntegration,
     hasFirstWin: firstWin.reached,
     firstWinAt: firstWin.reachedAt,
+    launchWindow,
+    inLaunchWindow: isLaunchWindowOpen(launchWindow),
     useCase: setupState?.goals?.[0] ?? setupState?.useCase ?? null,
     goals: setupState?.goals,
     feedbackPrivate: setupState?.feedbackPrivate,
