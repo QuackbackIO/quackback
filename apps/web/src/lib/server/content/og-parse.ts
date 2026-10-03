@@ -1,9 +1,11 @@
 /**
  * OpenGraph / Twitter meta-tag parser.
  *
- * Pure function: no I/O, no imports, never throws.
+ * Pure function: no I/O, never throws.
  * Only scans up to the first 200 KB of HTML, stopping at </head>.
  */
+
+import { normalizeHexColor } from '@/lib/shared/website-brand-color'
 
 const MAX_SCAN_BYTES = 200 * 1024
 
@@ -44,7 +46,7 @@ function cap(s: string | null, max: number): string | null {
  * Attribute order is irrelevant.
  */
 function extractAttr(tag: string, attr: string): string | null {
-  const re = new RegExp(`${attr}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s/>]*))`, 'i')
+  const re = new RegExp(`(?:^|\\s)${attr}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s/>]*))`, 'i')
   const m = re.exec(tag)
   if (!m) return null
   return m[1] ?? m[2] ?? m[3] ?? null
@@ -73,6 +75,7 @@ export interface OpenGraphData {
   siteName: string | null
   imageUrl: string | null
   faviconUrl: string | null
+  themeColor: string | null
 }
 
 /**
@@ -97,6 +100,8 @@ export function parseOpenGraph(html: string, baseUrl: string): OpenGraphData {
     let twitterImage: string | null = null
     let htmlTitle: string | null = null
     let metaDescription: string | null = null
+    let themeColor: string | null = null
+    let themePriority = 0
 
     // Extract <title>...</title>
     const titleMatch = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(head)
@@ -124,6 +129,19 @@ export function parseOpenGraph(html: string, baseUrl: string): OpenGraphData {
       else if (name === 'twitter:description') twitterDescription = decoded
       else if (name === 'twitter:image') twitterImage = decoded
       else if (name === 'description') metaDescription = decoded
+      else if (name === 'theme-color') {
+        const media = extractAttr(tag, 'media')?.trim().toLowerCase() ?? ''
+        const priority = !media
+          ? 2
+          : /^\(\s*prefers-color-scheme\s*:\s*light\s*\)$/.test(media)
+            ? 1
+            : 0
+        const color = normalizeHexColor(decoded)
+        if (color && priority > themePriority) {
+          themeColor = color
+          themePriority = priority
+        }
+      }
     }
 
     // Priority: og: > twitter: > html fallback
@@ -170,8 +188,16 @@ export function parseOpenGraph(html: string, baseUrl: string): OpenGraphData {
       siteName: cap(rawSiteName, 100),
       imageUrl,
       faviconUrl,
+      themeColor,
     }
   } catch {
-    return { title: null, description: null, siteName: null, imageUrl: null, faviconUrl: null }
+    return {
+      title: null,
+      description: null,
+      siteName: null,
+      imageUrl: null,
+      faviconUrl: null,
+      themeColor: null,
+    }
   }
 }

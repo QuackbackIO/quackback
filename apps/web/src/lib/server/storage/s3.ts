@@ -1067,7 +1067,7 @@ export async function uploadMediaFromFormData(
  *   of a timestamp, so re-uploading identical content overwrites one object
  *   rather than accumulating duplicates. Used for highly repetitive assets like
  *   favicons that the same source serves across many pages.
- * @returns Public URL to the uploaded object
+ * @returns Relative storage key and public URL to the uploaded object
  * @throws Error if the mime type is not allowed, the buffer is empty, or the upload fails
  */
 export async function uploadImageBuffer(
@@ -1075,7 +1075,7 @@ export async function uploadImageBuffer(
   mimeType: string,
   storagePrefix: string,
   opts?: { contentAddressed?: boolean }
-): Promise<{ url: string }> {
+): Promise<{ url: string; key: string }> {
   if (!isAllowedImageType(mimeType)) {
     throw new Error(`Invalid mime type for rehost: ${mimeType}`)
   }
@@ -1087,7 +1087,7 @@ export async function uploadImageBuffer(
     ? `${storagePrefix}/${createHash('sha256').update(buffer).digest('hex')}.${ext}`
     : generateStorageKey(storagePrefix, `rehost-${Date.now()}.${ext}`)
   const url = await uploadObject(key, buffer, mimeType)
-  return { url }
+  return { url, key }
 }
 
 // ============================================================================
