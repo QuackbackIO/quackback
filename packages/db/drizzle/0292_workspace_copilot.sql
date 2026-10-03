@@ -19,17 +19,22 @@ ALTER TABLE "conversation_messages" ADD COLUMN IF NOT EXISTS "workspace_thread_k
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'conversation_messages_parent_check' AND conrelid = 'conversation_messages'::regclass AND pg_get_constraintdef(oid) LIKE '%workspace_thread_key%') THEN
     ALTER TABLE "conversation_messages" DROP CONSTRAINT IF EXISTS "conversation_messages_parent_check";
-    ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_parent_check" CHECK (num_nonnulls("conversation_id", "ticket_id", "workspace_thread_key") = 1);
+    ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_parent_check" CHECK (num_nonnulls("conversation_id", "ticket_id", "workspace_thread_key") = 1) NOT VALID;
   END IF;
 END $$;
+--> statement-breakpoint
+-- Validated separately so existing rows are checked without blocking writes.
+ALTER TABLE "conversation_messages" VALIDATE CONSTRAINT "conversation_messages_parent_check";
 --> statement-breakpoint
 -- @replay: guarded-by the workspace internal check already existing; no constraint is changed on replay
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'conversation_messages_workspace_internal_check' AND conrelid = 'conversation_messages'::regclass) THEN
-    ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_workspace_internal_check" CHECK ("workspace_thread_key" IS NULL OR "is_internal" = true);
+    ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_workspace_internal_check" CHECK ("workspace_thread_key" IS NULL OR "is_internal" = true) NOT VALID;
   END IF;
 END $$;
 --> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "conversation_messages_workspace_created_idx" ON "conversation_messages" ("workspace_thread_key", "created_at", "id");
+ALTER TABLE "conversation_messages" VALIDATE CONSTRAINT "conversation_messages_workspace_internal_check";
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "conversation_messages_workspace_created_idx" ON "conversation_messages" ("workspace_thread_key", "created_at", "id") WHERE "workspace_thread_key" IS NOT NULL;
 --> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "conversation_messages_workspace_run_sender_idx" ON "conversation_messages" ("workspace_thread_key", ("metadata"->'workspaceTurn'->>'runId'), "sender_type") WHERE "workspace_thread_key" IS NOT NULL;

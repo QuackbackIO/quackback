@@ -87,6 +87,20 @@ it('replays without changing data or constraints and enforces private run dedupe
           )
         })
       ).rejects.toMatchObject({ cause: { code: '23514' } })
+      // Added NOT VALID, then validated: both checks end up enforced on existing rows.
+      expect(
+        await tx.execute(
+          sql`SELECT conname, convalidated FROM pg_constraint WHERE conrelid='conversation_messages'::regclass AND conname IN ('conversation_messages_parent_check','conversation_messages_workspace_internal_check') ORDER BY conname`
+        )
+      ).toEqual([
+        { conname: 'conversation_messages_parent_check', convalidated: true },
+        { conname: 'conversation_messages_workspace_internal_check', convalidated: true },
+      ])
+      // The thread index covers Home rows only, not every message.
+      const [index] = await tx.execute(
+        sql`SELECT pg_get_indexdef('conversation_messages_workspace_created_idx'::regclass) AS definition`
+      )
+      expect(index.definition).toContain('WHERE (workspace_thread_key IS NOT NULL)')
       throw rollback
     })
   } catch (error) {

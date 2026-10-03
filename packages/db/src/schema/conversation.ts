@@ -329,11 +329,9 @@ export const conversationMessages = pgTable(
       'conversation_messages_workspace_internal_check',
       sql`${table.workspaceThreadKey} IS NULL OR ${table.isInternal} = true`
     ),
-    index('conversation_messages_workspace_created_idx').on(
-      table.workspaceThreadKey,
-      table.createdAt,
-      table.id
-    ),
+    index('conversation_messages_workspace_created_idx')
+      .on(table.workspaceThreadKey, table.createdAt, table.id)
+      .where(sql`${table.workspaceThreadKey} IS NOT NULL`),
     uniqueIndex('conversation_messages_workspace_run_sender_idx')
       .on(
         table.workspaceThreadKey,
