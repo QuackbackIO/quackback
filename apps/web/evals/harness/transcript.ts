@@ -7,7 +7,7 @@
 import { mkdirSync, writeFileSync, appendFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { slugify } from '@/lib/shared/utils'
+import { slugify } from '@/lib/shared/utils/slugify'
 
 export const resultsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.results')
 

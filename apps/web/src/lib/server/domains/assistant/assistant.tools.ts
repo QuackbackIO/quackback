@@ -1,3 +1,10 @@
+import { RETRIEVED_CONTENT_NOTE } from './injection-guard'
+import {
+  isWorkspaceToolAllowed,
+  isWorkspaceMutationAllowed,
+  workspaceProposalMode,
+  WORKSPACE_THREAD_PREFIX,
+} from './workspace-safety'
 import { toolPermissions } from './tool-permissions'
 /**
  * Quinn's tool-execution pipeline: assembles the tool catalogue
@@ -16,6 +23,7 @@ import { toolPermissions } from './tool-permissions'
  * instead.
  */
 import { createHash } from 'node:crypto'
+import { DomainException } from '@/lib/shared/errors'
 import { can } from '@/lib/server/policy/authorize'
 import { logger } from '@/lib/server/logger'
 import type { ConversationId, TicketId } from '@quackback/ids'
@@ -47,6 +55,15 @@ function withDynamicPromptGuidance(
   ctx: AssistantToolContext
 ): AssistantToolSpec[] {
   const enumeration = describeEnabledKnowledgeSources(ctx.knowledge.sources)
+  if (ctx.workspaceThreadKey?.startsWith(WORKSPACE_THREAD_PREFIX))
+    return specs.map((spec) =>
+      spec.risk === 'write'
+        ? {
+            ...spec,
+            promptGuidance: `${spec.description} Calling this tool files a proposal. Nothing changes until the teammate clicks Apply.`,
+          }
+        : spec
+    )
   if (!enumeration) return specs
   return specs.map((spec) =>
     spec.name === 'search'
@@ -91,6 +108,8 @@ export function resolveEffectiveToolMode(
   spec: AssistantToolSpec,
   ctx: AssistantToolContext
 ): ToolExecutionMode {
+  if (workspaceProposalMode({ ...ctx, risk: spec.risk, approvalPolicy: spec.approvalPolicy }))
+    return 'propose'
   if (spec.risk === 'control') return 'autonomous'
   if (spec.approvalPolicy === 'always') return 'autonomous'
   if (spec.approvalPolicy === 'approval') return 'propose'
@@ -194,6 +213,49 @@ async function runWithPipeline(
     return { simulated: true, summary: spec.summarize(args, ctx) }
   }
 
+  if (
+    ctx.workspaceThreadKey?.startsWith(WORKSPACE_THREAD_PREFIX) &&
+    spec.risk === 'write' &&
+    !isWorkspaceMutationAllowed(spec.name, args)
+  ) {
+    return { status: 'denied', note: 'Open the relevant settings page to make this change.' }
+  }
+
+  if (
+    mode === 'propose' &&
+    spec.name === 'propose_settings_change' &&
+    ctx.workspaceThreadKey?.startsWith(WORKSPACE_THREAD_PREFIX)
+  ) {
+    const { enqueueWorkspaceSettingsProposal } =
+      await import('./workspace-settings-actions.service')
+    const { settingsProposalInputSchema } =
+      await import('@/lib/shared/assistant/settings-proposals')
+    let pending: AssistantPendingAction
+    try {
+      pending = await enqueueWorkspaceSettingsProposal(
+        ctx.actor,
+        settingsProposalInputSchema.parse(args).changes,
+        ctx.workspaceThreadKey,
+        ctx.latestCustomerMessageId ?? undefined
+      )
+    } catch (error) {
+      if (!(error instanceof DomainException)) throw error
+      ctx.ledger.toolOutcomes.push({ name: spec.name, outcome: 'failed' })
+      return { status: 'denied', note: error.message }
+    }
+    ctx.ledger.proposedActions = ctx.ledger.proposedActions.filter(
+      (action) => action.id !== pending.id
+    )
+    ctx.ledger.proposedActions.push({
+      id: pending.id,
+      toolName: pending.toolName,
+      summary: pending.summary,
+      label: spec.label,
+    })
+    ctx.ledger.toolOutcomes.push({ name: spec.name, outcome: 'proposed' })
+    return { status: 'pending_approval', note: PENDING_APPROVAL_NOTE }
+  }
+
   if (mode === 'propose') {
     const summary = spec.summarize(args, ctx)
     // Polymorphic parent (unified inbox §3.3): whichever item this turn is
@@ -283,6 +345,23 @@ async function runWithPipeline(
     name: spec.name,
     outcome: settled.ok ? (spec.risk === 'read' ? 'read' : 'executed') : 'failed',
   })
+  if (
+    settled.ok &&
+    ctx.workspaceThreadKey?.startsWith(WORKSPACE_THREAD_PREFIX) &&
+    (spec.risk === 'read' || spec.name === 'use_skill')
+  ) {
+    const data =
+      settled.result && typeof settled.result === 'object' && !Array.isArray(settled.result)
+        ? (settled.result as Record<string, unknown>)
+        : { data: settled.result }
+    const existingNote = typeof data.note === 'string' ? data.note : ''
+    return {
+      ...data,
+      note: existingNote.includes(RETRIEVED_CONTENT_NOTE)
+        ? existingNote
+        : [existingNote, RETRIEVED_CONTENT_NOTE].filter(Boolean).join(' '),
+    }
+  }
   return settled.ok ? settled.result : { status: 'failed', note: FAILED_NOTE }
 }
 
@@ -407,7 +486,10 @@ export async function assembleAssistantToolset(
   const parentKind = turnParentKind(ctx)
   const workspaceKeepBuiltins = new Set(['get_status', 'report_inability', 'use_skill'])
   const fitsParent = (spec: AssistantToolSpec) =>
-    spec.parents.includes(parentKind) && (spec.availableWhen?.(ctx) ?? true)
+    spec.parents.includes(parentKind) &&
+    (spec.availableWhen?.(ctx) ?? true) &&
+    (!ctx.workspaceThreadKey?.startsWith(WORKSPACE_THREAD_PREFIX) ||
+      isWorkspaceToolAllowed(spec.name, spec.risk))
   const availableBuiltin = (spec: AssistantToolSpec) =>
     fitsParent(spec) && (ctx.role !== 'workspace_assistant' || workspaceKeepBuiltins.has(spec.name))
 

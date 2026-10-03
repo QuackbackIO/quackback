@@ -1,18 +1,12 @@
-/**
- * Resolve which of a message's two possible parents (a conversation or a
- * ticket — every message has exactly one) it belongs to, authorizing a
- * ticket-parented message against the actor along the way. Both
- * `message.actions.ts` (reactions/flags) and `conversation.service.ts`
- * (`deleteConversationMessage`) independently re-derived this "which parent,
- * and can the actor see it" check; this is the one place it's written.
- */
+/** Public message actions accept conversation and ticket parents. Private
+ * Copilot transcripts stay outside this boundary. */
 import type { ConversationMessage } from '@/lib/server/db'
 import type { ConversationId, TicketId } from '@quackback/ids'
+import { NotFoundError } from '@/lib/shared/errors'
 import type { Actor } from '@/lib/server/policy/types'
 
 export type MessageParent =
-  | { kind: 'ticket'; ticketId: TicketId }
-  | { kind: 'conversation'; conversationId: ConversationId }
+  { kind: 'ticket'; ticketId: TicketId } | { kind: 'conversation'; conversationId: ConversationId }
 
 /**
  * Resolve `message`'s parent. For a ticket-parented message, authorizes the
@@ -29,6 +23,7 @@ export async function resolveMessageParent(
   message: ConversationMessage,
   actor: Actor
 ): Promise<MessageParent> {
+  if (message.workspaceThreadKey) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
   if (message.ticketId) {
     const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
     await assertTicketVisible(message.ticketId, actor)

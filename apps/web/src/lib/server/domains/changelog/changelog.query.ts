@@ -50,6 +50,12 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
   // Build where conditions - always exclude soft-deleted entries
   const conditions: SQL<unknown>[] = [isNull(changelogEntries.deletedAt)]
 
+  if (params.search?.trim()) {
+    conditions.push(
+      sql`to_tsvector('english', coalesce(${changelogEntries.title}, '') || ' ' || coalesce(${changelogEntries.content}, '')) @@ websearch_to_tsquery('english', ${params.search.trim()})`
+    )
+  }
+
   // Filter by status
   if (status === 'draft') {
     conditions.push(isNull(changelogEntries.publishedAt))

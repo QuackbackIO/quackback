@@ -1,3 +1,4 @@
+import { assertPendingWorkspaceParent } from '@/lib/server/domains/assistant/pending-action-parent'
 /**
  * Read-only fetch for a live pending-action row, by id.
  *
@@ -35,6 +36,7 @@ function toDTO(row: AssistantPendingAction): AssistantPendingActionDTO {
     id: row.id,
     conversationId: row.conversationId,
     ticketId: row.ticketId,
+    workspaceThreadKey: row.workspaceThreadKey ?? null,
     involvementId: row.involvementId,
     toolName: row.toolName,
     args: row.args as AssistantPendingActionDTO['args'],
@@ -60,6 +62,7 @@ export const getAssistantPendingActionFn = createServerFn({ method: 'GET' })
     // Row-level authz (unified inbox §3.3): see this file's doc comment —
     // the base gate above only confirms conversation.view SOMEWHERE.
     const actor = await policyActorFromAuth(auth)
+    await assertPendingWorkspaceParent(row, actor)
     if (row.conversationId) {
       await assertConversationViewable(row.conversationId, actor)
     } else if (row.ticketId) {

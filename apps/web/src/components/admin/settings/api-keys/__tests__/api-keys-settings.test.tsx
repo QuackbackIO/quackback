@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import userEvent from '@testing-library/user-event'
 import type { ApiKey } from '@/lib/shared/types'
 
@@ -18,6 +19,9 @@ vi.mock('../rotate-api-key-dialog', () => ({
 }))
 
 const { ApiKeysSettings } = await import('../api-keys-settings')
+const intl = ({ children }: { children: React.ReactNode }) => (
+  <IntlProvider locale="en">{children}</IntlProvider>
+)
 
 afterEach(cleanup)
 
@@ -35,14 +39,14 @@ function key(over: Partial<ApiKey> = {}): ApiKey {
 
 describe('ApiKeysSettings', () => {
   it('titles the card "API keys" and creates with "New API key"', () => {
-    render(<ApiKeysSettings apiKeys={[key()]} />)
+    render(<ApiKeysSettings apiKeys={[key()]} />, { wrapper: intl })
     expect(screen.getByRole('heading', { name: 'API keys' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'New API key' }))
     expect(screen.getByText('Create key form')).toBeInTheDocument()
   })
 
   it('shows a compact empty state whose action is also "New API key"', () => {
-    render(<ApiKeysSettings apiKeys={[]} />)
+    render(<ApiKeysSettings apiKeys={[]} />, { wrapper: intl })
     expect(screen.getByText('No API keys yet')).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'New API key' }).length).toBeGreaterThan(0)
     expect(screen.queryByText(/Create your first/)).toBeNull()
@@ -50,7 +54,7 @@ describe('ApiKeysSettings', () => {
 
   it('keeps Rotate and Revoke in the row menu, not as always-visible buttons', async () => {
     const user = userEvent.setup()
-    render(<ApiKeysSettings apiKeys={[key()]} />)
+    render(<ApiKeysSettings apiKeys={[key()]} />, { wrapper: intl })
     expect(screen.queryByRole('button', { name: /Revoke Deploy key API key/ })).toBeNull()
     await user.click(screen.getByRole('button', { name: 'Actions for Deploy key' }))
     await user.click(screen.getByRole('menuitem', { name: 'Revoke' }))
@@ -59,14 +63,14 @@ describe('ApiKeysSettings', () => {
 
   it('opens the rotate dialog from the row menu', async () => {
     const user = userEvent.setup()
-    render(<ApiKeysSettings apiKeys={[key()]} />)
+    render(<ApiKeysSettings apiKeys={[key()]} />, { wrapper: intl })
     await user.click(screen.getByRole('button', { name: 'Actions for Deploy key' }))
     await user.click(screen.getByRole('menuitem', { name: 'Rotate' }))
     expect(screen.getByText('Rotating Deploy key')).toBeInTheDocument()
   })
 
   it('shows "Never used" as plain muted text in the meta line', () => {
-    render(<ApiKeysSettings apiKeys={[key()]} />)
+    render(<ApiKeysSettings apiKeys={[key()]} />, { wrapper: intl })
     const never = screen.getByText(/Never used/)
     expect(never.className).not.toMatch(/amber|orange/)
   })
@@ -77,7 +81,8 @@ describe('ApiKeysSettings', () => {
         apiKeys={[
           key({ scopes: ['read:feedback', 'write:feedback'] as unknown as ApiKey['scopes'] }),
         ]}
-      />
+      />,
+      { wrapper: intl }
     )
     const scopes = screen.getByText(/Feedback \(read and write\)/)
     expect(scopes.className).toMatch(/whitespace-normal/)

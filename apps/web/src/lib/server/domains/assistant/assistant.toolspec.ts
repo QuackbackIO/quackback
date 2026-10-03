@@ -178,6 +178,7 @@ export interface AssistantToolLedger {
    * attempt's proposals. See `AssistantProposedAction`.
    */
   proposedActions: AssistantProposedAction[]
+  navigation?: { href: string; label: string; messageId?: string }[]
   /** search calls made this attempt, for the server-side search budget. */
   searchCalls: number
 }
@@ -196,6 +197,7 @@ export function makeAssistantToolLedger(): AssistantToolLedger {
     handoffRequest: null,
     inabilityReport: null,
     proposedActions: [],
+    navigation: [],
     searchCalls: 0,
   }
 }

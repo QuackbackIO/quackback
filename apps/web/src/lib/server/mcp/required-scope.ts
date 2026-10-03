@@ -45,6 +45,8 @@ export const TOOL_SCOPES: Readonly<Record<string, McpScope>> = {
   unlink_ticket: 'write:chat',
   upload_file: 'write:chat',
   widget_install_status: 'read:feedback',
+  get_settings: 'read:settings',
+  propose_settings_change: 'write:settings',
 }
 
 export const RESOURCE_SCOPES: Readonly<Record<string, McpScope>> = {
@@ -80,7 +82,11 @@ function getDetailsScope(args: unknown): McpScope {
 }
 
 /** Tools that pick a scope from arguments instead of a single `scope:` on registerTool. */
-export const MCP_ARGUMENT_DISPATCHED_TOOLS = ['search', 'get_details'] as const
+export const MCP_ARGUMENT_DISPATCHED_TOOLS = [
+  'search',
+  'get_details',
+  'navigate_workspace',
+] as const
 
 function requiredScopeForOne(body: unknown): McpScope | null {
   if (!isRecord(body) || typeof body.method !== 'string') return null
@@ -90,6 +96,14 @@ function requiredScopeForOne(body: unknown): McpScope | null {
     const name = typeof params.name === 'string' ? params.name : ''
     if (name === 'search') return searchScope(params.arguments)
     if (name === 'get_details') return getDetailsScope(params.arguments)
+    if (name === 'navigate_workspace') {
+      const destination = isRecord(params.arguments) ? params.arguments.destination : undefined
+      if (destination === 'conversations') return 'read:chat'
+      if (destination === 'articles') return 'read:article'
+      if (destination === 'feedback' || destination === 'boards' || destination === 'changelog')
+        return 'read:feedback'
+      return 'read:settings'
+    }
     return TOOL_SCOPES[name] ?? null
   }
 

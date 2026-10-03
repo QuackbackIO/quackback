@@ -6,6 +6,8 @@
  * touching built-ins.
  */
 import { z } from 'zod'
+import { RETRIEVED_CONTENT_NOTE } from '../injection-guard'
+import { WORKSPACE_THREAD_PREFIX } from '../workspace-safety'
 import { toolDefinition } from '@tanstack/ai'
 import { eq } from 'drizzle-orm'
 import { db as defaultDb, connectors, type CachedConnectorTool } from '@/lib/server/db'
@@ -134,7 +136,9 @@ export function buildConnectorToolSpec(
             ok: result.ok,
             error: result.ok ? undefined : result.note,
           })
-          return result
+          return ctx.workspaceThreadKey?.startsWith(WORKSPACE_THREAD_PREFIX)
+            ? { ...result, note: [result.note, RETRIEVED_CONTENT_NOTE].filter(Boolean).join(' ') }
+            : result
         } finally {
           if (owned && !ctx.mcpConnectorSessions) await session.close()
         }

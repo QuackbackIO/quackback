@@ -42,7 +42,12 @@ export const ALL_MCP_SCOPES: readonly McpScope[] = API_KEY_SCOPES
  * permissions are derived through the same permission-to-scope mapping the
  * runtime enforces, so the matrix shows exactly what a read-only key reaches.
  */
-const READ_ONLY_KEY_SCOPES = new Set<McpScope>(['read:feedback', 'read:article', 'read:chat'])
+const READ_ONLY_KEY_SCOPES = new Set<McpScope>([
+  'read:feedback',
+  'read:article',
+  'read:chat',
+  'read:settings',
+])
 
 export type PrincipalClassId =
   | 'admin'
@@ -194,7 +199,7 @@ export const PRINCIPAL_CLASSES: PrincipalClass[] = [
     isTeamMember: true,
     isAuthenticatedPrincipal: true,
     // Unlike an API key, an OAuth token's granted scopes ARE enforced on MCP.
-    mcpScopes: new Set(['read:feedback', 'read:article', 'read:chat']),
+    mcpScopes: new Set(['read:feedback', 'read:article', 'read:chat', 'read:settings']),
     note: 'Scopes are enforced for OAuth (contrast with API keys): a read-only grant cannot invoke write tools.',
   },
 ]

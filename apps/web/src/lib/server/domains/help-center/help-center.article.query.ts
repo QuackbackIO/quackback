@@ -43,6 +43,8 @@ import {
  */
 export interface ArticleListScope {
   audience?: 'team' | 'public'
+  /** Keyword search avoids provider calls for instant navigation. */
+  searchMode?: 'hybrid' | 'keyword'
   viewer?: Actor
 }
 
@@ -96,7 +98,7 @@ export async function listArticles(
   // The trash view keeps the plain keyword filter below: soft-deleted rows
   // are excluded from ranking by design.
   const searchTerm = search?.trim()
-  if (searchTerm && !showDeleted) {
+  if (searchTerm && !showDeleted && scope.searchMode !== 'keyword') {
     return listArticlesRanked(searchTerm, { categoryId, status, cursor, limit, audience, viewer })
   }
 

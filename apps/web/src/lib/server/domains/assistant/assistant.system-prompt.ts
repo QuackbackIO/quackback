@@ -1,4 +1,4 @@
-import { WORKSPACE_ROLE_PROMPT } from './workspace-prompt'
+import { WORKSPACE_ROLE_PROMPT, WORKSPACE_WEB_PROMPT } from './workspace-prompt'
 /**
  * Production prompt policy for every assistant role.
  *
@@ -185,7 +185,7 @@ function normalizeSystemValue(value: string, fallback: string, maxLength: number
 
 export function buildAssistantRoleProfile(
   role: AssistantPromptRole,
-  input: Pick<BuildAssistantPromptInput, 'config' | 'workspaceName' | 'tools'>
+  input: Pick<BuildAssistantPromptInput, 'config' | 'workspaceName' | 'tools' | 'surface'>
 ): string {
   const toolNames = new Set(input.tools.map((tool) => tool.name))
 
@@ -223,7 +223,7 @@ human performed an action or made a commitment. Never pretend to be a human.
 ${humanSupport}`
     }
     case 'workspace_assistant':
-      return WORKSPACE_ROLE_PROMPT
+      return input.surface === 'workspace' ? WORKSPACE_WEB_PROMPT : WORKSPACE_ROLE_PROMPT
     case 'copilot_qa': {
       // The propose affordance exists only when the turn actually assembled a
       // write tool; a read-only turn keeps the plain honesty rule so the model

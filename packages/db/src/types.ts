@@ -1053,6 +1053,9 @@ export interface ChannelDelivery {
 }
 
 export interface ConversationMessageMetadata {
+  /** Private workspace turn identity and its server-authored final payload. */
+  workspaceTurn?: { runId: string; payload?: Record<string, unknown> }
+
   /** The channel this message arrived through, when not the in-app messenger. */
   source?: 'email' | 'github'
   /** GitHub issue comment REST id, used to dedupe webhook retries. */

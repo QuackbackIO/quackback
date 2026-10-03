@@ -109,6 +109,7 @@ export function leadEngagementWhere() {
     ${principal.contactEmail} IS NOT NULL
     OR EXISTS (SELECT 1 FROM ${conversationMessages}
       WHERE ${conversationMessages.principalId} = ${principal.id}
+        AND ${conversationMessages.workspaceThreadKey} IS NULL
         AND ${notTestConversation(conversationMessages.conversationId)})
     OR EXISTS (SELECT 1 FROM ${posts}
       WHERE ${posts.principalId} = ${principal.id}

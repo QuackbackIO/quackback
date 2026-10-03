@@ -1,6 +1,7 @@
 import { useEffect, type ComponentProps } from 'react'
 import { createFileRoute, Outlet, redirect, useRouterState } from '@tanstack/react-router'
 import { IntlProvider } from 'react-intl'
+import { WorkspaceCopilotProvider } from '@/components/admin/ask/workspace-copilot'
 import { useAdminPresence } from '@/lib/client/hooks/use-admin-presence'
 import { DEFAULT_LOCALE, loadMessages, withoutViewerMessages } from '@/lib/shared/i18n'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
@@ -254,35 +255,37 @@ function AdminLayout() {
   return (
     <IntlProvider locale={locale} defaultLocale={DEFAULT_LOCALE} messages={messages}>
       <CloudQuackbackWidget />
-      <ProductTourProvider>
-        <TooltipProvider delay={0}>
-          <div className="flex h-screen bg-background">
-            <AdminSidebar initialUserData={initialUserData} latestVersion={latestVersion} />
-            <main
-              data-admin-shell=""
-              className="flex-1 min-w-0 overflow-hidden bg-chrome p-0 sm:h-screen sm:py-2 sm:pe-2"
-            >
-              {/* Mobile: Add padding for fixed header */}
-              <div
-                data-admin-canvas=""
-                className="h-full sm:pt-0 pt-14 overflow-hidden flex flex-col bg-background text-foreground sm:rounded-[14px] sm:border sm:border-chrome-hairline sm:shadow-chrome-canvas"
+      <WorkspaceCopilotProvider>
+        <ProductTourProvider>
+          <TooltipProvider delay={0}>
+            <div className="flex h-screen bg-background">
+              <AdminSidebar initialUserData={initialUserData} latestVersion={latestVersion} />
+              <main
+                data-admin-shell=""
+                className="flex-1 min-w-0 overflow-hidden bg-chrome p-0 sm:h-screen sm:py-2 sm:pe-2"
               >
-                <PlanNoticeBanner notice={planNotice} />
-                <UpdateBanner
-                  latestVersion={latestVersion}
-                  dismissedVersion={updateBannerDismissedVersion}
-                />
-                <div className="flex-1 min-h-0 overflow-hidden">
-                  <FileViewerProvider onJumpToMessage={scrollToMessage}>
-                    <Outlet />
-                  </FileViewerProvider>
+                {/* Mobile: Add padding for fixed header */}
+                <div
+                  data-admin-canvas=""
+                  className="h-full sm:pt-0 pt-14 overflow-hidden flex flex-col bg-background text-foreground sm:rounded-[14px] sm:border sm:border-chrome-hairline sm:shadow-chrome-canvas"
+                >
+                  <PlanNoticeBanner notice={planNotice} />
+                  <UpdateBanner
+                    latestVersion={latestVersion}
+                    dismissedVersion={updateBannerDismissedVersion}
+                  />
+                  <div className="flex-1 min-h-0 overflow-hidden">
+                    <FileViewerProvider onJumpToMessage={scrollToMessage}>
+                      <Outlet />
+                    </FileViewerProvider>
+                  </div>
                 </div>
-              </div>
-            </main>
-            <EntityModals currentUser={currentUser} />
-          </div>
-        </TooltipProvider>
-      </ProductTourProvider>
+              </main>
+              <EntityModals currentUser={currentUser} />
+            </div>
+          </TooltipProvider>
+        </ProductTourProvider>
+      </WorkspaceCopilotProvider>
     </IntlProvider>
   )
 }

@@ -462,6 +462,8 @@ export const REPOINT_STEPS: RepointStep[] = [
  * merge source.
  */
 export const REPOINT_EXEMPTIONS: Record<string, string> = {
+  'workspace_assistant_threads.owner_principal_id':
+    'Private Copilot threads belong to authenticated team users with copilot.use; anonymous visitor merges cannot own them.',
   'integration_sync_actions.principal_id':
     'Integration recovery requires INTEGRATION_MANAGE; anonymous principals cannot own these immutable action receipts.',
   // Team/agent actor columns (anonymous principals can never occupy them)

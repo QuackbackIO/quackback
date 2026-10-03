@@ -135,7 +135,20 @@ export async function handleSlackDecision(
   const pending = await getPendingActionById(action.value as AssistantPendingActionId)
   if (!pending || pending.originRole !== 'workspace_assistant' || !pending.workspaceThreadKey)
     return
-  const [boundTeam, boundChannel, boundThread] = JSON.parse(pending.workspaceThreadKey)
+  if (pending.workspaceThreadKey.startsWith('workspace:')) return
+  let binding: unknown
+  try {
+    binding = JSON.parse(pending.workspaceThreadKey)
+  } catch {
+    return
+  }
+  if (
+    !Array.isArray(binding) ||
+    binding.length !== 3 ||
+    binding.some((value) => typeof value !== 'string')
+  )
+    return
+  const [boundTeam, boundChannel, boundThread] = binding
   if (
     boundTeam !== team ||
     boundChannel !== channel ||
@@ -169,12 +182,14 @@ export async function handleSlackDecision(
   if (!terminal) {
     if (!actor) return
     try {
-      const { decideAssistantAction } = await import('@/lib/server/functions/assistant-actions')
+      const { decideAssistantAction } =
+        await import('@/lib/server/domains/assistant/assistant-actions.service')
       result = await decideAssistantAction(
         pending.id,
         action.action_id === 'qb_action_approve' ? 'approved' : 'rejected',
         person.id,
-        actor
+        actor,
+        pending.workspaceThreadKey
       )
     } catch (error) {
       log.warn(

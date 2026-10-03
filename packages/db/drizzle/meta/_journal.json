@@ -1884,6 +1884,13 @@
       "when": 1790956573567,
       "tag": "0291_test_customer",
       "breakpoints": true
+    },
+    {
+      "idx": 269,
+      "version": "7",
+      "when": 1790986500000,
+      "tag": "0292_workspace_copilot",
+      "breakpoints": true
     }
   ]
 }

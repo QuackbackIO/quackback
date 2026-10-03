@@ -444,11 +444,13 @@ export interface ThemeColors {
   mutedForeground?: string
   accent?: string
   accentForeground?: string
+  accentInk?: string
   destructive?: string
   destructiveForeground?: string
   border?: string
   input?: string
   ring?: string
+  success?: string
   sidebarBackground?: string
   sidebarForeground?: string
   sidebarPrimary?: string
@@ -462,6 +464,15 @@ export interface ThemeColors {
   chart3?: string
   chart4?: string
   chart5?: string
+  fontSans?: string
+  shadow2xs?: string
+  shadowXs?: string
+  shadowSm?: string
+  shadow?: string
+  shadowMd?: string
+  shadowLg?: string
+  shadowXl?: string
+  shadow2xl?: string
   /** Border radius CSS variable value */
   radius?: string
 }

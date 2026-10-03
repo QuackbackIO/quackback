@@ -126,13 +126,19 @@ const loggedInSession = {
 function renderHeader({
   userRole,
   isLoggedIn,
+  workspaceName = 'Acme',
 }: {
   userRole?: 'admin' | 'member' | 'user' | null
   isLoggedIn: boolean
+  workspaceName?: string
 }) {
   mockGetRouteContext.mockReturnValue({
     session: isLoggedIn ? loggedInSession : null,
-    settings: {},
+    settings: {
+      name: workspaceName,
+      headerDisplayName: 'Unused header',
+      headerDisplayMode: 'logo_only',
+    },
     registeredAuthProviders: [],
   })
 
@@ -140,13 +146,27 @@ function renderHeader({
     <IntlProvider locale="en" defaultLocale="en">
       {/* showThemeToggle=false removes the theme dropdown trigger so the only
           remaining button is the avatar / user-dropdown trigger */}
-      <PortalHeader orgName="Acme" userRole={userRole} showThemeToggle={false} />
+      <PortalHeader orgName={workspaceName} userRole={userRole} showThemeToggle={false} />
     </IntlProvider>
   )
 }
 
 describe('PortalHeader — Admin dropdown item', () => {
   afterEach(() => cleanup())
+
+  it('renders the workspace name after an update, with legacy header values present', () => {
+    const view = renderHeader({ isLoggedIn: false })
+    expect(screen.getByText('Acme')).toBeInTheDocument()
+    expect(screen.queryByText('Unused header')).not.toBeInTheDocument()
+    view.rerender(
+      <IntlProvider locale="en" defaultLocale="en">
+        <PortalHeader orgName="Acme team" showThemeToggle={false} />
+      </IntlProvider>
+    )
+    expect(screen.getByText('Acme team')).toBeInTheDocument()
+    expect(screen.queryByText('Acme')).not.toBeInTheDocument()
+    expect(screen.queryByText('Unused header')).not.toBeInTheDocument()
+  })
 
   it('shows an Admin item in the user dropdown for team members', async () => {
     renderHeader({ userRole: 'admin', isLoggedIn: true })

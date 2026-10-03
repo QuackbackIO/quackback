@@ -182,6 +182,7 @@ interface AssistantDeliveredFields {
    * caller that never resolves a write tool to 'approval').
    */
   proposedActions: AssistantProposedAction[]
+  navigation?: { href: string; label: string; messageId?: string }[]
   identity: AssistantIdentity
   trace: AssistantTurnTrace
   escalation?: EscalationOutcome
@@ -354,7 +355,7 @@ const citationInputSchema = z.object({
   id: z.string(),
 })
 
-const assistantOutputSchema = z.object({
+export const assistantOutputSchema = z.object({
   text: z.string(),
   citations: z.array(citationInputSchema).default([]),
   // Copilot-only intent tag (see buildCopilotFramingPrompt). Optional: the
@@ -1049,6 +1050,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   if (role === 'workspace_assistant') {
     try {
       const auth = await mcpAuthFromActor(input.actor, runtimeConfig.config.identity.name)
+      if (auth && surface === 'workspace') auth.workspaceThreadKey = input.workspaceThreadKey
       if (auth) {
         const opened = await openWorkspaceMcp(auth)
         closeWorkspaceMcp = opened.close
@@ -1436,6 +1438,9 @@ ${runtimeConfig.config.agents.workspace.instructions}`)
         contextInternallySourced ||
         [...toolContext.ledger.sources.values()].some((source) => source.internal === true),
       proposedActions: [...toolContext.ledger.proposedActions],
+      ...(surface === 'workspace'
+        ? { navigation: [...(toolContext.ledger.navigation ?? [])] }
+        : {}),
       identity: runtimeConfig.config.identity,
       trace,
       ...(escalation && { escalation }),
@@ -1473,7 +1478,7 @@ export interface StreamAssistantTurnOptions {
    * the turn fully completes — citations relinked, completion validated — so
    * the payload is the enriched result, never the raw model object.
    */
-  buildFinalPayload: (result: AssistantTurnResult) => unknown
+  buildFinalPayload: (result: AssistantTurnResult) => unknown | Promise<unknown>
   /** Maps a turn failure to the wire error frame. Defaults to
    *  not_configured / turn_failed. */
   mapError?: (error: unknown) => { code: string; message: string }
@@ -1545,10 +1550,11 @@ export function streamAssistantTurn(
 
   queue.push(runStartedChunk(options.wire))
   void runAssistantTurn({ ...options.input, onActivity, wireSink })
-    .then((result) => {
+    .then(async (result) => {
+      const payload = await options.buildFinalPayload(result)
       pairing.closeOpen()
       closeOpenStep()
-      queue.push(runFinishedChunk(options.wire, options.buildFinalPayload(result)))
+      queue.push(runFinishedChunk(options.wire, payload))
       queue.end()
     })
     .catch((error: unknown) => {

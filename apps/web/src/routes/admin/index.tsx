@@ -4,6 +4,7 @@ import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { OverviewDashboard } from '@/components/admin/admin-overview'
 import { HomeActions } from '@/components/admin/home-actions'
+import { AskQuackbackInline } from '@/components/admin/ask/workspace-copilot-context'
 import { HomeGettingStarted } from '@/components/onboarding/home-launch-plan'
 import { HomeTryItYourself } from '@/components/onboarding/home-try-it'
 import { adminQueries } from '@/lib/client/queries/admin'
@@ -53,17 +54,20 @@ function AdminOverviewPage() {
           <OverviewDashboard
             actions={<HomeActions flags={flags} />}
             header={
-              <header className="space-y-2">
-                <h1 className="text-2xl font-semibold">
-                  <FormattedMessage
-                    id="onboarding.home.greeting"
-                    defaultMessage="Welcome, {name}"
-                    values={{ name: session?.user.name || settings?.name || 'Quackback' }}
-                  />
-                </h1>
-                <a href={baseUrl} className="text-sm text-muted-foreground hover:underline">
-                  {baseUrl ? new URL(baseUrl).host : settings?.name}
-                </a>
+              <header className="space-y-4">
+                <div className="space-y-2">
+                  <h1 className="text-2xl font-semibold">
+                    <FormattedMessage
+                      id="onboarding.home.greeting"
+                      defaultMessage="Welcome, {name}"
+                      values={{ name: session?.user.name || settings?.name || 'Quackback' }}
+                    />
+                  </h1>
+                  <a href={baseUrl} className="text-sm text-muted-foreground hover:underline">
+                    {baseUrl ? new URL(baseUrl).host : settings?.name}
+                  </a>
+                </div>
+                <AskQuackbackInline />
               </header>
             }
             banner={

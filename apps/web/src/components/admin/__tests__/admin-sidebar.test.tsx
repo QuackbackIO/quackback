@@ -1,9 +1,13 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { render, cleanup, screen } from '@testing-library/react'
+import { render, cleanup, screen, fireEvent } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { WorkspaceCopilotContext } from '../ask/workspace-copilot-context'
+
+const openPalette = vi.fn()
+const copilotContext = { composer: null, conversation: null, starters: null, openPalette }
 
 // Injected by Vite at build time (see vite.config.ts `define`); absent in vitest.
 vi.stubGlobal('__APP_VERSION__', '0.0.0-test')
@@ -100,7 +104,9 @@ function renderSidebar(
   return render(
     <IntlProvider locale="en" messages={{}}>
       <TooltipProvider>
-        <AdminSidebar />
+        <WorkspaceCopilotContext.Provider value={copilotContext}>
+          <AdminSidebar />
+        </WorkspaceCopilotContext.Provider>
       </TooltipProvider>
     </IntlProvider>
   )
@@ -266,7 +272,9 @@ describe('AdminSidebar: labeled rail', () => {
       const { container } = render(
         <IntlProvider locale="en" messages={{}}>
           <TooltipProvider>
-            <AdminSidebar />
+            <WorkspaceCopilotContext.Provider value={copilotContext}>
+              <AdminSidebar />
+            </WorkspaceCopilotContext.Provider>
           </TooltipProvider>
         </IntlProvider>
       )
@@ -358,4 +366,11 @@ describe('AdminSidebar rail', () => {
     const links = [...dialog.querySelectorAll('nav a')].map((a) => a.getAttribute('href'))
     expect(links.slice(0, 3)).toEqual(['/admin', '/admin/feedback', '/admin/roadmap'])
   })
+})
+
+it('opens the shared palette from the sidebar search button', () => {
+  renderSidebar('admin')
+  fireEvent.click(screen.getAllByRole('button', { name: 'Search Quackback' })[0]!)
+  expect(openPalette).toHaveBeenCalledOnce()
+  cleanup()
 })

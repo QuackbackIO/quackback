@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 722 surfaces
+### Server functions (`requireAuth`) — 729 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -209,8 +209,9 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/api-keys.ts`::updateApiKeyFn | api_key.manage |
 | `lib/server/functions/api-keys.ts`::rotateApiKeyFn | api_key.manage |
 | `lib/server/functions/api-keys.ts`::revokeApiKeyFn | api_key.manage |
-| `lib/server/functions/assistant-actions.ts`::approveAssistantActionFn | DYNAMIC (conversation.view | ticket.view | conversation.set_attributes | conversation.set_status | ticket.create | post.create | post.vote_on_behalf) |
-| `lib/server/functions/assistant-actions.ts`::rejectAssistantActionFn | DYNAMIC (conversation.view | ticket.view) |
+| `lib/server/functions/ask-search.ts`::searchAskEntitiesFn | DYNAMIC (post.view_private | help_center.manage | changelog.view_draft | changelog.manage | conversation.view | ticket.view) |
+| `lib/server/functions/assistant-actions.ts`::approveAssistantActionFn | DYNAMIC (conversation.view | ticket.view | copilot.use | settings.manage | settings.branding | office_hours.manage | changelog.manage | conversation.set_attributes | conversation.set_status | ticket.create | post.create | post.vote_on_behalf) |
+| `lib/server/functions/assistant-actions.ts`::rejectAssistantActionFn | DYNAMIC (conversation.view | ticket.view | copilot.use) |
 | `lib/server/functions/assistant-analytics.ts`::getQuinnPerformanceFn | analytics.view |
 | `lib/server/functions/assistant-connectors.ts`::listConnectorsFn | assistant.manage |
 | `lib/server/functions/assistant-connectors.ts`::getConnectorFn | assistant.manage |
@@ -231,7 +232,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/assistant-guidance.ts`::deleteGuidanceRuleFn | assistant.manage |
 | `lib/server/functions/assistant-guidance.ts`::listAssistantToolsFn | assistant.manage |
 | `lib/server/functions/assistant-improve-answer.ts`::improveAssistantAnswerFn | conversation.reply |
-| `lib/server/functions/assistant-pending-actions.ts`::getAssistantPendingActionFn | DYNAMIC (conversation.view | ticket.view) |
+| `lib/server/functions/assistant-pending-actions.ts`::getAssistantPendingActionFn | DYNAMIC (conversation.view | ticket.view | copilot.use) |
 | `lib/server/functions/assistant-settings.ts`::getAssistantSettingsFn | assistant.manage |
 | `lib/server/functions/assistant-settings.ts`::updateAssistantIdentityFn | assistant.manage |
 | `lib/server/functions/assistant-settings.ts`::updateAssistantVoiceFn | assistant.manage |
@@ -825,6 +826,12 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/workflows.ts`::previewWorkflowFn | routing.manage |
 | `lib/server/functions/workflows.ts`::listRunnableWorkflowsFn | conversation.reply |
 | `lib/server/functions/workflows.ts`::runWorkflowManuallyFn | conversation.reply |
+| `lib/server/functions/workspace-copilot.ts`::getWorkspaceCopilotAvailabilityFn | END_USER (any authenticated) |
+| `lib/server/functions/workspace-copilot.ts`::listWorkspaceCopilotThreadsFn | DYNAMIC (copilot.use) |
+| `lib/server/functions/workspace-copilot.ts`::createWorkspaceCopilotThreadFn | DYNAMIC (copilot.use) |
+| `lib/server/functions/workspace-copilot.ts`::getWorkspaceCopilotThreadFn | DYNAMIC (copilot.use) |
+| `lib/server/functions/workspace-copilot.ts`::applyWorkspaceSettingsProposalFn | DYNAMIC (copilot.use | settings.manage | settings.branding | office_hours.manage | changelog.manage) |
+| `lib/server/functions/workspace-copilot.ts`::undoWorkspaceSettingsProposalFn | DYNAMIC (copilot.use | settings.manage | settings.branding | office_hours.manage | changelog.manage) |
 | `lib/server/functions/workspace-wipe.ts`::wipeCloudWorkspaceFn | END_USER (any authenticated) |
 
 ### Public REST API (`withApiKeyAuth`) — 126 surfaces
@@ -958,10 +965,11 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `routes/api/v1/webhooks/index.ts`::GET | webhook.view |
 | `routes/api/v1/webhooks/index.ts`::POST | webhook.manage |
 
-### Session-authenticated routes (`requireAuth`) — 1 surface
+### Session-authenticated routes (`requireAuth`) — 2 surfaces
 
 | Surface | Enforces |
 | --- | --- |
+| `routes/api/admin/assistant/workspace.ts`::handleWorkspaceCopilot | copilot.use |
 | `routes/api/plg-events.ts`::handlePlgEvent | END_USER (any authenticated) |
 
 ### SSE stream (inline gate) — 1 surface
@@ -978,7 +986,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 3. MCP tools
 
-40 tools. "Team" = requires an admin/member role in addition to the scope.
+43 tools. "Team" = requires an admin/member role in addition to the scope.
 
 | Tool | Scope(s) | Team |
 | --- | --- | :---: |
@@ -997,12 +1005,15 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | get_conversation | read:chat | ✓ |
 | get_details | read:article, read:feedback | ✓ |
 | get_post_activity | read:feedback | ✓ |
+| get_settings | read:settings | ✓ |
 | get_ticket | read:chat | ✓ |
 | link_ticket | write:chat | ✓ |
 | list_conversations | read:chat | ✓ |
 | list_tickets | read:chat | ✓ |
 | manage_category | write:article | ✓ |
 | merge_post | write:feedback | ✓ |
+| navigate_workspace | read:article, read:chat, read:feedback, read:settings | ✓ |
+| propose_settings_change | write:settings | ✓ |
 | proxy_vote | write:feedback | ✓ |
 | react_to_comment | write:feedback | · |
 | reply_to_conversation | write:chat | ✓ |
@@ -1027,15 +1038,15 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 Key scopes are enforced: an API key holds exactly its stored scopes (owner permissions ∩ key scopes on REST, per-tool scope guards on MCP). A key with NULL stored scopes (legacy, pre-scope-selection) holds every scope. OAuth grants carry their own enforced scopes.
 
-| Class | read:article | read:chat | read:feedback | write:article | write:changelog | write:chat | write:feedback |
-| --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| Scoped API key (admin-owned, read-only scopes) | ✓ | ✓ | ✓ | · | · | · | · |
-| Full API key (admin-owned) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| OAuth client (member, read-only grant) | ✓ | ✓ | ✓ | · | · | · | · |
+| Class | read:article | read:chat | read:feedback | read:settings | write:article | write:changelog | write:chat | write:feedback | write:settings |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| Scoped API key (admin-owned, read-only scopes) | ✓ | ✓ | ✓ | ✓ | · | · | · | · | · |
+| Full API key (admin-owned) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| OAuth client (member, read-only grant) | ✓ | ✓ | ✓ | ✓ | · | · | · | · | · |
 
 ## 4. Entry points without a requireAuth/key gate
 
-225 of 1056 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+225 of 1064 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 

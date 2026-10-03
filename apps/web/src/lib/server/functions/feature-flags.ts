@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
+import { modulesSchema } from '@/lib/shared/schemas/settings'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { updateFeatureFlags } from '@/lib/server/domains/settings/settings.service'
@@ -9,11 +10,12 @@ import type { FeatureFlags } from '@/lib/server/domains/settings/settings.types'
 // The schema is derived from DEFAULT_FEATURE_FLAGS: an enumerated list here
 // once silently stripped newer flags from the request (zod drops unknown keys),
 // making their Settings → General toggles no-ops.
-const featureFlagsUpdateSchema = z.object(
-  Object.fromEntries(
+const featureFlagsUpdateSchema = z.object({
+  ...(Object.fromEntries(
     Object.keys(DEFAULT_FEATURE_FLAGS).map((key) => [key, z.boolean().optional()])
-  ) as Record<keyof FeatureFlags, z.ZodOptional<z.ZodBoolean>>
-)
+  ) as Record<keyof FeatureFlags, z.ZodOptional<z.ZodBoolean>>),
+  ...modulesSchema.shape,
+})
 
 // Admin-only: feature flags toggle whole product subsystems that change the
 // public surface (helpCenter exposes a public subdomain). Without a role gate

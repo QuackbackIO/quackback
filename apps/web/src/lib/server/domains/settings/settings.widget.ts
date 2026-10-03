@@ -167,6 +167,7 @@ export function publicMessengerConfig(
 }
 import {
   requireSettings,
+  type SettingsWriteOptions,
   requireSettingsCached,
   readSettingsRow,
   type SettingsFreshness,
@@ -189,10 +190,13 @@ export async function getWidgetConfig(
   }
 }
 
-export async function updateWidgetConfig(input: UpdateWidgetConfigInput): Promise<WidgetConfig> {
+export async function updateWidgetConfig(
+  input: UpdateWidgetConfigInput,
+  options: SettingsWriteOptions = {}
+): Promise<WidgetConfig> {
   log.info('update widget config')
   try {
-    const org = await requireSettings()
+    const org = await requireSettings(options.executor)
     const existing = parseWidgetConfig(org.widgetConfig)
     const incoming = { ...input } as Partial<WidgetConfig>
     if (incoming.messenger && 'routing' in incoming.messenger) {
@@ -203,11 +207,11 @@ export async function updateWidgetConfig(input: UpdateWidgetConfigInput): Promis
     // The translations map replaces wholesale — deepMerge would union locale
     // keys, so a removed locale or a cleared field could never disappear.
     if (input.translations !== undefined) updated.translations = input.translations
-    await db
+    await (options.executor ?? db)
       .update(settings)
       .set({ widgetConfig: JSON.stringify(updated) })
       .where(eq(settings.id, org.id))
-    await invalidateSettingsCache()
+    if (!options.executor) await invalidateSettingsCache()
     return updated
   } catch (error) {
     log.error({ err: error }, 'update widget config failed')

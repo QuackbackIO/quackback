@@ -27,7 +27,7 @@ export const TOUR_STOPS = [
   },
   { target: 'roadmap', message: 'Move ideas along your roadmap to close the loop.', route: null },
   { target: 'view-portal', message: 'Open your portal to see what customers see.', route: null },
-  { target: 'search', message: 'Search this page to find an idea.', route: '/admin/feedback' },
+  { target: 'search', message: 'Search from any page.', route: null },
 ] as const
 
 const TourContext = createContext<{ start: () => void } | null>(null)
@@ -50,7 +50,7 @@ export function ProductTourProvider({ children }: { children: ReactNode }) {
   const stops = TOUR_STOPS.filter(
     (stop) =>
       !absent.has(stop.target) &&
-      (!['feedback-empty', 'roadmap', 'search'].includes(stop.target) ||
+      (!['feedback-empty', 'roadmap'].includes(stop.target) ||
         (flags?.feedback !== false && permissions.has(PERMISSIONS.POST_VIEW_PRIVATE)))
   )
 

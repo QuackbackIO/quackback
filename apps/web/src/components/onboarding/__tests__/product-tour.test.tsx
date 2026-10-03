@@ -84,18 +84,23 @@ it('never starts automatically and runs all five stops with keyboard navigation 
   expect(start).toHaveFocus()
 })
 
-it('skips products that are disabled and announces the remaining count', async () => {
+it('skips disabled products and keeps global search available', async () => {
   testState.feedback = false
   mount()
   fireEvent.click(screen.getByRole('button', { name: 'Start tour' }))
   await waitFor(() =>
-    expect(screen.getByRole('dialog')).toHaveAttribute('aria-label', 'Step 1 of 2')
+    expect(screen.getByRole('dialog')).toHaveAttribute('aria-label', 'Step 1 of 3')
   )
   fireEvent.keyDown(document, { key: 'ArrowRight' })
   await waitFor(() =>
-    expect(screen.getByRole('dialog')).toHaveAttribute('aria-label', 'Step 2 of 2')
+    expect(screen.getByRole('dialog')).toHaveAttribute('aria-label', 'Step 2 of 3')
   )
   expect(screen.getByText('Open your portal to see what customers see.')).toBeVisible()
+  fireEvent.keyDown(document, { key: 'ArrowRight' })
+  await waitFor(() =>
+    expect(screen.getByRole('dialog')).toHaveAttribute('aria-label', 'Step 3 of 3')
+  )
+  expect(screen.getByText('Search from any page.')).toBeVisible()
 })
 
 it('shows the current step count next to the progress dots', async () => {
