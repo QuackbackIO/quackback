@@ -2,6 +2,7 @@ import { CheckIcon } from '@heroicons/react/24/solid'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import { ActivationActionButton } from '@/components/admin/activation-action-button'
 import { LaunchTaskLabel } from '@/components/onboarding/launch-task-label'
 import { copyBoardLinkAction } from '@/lib/shared/activation-action'
@@ -13,12 +14,14 @@ export function GettingStartedCard({
   onSkip,
   onCreateBoard,
   full = false,
+  portalUrl,
 }: {
   status: LaunchStatus
   pending: boolean
   onSkip: (taskId: string) => void
   onCreateBoard: () => void
   full?: boolean
+  portalUrl?: string
 }) {
   const intl = useIntl()
   const summary = launchChecklistSummary(status)
@@ -31,9 +34,14 @@ export function GettingStartedCard({
         )
         .slice(0, 2)
   return (
-    <section
+    <Card
+      role="region"
       aria-labelledby="getting-started-title"
-      className="space-y-3 [--ring:var(--muted-foreground)]"
+      className={
+        full
+          ? 'gap-3 border-0 bg-transparent py-0 [--ring:var(--muted-foreground)]'
+          : 'gap-4 rounded-xl p-4 [--ring:var(--muted-foreground)]'
+      }
     >
       <div className="flex items-center justify-between">
         <h2 id="getting-started-title" className={full ? 'sr-only' : 'text-sm font-semibold'}>
@@ -50,24 +58,49 @@ export function GettingStartedCard({
       </div>
       <ol className="grid gap-3 sm:grid-cols-3">
         {!full && (
-          <li className="flex min-h-36 flex-col justify-between rounded-xl border bg-card p-4">
-            <CheckIcon className="size-5 text-muted-foreground" aria-hidden="true" />
-            <h3 className="text-sm font-medium">
-              <FormattedMessage id="onboarding.launch.live" defaultMessage="Portal is live" />
-            </h3>
+          <li className="flex flex-col gap-4 rounded-xl border bg-muted/30 p-3">
+            <div className="flex items-center gap-2">
+              <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-foreground text-background">
+                <CheckIcon className="size-3.5" aria-hidden="true" />
+              </span>
+              <h3 className="text-sm font-medium text-muted-foreground">
+                <FormattedMessage id="onboarding.launch.live" defaultMessage="Portal is live" />
+              </h3>
+            </div>
+            {portalUrl && (
+              <div className="overflow-hidden rounded-lg border bg-background">
+                <div className="h-5 bg-primary" aria-hidden="true" />
+                <a
+                  href={portalUrl}
+                  className="block truncate px-3 py-4 text-xs text-muted-foreground hover:underline"
+                >
+                  {new URL(portalUrl).host}
+                </a>
+              </div>
+            )}
           </li>
         )}
-        {tasks.map((task) => {
+        {tasks.map((task, index) => {
           const copy =
             task.id === 'distribute-feedback' ? copyBoardLinkAction(summary.outcome, status) : null
           return (
-            <li
-              key={task.id}
-              className="flex min-h-36 flex-col justify-between gap-3 rounded-xl border bg-card p-4"
-            >
-              <h3 className="text-sm font-medium">
-                <LaunchTaskLabel task={task} />
-              </h3>
+            <li key={task.id} className="flex flex-col gap-4 rounded-xl border bg-background p-3">
+              <div className="flex items-center gap-2">
+                <span
+                  className="flex size-5 shrink-0 items-center justify-center rounded-full border text-xs text-muted-foreground"
+                  aria-hidden="true"
+                >
+                  {full ? index + 1 : index + 2}
+                </span>
+                <h3 className="text-sm font-medium">
+                  <LaunchTaskLabel task={task} />
+                </h3>
+              </div>
+              {!full && copy?.kind === 'copy' && portalUrl && (
+                <code className="truncate rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+                  {new URL(copy.payload.path, portalUrl).href.replace(/^https?:\/\//, '')}
+                </code>
+              )}
               {task.availability === 'blocked' && (
                 <p className="text-xs text-muted-foreground">
                   <FormattedMessage
@@ -76,7 +109,7 @@ export function GettingStartedCard({
                   />
                 </p>
               )}
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="mt-auto flex flex-wrap items-center gap-2">
                 {task.isCompleted ? (
                   <span className="flex items-center gap-1 text-xs text-muted-foreground">
                     <CheckIcon className="size-4" />
@@ -127,6 +160,6 @@ export function GettingStartedCard({
           )
         })}
       </ol>
-    </section>
+    </Card>
   )
 }

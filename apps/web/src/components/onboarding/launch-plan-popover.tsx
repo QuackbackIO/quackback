@@ -1,14 +1,17 @@
 import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import { FormattedMessage } from 'react-intl'
-import { CheckIcon, RocketLaunchIcon } from '@heroicons/react/24/outline'
+import { FormattedMessage, useIntl } from 'react-intl'
+import { CheckIcon } from '@heroicons/react/24/outline'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Progress } from '@/components/ui/progress'
 import { launchChecklistSummary, type LaunchStatus } from '@/lib/shared/launch-checklist'
 import { useProductTour } from './product-tour'
 import { LaunchTaskLabel } from './launch-task-label'
 
 export function LaunchPlanPopover({ status }: { status: LaunchStatus }) {
+  const intl = useIntl()
   const [open, setOpen] = useState(false)
   const tour = useProductTour()
   const summary = launchChecklistSummary(status)
@@ -18,18 +21,32 @@ export function LaunchPlanPopover({ status }: { status: LaunchStatus }) {
   )
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="ghost"
-          className="w-full justify-start gap-2 text-sm focus-visible:ring-muted-foreground"
-        >
-          <RocketLaunchIcon className="size-5" />
-          <FormattedMessage id="onboarding.launch.title" defaultMessage="Launch plan" />
-          <span className="ms-auto text-xs text-muted-foreground">
-            {summary.doneCount}/{summary.denominator}
-          </span>
-        </Button>
-      </PopoverTrigger>
+      <Card className="mb-2 gap-0 rounded-xl py-0">
+        <PopoverTrigger asChild>
+          <Button
+            variant="ghost"
+            className="h-auto w-full flex-col items-stretch gap-2 rounded-xl px-3 py-3 text-xs focus-visible:ring-muted-foreground"
+          >
+            <span className="flex items-center justify-between gap-2">
+              <span className="truncate font-semibold">
+                <FormattedMessage id="onboarding.launch.title" defaultMessage="Launch plan" />
+              </span>
+              <span className="shrink-0 text-muted-foreground tabular-nums">
+                {summary.doneCount}/{summary.denominator}
+              </span>
+            </span>
+            <Progress
+              value={summary.doneCount}
+              max={summary.denominator}
+              aria-label={intl.formatMessage({
+                id: 'onboarding.launch.title',
+                defaultMessage: 'Launch plan',
+              })}
+              className="h-1 bg-muted [&>div]:bg-foreground [&>div]:motion-reduce:transition-none"
+            />
+          </Button>
+        </PopoverTrigger>
+      </Card>
       <PopoverContent side="right" align="end" className="w-80 space-y-3">
         <h2 className="text-sm font-semibold">
           <FormattedMessage id="onboarding.launch.title" defaultMessage="Launch plan" />

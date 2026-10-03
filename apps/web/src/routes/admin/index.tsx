@@ -47,8 +47,8 @@ function AdminOverviewPage() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="px-4 pt-4 pb-16 sm:px-6">
-        <div className="w-full max-w-5xl space-y-6">
+      <div className="px-4 pt-8 pb-16 sm:px-6 sm:pt-10">
+        <div className="mx-auto w-full max-w-5xl space-y-6">
           <OverviewDashboard
             actions={<HomeActions flags={flags} />}
             header={
@@ -68,7 +68,7 @@ function AdminOverviewPage() {
             banner={
               admin ? (
                 <Suspense fallback={null}>
-                  <HomeGettingStarted />
+                  <HomeGettingStarted portalUrl={baseUrl} />
                 </Suspense>
               ) : null
             }

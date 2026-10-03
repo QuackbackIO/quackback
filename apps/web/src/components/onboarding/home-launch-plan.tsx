@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
+import { PlayIcon } from '@heroicons/react/24/solid'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -18,7 +19,15 @@ import {
   normalizeOutcome,
 } from '@/lib/shared/launch-checklist'
 
-export function HomeGettingStarted({ full = false }: { full?: boolean }) {
+export function HomeGettingStarted({
+  full = false,
+  portalUrl,
+  children,
+}: {
+  full?: boolean
+  portalUrl?: string
+  children?: ReactNode
+}) {
   const intl = useIntl()
   const tour = useProductTour()
   const progress = useQuery({
@@ -87,21 +96,42 @@ export function HomeGettingStarted({ full = false }: { full?: boolean }) {
       {full || isLaunchPlanActive(launchChecklistSummary(statusQuery.data)) ? (
         <GettingStartedCard
           full={full}
+          portalUrl={portalUrl}
           status={statusQuery.data}
           pending={resolutionMutation.isPending}
           onSkip={(taskId) => resolutionMutation.mutate({ taskId, resolution: 'dismissed' })}
           onCreateBoard={() => setCreateBoardOpen(true)}
         />
       ) : null}
-      {!full && progress.data && !progress.data.tourSeenAt && (
-        <section className="[--ring:var(--muted-foreground)] mt-5 flex items-center justify-between gap-4 rounded-xl border bg-card p-4">
-          <h2 className="text-sm font-medium">
-            <FormattedMessage id="onboarding.tour.offer" defaultMessage="Take the 60-second tour" />
-          </h2>
-          <Button variant="outline" size="sm" onClick={() => tour?.start()}>
-            <FormattedMessage id="onboarding.launch.start" defaultMessage="Start" />
-          </Button>
-        </section>
+      {!full && (
+        <div
+          className={
+            progress.data && !progress.data.tourSeenAt && children
+              ? 'mt-4 grid gap-3 md:grid-cols-2'
+              : 'mt-4 grid gap-3'
+          }
+        >
+          {progress.data && !progress.data.tourSeenAt && (
+            <section className="[--ring:var(--muted-foreground)] flex items-center gap-3 rounded-xl border bg-card p-4">
+              <span
+                className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-foreground text-background"
+                aria-hidden="true"
+              >
+                <PlayIcon className="size-4 text-primary" />
+              </span>
+              <h2 className="min-w-0 flex-1 text-sm font-medium">
+                <FormattedMessage
+                  id="onboarding.tour.offer"
+                  defaultMessage="Take the 60-second tour"
+                />
+              </h2>
+              <Button variant="outline" size="sm" onClick={() => tour?.start()}>
+                <FormattedMessage id="onboarding.launch.start" defaultMessage="Start" />
+              </Button>
+            </section>
+          )}
+          {children}
+        </div>
       )}
       <CreateBoardDialog
         open={createBoardOpen}
