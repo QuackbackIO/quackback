@@ -4,6 +4,8 @@ import { IntlProvider } from 'react-intl'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '@/locales/en.json'
+import de from '@/locales/de.json'
+import { adminSeedMessages } from '@/lib/shared/i18n'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 
 const hoisted = vi.hoisted(() => ({
@@ -69,9 +71,12 @@ function Start() {
   )
 }
 
-function mount(endAction?: TourEndAction) {
+function mount(
+  endAction?: TourEndAction,
+  { locale = 'en', messages = en }: { locale?: string; messages?: Record<string, string> } = {}
+) {
   return render(
-    <IntlProvider locale="en" messages={en}>
+    <IntlProvider locale={locale} messages={messages}>
       <QueryClientProvider client={new QueryClient()}>
         <ProductTourProvider endAction={endAction}>
           <Start />
@@ -251,5 +256,18 @@ describe('guided tour', () => {
     mount()
     await startTour()
     expect(hoisted.seen).toBe(0)
+  })
+})
+
+describe('strings', () => {
+  it('loads the overlay strings an admin page leaves out of its seed', async () => {
+    const seeded = adminSeedMessages(de)
+    expect(seeded['onboarding.tour.next']).toBeUndefined()
+    mount(undefined, { locale: 'de', messages: seeded })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Start tour' }))
+    })
+    await waitFor(() => expect(dialog()).toHaveTextContent('Weiter'))
+    expect(dialog()).toHaveTextContent(de['onboarding.tour.stop.products.lead'])
   })
 })
