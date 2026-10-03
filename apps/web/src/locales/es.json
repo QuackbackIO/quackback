@@ -1206,7 +1206,6 @@
   "onboarding.goals.private": "Mantener los comentarios privados para mi equipo",
   "onboarding.tour.offer": "Haz el recorrido de 60 segundos",
   "onboarding.tour.replay": "Repetir el recorrido",
-  "onboarding.tour.skip": "Omitir",
   "onboarding.tour.back": "Atrás",
   "onboarding.tour.finish": "Finalizar",
   "onboarding.tour.next": "Siguiente",
@@ -1268,5 +1267,14 @@
   "onboarding.tour.skipTour": "Omitir recorrido",
   "onboarding.tour.end.title": "Ese fue el recorrido",
   "onboarding.tour.end.replay": "Puedes repetirlo cuando quieras desde Ayuda.",
-  "onboarding.tour.end.done": "Listo"
+  "onboarding.tour.end.done": "Listo",
+  "onboarding.launch.skip": "Omitir",
+  "onboarding.launch.undoSkip": "Deshacer omisión",
+  "onboarding.launch.progressDone": "{done} de {total} hechos",
+  "onboarding.launch.auto": "Se marca como hecho cuando ocurra",
+  "onboarding.launch.group.feedback": "Comentarios",
+  "onboarding.launch.group.support": "Soporte",
+  "onboarding.launch.group.helpCenter": "Centro de ayuda",
+  "onboarding.launch.group.status": "Estado",
+  "onboarding.launch.group.polish": "Retoques"
 }

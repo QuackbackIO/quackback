@@ -1206,7 +1206,6 @@
   "onboarding.goals.private": "Keep feedback private to my team",
   "onboarding.tour.offer": "Take the 60-second tour",
   "onboarding.tour.replay": "Replay the tour",
-  "onboarding.tour.skip": "Skip",
   "onboarding.tour.back": "Back",
   "onboarding.tour.finish": "Finish",
   "onboarding.tour.next": "Next",
@@ -1268,5 +1267,14 @@
   "onboarding.tour.skipTour": "Skip tour",
   "onboarding.tour.end.title": "That's the tour",
   "onboarding.tour.end.replay": "Replay it any time from Help.",
-  "onboarding.tour.end.done": "Done"
+  "onboarding.tour.end.done": "Done",
+  "onboarding.launch.skip": "Skip",
+  "onboarding.launch.undoSkip": "Undo skip",
+  "onboarding.launch.progressDone": "{done} of {total} done",
+  "onboarding.launch.auto": "Marked done when it happens",
+  "onboarding.launch.group.feedback": "Feedback",
+  "onboarding.launch.group.support": "Support",
+  "onboarding.launch.group.helpCenter": "Help Center",
+  "onboarding.launch.group.status": "Status",
+  "onboarding.launch.group.polish": "Polish"
 }

@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from 'react'
-import { FormattedMessage, useIntl } from 'react-intl'
+import { FormattedMessage } from 'react-intl'
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
-import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { useProductTour } from '@/components/onboarding/product-tour'
 import {
@@ -11,24 +10,21 @@ import {
 } from '@/lib/server/functions/onboarding-progress'
 import { GettingStartedCard } from '@/components/admin/getting-started-card'
 import { CreateBoardDialog } from '@/components/admin/settings/boards/create-board-dialog'
-import { adminQueries } from '@/lib/client/queries/admin'
-import { setLaunchTaskResolutionFn } from '@/lib/server/functions/admin'
 import { isLaunchPlanActive, launchChecklistSummary } from '@/lib/shared/launch-checklist'
+import { launchStatusQuery, useLaunchTaskResolution } from './use-launch-plan'
 
 const PROGRESS_KEY = ['onboarding', 'progress'] as const
 type Progress = Awaited<ReturnType<typeof getOnboardingProgressFn>>
 
+/** Home's first-run area: the celebration, the launch tiles, the tour offer and the try-it slot. */
 export function HomeGettingStarted({
-  full = false,
   portalUrl,
   tryIt,
 }: {
-  full?: boolean
   portalUrl?: string
   /** The "Try it yourself" card. Shown beside the tour offer, in the launch window only. */
   tryIt?: ReactNode
 }) {
-  const intl = useIntl()
   const tour = useProductTour()
   const progress = useQuery({
     queryKey: PROGRESS_KEY,
@@ -37,28 +33,8 @@ export function HomeGettingStarted({
   const [winDismissed, setWinDismissed] = useState(false)
   const queryClient = useQueryClient()
   const [createBoardOpen, setCreateBoardOpen] = useState(false)
-  const statusQuery = useSuspenseQuery({
-    ...adminQueries.onboardingStatus(),
-    refetchInterval: (query) => {
-      const data = query.state.data
-      if (!data) return false
-      return !data.hasFirstWin ? 15_000 : false
-    },
-  })
-  const resolutionMutation = useMutation({
-    mutationFn: (data: { taskId: string; resolution: 'dismissed' | null }) =>
-      setLaunchTaskResolutionFn({ data }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'onboarding'] }),
-    onError: (error) =>
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : intl.formatMessage({
-              id: 'onboarding.launch.error',
-              defaultMessage: 'Could not update your launch plan. Try again.',
-            })
-      ),
-  })
+  const statusQuery = useSuspenseQuery(launchStatusQuery())
+  const resolutionMutation = useLaunchTaskResolution()
 
   const dismissTour = useMutation({
     mutationFn: () => dismissTourOfferFn(),
@@ -78,7 +54,6 @@ export function HomeGettingStarted({
     queryKey: ['onboarding', 'first-win-moment'],
     queryFn: () => claimFirstWinMomentFn(),
     enabled:
-      !full &&
       inWindow &&
       statusQuery.data.hasFirstWin === true &&
       Boolean(progress.data) &&
@@ -86,14 +61,13 @@ export function HomeGettingStarted({
     staleTime: Infinity,
     gcTime: 0,
   })
-  const showWin = !full && moment.data?.show && !winDismissed
+  const showWin = moment.data?.show && !winDismissed
   const showTourOffer =
-    !full &&
     inWindow &&
     Boolean(progress.data) &&
     !progress.data?.tourSeenAt &&
     !progress.data?.tourDismissedAt
-  const showTryIt = !full && inWindow && Boolean(tryIt)
+  const showTryIt = inWindow && Boolean(tryIt)
 
   return (
     <>
@@ -110,9 +84,8 @@ export function HomeGettingStarted({
           </Button>
         </section>
       )}
-      {full || (inWindow && isLaunchPlanActive(launchChecklistSummary(statusQuery.data))) ? (
+      {inWindow && isLaunchPlanActive(launchChecklistSummary(statusQuery.data)) ? (
         <GettingStartedCard
-          full={full}
           portalUrl={portalUrl}
           status={statusQuery.data}
           pending={resolutionMutation.isPending}

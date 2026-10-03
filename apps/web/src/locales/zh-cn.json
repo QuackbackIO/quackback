@@ -1206,7 +1206,6 @@
   "onboarding.goals.private": "仅向我的团队开放反馈",
   "onboarding.tour.offer": "体验 60 秒导览",
   "onboarding.tour.replay": "重播导览",
-  "onboarding.tour.skip": "跳过",
   "onboarding.tour.back": "返回",
   "onboarding.tour.finish": "完成",
   "onboarding.tour.next": "下一步",
@@ -1268,5 +1267,14 @@
   "onboarding.tour.skipTour": "跳过导览",
   "onboarding.tour.end.title": "导览结束",
   "onboarding.tour.end.replay": "随时可以从“帮助”重播。",
-  "onboarding.tour.end.done": "完成"
+  "onboarding.tour.end.done": "完成",
+  "onboarding.launch.skip": "跳过",
+  "onboarding.launch.undoSkip": "撤销跳过",
+  "onboarding.launch.progressDone": "已完成 {done}/{total}",
+  "onboarding.launch.auto": "发生时会自动标记完成",
+  "onboarding.launch.group.feedback": "反馈",
+  "onboarding.launch.group.support": "支持",
+  "onboarding.launch.group.helpCenter": "帮助中心",
+  "onboarding.launch.group.status": "状态",
+  "onboarding.launch.group.polish": "完善"
 }

@@ -1206,7 +1206,6 @@
   "onboarding.goals.private": "Manter o feedback privado para minha equipe",
   "onboarding.tour.offer": "Faça o tour de 60 segundos",
   "onboarding.tour.replay": "Repetir o tour",
-  "onboarding.tour.skip": "Pular",
   "onboarding.tour.back": "Voltar",
   "onboarding.tour.finish": "Concluir",
   "onboarding.tour.next": "Próximo",
@@ -1268,5 +1267,14 @@
   "onboarding.tour.skipTour": "Pular tour",
   "onboarding.tour.end.title": "Esse foi o tour",
   "onboarding.tour.end.replay": "Repita quando quiser pelo menu Ajuda.",
-  "onboarding.tour.end.done": "Concluído"
+  "onboarding.tour.end.done": "Concluído",
+  "onboarding.launch.skip": "Pular",
+  "onboarding.launch.undoSkip": "Desfazer",
+  "onboarding.launch.progressDone": "{done} de {total} concluídos",
+  "onboarding.launch.auto": "Marcado como concluído quando acontecer",
+  "onboarding.launch.group.feedback": "Feedback",
+  "onboarding.launch.group.support": "Suporte",
+  "onboarding.launch.group.helpCenter": "Central de ajuda",
+  "onboarding.launch.group.status": "Status",
+  "onboarding.launch.group.polish": "Ajustes finais"
 }

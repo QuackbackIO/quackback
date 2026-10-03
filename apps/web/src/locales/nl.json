@@ -1206,7 +1206,6 @@
   "onboarding.goals.private": "Feedback privé houden voor mijn team",
   "onboarding.tour.offer": "Volg de rondleiding van 60 seconden",
   "onboarding.tour.replay": "Rondleiding opnieuw starten",
-  "onboarding.tour.skip": "Overslaan",
   "onboarding.tour.back": "Terug",
   "onboarding.tour.finish": "Afronden",
   "onboarding.tour.next": "Volgende",
@@ -1268,5 +1267,14 @@
   "onboarding.tour.skipTour": "Rondleiding overslaan",
   "onboarding.tour.end.title": "Dat was de rondleiding",
   "onboarding.tour.end.replay": "Start hem altijd opnieuw via Help.",
-  "onboarding.tour.end.done": "Klaar"
+  "onboarding.tour.end.done": "Klaar",
+  "onboarding.launch.skip": "Overslaan",
+  "onboarding.launch.undoSkip": "Overslaan ongedaan maken",
+  "onboarding.launch.progressDone": "{done} van {total} klaar",
+  "onboarding.launch.auto": "Wordt afgevinkt zodra het gebeurt",
+  "onboarding.launch.group.feedback": "Feedback",
+  "onboarding.launch.group.support": "Support",
+  "onboarding.launch.group.helpCenter": "Helpcentrum",
+  "onboarding.launch.group.status": "Status",
+  "onboarding.launch.group.polish": "Afwerking"
 }

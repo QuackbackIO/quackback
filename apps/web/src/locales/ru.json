@@ -1206,7 +1206,6 @@
   "onboarding.goals.private": "Оставить обратную связь доступной только моей команде",
   "onboarding.tour.offer": "Пройти обзор за 60 секунд",
   "onboarding.tour.replay": "Повторить обзор",
-  "onboarding.tour.skip": "Пропустить",
   "onboarding.tour.back": "Назад",
   "onboarding.tour.finish": "Завершить",
   "onboarding.tour.next": "Далее",
@@ -1268,5 +1267,14 @@
   "onboarding.tour.skipTour": "Пропустить обзор",
   "onboarding.tour.end.title": "Обзор завершён",
   "onboarding.tour.end.replay": "Повторите его в любой момент в разделе «Помощь».",
-  "onboarding.tour.end.done": "Готово"
+  "onboarding.tour.end.done": "Готово",
+  "onboarding.launch.skip": "Пропустить",
+  "onboarding.launch.undoSkip": "Отменить пропуск",
+  "onboarding.launch.progressDone": "Готово: {done} из {total}",
+  "onboarding.launch.auto": "Отметится, когда это произойдёт",
+  "onboarding.launch.group.feedback": "Обратная связь",
+  "onboarding.launch.group.support": "Поддержка",
+  "onboarding.launch.group.helpCenter": "Справочный центр",
+  "onboarding.launch.group.status": "Статус",
+  "onboarding.launch.group.polish": "Доработка"
 }

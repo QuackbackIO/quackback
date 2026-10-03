@@ -1206,7 +1206,6 @@
   "onboarding.goals.private": "Feedback nur für mein Team sichtbar halten",
   "onboarding.tour.offer": "Starte die 60-Sekunden-Tour",
   "onboarding.tour.replay": "Tour erneut starten",
-  "onboarding.tour.skip": "Überspringen",
   "onboarding.tour.back": "Zurück",
   "onboarding.tour.finish": "Fertig",
   "onboarding.tour.next": "Weiter",
@@ -1268,5 +1267,14 @@
   "onboarding.tour.skipTour": "Tour überspringen",
   "onboarding.tour.end.title": "Das war die Tour",
   "onboarding.tour.end.replay": "Du kannst sie jederzeit über Hilfe erneut starten.",
-  "onboarding.tour.end.done": "Fertig"
+  "onboarding.tour.end.done": "Fertig",
+  "onboarding.launch.skip": "Überspringen",
+  "onboarding.launch.undoSkip": "Überspringen rückgängig machen",
+  "onboarding.launch.progressDone": "{done} von {total} erledigt",
+  "onboarding.launch.auto": "Wird abgehakt, sobald es passiert",
+  "onboarding.launch.group.feedback": "Feedback",
+  "onboarding.launch.group.support": "Support",
+  "onboarding.launch.group.helpCenter": "Hilfecenter",
+  "onboarding.launch.group.status": "Status",
+  "onboarding.launch.group.polish": "Feinschliff"
 }

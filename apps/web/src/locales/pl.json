@@ -1206,7 +1206,6 @@
   "onboarding.goals.private": "Zachowaj opinie jako prywatne dla mojego zespołu",
   "onboarding.tour.offer": "Rozpocznij 60-sekundowy przewodnik",
   "onboarding.tour.replay": "Powtórz przewodnik",
-  "onboarding.tour.skip": "Pomiń",
   "onboarding.tour.back": "Wstecz",
   "onboarding.tour.finish": "Zakończ",
   "onboarding.tour.next": "Dalej",
@@ -1268,5 +1267,14 @@
   "onboarding.tour.skipTour": "Pomiń przewodnik",
   "onboarding.tour.end.title": "To koniec przewodnika",
   "onboarding.tour.end.replay": "Możesz go powtórzyć w dowolnej chwili w menu Pomoc.",
-  "onboarding.tour.end.done": "Gotowe"
+  "onboarding.tour.end.done": "Gotowe",
+  "onboarding.launch.skip": "Pomiń",
+  "onboarding.launch.undoSkip": "Cofnij pominięcie",
+  "onboarding.launch.progressDone": "Ukończono {done} z {total}",
+  "onboarding.launch.auto": "Oznaczymy jako gotowe, gdy to nastąpi",
+  "onboarding.launch.group.feedback": "Opinie",
+  "onboarding.launch.group.support": "Wsparcie",
+  "onboarding.launch.group.helpCenter": "Centrum pomocy",
+  "onboarding.launch.group.status": "Status",
+  "onboarding.launch.group.polish": "Dopracowanie"
 }

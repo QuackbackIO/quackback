@@ -558,6 +558,51 @@ export function launchPlanProgress(status: LaunchStatus): {
   }
 }
 
+export type LaunchPlanGroupId =
+  'product_feedback' | 'customer_support' | 'help_center' | 'status_page' | 'polish'
+
+/** The goal whose work a task is. Anything else is polish. */
+const TASK_GROUP: Record<string, Exclude<LaunchPlanGroupId, 'polish'>> = {
+  'create-board': 'product_feedback',
+  'distribute-feedback': 'product_feedback',
+  'connect-messenger': 'customer_support',
+  'set-up-quinn': 'customer_support',
+  'help-article': 'help_center',
+  'add-status-service': 'status_page',
+}
+
+const GOAL_GROUPS = ['product_feedback', 'customer_support', 'help_center', 'status_page'] as const
+
+/**
+ * The plan as the Launch plan page lists it: a group for each goal in the
+ * order chosen, the first win under the primary goal, then Polish.
+ */
+export function launchPlanGroups(
+  status: LaunchStatus
+): { id: LaunchPlanGroupId; tasks: LaunchTask[] }[] {
+  const { tasks } = launchChecklistSummary(status)
+  const primary = launchResolutionKey(status)
+  const asGroup = (goal: OnboardingOutcome): LaunchPlanGroupId =>
+    goal === 'internal' ? 'product_feedback' : goal
+  const groupOf = (task: LaunchTask): LaunchPlanGroupId =>
+    task.classification === 'first_win'
+      ? asGroup(primary)
+      : task.classification === 'prerequisite' && task.id === 'invite-team'
+        ? 'product_feedback'
+        : (TASK_GROUP[task.id] ?? 'polish')
+  const order: LaunchPlanGroupId[] = []
+  for (const id of [
+    ...(status.goals?.length ? status.goals : [primary]).map(asGroup),
+    ...GOAL_GROUPS,
+    'polish' as const,
+  ]) {
+    if (!order.includes(id)) order.push(id)
+  }
+  return order
+    .map((id) => ({ id, tasks: tasks.filter((task) => groupOf(task) === id) }))
+    .filter((group) => group.tasks.length > 0)
+}
+
 /** Home card visibility. First win no longer holds this. */
 export function isLaunchPlanActive(summary: {
   resolved: boolean

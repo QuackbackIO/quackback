@@ -1206,7 +1206,6 @@
   "onboarding.goals.private": "Garder les retours privés pour mon équipe",
   "onboarding.tour.offer": "Faire la visite de 60 secondes",
   "onboarding.tour.replay": "Rejouer la visite",
-  "onboarding.tour.skip": "Ignorer",
   "onboarding.tour.back": "Retour",
   "onboarding.tour.finish": "Terminer",
   "onboarding.tour.next": "Suivant",
@@ -1268,5 +1267,14 @@
   "onboarding.tour.skipTour": "Ignorer la visite",
   "onboarding.tour.end.title": "C’est la fin de la visite",
   "onboarding.tour.end.replay": "Rejouez-la à tout moment depuis Aide.",
-  "onboarding.tour.end.done": "Terminé"
+  "onboarding.tour.end.done": "Terminé",
+  "onboarding.launch.skip": "Ignorer",
+  "onboarding.launch.undoSkip": "Annuler",
+  "onboarding.launch.progressDone": "{done} sur {total} terminés",
+  "onboarding.launch.auto": "Marqué comme terminé dès que cela arrive",
+  "onboarding.launch.group.feedback": "Retours",
+  "onboarding.launch.group.support": "Support",
+  "onboarding.launch.group.helpCenter": "Centre d’aide",
+  "onboarding.launch.group.status": "Statut",
+  "onboarding.launch.group.polish": "Finitions"
 }

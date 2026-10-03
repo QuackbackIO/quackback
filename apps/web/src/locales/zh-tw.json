@@ -1206,7 +1206,6 @@
   "onboarding.goals.private": "僅向我的團隊開放回饋",
   "onboarding.tour.offer": "體驗 60 秒導覽",
   "onboarding.tour.replay": "重播導覽",
-  "onboarding.tour.skip": "略過",
   "onboarding.tour.back": "返回",
   "onboarding.tour.finish": "完成",
   "onboarding.tour.next": "下一步",
@@ -1268,5 +1267,14 @@
   "onboarding.tour.skipTour": "略過導覽",
   "onboarding.tour.end.title": "導覽結束",
   "onboarding.tour.end.replay": "隨時可以從「說明」重播。",
-  "onboarding.tour.end.done": "完成"
+  "onboarding.tour.end.done": "完成",
+  "onboarding.launch.skip": "略過",
+  "onboarding.launch.undoSkip": "復原略過",
+  "onboarding.launch.progressDone": "已完成 {done}/{total}",
+  "onboarding.launch.auto": "發生時會自動標記完成",
+  "onboarding.launch.group.feedback": "回饋",
+  "onboarding.launch.group.support": "支援",
+  "onboarding.launch.group.helpCenter": "說明中心",
+  "onboarding.launch.group.status": "狀態",
+  "onboarding.launch.group.polish": "完善"
 }

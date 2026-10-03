@@ -1206,7 +1206,6 @@
   "onboarding.goals.private": "إبقاء الملاحظات خاصة بفريقي",
   "onboarding.tour.offer": "ابدأ الجولة التي تستغرق 60 ثانية",
   "onboarding.tour.replay": "إعادة الجولة",
-  "onboarding.tour.skip": "تخطي",
   "onboarding.tour.back": "رجوع",
   "onboarding.tour.finish": "إنهاء",
   "onboarding.tour.next": "التالي",
@@ -1268,5 +1267,14 @@
   "onboarding.tour.skipTour": "تخطي الجولة",
   "onboarding.tour.end.title": "انتهت الجولة",
   "onboarding.tour.end.replay": "يمكنك إعادة تشغيلها في أي وقت من المساعدة.",
-  "onboarding.tour.end.done": "تم"
+  "onboarding.tour.end.done": "تم",
+  "onboarding.launch.skip": "تخطي",
+  "onboarding.launch.undoSkip": "التراجع عن التخطي",
+  "onboarding.launch.progressDone": "اكتمل {done} من {total}",
+  "onboarding.launch.auto": "يُعلَّم كمكتمل عند حدوثه",
+  "onboarding.launch.group.feedback": "الملاحظات",
+  "onboarding.launch.group.support": "الدعم",
+  "onboarding.launch.group.helpCenter": "مركز المساعدة",
+  "onboarding.launch.group.status": "الحالة",
+  "onboarding.launch.group.polish": "لمسات أخيرة"
 }
