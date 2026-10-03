@@ -49,7 +49,7 @@ export function CitationFreshness({
   return (
     <span className={cn('block text-[11px] text-muted-foreground', className)}>
       <FormattedMessage
-        id="portal.status.hero.updated"
+        id="common.citation.updated"
         defaultMessage="Updated {time}"
         values={{ time: label }}
       />
@@ -140,10 +140,10 @@ function CitationDot({
   const label = intl.formatMessage(
     isInternal
       ? {
-          id: 'assistant.citation.internalSourceLabel',
+          id: 'common.citation.internalSourceLabel',
           defaultMessage: 'Internal source {number}: {title}',
         }
-      : { id: 'assistant.citation.sourceLabel', defaultMessage: 'Source {number}: {title}' },
+      : { id: 'common.citation.sourceLabel', defaultMessage: 'Source {number}: {title}' },
     { number: n, title: citation.title }
   )
   const dotClass = cn(CITATION_DOT_CLASS, isInternal && CITATION_DOT_INTERNAL_CLASS)
@@ -186,7 +186,7 @@ function CitationDot({
           {isInternal && !hasUrl ? (
             <span className="flex items-center gap-1.5 text-[12px] text-amber-700 dark:text-amber-300">
               <LockClosedIcon className="h-3 w-3 shrink-0" />
-              <FormattedMessage id="assistant.citation.internal" defaultMessage="Internal" />
+              <FormattedMessage id="common.citation.internal" defaultMessage="Internal" />
             </span>
           ) : (
             <span className="flex items-center gap-1.5 text-[12px] text-muted-foreground">

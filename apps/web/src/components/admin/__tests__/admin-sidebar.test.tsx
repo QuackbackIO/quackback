@@ -7,7 +7,13 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { WorkspaceCopilotContext } from '../ask/workspace-copilot-context'
 
 const openPalette = vi.fn()
-const copilotContext = { composer: null, conversation: null, starters: null, openPalette }
+const copilotContext = {
+  composer: null,
+  conversation: null,
+  starters: null,
+  focusedConversation: null,
+  openPalette,
+}
 
 // Injected by Vite at build time (see vite.config.ts `define`); absent in vitest.
 vi.stubGlobal('__APP_VERSION__', '0.0.0-test')
