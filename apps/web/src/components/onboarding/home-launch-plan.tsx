@@ -13,11 +13,7 @@ import { GettingStartedCard } from '@/components/admin/getting-started-card'
 import { CreateBoardDialog } from '@/components/admin/settings/boards/create-board-dialog'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { setLaunchTaskResolutionFn } from '@/lib/server/functions/admin'
-import {
-  isLaunchPlanActive,
-  launchChecklistSummary,
-  normalizeOutcome,
-} from '@/lib/shared/launch-checklist'
+import { isLaunchPlanActive, launchChecklistSummary } from '@/lib/shared/launch-checklist'
 
 const PROGRESS_KEY = ['onboarding', 'progress'] as const
 type Progress = Awaited<ReturnType<typeof getOnboardingProgressFn>>
@@ -51,12 +47,7 @@ export function HomeGettingStarted({
   })
   const resolutionMutation = useMutation({
     mutationFn: (data: { taskId: string; resolution: 'dismissed' | null }) =>
-      setLaunchTaskResolutionFn({
-        data: {
-          ...data,
-          outcome: normalizeOutcome(statusQuery.data.useCase),
-        },
-      }),
+      setLaunchTaskResolutionFn({ data }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'onboarding'] }),
     onError: (error) =>
       toast.error(
