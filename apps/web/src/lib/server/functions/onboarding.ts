@@ -43,7 +43,11 @@ import {
   finishIdentityOnboarding,
   mutateSetupStateAtomic,
 } from '@/lib/server/setup-state'
-import { prepareOnboardingBoard } from '@/lib/server/onboarding-board'
+import {
+  applyOnboardingGoals,
+  prepareOnboardingBoard,
+  setupGoals,
+} from '@/lib/server/onboarding-board'
 import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/identity-projection'
 
 const log = logger.child({ component: 'onboarding' })
@@ -449,23 +453,15 @@ export const ensureOnboardingHomeReadyFn = createServerFn({ method: 'POST' }).ha
 
   const { value } = await mutateSetupStateAtomic(async (current, row, tx) => {
     const now = new Date().toISOString()
-    const goals = current.goals?.length ? current.goals : [current.useCase ?? 'product_feedback']
-    const goal = goals[0]
+    const goals = setupGoals(current)
     let next: SetupState = { ...current, goals }
     let modulesChanged = false
     if (hasFriendlyHost && !current.workspaceDetailsSeenAt) {
       next = { ...next, workspaceDetailsSeenAt: now }
     }
     if (!next.steps.startingPoint || next.steps.startingPoint.source === 'managed') {
-      const before = resolveFeatureFlags(row.featureFlags)
-      const { flags } = flagsForGoals(before, goals)
-      modulesChanged = JSON.stringify(flags) !== JSON.stringify(before)
-      await tx
-        .update(settings)
-        .set({ featureFlags: JSON.stringify(flags) })
-        .where(eq(settings.id, row.id))
-      await prepareOnboardingBoard(tx, next)
-      next = applyDeferredLaunchStartingPoint(next, goal, now)
+      ;({ modulesChanged } = await applyOnboardingGoals(tx, row, next))
+      next = applyDeferredLaunchStartingPoint(next, goals[0], now)
     }
     if (!next.activationHandoffSeenAt) {
       next = { ...next, activationHandoffSeenAt: now }
