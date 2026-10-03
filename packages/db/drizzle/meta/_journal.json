@@ -1891,6 +1891,13 @@
       "when": 1790986500000,
       "tag": "0292_workspace_copilot",
       "breakpoints": true
+    },
+    {
+      "idx": 270,
+      "version": "7",
+      "when": 1791000000000,
+      "tag": "0293_website_branding_existing_workspaces",
+      "breakpoints": true
     }
   ]
 }

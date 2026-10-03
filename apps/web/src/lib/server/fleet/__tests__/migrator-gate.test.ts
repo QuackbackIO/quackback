@@ -367,6 +367,7 @@ describe('replayGateVerdict', () => {
       '0290_files',
       '0291_test_customer',
       '0292_workspace_copilot',
+      '0293_website_branding_existing_workspaces',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)

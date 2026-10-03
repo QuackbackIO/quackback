@@ -295,6 +295,8 @@ describe('the real corpus', () => {
     // 0292 widens the parent check once, guarded by its existing definition,
     // and adds the internal-only check once, guarded by its exact name. Its
     // migration regression also verifies existing parent rows and constraint OIDs.
+    // 0293 marks a settings row only while its metadata lacks brandingLookup,
+    // so a second run writes zero rows.
     const vouching = files.filter(
       (f) => assessReplaySafety(f, readFileSync(join(MIGRATIONS_DIR, f), 'utf8')).vouched.length > 0
     )
@@ -314,6 +316,7 @@ describe('the real corpus', () => {
       '0285_integration_link_scope.sql',
       '0288_kb_translations_dutch_search.sql',
       '0292_workspace_copilot.sql',
+      '0293_website_branding_existing_workspaces.sql',
     ])
   })
 
