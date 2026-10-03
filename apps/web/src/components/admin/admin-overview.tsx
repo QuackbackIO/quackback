@@ -78,7 +78,14 @@ export function OverviewDashboard({
 
   return (
     <div className="min-w-0 space-y-6">
-      {header ?? <PageHeader title="Home" actions={actions} />}
+      {header ? (
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">{header}</div>
+          {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+        </div>
+      ) : (
+        <PageHeader title="Home" actions={actions} />
+      )}
 
       {banner}
 

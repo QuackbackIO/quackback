@@ -23,6 +23,18 @@ test.describe('onboarding launch plan', () => {
     await expect(page.getByText('Nothing to review')).toHaveCount(0)
   })
 
+  test('Home keeps the Actions menu and it opens a create dialog', async ({ page }) => {
+    await page.goto('/admin')
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    const actions = page.getByRole('button', { name: 'Actions' })
+    await expect(actions).toBeVisible()
+    await actions.click()
+    await expect(page.getByRole('menuitem', { name: 'New post' })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: 'New changelog' })).toBeVisible()
+    await page.getByRole('menuitem', { name: 'New changelog' }).click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+  })
+
   test('runs the opt-in tour with the keyboard and can replay it from Help', async ({ page }) => {
     await page.goto('/admin')
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
