@@ -20,7 +20,7 @@ import {
   conversations,
   boards,
 } from '@/lib/server/db'
-import { notTestRecord, notTestPrincipal, notTestConversation } from '@/lib/server/test-data'
+import { notTestPrincipal, notTestConversation } from '@/lib/server/test-data'
 
 export interface DashboardRange {
   period: '7d' | '30d' | '90d' | '12m'
@@ -68,7 +68,7 @@ export function queryDashboardRows({
       FROM post_subscriptions psub
       JOIN posts p ON p.id = psub.post_id
       WHERE p.deleted_at IS NULL
-        AND ${notTestRecord(sql`p.widget_metadata`)}
+        AND ${notTestPrincipal(sql`p.principal_id`)}
         AND ${notTestPrincipal(sql`psub.principal_id`)}
     `),
 
@@ -102,7 +102,7 @@ export function queryDashboardRows({
       FROM first_resolution fr
       JOIN posts p ON p.id = fr.post_id
       WHERE fr.resolved_at >= ${sinceIso}::timestamptz AND p.deleted_at IS NULL
-        AND ${notTestRecord(sql`p.widget_metadata`)}
+        AND ${notTestPrincipal(sql`p.principal_id`)}
     `),
 
     // Top posts (pre-materialized per period).
@@ -137,19 +137,19 @@ export function queryDashboardRows({
       FROM principal p
       LEFT JOIN (
         SELECT principal_id as pid, COUNT(*)::int as cnt
-        FROM posts WHERE created_at >= ${sinceIso}::timestamptz AND deleted_at IS NULL AND ${notTestRecord(sql`widget_metadata`)}
+        FROM posts WHERE created_at >= ${sinceIso}::timestamptz AND deleted_at IS NULL
         GROUP BY principal_id
       ) post_counts ON post_counts.pid = p.id
       LEFT JOIN (
         SELECT v.principal_id as pid, COUNT(*)::int as cnt
         FROM post_votes v JOIN posts activity_post ON activity_post.id = v.post_id
-        WHERE v.created_at >= ${sinceIso}::timestamptz AND ${notTestRecord(sql`activity_post.widget_metadata`)}
+        WHERE v.created_at >= ${sinceIso}::timestamptz AND ${notTestPrincipal(sql`activity_post.principal_id`)}
         GROUP BY v.principal_id
       ) vote_counts ON vote_counts.pid = p.id
       LEFT JOIN (
         SELECT c.principal_id as pid, COUNT(*)::int as cnt
         FROM post_comments c JOIN posts activity_post ON activity_post.id = c.post_id
-        WHERE c.created_at >= ${sinceIso}::timestamptz AND c.deleted_at IS NULL AND ${notTestRecord(sql`activity_post.widget_metadata`)}
+        WHERE c.created_at >= ${sinceIso}::timestamptz AND c.deleted_at IS NULL AND ${notTestPrincipal(sql`activity_post.principal_id`)}
         GROUP BY c.principal_id
       ) comment_counts ON comment_counts.pid = p.id
       WHERE p.type != 'anonymous' AND p.role = 'user'

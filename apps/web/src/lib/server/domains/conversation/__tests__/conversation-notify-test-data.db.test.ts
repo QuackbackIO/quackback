@@ -104,15 +104,13 @@ function recipients() {
   return sendEmail.mock.calls.map(([options]) => options.to).sort()
 }
 
-it.each([true, 'true'])('emails only the owner for a test marker of %s', async (test) => {
-  await send({ test, testOwnerPrincipalId: owner })
-  expect(recipients()).toEqual(['you@example.com'])
-})
-
-it('does not email the team when a test marker has no owner', async () => {
-  await send({ test: true })
-  expect(recipients()).toEqual([])
-})
+it.each([{}, { test: 'false' }])(
+  'emails only the owner for a test customer thread with attributes %j',
+  async (attributes) => {
+    await send(attributes)
+    expect(recipients()).toEqual(['you@example.com'])
+  }
+)
 
 it('keeps every ordinary team recipient, including a contact-only teammate', async () => {
   const [visitor] = await testDb
@@ -183,7 +181,7 @@ async function replyThread(test: boolean | string | undefined, testCustomer = tr
 }
 
 it.each([true, 'true', undefined])(
-  'limits test replies and participant fan-out to the stored owner for marker %s',
+  'limits test replies and participant fan-out to the stored owner whatever the attributes (%s)',
   async (test) => {
     const conversation = await replyThread(test)
     await notifyAgentReply({
@@ -204,17 +202,20 @@ it.each([true, 'true', undefined])(
   }
 )
 
-it('keeps ordinary group reply recipients', async () => {
-  const conversation = await replyThread(undefined, false)
-  await notifyAgentReply({
-    conversationId: conversation.id,
-    visitorPrincipalId: conversation.visitorPrincipalId,
-    content: 'Acme reply',
-    agentName: 'Acme',
-    channel: 'email',
-  })
-  expect(recipients()).toEqual(['contact@example.com', 'other@example.com'])
-})
+it.each([undefined, true])(
+  'keeps ordinary group reply recipients (legacy marker %s)',
+  async (test) => {
+    const conversation = await replyThread(test, false)
+    await notifyAgentReply({
+      conversationId: conversation.id,
+      visitorPrincipalId: conversation.visitorPrincipalId,
+      content: 'Acme reply',
+      agentName: 'Acme',
+      channel: 'email',
+    })
+    expect(recipients()).toEqual(['contact@example.com', 'other@example.com'])
+  }
+)
 
 it('does not deliver a test reply after the owner loses their team role', async () => {
   const conversation = await replyThread(true)

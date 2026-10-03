@@ -45,7 +45,7 @@ import type {
 } from './post.types'
 import type { CommentTreeNode } from '@/lib/shared'
 import { logger } from '@/lib/server/logger'
-import { notTestPrincipal, notTestRecord } from '@/lib/server/test-data'
+import { isTestPrincipalSql, notTestPrincipal } from '@/lib/server/test-data'
 
 const log = logger.child({ component: 'post-merge' })
 
@@ -80,7 +80,6 @@ export async function mergePost(
       where: and(
         eq(posts.id, duplicatePostId),
         isNull(posts.deletedAt),
-        notTestRecord(posts.widgetMetadata),
         notTestPrincipal(posts.principalId)
       ),
     }),
@@ -88,7 +87,6 @@ export async function mergePost(
       where: and(
         eq(posts.id, canonicalPostId),
         isNull(posts.deletedAt),
-        notTestRecord(posts.widgetMetadata),
         notTestPrincipal(posts.principalId)
       ),
     }),
@@ -148,7 +146,6 @@ export async function mergePost(
       where: and(
         eq(posts.id, canonicalPostId),
         isNull(posts.deletedAt),
-        notTestRecord(posts.widgetMetadata),
         notTestPrincipal(posts.principalId)
       ),
       columns: { canonicalPostId: true },
@@ -171,7 +168,6 @@ export async function mergePost(
           eq(posts.id, duplicatePostId),
           isNull(posts.deletedAt),
           isNull(posts.canonicalPostId),
-          notTestRecord(posts.widgetMetadata),
           notTestPrincipal(posts.principalId)
         )
       )
@@ -446,7 +442,7 @@ export async function getPostMergeInfo(
       title: posts.title,
       moderationState: posts.moderationState,
       principalId: posts.principalId,
-      widgetMetadata: posts.widgetMetadata,
+      authorIsTest: isTestPrincipalSql(posts.principalId).mapWith(Boolean),
       boardSlug: boards.slug,
       boardAccess: boards.access,
     })
@@ -469,7 +465,7 @@ export async function getPostMergeInfo(
     {
       moderationState: canonicalPost[0].moderationState,
       principalId: canonicalPost[0].principalId,
-      widgetMetadata: canonicalPost[0].widgetMetadata,
+      authorIsTest: canonicalPost[0].authorIsTest,
     },
     { access: canonicalPost[0].boardAccess }
   )

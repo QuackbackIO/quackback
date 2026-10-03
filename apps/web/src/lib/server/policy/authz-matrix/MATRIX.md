@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 729 surfaces
+### Server functions (`requireAuth`) — 728 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -160,8 +160,6 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/activation.ts`::getStartingPointContextFn | settings.manage |
 | `lib/server/functions/activation.ts`::getActivationBridgeContextFn | settings.manage |
 | `lib/server/functions/activation.ts`::markPublicBoardLinkCopiedFn | board.manage |
-| `lib/server/functions/activation.ts`::setActivationGoalFn | settings.manage |
-| `lib/server/functions/activation.ts`::completeStartingPointFn | settings.manage |
 | `lib/server/functions/activation.ts`::acknowledgeActivationHandoffFn | settings.manage |
 | `lib/server/functions/activity.ts`::fetchActivityForPost | post.view_private |
 | `lib/server/functions/admin-overview.ts`::fetchAdminOverviewFn | END_USER (any authenticated) |
@@ -498,11 +496,12 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/notifications.ts`::markAllNotificationsAsReadFn | END_USER (any authenticated) |
 | `lib/server/functions/notifications.ts`::archiveNotificationFn | END_USER (any authenticated) |
 | `lib/server/functions/notifications.ts`::archiveAllReadNotificationsFn | END_USER (any authenticated) |
-| `lib/server/functions/onboarding-progress.ts`::getOnboardingProgressFn | END_USER (any authenticated) |
-| `lib/server/functions/onboarding-progress.ts`::markTourSeenFn | END_USER (any authenticated) |
+| `lib/server/functions/onboarding-progress.ts`::getOnboardingProgressFn | member.view |
+| `lib/server/functions/onboarding-progress.ts`::markTourSeenFn | member.view |
+| `lib/server/functions/onboarding-progress.ts`::dismissTourOfferFn | member.view |
 | `lib/server/functions/onboarding-progress.ts`::claimFirstWinMomentFn | member.view |
+| `lib/server/functions/onboarding-progress.ts`::getTourContextFn | member.view |
 | `lib/server/functions/onboarding.ts`::saveWorkspaceAndGoalFn | ADMIN-ONLY |
-| `lib/server/functions/onboarding.ts`::saveCloudOnboardingGoalFn | ADMIN-ONLY |
 | `lib/server/functions/onboarding.ts`::ensureOnboardingHomeReadyFn | ADMIN-ONLY |
 | `lib/server/functions/owner-workspaces.ts`::listOwnerWorkspacesFn | settings.manage |
 | `lib/server/functions/owner-workspaces.ts`::openOwnerWorkspaceFn | settings.manage |
@@ -1046,7 +1045,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-225 of 1064 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+224 of 1063 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1098,7 +1097,6 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/locale.ts`::getPortalLocaleFn | server-fn |
 | `lib/server/functions/onboarding.ts`::ensureOnboardingHomeReadyFn | server-fn |
 | `lib/server/functions/onboarding.ts`::getWorkspaceClaimFn | server-fn |
-| `lib/server/functions/onboarding.ts`::saveCloudOnboardingGoalFn | server-fn |
 | `lib/server/functions/onboarding.ts`::saveUserNameFn | server-fn |
 | `lib/server/functions/onboarding.ts`::saveWorkspaceAndGoalFn | server-fn |
 | `lib/server/functions/portal-access.ts`::evaluateMyPortalAccessFn | server-fn |

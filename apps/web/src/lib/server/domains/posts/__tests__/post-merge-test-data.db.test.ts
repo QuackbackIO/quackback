@@ -87,31 +87,11 @@ beforeEach(async () => {
 afterEach(fixture.rollback)
 afterAll(fixture.close)
 
-it.each([
-  ['source', 'boolean'],
-  ['target', 'boolean'],
-  ['source', 'string'],
-  ['target', 'string'],
-  ['source', 'generated'],
-  ['target', 'generated'],
-  ['source', 'identity'],
-  ['target', 'identity'],
-] as const)(
-  'refuses a %s test post derived from %s without moving real teammate votes or comments',
-  async (position, kind) => {
+it.each(['source', 'target'] as const)(
+  'refuses a %s test-customer idea without moving real teammate votes or comments',
+  async (position) => {
     const id = position === 'source' ? source : target
-    const metadata =
-      kind === 'generated'
-        ? { onboardingGenerated: true }
-        : { test: kind === 'boolean' ? true : 'true' }
-    await testDb
-      .update(posts)
-      .set(
-        kind === 'identity'
-          ? { principalId: customer }
-          : { widgetMetadata: sql`${JSON.stringify(metadata)}::jsonb` }
-      )
-      .where(eq(posts.id, id))
+    await testDb.update(posts).set({ principalId: customer }).where(eq(posts.id, id))
     await expect(mergePost(source, target, owner)).rejects.toMatchObject({ code: 'POST_NOT_FOUND' })
     expect(await testDb.query.posts.findFirst({ where: eq(posts.id, source) })).toMatchObject({
       canonicalPostId: null,
@@ -126,6 +106,19 @@ it.each([
     expect(effects.createActivity).not.toHaveBeenCalled()
     expect(effects.scheduleDispatch).not.toHaveBeenCalled()
     expect(effects.dispatchPostMerged).not.toHaveBeenCalled()
+  }
+)
+
+it.each([{ test: true }, { test: 'true' }, { onboardingGenerated: true }])(
+  'merges a real idea carrying the legacy client attributes %j',
+  async (metadata) => {
+    await testDb
+      .update(posts)
+      .set({ widgetMetadata: sql`${JSON.stringify(metadata)}::jsonb` })
+      .where(eq(posts.id, source))
+    await expect(mergePost(source, target, owner)).resolves.toMatchObject({
+      canonicalPost: { id: target, voteCount: 2 },
+    })
   }
 )
 

@@ -32,7 +32,7 @@ import { realEmail } from '@/lib/shared/anonymous-email'
 import { truncate } from '@/lib/shared/utils/string'
 import { logger } from '@/lib/server/logger'
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
-import { notTestPrincipal, notTestRecord } from '@/lib/server/test-data'
+import { notTestPrincipal } from '@/lib/server/test-data'
 
 const log = logger.child({ component: 'user-detail' })
 import type {
@@ -128,11 +128,7 @@ export async function getPortalUserDetail(
     }
 
     const principalData = principalResult[0]
-    const realPost = and(
-      isNull(posts.deletedAt),
-      notTestRecord(posts.widgetMetadata),
-      notTestPrincipal(posts.principalId)
-    )
+    const realPost = and(isNull(posts.deletedAt), notTestPrincipal(posts.principalId))
 
     // Run independent queries in parallel for better performance
     const [authoredPosts, commentedPostIds, votedPostIds] = await Promise.all([

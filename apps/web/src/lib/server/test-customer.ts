@@ -7,16 +7,24 @@ import {
   session,
   verification,
   conversations,
+  posts,
+  tickets,
   eq,
   and,
   gt,
   desc,
   type Principal,
+  type Transaction,
 } from '@/lib/server/db'
 import { isTeamMember } from '@/lib/shared/roles'
 import { loadMessages, type SupportedLocale } from '@/lib/shared/i18n'
 import { ANON_EMAIL_DOMAIN } from '@/lib/shared/anonymous-email'
-import { createPrincipal } from '@/lib/server/domains/principals/principal.factory'
+import {
+  createPrincipal,
+  deleteAnonymousIdentity,
+} from '@/lib/server/domains/principals/principal.factory'
+import { reattributeAuthoredContent } from '@/lib/server/domains/principals/principal-reattribute'
+import { activeTestOwnerOf } from '@/lib/server/test-data'
 import {
   TEST_CUSTOMER_SESSION_PREFIX,
   TEST_CUSTOMER_VERIFICATION_PREFIX,
@@ -141,6 +149,8 @@ export async function consumeTestCustomerToken(token: string) {
       where: eq(principal.userId, activeSession.userId),
     })
     if (!customer?.testOwnerPrincipalId || customer.type !== 'anonymous') return null
+    // The owner may have left the team since the token was minted.
+    if (!(await activeTestOwnerOf(customer.id, tx))) return null
     await tx.delete(verification).where(eq(verification.id, proof.id))
     return {
       bearerToken: activeSession.token,
@@ -160,4 +170,30 @@ export async function latestTestConversationId(ownerPrincipalId: PrincipalId) {
     .orderBy(desc(conversations.lastMessageAt))
     .limit(1)
   return row?.id ?? null
+}
+
+/**
+ * Remove a teammate's test customer and everything it authored, before the
+ * teammate's own principal is deleted. Its threads, ideas and tickets are test
+ * data, so they go rather than move; anything else it authored is moved to the
+ * deleted-user placeholder, so no RESTRICT reference can block the delete.
+ */
+export async function purgeTestCustomerOf(
+  tx: Transaction,
+  ownerPrincipalId: PrincipalId
+): Promise<void> {
+  const customer = await tx.query.principal.findFirst({
+    where: eq(principal.testOwnerPrincipalId, ownerPrincipalId),
+    columns: { id: true, userId: true },
+  })
+  if (!customer) return
+  await tx.delete(tickets).where(eq(tickets.requesterPrincipalId, customer.id))
+  await tx.delete(conversations).where(eq(conversations.visitorPrincipalId, customer.id))
+  await tx.delete(posts).where(eq(posts.principalId, customer.id))
+  await reattributeAuthoredContent(tx, customer.id)
+  if (customer.userId) {
+    await deleteAnonymousIdentity({ principalId: customer.id, userId: customer.userId }, tx)
+  } else {
+    await tx.delete(principal).where(eq(principal.id, customer.id))
+  }
 }

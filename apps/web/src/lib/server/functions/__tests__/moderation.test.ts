@@ -7,7 +7,6 @@
  * emit the corresponding audit event with before/after values intact.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { isTestRecord } from '@/lib/server/db'
 
 // ----------------------------------------------------------------------
 // createServerFn capture — mirrors the project's existing pattern.
@@ -79,7 +78,6 @@ type Post = {
   title: string
   content: string
   createdAt: Date
-  widgetMetadata?: unknown
 }
 type Board = { id: string; name: string; deletedAt?: Date | null }
 type Principal = { id: string; displayName: string | null; testOwnerPrincipalId?: string | null }
@@ -136,7 +134,6 @@ type IsNullCondition = { kind: 'isNull'; col: ColRef }
 type AndCondition = { kind: 'and'; conditions: PostCondition[] }
 type ExistsCondition = { kind: 'exists'; subquery: SubqueryDescriptor }
 type PrincipalProbe = { __principalProbe: true; condition: EqCondition }
-type NotTestRecordCondition = { kind: 'notTestRecord'; col: ColRef }
 type NotTestPrincipalCondition = { kind: 'notTestPrincipal'; value: ColRef | PrincipalProbe }
 type PostCondition =
   | EqCondition
@@ -144,7 +141,6 @@ type PostCondition =
   | IsNullCondition
   | AndCondition
   | ExistsCondition
-  | NotTestRecordCondition
   | NotTestPrincipalCondition
 
 // A subquery captured by the mocked select chain — carries the source table
@@ -176,7 +172,6 @@ function rowsFor(table: string): Array<Record<string, unknown>> {
 }
 
 function matchRow(ctx: RowContext, c: PostCondition): boolean {
-  if (c.kind === 'notTestRecord') return !isTestRecord(getVal(ctx, c.col))
   if (c.kind === 'notTestPrincipal') {
     const value = c.value
     const id =
@@ -311,7 +306,7 @@ function tableNameOf(t: unknown): string {
   return ''
 }
 
-vi.mock('@/lib/server/db', async (importOriginal) => ({
+vi.mock('@/lib/server/db', () => ({
   db: {
     execute: vi.fn(),
     select: vi.fn((spec: ProjectionSpec) => ({
@@ -432,7 +427,6 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
     title: { __table: 'posts', __col: 'title' } satisfies ColRef,
     content: { __table: 'posts', __col: 'content' } satisfies ColRef,
     createdAt: { __table: 'posts', __col: 'createdAt' } satisfies ColRef,
-    widgetMetadata: { __table: 'posts', __col: 'widgetMetadata' } satisfies ColRef,
   },
   boards: {
     __tableName: 'boards',
@@ -482,12 +476,6 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
     return { kind: 'exists', subquery: subqueryChain.__subquery }
   }),
   desc: vi.fn((col: ColRef) => col),
-  isTestRecord: (await importOriginal<typeof import('@/lib/server/db')>()).isTestRecord,
-  notTestRecord: vi.fn((col: ColRef): NotTestRecordCondition => {
-    expect(col.__table).toBe('posts')
-    expect(col.__col).toBe('widgetMetadata')
-    return { kind: 'notTestRecord', col }
-  }),
   notTestPrincipal: vi.fn((value: ColRef | PrincipalProbe): NotTestPrincipalCondition => {
     expect(value).toBeDefined()
     if (!('__principalProbe' in value)) expect(value.__col).toBe('principalId')

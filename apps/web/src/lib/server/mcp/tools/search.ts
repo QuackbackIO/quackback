@@ -307,6 +307,7 @@ async function searchPosts(args: SearchArgs, auth: McpAuthContext): Promise<Call
 
   const result = await listInboxPosts({
     search: args.query,
+    excludeTest: true,
     boardIds: args.boardId ? [args.boardId as BoardId] : undefined,
     statusSlugs: args.status ? [args.status] : undefined,
     tagIds: args.tagIds as PostTagId[] | undefined,

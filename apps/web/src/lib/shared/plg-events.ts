@@ -29,7 +29,13 @@ export interface PlgEventInput {
 }
 
 const EVENT_NAMES = new Set<string>(PLG_EVENT_NAMES)
-const OUTCOMES = new Set(['product_feedback', 'customer_support', 'help_center', 'internal'])
+const OUTCOMES = new Set([
+  'product_feedback',
+  'customer_support',
+  'help_center',
+  'status_page',
+  'internal',
+])
 const SURFACES = new Set([
   'onboarding_handoff',
   'feedback_empty',

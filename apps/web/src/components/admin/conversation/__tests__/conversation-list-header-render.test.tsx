@@ -101,12 +101,21 @@ describe('ConversationListColumn', () => {
     const client = new QueryClient()
     render(
       <QueryClientProvider client={client}>
-        <IntlProvider locale="en">
+        <IntlProvider
+          locale="fr"
+          messages={{
+            // The admin inbox owns its title; the widget's string must not leak in.
+            'inbox.empty.firstRun.title': 'Aucune conversation pour le moment',
+            'widget.messages.empty': 'Widget string',
+          }}
+          onError={() => {}}
+        >
           <ConversationListColumn {...PROPS} items={[]} />
         </IntlProvider>
       </QueryClientProvider>
     )
-    expect(screen.getByText('No conversations yet')).toBeVisible()
+    expect(screen.getByText('Aucune conversation pour le moment')).toBeVisible()
+    expect(screen.queryByText('Widget string')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Send yourself a test message' })).toBeVisible()
     expect(screen.queryByRole('link', { name: 'Connect Messenger' })).not.toBeInTheDocument()
     expect(

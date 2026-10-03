@@ -352,6 +352,8 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
   const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
   const { hasEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
   const { isAssistantConfigured } = await import('@/lib/server/domains/assistant')
+  const { canTestCustomerPostIdea } = await import('@/lib/server/test-customer-feedback')
+  const { workspaceAllowsAnonymous } = await import('@/lib/server/domains/settings/settings.types')
 
   const [
     orgBoards,
@@ -398,6 +400,8 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
 
   const setupState = getSetupState(orgSettings?.setupState ?? null)
   const firstWin = await (await import('@/lib/server/activation-wins')).detectFirstWin(setupState)
+  const { launchWindowFor, isLaunchWindowOpen } = await import('@/lib/shared/launch-window')
+  const launchWindow = launchWindowFor({ setupState, workspaceCreatedAt: orgSettings?.createdAt })
   const flags = resolveFeatureFlags(orgSettings?.featureFlags)
   const permissions = permissionsForLegacyRole(auth.principal.role)
   const hasBranding = Boolean(orgSettings?.logoKey)
@@ -456,6 +460,15 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
     hasIntegration,
     hasFirstWin: firstWin.reached,
     firstWinAt: firstWin.reachedAt,
+    // "Post an idea" as the caller's test customer is offered only where it can land.
+    canPostTestIdea: canTestCustomerPostIdea(
+      auth.principal.id,
+      new Set(auth.permissions),
+      orgBoards,
+      workspaceAllowsAnonymous(orgSettings?.portalConfig)
+    ),
+    launchWindow,
+    inLaunchWindow: isLaunchWindowOpen(launchWindow),
     useCase: setupState?.goals?.[0] ?? setupState?.useCase ?? null,
     goals: setupState?.goals,
     feedbackPrivate: setupState?.feedbackPrivate,
@@ -490,16 +503,10 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
 })
 
 /** Save or clear a launch-plan skip. Any incomplete non-milestone task can
- *  be skipped; storage is always `dismissed`. Legacy clients may still send
- *  `deferred`, which is accepted and normalized. */
+ *  be skipped; storage is always `dismissed`, under the workspace's primary
+ *  goal. Legacy clients may still send `deferred`, which is accepted and
+ *  normalized, or an `outcome`, which the stored goal supersedes. */
 const taskResolutionSchema = z.object({
-  outcome: z.enum([
-    'product_feedback',
-    'customer_support',
-    'help_center',
-    'status_page',
-    'internal',
-  ]),
   taskId: z.string().min(1),
   resolution: z.enum(['deferred', 'dismissed']).nullable(),
 })
@@ -509,7 +516,8 @@ export const setLaunchTaskResolutionFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ task_id: data.taskId, resolution: data.resolution }, 'set launch task resolution')
     await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-    const { buildLaunchTasks } = await import('@/lib/shared/launch-checklist')
+    const { buildLaunchTasks, withLaunchTaskResolution } =
+      await import('@/lib/shared/launch-checklist')
     const status = await fetchOnboardingStatus()
     const task = buildLaunchTasks(status).find((candidate) => candidate.id === data.taskId)
     if (!task) throw new Error('Unknown launch task')
@@ -523,29 +531,19 @@ export const setLaunchTaskResolutionFn = createServerFn({ method: 'POST' })
     const storedResolution = data.resolution === 'deferred' ? 'dismissed' : data.resolution
 
     const { mutateSetupStateAtomic } = await import('@/lib/server/setup-state')
-    const { state } = await mutateSetupStateAtomic((current) => {
-      if (current.useCase !== data.outcome)
-        throw new Error('Task outcome does not match the workspace goal')
-      const taskResolutions = { ...(current.taskResolutions ?? {}) }
-      const outcomeTasks = { ...(taskResolutions[data.outcome] ?? {}) }
-      if (storedResolution) {
-        outcomeTasks[data.taskId] = {
-          resolution: storedResolution,
-          resolvedAt: new Date().toISOString(),
-        }
-      } else {
-        delete outcomeTasks[data.taskId]
-      }
-      if (Object.keys(outcomeTasks).length > 0) taskResolutions[data.outcome] = outcomeTasks
-      else delete taskResolutions[data.outcome]
-      return {
-        state: {
-          ...current,
-          taskResolutions: Object.keys(taskResolutions).length > 0 ? taskResolutions : undefined,
-        },
-        value: undefined,
-      }
-    })
+    const { state } = await mutateSetupStateAtomic((current) => ({
+      state: {
+        ...current,
+        taskResolutions: withLaunchTaskResolution(
+          current,
+          data.taskId,
+          storedResolution
+            ? { resolution: storedResolution, resolvedAt: new Date().toISOString() }
+            : null
+        ),
+      },
+      value: undefined,
+    }))
 
     log.info({ task_id: data.taskId, resolution: storedResolution }, 'launch task resolution saved')
     return { taskResolutions: state.taskResolutions ?? {} }

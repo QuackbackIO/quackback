@@ -4,13 +4,13 @@ import { IntlProvider } from 'react-intl'
 import { SearchPaletteProvider } from '@/components/admin/ask/search-palette'
 import { AdminWorkspaceFrame } from '@/components/admin/admin-workspace-frame'
 import { useAdminPresence } from '@/lib/client/hooks/use-admin-presence'
-import { DEFAULT_LOCALE, loadMessages, withoutViewerMessages } from '@/lib/shared/i18n'
+import { DEFAULT_LOCALE, adminSeedMessages, loadMessages } from '@/lib/shared/i18n'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { unreadCountQuery } from '@/lib/client/hooks/use-notifications-queries'
 import { getLatestVersion, isNewerVersion } from '@/lib/server/functions/version'
-import { ProductTourProvider } from '@/components/onboarding/product-tour'
+import { AdminProductTourProvider } from '@/components/onboarding/test-actions'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
 import { ArticleModal, ChangelogModal, PostModal } from '@/components/admin/entity-modals'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -106,7 +106,7 @@ export const Route = createFileRoute('/admin')({
         currentUser: null,
         planNotice: null,
         locale: DEFAULT_LOCALE,
-        messages: withoutViewerMessages(await loadMessages(DEFAULT_LOCALE)),
+        messages: adminSeedMessages(await loadMessages(DEFAULT_LOCALE)),
       }
     }
 
@@ -127,7 +127,7 @@ export const Route = createFileRoute('/admin')({
       }),
       getLatestVersion(),
       getPlanNotice(),
-      loadMessages(locale).then(withoutViewerMessages),
+      loadMessages(locale).then(adminSeedMessages),
       // The rail's unread badge rides the document rather than a request of
       // its own after hydration. Unreadable now, it is left to the bell.
       context.queryClient.ensureQueryData(unreadCountQuery()).catch(() => null),
@@ -256,7 +256,7 @@ function AdminLayout() {
   return (
     <IntlProvider locale={locale} defaultLocale={DEFAULT_LOCALE} messages={messages}>
       <SearchPaletteProvider>
-        <ProductTourProvider>
+        <AdminProductTourProvider>
           <TooltipProvider delay={0}>
             <AdminContent
               initialUserData={initialUserData}
@@ -266,7 +266,7 @@ function AdminLayout() {
               currentUser={currentUser}
             />
           </TooltipProvider>
-        </ProductTourProvider>
+        </AdminProductTourProvider>
       </SearchPaletteProvider>
     </IntlProvider>
   )

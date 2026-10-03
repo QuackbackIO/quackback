@@ -4,9 +4,11 @@ import {
   and,
   asc,
   boards,
+  conversationMessages,
   conversations,
   eq,
   helpCenterArticles,
+  inArray,
   isNotNull,
   isNull,
   lte,
@@ -19,7 +21,7 @@ import {
   type OnboardingOutcome,
   type SetupState,
 } from '@/lib/server/db'
-import { notTestRecord, notTestPrincipal } from '@/lib/server/test-data'
+import { notTestPrincipal } from '@/lib/server/test-data'
 
 export interface FirstWinFacts {
   customerOriginatedConversation?: boolean
@@ -56,7 +58,10 @@ export interface FirstWinResult {
   reachedAt: string | null
 }
 
-const notGeneratedPost = notTestRecord(posts.widgetMetadata)
+const notGeneratedPost = and(
+  sql`coalesce(${posts.widgetMetadata}->>'onboardingGenerated', 'false') <> 'true'`,
+  notTestPrincipal(posts.principalId)
+)!
 const externalPrincipal = and(
   or(eq(principal.role, 'user'), eq(principal.type, 'anonymous')),
   notTestPrincipal(principal.id)
@@ -78,9 +83,16 @@ export async function detectFirstWin(state: SetupState | null): Promise<FirstWin
           // silently UN-REACH a genuine first win the moment that customer
           // answered from their inbox. `source` is immutable provenance, which
           // is the question this actually asks.
-          eq(conversations.source, 'widget'),
+          // A conversation the customer opened, by Messenger or email: its
+          // first message is theirs. One a teammate starts does not count.
+          inArray(conversations.source, ['widget', 'email']),
+          sql`(select ${conversationMessages.senderType} from ${conversationMessages}
+            where ${conversationMessages.conversationId} = ${conversations.id}
+            order by ${conversationMessages.createdAt} asc, ${conversationMessages.id} asc
+            limit 1) = 'visitor'`,
           isNotNull(conversations.visitorPrincipalId),
-          notTestRecord(conversations.customAttributes),
+          sql`coalesce(${conversations.customAttributes}->>'onboardingGenerated', 'false') <> 'true'`,
+          sql`coalesce(${conversations.customAttributes}->>'test', 'false') <> 'true'`,
           notTestPrincipal(conversations.visitorPrincipalId)
         )
       )

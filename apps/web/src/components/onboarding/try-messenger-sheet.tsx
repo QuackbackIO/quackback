@@ -74,9 +74,12 @@ function TryMessengerBody({ start }: { start: TryMessengerStart }) {
   const [frameKey, setFrameKey] = useState(0)
   const [status, setStatus] = useState<TestCustomerFrameStatus>('connecting')
   const [postId, setPostId] = useState<string | null>(null)
+  // The thread this frame's first message opened; until then, the latest one.
+  const [startedId, setStartedId] = useState<ConversationId | null>(null)
 
   const overview = useQuery({ queryKey: OVERVIEW_KEY, queryFn: () => getTestCustomerOverviewFn() })
-  const conversationId = (overview.data?.conversationId ?? null) as ConversationId | null
+  const conversationId =
+    startedId ?? ((overview.data?.conversationId ?? null) as ConversationId | null)
 
   const { data: thread } = useQuery<AgentThreadCache>({
     queryKey: conversationKeys.agentThread(conversationId ?? ('' as ConversationId)),
@@ -97,7 +100,7 @@ function TryMessengerBody({ start }: { start: TryMessengerStart }) {
             : undefined
       if (!id || evt.kind === 'typing') return
       if (id !== conversationId) {
-        void queryClient.invalidateQueries({ queryKey: OVERVIEW_KEY })
+        if (!startedId) void queryClient.invalidateQueries({ queryKey: OVERVIEW_KEY })
         return
       }
       if (evt.kind === 'assistant_activity' || evt.kind === 'assistant_delta') return
@@ -137,10 +140,10 @@ function TryMessengerBody({ start }: { start: TryMessengerStart }) {
             open={frameOpen}
             onStatusChange={setStatus}
             onEvent={(name, payload) => {
-              if (name === 'post:created') {
-                const id = (payload as { id?: unknown } | null)?.id
-                if (typeof id === 'string') setPostId(id)
-              }
+              const id = (payload as { id?: unknown } | null)?.id
+              if (typeof id !== 'string') return
+              if (name === 'post:created') setPostId(id)
+              if (name === 'conversation:started') setStartedId(id as ConversationId)
             }}
             title={intl.formatMessage({
               id: 'onboarding.test.frameTitle',
@@ -257,8 +260,8 @@ function TryMessengerBody({ start }: { start: TryMessengerStart }) {
 
         <PhoneCode locale={locale} />
 
-        {overview.data?.platformInboxAddress && (
-          <EmailAddress address={overview.data.platformInboxAddress} />
+        {overview.data?.testEmailAddress && (
+          <EmailAddress address={overview.data.testEmailAddress} />
         )}
       </aside>
     </div>
@@ -351,7 +354,7 @@ function EmailAddress({ address }: { address: string }) {
   return (
     <div className="space-y-2">
       <p className="text-sm font-medium">
-        <FormattedMessage id="onboarding.test.email" defaultMessage="Or email from your inbox" />
+        <FormattedMessage id="onboarding.test.email" defaultMessage="Or email this address" />
       </p>
       <div className="flex items-center gap-2">
         <code className="min-w-0 flex-1 truncate rounded-md border bg-muted px-2 py-1 text-xs">

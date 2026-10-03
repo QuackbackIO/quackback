@@ -44,7 +44,7 @@ const boardFields: { value: BoardCustomField[] } = { value: [REQUIRED_TEXT_FIELD
 
 vi.mock('@/lib/server/db', async (importOriginal) => {
   const { sql: realSql } = await vi.importActual<typeof import('drizzle-orm')>('drizzle-orm')
-  const { isTestRecord, notTestRecord } = await importOriginal<typeof import('@/lib/server/db')>()
+  const { notTestPrincipal } = await importOriginal<typeof import('@/lib/server/db')>()
 
   function chain(label: string) {
     const c: Record<string, unknown> = {}
@@ -129,8 +129,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
     eq: vi.fn((a: unknown, b: unknown) => [a, b]),
     inArray: vi.fn((a: unknown, b: unknown) => [a, b]),
     sql: realSql,
-    isTestRecord,
-    notTestRecord,
+    notTestPrincipal,
   }
 })
 

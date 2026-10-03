@@ -9,8 +9,7 @@
  */
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import type { ReactElement } from 'react'
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
-import { IntlProvider } from 'react-intl'
+import { render, screen, cleanup } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ConversationId } from '@quackback/ids'
 
@@ -52,10 +51,7 @@ const DEFINITIONS = [
 
 const hoisted = vi.hoisted(() => ({
   setConversationAttributeValueFn: vi.fn(),
-  toastError: vi.fn(),
 }))
-
-vi.mock('sonner', () => ({ toast: { error: hoisted.toastError } }))
 
 vi.mock('@/lib/server/functions/conversation-attributes', () => ({
   setConversationAttributeValueFn: hoisted.setConversationAttributeValueFn,
@@ -76,35 +72,12 @@ afterEach(cleanup)
 
 function renderWithClient(ui: ReactElement) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(
-    <IntlProvider
-      locale="fr"
-      messages={{ 'conversationAttributes.reservedKey': 'Attribut réservé.' }}
-    >
-      <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
-    </IntlProvider>
-  )
+  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
 }
 
 const TARGET = { conversationId: 'conversation_1' as ConversationId }
 
 describe('ConversationAttributesEditor', () => {
-  it('localizes a reserved-key refusal without showing its diagnostic message', async () => {
-    hoisted.toastError.mockClear()
-    hoisted.setConversationAttributeValueFn.mockImplementation(async ({ data }) => {
-      expect(data).toEqual({ ...TARGET, key: 'priority', value: 'Acme' })
-      throw Object.assign(new Error('Raw diagnostic'), { code: 'ATTRIBUTE_RESERVED' })
-    })
-    renderWithClient(
-      <ConversationAttributesEditor target={TARGET} customAttributes={{}} onChanged={() => {}} />
-    )
-    const input = await screen.findByRole('textbox')
-    fireEvent.change(input, { target: { value: 'Acme' } })
-    fireEvent.blur(input)
-    await waitFor(() => expect(hoisted.toastError).toHaveBeenCalledWith('Attribut réservé.'))
-    expect(hoisted.toastError).not.toHaveBeenCalledWith('Raw diagnostic')
-  })
-
   it('shows a visible AI badge next to a value written by the AI classifier', async () => {
     renderWithClient(
       <ConversationAttributesEditor

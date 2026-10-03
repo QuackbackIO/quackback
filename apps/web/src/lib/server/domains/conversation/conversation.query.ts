@@ -63,6 +63,7 @@ import { assistantPrincipalIdOnce } from '@/lib/server/messages/assistant-princi
 import { hasLinkedCustomerTicketSql } from '@/lib/server/messages/pair-link'
 import { conversationFilter } from '@/lib/server/policy/conversations'
 import { isTestThreadSql } from './conversation.test-data'
+import { testOwnerOf } from '@/lib/server/test-data'
 import type { Actor } from '@/lib/server/policy/types'
 import { priorityRankSql } from '@/lib/server/utils/priority-rank'
 import {
@@ -500,7 +501,9 @@ export function toConversationDTO(
   translation: ConversationTranslationStateDTO | null = null,
   // Which rule/classifier filed a spam-ended thread (agent-only); callers
   // pass null on visitor paths.
-  spamReason: ConversationSpamFiledBy | null = null
+  spamReason: ConversationSpamFiledBy | null = null,
+  // The visitor is a teammate's test customer (agent-only).
+  isTest = false
 ): ConversationDTO {
   return {
     id: conversation.id,
@@ -531,7 +534,7 @@ export function toConversationDTO(
     sla,
     customAttributes,
     translation,
-    isTest: customAttributes.test === true,
+    isTest,
   }
 }
 
@@ -618,6 +621,9 @@ export async function conversationToDTO(
       ? loadConversationTagsForConversations([conversation.id])
       : Promise.resolve(new Map<ConversationId, ConversationTagDTO[]>()),
   ])
+  // The author read above already told the process whether the visitor is a
+  // test customer, so this answers without another query.
+  const testOwner = side === 'agent' ? await testOwnerOf(conversation.visitorPrincipalId) : null
   return toConversationDTO(
     conversation,
     authors.get(conversation.visitorPrincipalId) ?? fallbackAuthor(conversation.visitorPrincipalId),
@@ -635,7 +641,8 @@ export async function conversationToDTO(
     side === 'agent' ? ((conversation.customAttributes ?? {}) as Record<string, JsonValue>) : {},
     side === 'agent' ? translationStateFrom(conversation) : null,
     // App-constrained taxonomy (CONVERSATION_SPAM_FILED_BY), like endReason.
-    side === 'agent' ? ((conversation.spamReason as ConversationSpamFiledBy | null) ?? null) : null
+    side === 'agent' ? ((conversation.spamReason as ConversationSpamFiledBy | null) ?? null) : null,
+    testOwner !== null
   )
 }
 
@@ -1647,13 +1654,13 @@ export async function listConversationsForAgent(
       translationEnabled: conversations.translationEnabled,
       detectedCustomerLanguage: conversations.detectedCustomerLanguage,
       translationDismissedAt: conversations.translationDismissedAt,
-      isTest: isTestThreadSql(conversations.customAttributes).mapWith(Boolean),
+      isTest: isTestThreadSql(conversations.visitorPrincipalId).mapWith(Boolean),
     })
     .from(conversations)
     .where(
       and(
         conversationFilter(actor),
-        filter.testOnly ? isTestThreadSql(conversations.customAttributes) : undefined,
+        filter.testOnly ? isTestThreadSql(conversations.visitorPrincipalId) : undefined,
         // Spam lifecycle: a spam-ended thread is out of every triage view.
         // The Spam view (spamOnly) is the single list that surfaces them.
         filter.spamOnly

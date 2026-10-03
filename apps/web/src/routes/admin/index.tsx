@@ -5,8 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { OverviewDashboard } from '@/components/admin/admin-overview'
 import { HomeActions } from '@/components/admin/home-actions'
 import { copilotAvailabilityQuery, useCopilotOnHome } from '@/components/admin/ask/copilot-on-home'
-import { HomeGettingStarted } from '@/components/onboarding/home-launch-plan'
-import { HomeTryItYourself } from '@/components/onboarding/home-try-it'
+import { HomeLaunchArea } from '@/components/onboarding/home-try-it'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { adminOverviewQueries } from '@/lib/client/queries/admin-overview'
 import { useHasPermission } from '@/lib/client/use-permissions'
@@ -86,14 +85,12 @@ function AdminOverviewPage() {
       </a>
     </header>
   )
-  const plan = (compact: boolean) =>
-    admin ? (
-      <Suspense fallback={null}>
-        <HomeGettingStarted portalUrl={baseUrl} compact={compact}>
-          <HomeTryItYourself flags={flags} />
-        </HomeGettingStarted>
-      </Suspense>
-    ) : null
+  // The launch plan, then the tour and try-it cards, in the launch window only.
+  const plan = admin ? (
+    <Suspense fallback={null}>
+      <HomeLaunchArea portalUrl={baseUrl} flags={flags} />
+    </Suspense>
+  ) : null
 
   // A review link opens its thread even when new chats are unavailable.
   if (canUseCopilot && (copilotOnHome || copilotThread))
@@ -103,7 +100,7 @@ function AdminOverviewPage() {
           threadKey={copilotThread}
           canAsk={copilotOnHome}
           header={header}
-          below={plan(true)}
+          below={plan}
         />
       </Suspense>
     )
@@ -115,7 +112,7 @@ function AdminOverviewPage() {
           <OverviewDashboard
             actions={<HomeActions flags={flags} />}
             header={header}
-            banner={plan(false)}
+            banner={plan}
           />
         </div>
       </div>

@@ -153,7 +153,6 @@ export async function getPublicPostDetail(
         boardAccess: boards.access,
         postModerationState: posts.moderationState,
         postPrincipalId: posts.principalId,
-        widgetMetadata: posts.widgetMetadata,
         tagsJson: sql<string>`COALESCE(
           (SELECT json_agg(json_build_object('id', t.id, 'name', t.name, 'color', t.color))
            FROM ${postTagAssignments} pt
@@ -218,7 +217,6 @@ export async function getPublicPostDetail(
     {
       moderationState: postResult.postModerationState,
       principalId: postResult.postPrincipalId,
-      widgetMetadata: postResult.widgetMetadata,
     },
     { access: postResult.boardAccess }
   )

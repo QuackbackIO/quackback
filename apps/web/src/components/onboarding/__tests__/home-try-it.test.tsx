@@ -19,9 +19,13 @@ vi.mock('@/lib/client/hooks/use-permission', () => ({
 }))
 afterEach(cleanup)
 
-function renderCard(hasBoards: boolean, flags: Pick<FeatureFlags, 'supportInbox' | 'feedback'>) {
-  const status: LaunchStatus = {
-    hasBoards,
+function renderCard(
+  canPostTestIdea: boolean,
+  flags: Pick<FeatureFlags, 'supportInbox' | 'feedback'>
+) {
+  const status: LaunchStatus & { canPostTestIdea: boolean } = {
+    hasBoards: true,
+    canPostTestIdea,
     memberCount: 1,
     hasBranding: false,
     goals: ['product_feedback', 'customer_support'],
@@ -47,13 +51,13 @@ function renderCard(hasBoards: boolean, flags: Pick<FeatureFlags, 'supportInbox'
   )
 }
 
-it('offers a message but waits for a real board before offering a test idea', () => {
+it('offers a message but no test idea when the test customer could not post anywhere', () => {
   renderCard(false, { feedback: true, supportInbox: true })
   expect(screen.getByRole('button', { name: 'Send a message' })).toBeVisible()
   expect(screen.queryByRole('button', { name: 'Post an idea' })).toBeNull()
 })
 
-it('offers both test paths once a real board exists', () => {
+it('offers both test paths once a test idea can land on a board', () => {
   renderCard(true, { feedback: true, supportInbox: true })
   expect(screen.getByRole('button', { name: 'Post an idea' })).toBeVisible()
   expect(screen.getByRole('button', { name: 'Send a message' })).toBeVisible()

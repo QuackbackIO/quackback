@@ -1,19 +1,41 @@
 import { FormattedMessage } from 'react-intl'
 import { UserIcon } from '@heroicons/react/24/outline'
-import { useSuspenseQuery } from '@tanstack/react-query'
-import { adminQueries } from '@/lib/client/queries/admin'
-import { isLaunchPlanActive, launchChecklistSummary } from '@/lib/shared/launch-checklist'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
+import { HomeGettingStarted } from './home-launch-plan'
+import { useTestPaths, type TestPaths } from './test-actions'
 import { TryMessengerButton } from './try-messenger-button'
 
-/** Home's "Try it yourself" card: both sides of a test idea or message, while the launch plan runs. */
+/**
+ * Home's first-run area with the "Try it yourself" card in its try-it slot.
+ * The slot shows only in the launch window, and the card only when one of its
+ * test paths will work.
+ */
+export function HomeLaunchArea({
+  portalUrl,
+  flags,
+}: {
+  portalUrl?: string
+  flags: FeatureFlags | undefined
+}) {
+  const paths = useTestPaths(flags)
+  return (
+    <HomeGettingStarted
+      portalUrl={portalUrl}
+      tryIt={paths.message || paths.idea ? <TryItCard paths={paths} /> : undefined}
+    />
+  )
+}
+
+/** Home's "Try it yourself" card: both sides of a test idea or message. */
 export function HomeTryItYourself({ flags }: { flags: FeatureFlags | undefined }) {
-  const { data } = useSuspenseQuery(adminQueries.onboardingStatus())
-  const canTryMessage = !!flags?.supportInbox
-  const canTryIdea = (flags?.feedback ?? true) && data.hasBoards
-  if (!isLaunchPlanActive(launchChecklistSummary(data)) || !(canTryMessage || canTryIdea)) {
-    return null
-  }
+  const paths = useTestPaths(flags)
+  if (!paths.message && !paths.idea) return null
+  return <TryItCard paths={paths} />
+}
+
+function TryItCard({ paths }: { paths: TestPaths }) {
+  const canTryIdea = paths.idea
+  const canTryMessage = paths.message
   return (
     <section className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-4">
       <span

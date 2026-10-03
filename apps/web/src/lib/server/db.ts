@@ -509,9 +509,8 @@ export {
   // Types/constants
   REACTION_EMOJIS,
   USE_CASE_TYPES,
-  // Test-data markers kept out of every metric
-  isTestRecord,
-  notTestRecord,
+  // Test-customer identity kept out of every metric
+  isTestPrincipalSql,
   notTestPrincipal,
   notTestConversation,
   notTestTicket,

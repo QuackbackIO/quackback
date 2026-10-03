@@ -34,7 +34,7 @@ const to = new Date('2035-04-02T00:00:00Z')
 
 beforeEach(async () => {
   expect(fixture.available).toBe(true)
-  expect(process.env.DATABASE_URL).toMatch(/\/quackback_test(?:\?|$)/)
+  expect(process.env.DATABASE_URL).toMatch(/\/quackback_test(?:_\w+)?(?:\?|$)/)
   await fixture.begin()
   companyId = createId('company')
   owner = createId('principal')
@@ -67,40 +67,45 @@ beforeEach(async () => {
 afterEach(fixture.rollback)
 afterAll(fixture.close)
 
+/**
+ * Only the test customer's threads carry `test_option`. The teammate's own
+ * thread and the legacy client markers are real data and carry `real_option`,
+ * so excluding them, or keeping a test thread, both change a count.
+ */
 async function seedConversations() {
-  const testValue = { [key]: { v: 'test_option' } }
+  const realValue = { [key]: { v: 'real_option' } }
   return testDb
     .insert(conversations)
     .values([
       {
         visitorPrincipalId: ordinary,
-        customAttributes: { [key]: { v: 'real_option' } },
+        customAttributes: realValue,
         channel: 'messenger',
         createdAt: at,
       },
       { visitorPrincipalId: ordinary, customAttributes: {}, channel: 'messenger', createdAt: at },
       {
         visitorPrincipalId: customer,
-        customAttributes: testValue,
+        customAttributes: { [key]: { v: 'test_option' } },
         channel: 'messenger',
         createdAt: at,
       },
       { visitorPrincipalId: customer, customAttributes: {}, channel: 'messenger', createdAt: at },
       {
         visitorPrincipalId: owner,
-        customAttributes: { ...testValue, test: true },
+        customAttributes: { ...realValue, test: true },
         channel: 'messenger',
         createdAt: at,
       },
       {
         visitorPrincipalId: ordinary,
-        customAttributes: { ...testValue, test: 'true' },
+        customAttributes: { ...realValue, test: 'true' },
         channel: 'messenger',
         createdAt: at,
       },
       {
         visitorPrincipalId: ordinary,
-        customAttributes: { ...testValue, onboardingGenerated: true },
+        customAttributes: { ...realValue, onboardingGenerated: true },
         channel: 'messenger',
         createdAt: at,
       },
@@ -108,26 +113,26 @@ async function seedConversations() {
     .returning({ id: conversations.id })
 }
 
-it('keeps test identities and protected markers out of attribute detection counts, including unset', async () => {
+it('keeps test identities out of attribute detection counts, including unset, and counts legacy markers', async () => {
   const baseline = await attributeValueCounts({ key })
   const beforeUnset = baseline.find((row) => row.optionId === null)!.count
   await seedConversations()
   const counts = await attributeValueCounts({ key })
-  expect(counts.find((row) => row.optionId === 'real_option')!.count).toBe(1)
+  expect(counts.find((row) => row.optionId === 'real_option')!.count).toBe(4)
   expect(counts.find((row) => row.optionId === 'test_option')!.count).toBe(0)
   expect(counts.find((row) => row.optionId === null)!.count).toBe(beforeUnset + 1)
 })
 
-it('keeps test identities and protected markers out of the date-window attribute breakdown', async () => {
+it('keeps test identities out of the date-window attribute breakdown and counts legacy markers', async () => {
   const baseline = await attributeValueBreakdown(key, from, to)
   await seedConversations()
   expect(await attributeValueBreakdown(key, from, to)).toEqual({
-    values: [{ value: 'real_option', count: 1 }],
+    values: [{ value: 'real_option', count: 4 }],
     unset: baseline.unset + 1,
   })
 })
 
-it('counts real company conversations and tickets while excluding test identities, markers and linked test threads', async () => {
+it('counts real company conversations and tickets while excluding test identities and linked test threads', async () => {
   const rows = await seedConversations()
   const statusId = createId('ticket_status')
   await testDb.insert(ticketStatuses).values({ id: statusId, name: 'Acme open', slug: statusId })
@@ -137,7 +142,7 @@ it('counts real company conversations and tickets while excluding test identitie
       { title: 'Acme real request', statusId, requesterPrincipalId: ordinary, companyId },
       { title: 'Acme test customer', statusId, requesterPrincipalId: customer, companyId },
       {
-        title: 'Acme test marker',
+        title: 'Acme legacy marker',
         statusId,
         requesterPrincipalId: ordinary,
         companyId,
@@ -155,10 +160,10 @@ it('counts real company conversations and tickets while excluding test identitie
     .returning({ id: tickets.id })
   await testDb.insert(ticketConversations).values({
     ticketId: paired.id,
-    conversationId: rows[4].id,
+    conversationId: rows[2].id,
     ticketType: 'customer',
   })
-  expect(await getActivityCounts(companyId)).toEqual({ conversations: 2, tickets: 1 })
+  expect(await getActivityCounts(companyId)).toEqual({ conversations: 5, tickets: 2 })
 })
 
 it('keeps the test customer out of company directory counts and the company roster', async () => {

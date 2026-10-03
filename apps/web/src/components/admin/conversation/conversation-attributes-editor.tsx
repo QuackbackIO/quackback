@@ -10,8 +10,6 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDownIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
-import { useIntl } from 'react-intl'
-import { isReservedTestAttributeError } from '@/lib/shared/test-attributes'
 import type { ConversationId, TicketId } from '@quackback/ids'
 import { setConversationAttributeValueFn } from '@/lib/server/functions/conversation-attributes'
 import {
@@ -188,7 +186,6 @@ export function ConversationAttributesEditor({
   /** Skip fetching while the panel is hidden (mirrors the sibling queries). */
   enabled?: boolean
 }) {
-  const intl = useIntl()
   const queryClient = useQueryClient()
   const { data: definitions } = useQuery({
     ...conversationAttributeQueries.live(),
@@ -207,17 +204,7 @@ export function ConversationAttributesEditor({
       })
       onChanged()
     },
-    onError: (e) =>
-      toast.error(
-        isReservedTestAttributeError(e)
-          ? intl.formatMessage({
-              id: 'conversationAttributes.reservedKey',
-              defaultMessage: 'Quackback manages this attribute.',
-            })
-          : e instanceof Error
-            ? e.message
-            : 'Failed to update attribute'
-      ),
+    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed to update attribute'),
   })
 
   if (!definitions || definitions.length === 0) return null

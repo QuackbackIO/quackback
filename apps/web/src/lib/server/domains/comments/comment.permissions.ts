@@ -22,7 +22,7 @@ import { Role } from '@/lib/shared/roles'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { resolveActorPermissions } from '@/lib/server/policy/permissions'
 import { adjustCanonicalCommentCount } from '@/lib/server/domains/posts/post.merge-ids'
-import { notTestPrincipal, notTestRecord } from '@/lib/server/test-data'
+import { notTestPrincipal } from '@/lib/server/test-data'
 
 /**
  * Minimal actor shape the comment policy consumes. `permissions` is the
@@ -277,7 +277,6 @@ export async function userEditComment(
           and(
             eq(posts.id, existingComment.postId),
             and(
-              notTestRecord(posts.widgetMetadata),
               notTestPrincipal(posts.principalId),
               notTestPrincipal(
                 sql`(SELECT ${principal.id} FROM ${principal} WHERE ${eq(principal.id, result.principalId)})`
@@ -393,7 +392,6 @@ export async function softDeleteComment(
           and(
             eq(posts.id, comment.postId),
             and(
-              notTestRecord(posts.widgetMetadata),
               notTestPrincipal(posts.principalId),
               notTestPrincipal(
                 sql`(SELECT ${principal.id} FROM ${principal} WHERE ${eq(principal.id, updatedComment.principalId)})`

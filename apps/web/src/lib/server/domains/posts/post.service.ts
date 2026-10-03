@@ -60,7 +60,7 @@ import type { CustomFieldValues } from '@/lib/shared/db-types'
 import { buildPostUrl } from '@/lib/server/integrations/message-utils'
 import { getBaseUrl } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
-import { deriveTestAttributes, isTestRecord, notTestRecord } from '@/lib/server/test-data'
+import { isTestCustomer, notTestPrincipal } from '@/lib/server/test-data'
 import { resolveTestFeedbackActor } from '@/lib/server/test-customer-feedback'
 
 const log = logger.child({ component: 'posts' })
@@ -89,7 +89,7 @@ export async function createPost(
     displayName?: string
     actor?: Actor
   },
-  options?: { skipDispatch?: boolean; headers?: Headers; visitorIngress?: boolean }
+  options?: { skipDispatch?: boolean; headers?: Headers }
 ): Promise<CreatePostResult> {
   log.info({ board_id: input.boardId }, 'create post')
 
@@ -110,16 +110,10 @@ export async function createPost(
 
   // Tier-limit gate (no-op in OSS — getTierLimits short-circuits to OSS_TIER_LIMITS
   // which has maxPosts: null, so enforceCountLimit returns immediately).
-  const attributes = await deriveTestAttributes(
-    author.principalId,
-    input.widgetMetadata,
-    options?.visitorIngress === true
-  )
-  const widgetMetadata = Object.fromEntries(
-    Object.entries(attributes).map(([key, value]) => [key, String(value)])
-  )
+  // A test customer's idea is test data: it never counts toward a plan limit.
+  const testIdea = await isTestCustomer(author.principalId)
   const limits = await getTierLimits()
-  if (!isTestRecord(attributes))
+  if (!testIdea)
     await enforceCountLimit({
       limit: limits.maxPosts,
       name: 'maxPosts',
@@ -128,7 +122,7 @@ export async function createPost(
         const [row] = await db
           .select({ count: sql<number>`count(*)::int` })
           .from(posts)
-          .where(and(isNull(posts.deletedAt), notTestRecord(posts.widgetMetadata)))
+          .where(and(isNull(posts.deletedAt), notTestPrincipal(posts.principalId)))
         return row?.count ?? 0
       },
     })
@@ -263,7 +257,7 @@ export async function createPost(
         contentJson,
         statusId,
         principalId: author.principalId,
-        widgetMetadata,
+        widgetMetadata: input.widgetMetadata ?? null,
         customFieldValues,
         trackedByPrincipalId: input.trackedByPrincipalId ?? null,
         voteCount: 1,
@@ -312,9 +306,11 @@ export async function createPost(
   // AI auto-tagging: evaluate the post against every tag carrying an AI
   // prompt. Fire-and-forget like the embedding regen in updatePost — the
   // service degrades to a no-op on any AI failure and never blocks creation.
-  import('./post.autotag')
-    .then(({ autoTagPost }) => autoTagPost(post.id, post.title, post.content ?? ''))
-    .catch((err) => log.error({ err, post_id: post.id }, 'ai auto-tag failed'))
+  // A test idea spends no AI tokens.
+  if (!testIdea)
+    import('./post.autotag')
+      .then(({ autoTagPost }) => autoTagPost(post.id, post.title, post.content ?? ''))
+      .catch((err) => log.error({ err, post_id: post.id }, 'ai auto-tag failed'))
 
   if (!options?.skipDispatch) {
     // Auto-subscribe the author to their own post. Runs even when held for

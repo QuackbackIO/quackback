@@ -19,11 +19,6 @@ import type { ConversationId, TicketId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import type { JsonValue } from '@/lib/shared/json'
 import {
-  isProtectedTestAttributeKey,
-  RESERVED_TEST_ATTRIBUTE_CODE,
-  RESERVED_TEST_ATTRIBUTE_MESSAGE,
-} from '@/lib/shared/test-attributes'
-import {
   attributeHasValue,
   readAttributeValue,
   type ConversationAttributeEnvelope,
@@ -132,9 +127,6 @@ export async function setConversationAttribute(
   value: unknown,
   src: ConversationAttributeSource
 ): Promise<Record<string, JsonValue>> {
-  if (isProtectedTestAttributeKey(key)) {
-    throw new ValidationError(RESERVED_TEST_ATTRIBUTE_CODE, RESERVED_TEST_ATTRIBUTE_MESSAGE)
-  }
   const def = await db.query.conversationAttributeDefinitions.findFirst({
     where: eq(conversationAttributeDefinitions.key, key),
   })

@@ -304,6 +304,15 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       "another workspace's messages on a bus with no authorization layer of its own.",
   },
   {
+    file: 'apps/web/src/lib/server/test-data.ts',
+    name: 'testOwners',
+    category: 'workspace-keyed',
+    reason:
+      "Which principals are a teammate's test customer, by principal id. The answer is fixed when the " +
+      'principal is created, but it is read from one workspace database: shared across workspaces a ' +
+      "copied id could answer from the wrong workspace and leak or hide that workspace's test data.",
+  },
+  {
     file: 'apps/web/src/lib/server/local-cache.ts',
     name: 'localCopies',
     category: 'workspace-keyed',

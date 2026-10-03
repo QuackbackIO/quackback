@@ -140,7 +140,6 @@ export async function getNotificationsForMember(
       postTitle: posts.title,
       postModerationState: posts.moderationState,
       postPrincipalId: posts.principalId,
-      postWidgetMetadata: posts.widgetMetadata,
       boardSlug: boards.slug,
       boardAccess: boards.access,
     })
@@ -201,7 +200,6 @@ export async function getNotificationsForMember(
           {
             moderationState: row.postModerationState ?? 'published',
             principalId: row.postPrincipalId,
-            widgetMetadata: row.postWidgetMetadata,
           },
           { access: row.boardAccess }
         )

@@ -8,6 +8,9 @@ vi.mock('@/lib/server/domains/embeddings/embedding.service', () => ({
 // Terminal `.limit()` resolves with whatever rows the test seeded.
 const mockLimit = vi.fn()
 
+vi.mock('@/lib/server/test-data', () => ({
+  notTestPrincipal: vi.fn((column: unknown) => ({ op: 'notTestPrincipal', column })),
+}))
 vi.mock('@/lib/server/db', () => ({
   db: {
     select: vi.fn(() => ({
@@ -42,6 +45,7 @@ vi.mock('@/lib/server/db', () => ({
     deletedAt: 'deleted_at',
     canonicalPostId: 'canonical_post_id',
     moderationState: 'moderation_state',
+    principalId: 'principal_id',
     searchVector: 'search_vector',
     embedding: 'embedding',
   },
@@ -58,6 +62,7 @@ vi.mock('@/lib/server/db', () => ({
 }))
 
 import { eq, isNull, sql } from '@/lib/server/db'
+import { notTestPrincipal } from '@/lib/server/test-data'
 import {
   retrievePosts,
   postsVisibilityConditions,
@@ -91,12 +96,14 @@ describe('postsVisibilityConditions', () => {
     expect(vi.mocked(isNull)).toHaveBeenCalledWith('canonical_post_id')
     expect(vi.mocked(eq)).toHaveBeenCalledWith('moderation_state', 'published')
     expect(vi.mocked(isNull)).toHaveBeenCalledWith('board_deleted_at')
-    expect(conditions).toHaveLength(4)
+    // ...and a test customer's ideas, which no ceiling may cite.
+    expect(vi.mocked(notTestPrincipal)).toHaveBeenCalledWith('principal_id')
+    expect(conditions).toHaveLength(5)
   })
 
   it('adds the public-board predicate only for the public ceiling', () => {
     const publicConditions = postsVisibilityConditions('public')
-    expect(publicConditions).toHaveLength(5)
+    expect(publicConditions).toHaveLength(6)
     const boardCheck = vi
       .mocked(sql)
       .mock.calls.find(

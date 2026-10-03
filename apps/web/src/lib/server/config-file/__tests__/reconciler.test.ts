@@ -111,7 +111,7 @@ describe('reconcileFileIntoDb', () => {
     })
     expect(next.steps.startingPoint).toBeNull()
     expect(next.completedAt).toBeUndefined()
-    expect(next.useCase).toBe('internal')
+    expect(next).toMatchObject({ useCase: 'product_feedback', feedbackPrivate: true })
   })
 
   it('hands tier limits to the write seam, not to the column update', async () => {
@@ -219,4 +219,33 @@ describe('reconcileFileIntoDb', () => {
       expect(deps.createSettings).not.toHaveBeenCalled()
     }
   )
+})
+
+describe('private feedback follows the config file', () => {
+  const privateState = incompleteState({
+    useCase: 'product_feedback',
+    goals: ['product_feedback'],
+    feedbackPrivate: true,
+  })
+
+  it('clears private feedback when the file moves the goal off internal', () => {
+    const next = mergeSetupState(JSON.stringify(privateState), { useCase: 'product_feedback' })
+    expect(next.feedbackPrivate).toBe(false)
+    expect(next.goals).toEqual(['product_feedback'])
+  })
+
+  it('sets it, as a feedback goal, when the file says internal', () => {
+    const next = mergeSetupState(JSON.stringify(incompleteState()), { useCase: 'internal' })
+    expect(next).toMatchObject({
+      goals: ['product_feedback'],
+      useCase: 'product_feedback',
+      feedbackPrivate: true,
+    })
+  })
+
+  it('keeps the stored choice when the file does not set a goal', () => {
+    expect(mergeSetupState(JSON.stringify(privateState), { name: 'Acme' }).feedbackPrivate).toBe(
+      true
+    )
+  })
 })

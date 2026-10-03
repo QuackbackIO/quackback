@@ -24,6 +24,7 @@ import {
 import { postViewFilter } from '@/lib/server/policy/posts'
 import type { Actor } from '@/lib/server/policy/types'
 import { toUuid, type PostId, type PrincipalId } from '@quackback/ids'
+import { notTestPrincipal } from '@/lib/server/test-data'
 import type {
   PostListItem,
   InboxPostListParams,
@@ -80,6 +81,7 @@ export function inboxFilterConditions(params: InboxPostListParams, omit?: InboxF
     responded,
     updatedBefore,
     showDeleted,
+    excludeTest,
   } = params
 
   const conditions = []
@@ -97,6 +99,7 @@ export function inboxFilterConditions(params: InboxPostListParams, omit?: InboxF
 
   // Exclude merged/duplicate posts from inbox listing
   conditions.push(isNull(posts.canonicalPostId))
+  if (excludeTest) conditions.push(notTestPrincipal(posts.principalId))
 
   if (omit !== 'board' && boardIds?.length) {
     conditions.push(inArray(posts.boardId, boardIds))

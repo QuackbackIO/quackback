@@ -11,6 +11,7 @@ import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { getEmbeddingModel } from '@/lib/server/domains/ai/models'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import { withUsageLogging } from '@/lib/server/domains/ai/usage-log'
+import { isTestPost } from '@/lib/server/test-data'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'embeddings' })
@@ -119,6 +120,8 @@ export async function generatePostEmbedding(
   content: string,
   tags?: string[]
 ): Promise<boolean> {
+  // A test customer's idea spends no embedding tokens.
+  if (await isTestPost(postId)) return false
   const text = formatPostText(title, content, tags)
   const embedding = await generateEmbedding(text, {
     pipelineStep: 'post_embedding',

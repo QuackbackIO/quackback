@@ -128,7 +128,7 @@ import type {
   SendAgentMessageResult,
 } from './conversation.types'
 import { logger } from '@/lib/server/logger'
-import { deriveTestAttributes } from '@/lib/server/test-data'
+import { activeTestOwnerOf, notTestPrincipal, testOwnerOf } from '@/lib/server/test-data'
 
 const log = logger.child({ component: 'conversation' })
 
@@ -362,6 +362,9 @@ export async function sendVisitorMessage(
     } else {
       const start = canStartConversation(actor)
       if (!start.allowed) throw new ForbiddenError('FORBIDDEN', start.reason)
+      // A test customer's thread goes straight to the teammate trying it out,
+      // never through routing to whoever else is online.
+      const testOwner = await activeTestOwnerOf(author.principalId, tx)
       const [createdConv] = await tx
         .insert(conversations)
         .values({
@@ -369,7 +372,7 @@ export async function sendVisitorMessage(
           channel: 'messenger',
           status: 'open',
           subject: preview(content || fallbackLabel, attachments),
-          customAttributes: await deriveTestAttributes(author.principalId, {}, true, tx),
+          ...(testOwner ? { assignedAgentPrincipalId: testOwner } : {}),
         })
         .returning()
       conversation = createdConv
@@ -1476,6 +1479,9 @@ export async function routeUnassignedConversation(
 }
 
 async function assignRoutedConversation(conversation: Conversation): Promise<PrincipalId | null> {
+  // Test threads belong to the teammate trying them out; they never take a
+  // colleague's routing slot.
+  if (await testOwnerOf(conversation.visitorPrincipalId)) return null
   const { routeConversation } = await import('./routing')
   const { assignedPrincipalId } = await routeConversation(conversation)
   if (!assignedPrincipalId) return null
@@ -1643,10 +1649,16 @@ export async function requeueUnansweredOnAgentOffline(
   agentPrincipalId: PrincipalId
 ): Promise<void> {
   try {
+    // A test thread stays with the teammate who owns it, online or not.
     const assigned = await db
       .select({ id: conversations.id, status: conversations.status })
       .from(conversations)
-      .where(eq(conversations.assignedAgentPrincipalId, agentPrincipalId))
+      .where(
+        and(
+          eq(conversations.assignedAgentPrincipalId, agentPrincipalId),
+          notTestPrincipal(conversations.visitorPrincipalId)
+        )
+      )
     if (assigned.length === 0) return
 
     // Which of those threads have a real, visitor-facing agent reply (so they

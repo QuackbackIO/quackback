@@ -1,6 +1,6 @@
 import { db, principal, user, eq } from '@/lib/server/db'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
-import { isTestRecord } from '@/lib/server/test-data'
+import { testOwnerOf } from '@/lib/server/test-data'
 import { isTeamMember } from '@/lib/shared/roles'
 import { contactRecipientFrom } from '@/lib/server/email/recipient'
 
@@ -13,20 +13,11 @@ export async function conversationTestDelivery(
 ): Promise<TestDelivery> {
   const conversation = await db.query.conversations.findFirst({
     where: (table, { eq }) => eq(table.id, conversationId),
-    columns: { customAttributes: true, visitorPrincipalId: true },
+    columns: { visitorPrincipalId: true },
   })
   if (!conversation) return { test: true, ownerPrincipalId: null, recipient: null }
-  const visitor = await db.query.principal.findFirst({
-    where: eq(principal.id, conversation.visitorPrincipalId),
-    columns: { testOwnerPrincipalId: true },
-  })
-  const marked = isTestRecord(conversation.customAttributes)
-  if (!marked && !visitor?.testOwnerPrincipalId) return { test: false }
-  const markerOwner = conversation.customAttributes?.testOwnerPrincipalId
-  const ownerPrincipalId =
-    visitor?.testOwnerPrincipalId ??
-    (typeof markerOwner === 'string' ? (markerOwner as PrincipalId) : null)
-  if (!ownerPrincipalId) return { test: true, ownerPrincipalId: null, recipient: null }
+  const ownerPrincipalId = await testOwnerOf(conversation.visitorPrincipalId)
+  if (!ownerPrincipalId) return { test: false }
   const [owner] = await db
     .select({
       type: principal.type,

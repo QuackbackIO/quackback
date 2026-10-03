@@ -37,7 +37,7 @@ import { getPortalConfig } from '@/lib/server/domains/settings/settings.service'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { logger } from '@/lib/server/logger'
 import { adjustCanonicalCommentCount } from '@/lib/server/domains/posts/post.merge-ids'
-import { notTestPrincipal, notTestRecord } from '@/lib/server/test-data'
+import { isTestCustomer, notTestPrincipal } from '@/lib/server/test-data'
 
 const log = logger.child({ component: 'comments' })
 
@@ -76,7 +76,7 @@ export async function createComment(
     {
       moderationState: post.moderationState,
       principalId: post.principalId,
-      widgetMetadata: post.widgetMetadata,
+      authorIsTest: await isTestCustomer(post.principalId),
       isCommentsLocked: post.isCommentsLocked,
     },
     { access: board.access },
@@ -120,7 +120,6 @@ export async function createComment(
   // Determine if user is a team member
   const authorIsTeamMember = isTeamMember(author.role)
   const countedComment = and(
-    notTestRecord(posts.widgetMetadata),
     notTestPrincipal(posts.principalId),
     notTestPrincipal(
       sql`(SELECT ${principal.id} FROM ${principal} WHERE ${eq(principal.id, author.principalId)})`
@@ -503,13 +502,7 @@ export async function deleteComment(
       const counted = await tx
         .update(posts)
         .set({ commentCount: sql`GREATEST(0, ${posts.commentCount} - ${decrement})` })
-        .where(
-          and(
-            eq(posts.id, existingComment.postId),
-            notTestRecord(posts.widgetMetadata),
-            notTestPrincipal(posts.principalId)
-          )
-        )
+        .where(and(eq(posts.id, existingComment.postId), notTestPrincipal(posts.principalId)))
         .returning({ id: posts.id })
       if (counted.length > 0)
         await adjustCanonicalCommentCount(existingComment.postId, -decrement, tx)

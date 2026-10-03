@@ -33,7 +33,7 @@ let ids: Record<string, string>
 
 beforeEach(async () => {
   expect(fixture.available).toBe(true)
-  expect(process.env.DATABASE_URL).toMatch(/\/quackback_test(?:\?|$)/)
+  expect(process.env.DATABASE_URL).toMatch(/\/quackback_test(?:_\w+)?(?:\?|$)/)
   await fixture.begin()
   const ownerUser = createId('user'),
     ordinaryUser = createId('user'),
@@ -147,7 +147,7 @@ beforeEach(async () => {
     .returning()
   await testDb.insert(ticketConversations).values({
     ticketId: linkedTicket.id,
-    conversationId: markedConversation.id,
+    conversationId: identityConversation.id,
     ticketType: 'customer',
   })
   ;[integration] = await testDb
@@ -224,22 +224,24 @@ async function allowed(sourceType: string, sourceId: string) {
 it('blocks manual sync of test posts and comments while permitting real source dispatch', async () => {
   await allowed('post', ids.realPost)
   await allowed('comment', ids.realComment)
-  await denied('post', ids.markedPost)
+  // A legacy client marker is real data; only the test customer's identity is test.
+  await allowed('post', ids.markedPost)
+  await allowed('comment', ids.markedPostComment)
   await denied('post', ids.identityPost)
-  await denied('comment', ids.markedPostComment)
   await denied('comment', ids.identityComment)
 })
 it('blocks manual sync of test conversations and messages while permitting real source dispatch', async () => {
   await allowed('conversation', ids.realConversation)
   await allowed('message', ids.realMessage)
-  await denied('conversation', ids.markedConversation)
+  await allowed('conversation', ids.markedConversation)
+  await allowed('message', ids.markedMessage)
   await denied('conversation', ids.identityConversation)
-  await denied('message', ids.markedMessage)
   await denied('message', ids.identityMessage)
 })
-it('blocks test ticket issue creation by marker, requester and linked thread before archive bypass', async () => {
+it('blocks test ticket issue creation by requester and linked thread before archive bypass', async () => {
   await allowed('ticket', ids.realTicket)
-  for (const id of [ids.markedTicket, ids.identityTicket, ids.linkedTicket]) {
+  await allowed('ticket', ids.markedTicket)
+  for (const id of [ids.identityTicket, ids.linkedTicket]) {
     await denied('ticket', id)
     await denied('ticket', id, 'archive')
   }

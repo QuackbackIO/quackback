@@ -1,7 +1,7 @@
 /**
  * Real-Postgres proof that `countInboxScopes` issues one round trip for the
- * conversation scopes (mine/unassigned/pair, merged via FILTER), one for the
- * ticket-type breakdown and one for the Test count, not a query per scope. The `inbox.query.test.ts`
+ * conversation scopes (mine/unassigned/pair, merged via FILTER) and one for
+ * the ticket-type breakdown, not a query per scope. The `inbox.query.test.ts`
  * suite (rollback-transaction fixture) already proves the VALUES are right;
  * this proves the STATEMENT COUNT, which that fixture's `db` mock can't see
  * (it swaps in a plain testDb with no counting logger attached).
@@ -40,21 +40,19 @@ function fullPermissionActor(): Actor {
 }
 
 describe.skipIf(!available)('countInboxScopes against Postgres', () => {
-  it('issues exactly 3 statements for an actor who can view both kinds', async () => {
+  it('issues exactly 2 statements for an actor who can view both kinds', async () => {
     const metrics = await runWithLogContext({ request_id: 'count-inbox-scopes-1' }, async () => {
       openRequestMetrics()
       await countInboxScopes(fullPermissionActor())
       return currentRequestMetrics()
     })
-    // One merged conversation-scopes query (mine/unassigned/pair via FILTER),
-    // one grouped ticket-type query, and the Test count. The Test count spans
-    // every status, so folding it into the open-only scopes query would widen
-    // that scan; it reads its own partial index instead. A regression back to
-    // a query per scope would show up here as 5.
-    expect(metrics?.dbQueries).toBe(3)
+    // One merged conversation-scopes query (mine/unassigned/pair via FILTER)
+    // plus one grouped ticket-type query. Was 4 before the FILTER merge: a
+    // regression back to a query per scope would show up here as 4 again.
+    expect(metrics?.dbQueries).toBe(2)
   })
 
-  it('issues exactly 2 statements for a conversation-only actor', async () => {
+  it('issues exactly 1 statement for a conversation-only actor', async () => {
     const actor: Actor = {
       principalId: null,
       role: 'member',
@@ -67,6 +65,6 @@ describe.skipIf(!available)('countInboxScopes against Postgres', () => {
       await countInboxScopes(actor)
       return currentRequestMetrics()
     })
-    expect(metrics?.dbQueries).toBe(2)
+    expect(metrics?.dbQueries).toBe(1)
   })
 })

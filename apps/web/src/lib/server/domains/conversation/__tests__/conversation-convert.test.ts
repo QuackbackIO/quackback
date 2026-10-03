@@ -37,8 +37,7 @@ vi.mock('../conversation.service', () => ({
   sendAgentMessage: (...args: unknown[]) => sendAgentMessage(...args),
 }))
 
-vi.mock('@/lib/server/test-data', async () => ({
-  isTestRecord: (await import('@/lib/server/db')).isTestRecord,
+vi.mock('@/lib/server/test-data', () => ({
   isTestCustomer: (id: PrincipalId) => isTestCustomer(id),
 }))
 
@@ -64,7 +63,7 @@ vi.mock('@/lib/server/domains/comments/comment.service', () => ({
   createComment: (...args: unknown[]) => createComment(...args),
 }))
 
-vi.mock('@/lib/server/db', async (importOriginal) => {
+vi.mock('@/lib/server/db', () => {
   function insertChain() {
     const c: Record<string, unknown> = {}
     c.values = (row: Record<string, unknown>) => {
@@ -78,7 +77,6 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
     return c
   }
   return {
-    isTestRecord: (await importOriginal<typeof import('@/lib/server/db')>()).isTestRecord,
     db: { insert: () => insertChain() },
     postExternalLinks: { __name: 'post_external_links' },
   }

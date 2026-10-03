@@ -31,7 +31,7 @@ let updateReturningTitle = 'Updated title'
 
 vi.mock('@/lib/server/db', async (importOriginal) => {
   const { sql: realSql } = await vi.importActual<typeof import('drizzle-orm')>('drizzle-orm')
-  const { isTestRecord, notTestRecord } = await importOriginal<typeof import('@/lib/server/db')>()
+  const { notTestPrincipal } = await importOriginal<typeof import('@/lib/server/db')>()
 
   function chain(label: string) {
     const c: Record<string, unknown> = {}
@@ -173,8 +173,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
     inArray: vi.fn(),
     isNull: vi.fn(),
     sql: realSql,
-    isTestRecord,
-    notTestRecord,
+    notTestPrincipal,
   }
 })
 

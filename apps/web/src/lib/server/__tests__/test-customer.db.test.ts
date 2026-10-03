@@ -1,7 +1,19 @@
 import { afterAll, afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createId, type PrincipalId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from './db-test-fixture'
-import { principal, user, eq, session, verification } from '@/lib/server/db'
+import {
+  boards,
+  conversationMessages,
+  conversations,
+  posts,
+  principal,
+  tickets,
+  ticketStatuses,
+  user,
+  eq,
+  session,
+  verification,
+} from '@/lib/server/db'
 
 vi.mock('@/lib/server/db', async (original) => ({
   ...(await original<typeof import('@/lib/server/db')>()),
@@ -13,7 +25,10 @@ import {
   mintTestCustomerToken,
   consumeTestCustomerToken,
 } from '../test-customer'
-import { deriveTestAttributes, notTestPrincipal } from '../test-data'
+import { notTestPrincipal } from '../test-data'
+import { removePortalUser } from '../domains/users/user.service'
+import { findContactsByEmail } from '../domains/users/user.dedup'
+import { mergeAnonymousToIdentified } from '../auth/merge-anonymous'
 const fixture = await createDbTestFixture()
 let owner: PrincipalId
 beforeEach(async () => {
@@ -126,28 +141,91 @@ it('enforces one test customer per owner in the database', async () => {
   ).rejects.toMatchObject({ cause: { code: '23505', constraint_name: 'principal_test_owner_idx' } })
 })
 
-it('derives test markers from the author and ingress while stripping client markers', async () => {
+it('stops redeeming a token once its owner has left the team', async () => {
+  const issued = await mintTestCustomerToken(owner, 'en')
+  await testDb.update(principal).set({ role: 'user' }).where(eq(principal.id, owner))
+  expect(await consumeTestCustomerToken(issued.token)).toBeNull()
+  await testDb.update(principal).set({ role: 'admin' }).where(eq(principal.id, owner))
+  expect(await consumeTestCustomerToken(issued.token)).not.toBeNull()
+})
+
+it('removes a former teammate whose test customer still owns a thread, an idea and a ticket', async () => {
   const customer = await getOrCreateTestCustomer(owner, 'en')
-  const ordinary = createId('principal')
+  const [board] = await testDb
+    .insert(boards)
+    .values({ name: 'Acme ideas', slug: createId('board') })
+    .returning()
+  const [thread] = await testDb
+    .insert(conversations)
+    .values({ visitorPrincipalId: customer.id, channel: 'messenger' })
+    .returning()
+  await testDb.insert(conversationMessages).values({
+    conversationId: thread.id,
+    principalId: customer.id,
+    senderType: 'visitor',
+    content: 'Hi! Is anyone there?',
+  })
+  const [idea] = await testDb
+    .insert(posts)
+    .values({ boardId: board.id, title: 'Acme idea', content: '', principalId: customer.id })
+    .returning()
+  const [status] = await testDb
+    .insert(ticketStatuses)
+    .values({ name: 'Acme open', slug: createId('ticket_status') })
+    .returning()
+  const [ticket] = await testDb
+    .insert(tickets)
+    .values({ title: 'Acme ticket', statusId: status.id, requesterPrincipalId: customer.id })
+    .returning()
+  await testDb.update(principal).set({ role: 'user' }).where(eq(principal.id, owner))
+
+  await removePortalUser(owner)
+
+  expect(await testDb.query.principal.findFirst({ where: eq(principal.id, owner) })).toBeUndefined()
+  expect(
+    await testDb.query.principal.findFirst({ where: eq(principal.id, customer.id) })
+  ).toBeUndefined()
+  expect(
+    await testDb.query.conversations.findFirst({ where: eq(conversations.id, thread.id) })
+  ).toBeUndefined()
+  expect(await testDb.query.posts.findFirst({ where: eq(posts.id, idea.id) })).toBeUndefined()
+  expect(await testDb.query.tickets.findFirst({ where: eq(tickets.id, ticket.id) })).toBeUndefined()
+  expect(
+    await testDb.query.user.findFirst({ where: eq(user.id, customer.userId!) })
+  ).toBeUndefined()
+})
+
+it('never merges a test customer into a real identity or lists it as a contact', async () => {
+  const customer = await getOrCreateTestCustomer(owner, 'en')
+  const [thread] = await testDb
+    .insert(conversations)
+    .values({ visitorPrincipalId: customer.id, channel: 'messenger' })
+    .returning()
+  const realUser = createId('user'),
+    real = createId('principal')
+  await testDb.insert(user).values({ id: realUser, name: 'Acme', email: 'real@example.com' })
   await testDb
     .insert(principal)
-    .values({ id: ordinary, type: 'anonymous', role: 'user', createdAt: new Date() })
-  const forged = {
-    test: 'true',
-    onboardingGenerated: 'true',
-    testOwnerPrincipalId: owner,
-    source: 'widget',
-  }
-  expect(await deriveTestAttributes(ordinary, forged, true)).toEqual({ source: 'widget' })
-  expect(await deriveTestAttributes(customer.id, { test: 'false' }, true)).toEqual({
-    test: true,
-    testOwnerPrincipalId: owner,
+    .values({ id: real, userId: realUser, role: 'user', type: 'user', createdAt: new Date() })
+
+  await mergeAnonymousToIdentified({
+    anonPrincipalId: customer.id,
+    targetPrincipalId: real,
+    anonUserId: customer.userId!,
+    anonDisplayName: 'Test customer',
+    targetDisplayName: 'Acme',
   })
-  expect(await deriveTestAttributes(owner, {}, true)).toEqual({
-    test: true,
-    testOwnerPrincipalId: owner,
-  })
-  expect(await deriveTestAttributes(owner, forged, false)).toEqual({ source: 'widget' })
+  expect(
+    await testDb.query.principal.findFirst({ where: eq(principal.id, customer.id) })
+  ).toBeDefined()
+  expect(
+    (await testDb.query.conversations.findFirst({ where: eq(conversations.id, thread.id) }))!
+      .visitorPrincipalId
+  ).toBe(customer.id)
+
+  // The test customer carries its owner's address, but it is nobody's contact.
+  const matches = await findContactsByEmail('you@example.com')
+  expect(matches.map((match) => match.principalId)).not.toContain(customer.id)
 })
 
 it('excludes test identities in a real query without excluding their owners', async () => {

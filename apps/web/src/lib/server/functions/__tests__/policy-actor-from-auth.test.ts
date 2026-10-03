@@ -21,6 +21,7 @@ const mockResolveTestFeedbackActor = vi.hoisted(() =>
         ...actor,
         testFeedback: {
           ownerPrincipalId: 'principal_test_owner' as PrincipalId,
+          active: true,
           canView: true,
           canSubmit: true,
         },
@@ -126,6 +127,7 @@ describe('policyActorFromAuth', () => {
     expect(actor.permissions).toEqual(new Set([PERMISSIONS.POST_CREATE]))
     expect(actor.testFeedback).toEqual({
       ownerPrincipalId: 'principal_test_owner',
+      active: true,
       canView: true,
       canSubmit: true,
     })

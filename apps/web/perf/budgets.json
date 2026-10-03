@@ -43,7 +43,7 @@
       "htmlKB": 226
     },
     "doc:admin-inbox": {
-      "dbQueries": 23,
+      "dbQueries": 22,
       "htmlKB": 164.7
     },
     "doc:admin-roadmap": {
@@ -105,8 +105,8 @@
     "ui:widget-load": {
       "dbQueries": 20,
       "serverRequests": 3,
-      "requests": 172,
-      "jsRequests": 165,
+      "requests": 170,
+      "jsRequests": 163,
       "jsKB": 765,
       "htmlTransferKB": 12.4,
       "componentRenders": 295
@@ -115,7 +115,7 @@
       "dbQueries": 20,
       "serverRequests": 5,
       "requests": 88,
-      "jsRequests": 80,
+      "jsRequests": 79,
       "jsKB": 383.8,
       "htmlTransferKB": 1.1,
       "componentRenders": 348
@@ -148,10 +148,10 @@
       "componentRenders": 599
     },
     "ui:admin-inbox-load": {
-      "dbQueries": 23,
+      "dbQueries": 22,
       "serverRequests": 1,
-      "requests": 225,
-      "jsRequests": 220,
+      "requests": 222,
+      "jsRequests": 217,
       "jsKB": 881.1,
       "htmlTransferKB": 34.6,
       "componentRenders": 632
@@ -293,8 +293,8 @@
     "sweep:ui:admin:/admin/settings/agent": {
       "dbQueries": 16,
       "serverRequests": 3,
-      "requests": 132,
-      "jsRequests": 128,
+      "requests": 130,
+      "jsRequests": 126,
       "jsKB": 460.4,
       "htmlTransferKB": 31.1,
       "componentRenders": 548
@@ -306,8 +306,8 @@
     "sweep:ui:admin:/admin/settings/connectors": {
       "dbQueries": 7,
       "serverRequests": 1,
-      "requests": 110,
-      "jsRequests": 106,
+      "requests": 108,
+      "jsRequests": 104,
       "jsKB": 397.3,
       "htmlTransferKB": 31.4,
       "componentRenders": 405
@@ -319,8 +319,8 @@
     "sweep:ui:admin:/admin/settings/copilot": {
       "dbQueries": 16,
       "serverRequests": 3,
-      "requests": 129,
-      "jsRequests": 123,
+      "requests": 127,
+      "jsRequests": 121,
       "jsKB": 442.0,
       "htmlTransferKB": 30.4,
       "componentRenders": 467
@@ -332,8 +332,8 @@
     "sweep:ui:admin:/admin/settings/skills": {
       "dbQueries": 7,
       "serverRequests": 1,
-      "requests": 110,
-      "jsRequests": 106,
+      "requests": 108,
+      "jsRequests": 104,
       "jsKB": 396.9,
       "htmlTransferKB": 30.1,
       "componentRenders": 375
@@ -345,8 +345,8 @@
     "sweep:ui:admin:/admin/settings/workflows": {
       "dbQueries": 13,
       "serverRequests": 2,
-      "requests": 149,
-      "jsRequests": 144,
+      "requests": 146,
+      "jsRequests": 141,
       "jsKB": 467.4,
       "htmlTransferKB": 31.9,
       "componentRenders": 495
@@ -391,14 +391,14 @@
       "componentRenders": 340
     },
     "sweep:doc:admin:/admin/inbox": {
-      "dbQueries": 23,
+      "dbQueries": 22,
       "htmlKB": 164.7
     },
     "sweep:ui:admin:/admin/inbox": {
-      "dbQueries": 23,
+      "dbQueries": 22,
       "serverRequests": 1,
-      "requests": 225,
-      "jsRequests": 220,
+      "requests": 222,
+      "jsRequests": 217,
       "jsKB": 881.1,
       "htmlTransferKB": 34.6,
       "componentRenders": 632
@@ -567,7 +567,7 @@
       "dbQueries": 8,
       "serverRequests": 1,
       "requests": 132,
-      "jsRequests": 128,
+      "jsRequests": 127,
       "jsKB": 431.9,
       "htmlTransferKB": 34.3,
       "componentRenders": 431
@@ -671,7 +671,7 @@
       "dbQueries": 16,
       "serverRequests": 1,
       "requests": 136,
-      "jsRequests": 132,
+      "jsRequests": 131,
       "jsKB": 453.4,
       "htmlTransferKB": 33.0,
       "componentRenders": 573
@@ -852,8 +852,8 @@
     "sweep:ui:admin:/admin/settings/widget": {
       "dbQueries": 77,
       "serverRequests": 10,
-      "requests": 220,
-      "jsRequests": 204,
+      "requests": 217,
+      "jsRequests": 199,
       "jsKB": 813.8,
       "htmlTransferKB": 34.3,
       "componentRenders": 1340
@@ -865,8 +865,8 @@
     "sweep:ui:admin:/admin/settings/widget/install": {
       "dbQueries": 17,
       "serverRequests": 1,
-      "requests": 140,
-      "jsRequests": 136,
+      "requests": 138,
+      "jsRequests": 133,
       "jsKB": 447.1,
       "htmlTransferKB": 33.1,
       "componentRenders": 413
@@ -931,7 +931,7 @@
       "dbQueries": 0,
       "serverRequests": 3,
       "requests": 98,
-      "jsRequests": 93,
+      "jsRequests": 92,
       "jsKB": 376.7,
       "htmlTransferKB": 15.4,
       "componentRenders": 183
@@ -970,7 +970,7 @@
       "dbQueries": 18,
       "serverRequests": 4,
       "requests": 99,
-      "jsRequests": 93,
+      "jsRequests": 92,
       "jsKB": 376.7,
       "htmlTransferKB": 16.6,
       "componentRenders": 267
