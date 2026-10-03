@@ -11,7 +11,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from '@tanstack/react-router'
-import { FormattedMessage, useIntl } from 'react-intl'
+import { FormattedMessage, IntlProvider, useIntl } from 'react-intl'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { getTourContextFn, markTourSeenFn } from '@/lib/server/functions/onboarding-progress'
@@ -21,6 +21,7 @@ import type { OnboardingOutcome } from '@/lib/shared/db-types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { cn } from '@/lib/shared/utils'
+import { DEFAULT_LOCALE, isTourMessage, loadTourMessages, normalizeLocale } from '@/lib/shared/i18n'
 import {
   placeCoachmark,
   resolveTourStops,
@@ -85,6 +86,15 @@ function fallbackTarget(target: string): string | null {
 
 type Phase = 'idle' | 'tour' | 'end'
 
+/**
+ * The overlay's strings, which admin pages leave out of the catalog they seed.
+ * A catalog that already holds them (one loaded whole, say) needs nothing more.
+ */
+function tourMessagesFor(messages: Record<string, unknown>, locale: string) {
+  if (Object.keys(messages).some(isTourMessage)) return Promise.resolve({})
+  return loadTourMessages(normalizeLocale(locale) ?? DEFAULT_LOCALE).catch(() => ({}))
+}
+
 export function ProductTourProvider({
   children,
   copilotOnHome = false,
@@ -106,6 +116,7 @@ export function ProductTourProvider({
   const [context, setContext] = useState<Pick<TourContext, 'goals' | 'feedbackPrivate'> | null>(
     null
   )
+  const [tourMessages, setTourMessages] = useState<Record<string, string>>({})
   const [targetElement, setTargetElement] = useState<HTMLElement | null>(null)
   const [rect, setRect] = useState<DOMRect | null>(null)
   const [located, setLocated] = useState(false)
@@ -140,7 +151,10 @@ export function ProductTourProvider({
     starting.current = true
     priorFocus.current = document.activeElement as HTMLElement | null
     try {
-      const fetched = await getTourContextFn().catch(() => null)
+      const [fetched, loadedMessages] = await Promise.all([
+        getTourContextFn().catch(() => null),
+        tourMessagesFor(intl.messages, intl.locale),
+      ])
       const tourContext: TourContext = {
         copilotOnHome,
         goals: fetched?.goals ?? ['product_feedback'],
@@ -168,6 +182,7 @@ export function ProductTourProvider({
           .then(() => queryClient.invalidateQueries({ queryKey: ['onboarding', 'progress'] }))
           .catch(() => undefined)
       }
+      setTourMessages((current) => ({ ...current, ...loadedMessages }))
       setContext({ goals: tourContext.goals, feedbackPrivate: tourContext.feedbackPrivate })
       setStops(resolved)
       setIndex(0)
@@ -176,7 +191,7 @@ export function ProductTourProvider({
     } finally {
       starting.current = false
     }
-  }, [copilotOnHome, flags, permissions, queryClient])
+  }, [copilotOnHome, flags, permissions, queryClient, intl.messages, intl.locale])
 
   const finish = useCallback(async () => {
     setTargetElement(null)
@@ -306,9 +321,15 @@ export function ProductTourProvider({
       : null
   const last = index === stops.length - 1
 
-  return (
-    <TourApi.Provider value={api}>
-      {children}
+  // The app's catalogs are plain strings, never precompiled messages.
+  const pageMessages = intl.messages as Record<string, string>
+  const overlayMessages = useMemo(
+    () => ({ ...pageMessages, ...tourMessages }),
+    [pageMessages, tourMessages]
+  )
+
+  const overlay = (
+    <>
       {phase === 'tour' &&
         stop &&
         createPortal(
@@ -361,9 +382,11 @@ export function ProductTourProvider({
                 )}
                 <p className="relative text-sm leading-relaxed">
                   <strong id="tour-stop-lead" className="font-semibold">
-                    {intl.formatMessage(stop.lead)}
+                    <FormattedMessage {...stop.lead} />
                   </strong>{' '}
-                  <span id="tour-stop-line">{intl.formatMessage(stop.line, { shortcut })}</span>
+                  <span id="tour-stop-line">
+                    <FormattedMessage {...stop.line} values={{ shortcut }} />
+                  </span>
                 </p>
                 <div className="relative mt-3.5 flex items-center gap-1.5">
                   <span id="tour-stop-count" className="me-auto text-xs text-muted-foreground">
@@ -423,6 +446,22 @@ export function ProductTourProvider({
           </div>,
           document.body
         )}
+    </>
+  )
+
+  return (
+    <TourApi.Provider value={api}>
+      {children}
+      {phase !== 'idle' && (
+        <IntlProvider
+          locale={intl.locale}
+          defaultLocale={intl.defaultLocale}
+          messages={overlayMessages}
+          onError={intl.onError}
+        >
+          {overlay}
+        </IntlProvider>
+      )}
     </TourApi.Provider>
   )
 }
