@@ -1,5 +1,3 @@
-import { useCopilotOnHome } from '@/components/admin/ask/copilot-on-home'
-import { useCallback, type ReactNode } from 'react'
 import { FormattedMessage } from 'react-intl'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
@@ -8,8 +6,7 @@ import { useFeatureFlags } from '@/lib/client/hooks/use-root-context'
 import { buildLaunchTasks } from '@/lib/shared/launch-checklist'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
-import { ProductTourProvider, type TourEndAction } from './product-tour'
-import { useCanPostTestIdea, useTryMessengerSheet } from './try-messenger-button'
+import { useCanPostTestIdea, useOpenTryMessenger } from './try-messenger-button'
 import type { TryMessengerStart } from './try-messenger-sheet'
 import { launchStatusQuery } from './use-launch-plan'
 
@@ -60,7 +57,8 @@ function TestActionLabel({ start }: { start: TryMessengerStart }) {
   )
 }
 
-function TourEndTestAction({
+/** The tour end card's test action; the admin layout loads it as the card opens. */
+export function TourEndTestAction({
   feedbackPrivate,
   onOpen,
 }: {
@@ -76,44 +74,16 @@ function TourEndTestAction({
   )
 }
 
-/** The admin's guided tour, ending on the next test action and owning its one sheet. */
-export function AdminProductTourProvider({ children }: { children: ReactNode }) {
-  const { open, sheet } = useTryMessengerSheet()
-  // Home is the Copilot chat for this teammate, so the tour opens on it.
-  const copilotOnHome = useCopilotOnHome()
-  const endAction = useCallback<TourEndAction>(
-    ({ feedbackPrivate, close }) => (
-      <TourEndTestAction
-        feedbackPrivate={feedbackPrivate}
-        onOpen={(start) => {
-          close()
-          open(start)
-        }}
-      />
-    ),
-    [open]
-  )
-  return (
-    <ProductTourProvider endAction={endAction} copilotOnHome={copilotOnHome}>
-      {children}
-      {sheet}
-    </ProductTourProvider>
-  )
-}
-
 /** The Launch plan's action for the automatic first-win step. */
 export function FirstWinTestAction() {
   const { data: status } = useSuspenseQuery(launchStatusQuery())
   const variant = buildLaunchTasks(status).find((task) => task.id === 'first-win')?.variant
   const start = firstWinTestStart(variant, useTestPaths(useFeatureFlags()))
-  const { open, sheet } = useTryMessengerSheet()
+  const open = useOpenTryMessenger()
   if (!start) return null
   return (
-    <>
-      <Button size="sm" variant="outline" className="h-8" onClick={() => open(start)}>
-        <TestActionLabel start={start} />
-      </Button>
-      {sheet}
-    </>
+    <Button size="sm" variant="outline" className="h-8" onClick={() => open(start)}>
+      <TestActionLabel start={start} />
+    </Button>
   )
 }

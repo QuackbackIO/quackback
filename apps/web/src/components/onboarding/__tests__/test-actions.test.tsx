@@ -72,7 +72,12 @@ vi.mock('../try-messenger-sheet', () => ({
 }))
 
 import { useProductTour } from '../product-tour'
-import { AdminProductTourProvider, firstWinTestStart, tourTestStart } from '../test-actions'
+import { firstWinTestStart, tourTestStart } from '../test-actions'
+import {
+  AdminProductTourProvider,
+  OPEN_TRY_MESSENGER_EVENT as HOST_EVENT,
+} from '../admin-product-tour'
+import { OPEN_TRY_MESSENGER_EVENT } from '../try-messenger-button'
 import { Route as GettingStartedRoute } from '@/routes/admin/getting-started'
 
 const NOW = Date.now()
@@ -193,6 +198,12 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+describe('the sheet host', () => {
+  it('listens for the event the entry points send', () => {
+    expect(HOST_EVENT).toBe(OPEN_TRY_MESSENGER_EVENT)
+  })
+})
+
 describe('choosing the test action', () => {
   it('ends the tour on a message, or an idea when feedback is private and an idea can land', () => {
     expect(tourTestStart({ message: true, idea: true }, false)).toBe('message')
@@ -242,7 +253,7 @@ describe('the admin tour', () => {
 describe('the tour end card', () => {
   it('sends a test message from the end card and opens the sheet', async () => {
     await finishTour()
-    fireEvent.click(screen.getByRole('button', { name: 'Send a test message' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Send a test message' }))
     expect(screen.queryByRole('dialog', { name: "That's the tour" })).toBeNull()
     expect(await screen.findByRole('region', { name: 'Test sheet' })).toHaveTextContent(
       'sheet:message'
@@ -269,6 +280,10 @@ describe('the tour end card', () => {
   it('offers only Done when no test action would work', async () => {
     hoisted.canConverse = false
     await finishTour()
+    // The end card's action loads lazily; let it settle so its absence is real.
+    await act(async () => {
+      await import('../test-actions')
+    })
     expect(screen.getByRole('button', { name: 'Done' })).toBeVisible()
     expect(screen.queryByRole('button', { name: 'Send a test message' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Post a test idea' })).toBeNull()
@@ -276,7 +291,13 @@ describe('the tour end card', () => {
 })
 
 describe("the Launch plan's first-win step", () => {
-  const Page = (GettingStartedRoute as unknown as { component: () => ReactNode }).component
+  const Route = (GettingStartedRoute as unknown as { component: () => ReactNode }).component
+  // The admin layout hosts the sheet the page's action opens.
+  const Page = () => (
+    <AdminProductTourProvider>
+      <Route />
+    </AdminProductTourProvider>
+  )
 
   it('offers a test idea for "Get your first idea"', async () => {
     render(providers(<Page />))
