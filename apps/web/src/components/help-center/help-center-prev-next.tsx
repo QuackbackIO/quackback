@@ -1,4 +1,5 @@
 import { Link } from '@tanstack/react-router'
+import { FormattedMessage } from 'react-intl'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import { hcArticlePath } from '@/lib/shared/help-center-url'
 
@@ -27,7 +28,7 @@ export function HelpCenterPrevNext({ prev, next, locale }: HelpCenterPrevNextPro
       {prev ? (
         <Link to={hrefFor(prev)} className="group text-left">
           <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
-            &larr; Previous
+            &larr; <FormattedMessage id="portal.hc.prevNext.previous" defaultMessage="Previous" />
           </span>
           <p className="text-sm font-medium text-foreground group-hover:text-primary transition-colors mt-0.5">
             {prev.title}
@@ -39,7 +40,7 @@ export function HelpCenterPrevNext({ prev, next, locale }: HelpCenterPrevNextPro
       {next ? (
         <Link to={hrefFor(next)} className="group text-right">
           <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
-            Next &rarr;
+            <FormattedMessage id="portal.hc.prevNext.next" defaultMessage="Next" /> &rarr;
           </span>
           <p className="text-sm font-medium text-foreground group-hover:text-primary transition-colors mt-0.5">
             {next.title}

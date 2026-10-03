@@ -1,4 +1,5 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { createIsomorphicFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { HelpCenterHero } from '@/components/help-center/help-center-hero'
@@ -11,7 +12,7 @@ import {
   listPopularPublicArticlesFn,
 } from '@/lib/server/functions/help-center'
 import { HC_LOCALE_COOKIE, resolveHcLandingLocale } from '@/lib/shared/help-center-url'
-import type { HelpCenterConfig } from '@/lib/shared/types/settings'
+import { DEFAULT_HELP_CENTER_CONFIG, type HelpCenterConfig } from '@/lib/shared/types/settings'
 import { resolvePortalOgImageUrl } from '@/lib/shared/portal-og-image'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
@@ -105,12 +106,32 @@ export const Route = createFileRoute('/_portal/hc/')({
 })
 
 function HelpCenterLandingPage() {
+  const intl = useIntl()
   const { categories, popularArticles, helpCenterConfig } = Route.useLoaderData()
   const settings = useWorkspaceSettings()
   const askAiEnabled = !!settings?.featureFlags?.helpCenter
 
-  const title = helpCenterConfig?.homepageTitle ?? DEFAULT_TITLE
-  const description = helpCenterConfig?.homepageDescription ?? DEFAULT_DESCRIPTION
+  // Settings store the English defaults until an admin edits them, so a stored
+  // default is worded in the app's language like a missing one.
+  const storedTitle = helpCenterConfig?.homepageTitle
+  const title =
+    storedTitle == null || storedTitle === DEFAULT_HELP_CENTER_CONFIG.homepageTitle
+      ? intl.formatMessage({ id: 'portal.hc.home.title', defaultMessage: 'How can we help?' })
+      : storedTitle
+  const storedDescription = helpCenterConfig?.homepageDescription
+  const description =
+    storedDescription == null
+      ? intl.formatMessage({
+          id: 'portal.hc.home.description',
+          defaultMessage:
+            'Search our guides or ask AI for an instant answer. Real answers, fast, no ticket required.',
+        })
+      : storedDescription === DEFAULT_HELP_CENTER_CONFIG.homepageDescription
+        ? intl.formatMessage({
+            id: 'portal.hc.home.localeDescription',
+            defaultMessage: 'Search our knowledge base or browse by category',
+          })
+        : storedDescription
   const collectionCount = getTopLevelCategories(categories).length
 
   return (
@@ -126,11 +147,15 @@ function HelpCenterLandingPage() {
       >
         <div className="mb-6 flex items-baseline justify-between gap-4">
           <h2 id="hc-topics" className="text-2xl font-semibold tracking-tight text-foreground">
-            Browse by topic
+            <FormattedMessage id="portal.hc.home.browseByTopic" defaultMessage="Browse by topic" />
           </h2>
           {collectionCount > 0 && (
             <span className="shrink-0 text-sm text-muted-foreground">
-              {collectionCount} {collectionCount === 1 ? 'collection' : 'collections'}
+              <FormattedMessage
+                id="portal.hc.home.collectionCount"
+                defaultMessage="{count, plural, one {# collection} other {# collections}}"
+                values={{ count: collectionCount }}
+              />
             </span>
           )}
         </div>

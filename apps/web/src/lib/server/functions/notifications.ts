@@ -15,6 +15,7 @@ import {
   archiveAllNotifications,
 } from '@/lib/server/domains/notifications/notification.service'
 import { logger } from '@/lib/server/logger'
+import type { NotificationTextParams } from '@/lib/shared/notifications/text-params'
 
 const log = logger.child({ component: 'notifications' })
 
@@ -35,6 +36,36 @@ const notificationIdSchema = z.object({
 // ============================================
 // Read Operations
 // ============================================
+
+const TEXT_PARAM_KEYS = [
+  'postTitle',
+  'previousStatus',
+  'newStatus',
+  'changelogTitle',
+  'incidentTitle',
+  'kind',
+  'ticketTitle',
+  'stageLabel',
+  'previousStageLabel',
+] as const
+
+/**
+ * The metadata values a notification's title and body were worded from, so
+ * the bell can word them again in the reader's language. Only strings pass;
+ * `isTeamMember` is the one flag a title depends on.
+ */
+function notificationTextParams(
+  metadata: Record<string, unknown> | null | undefined
+): NotificationTextParams {
+  const params: NotificationTextParams = {}
+  if (!metadata) return params
+  for (const key of TEXT_PARAM_KEYS) {
+    const value = metadata[key]
+    if (typeof value === 'string') params[key] = value
+  }
+  if (metadata.isTeamMember === true) params.isTeamMember = true
+  return params
+}
 
 /**
  * Get notifications for the current user with pagination
@@ -93,6 +124,7 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
           actorName: typeof actorName === 'string' ? actorName : null,
           actorAvatarUrl: typeof actorAvatarUrl === 'string' ? actorAvatarUrl : null,
           audience: audience === 'admin' || audience === 'portal' ? audience : null,
+          params: notificationTextParams(n.metadata),
           readAt: n.readAt?.toISOString() ?? null,
           archivedAt: n.archivedAt?.toISOString() ?? null,
           createdAt: n.createdAt.toISOString(),

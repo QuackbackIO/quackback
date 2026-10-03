@@ -7,6 +7,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 vi.stubGlobal('__APP_VERSION__', '0.0.0-test')
@@ -55,9 +56,11 @@ async function loadAdmin(queryClient: QueryClient) {
 function renderBell(queryClient: QueryClient) {
   return render(
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <NotificationBell />
-      </TooltipProvider>
+      <IntlProvider locale="en" defaultLocale="en">
+        <TooltipProvider>
+          <NotificationBell />
+        </TooltipProvider>
+      </IntlProvider>
     </QueryClientProvider>
   )
 }

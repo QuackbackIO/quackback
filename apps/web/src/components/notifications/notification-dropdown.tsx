@@ -1,6 +1,7 @@
 'use client'
 
 import { Link, useRouterState } from '@tanstack/react-router'
+import { FormattedMessage } from 'react-intl'
 import { InboxIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 import { Spinner } from '@/components/shared/spinner'
 import { Button } from '@/components/ui/button'
@@ -31,7 +32,9 @@ export function NotificationDropdown({ onClose }: NotificationDropdownProps) {
     <div>
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2.5">
-        <h3 className="font-semibold text-sm">Notifications</h3>
+        <h3 className="font-semibold text-sm">
+          <FormattedMessage id="portal.notifications.title" defaultMessage="Notifications" />
+        </h3>
         {unreadCount > 0 && (
           <Button
             variant="ghost"
@@ -40,7 +43,10 @@ export function NotificationDropdown({ onClose }: NotificationDropdownProps) {
             disabled={markAllAsRead.isPending}
             className="text-xs h-7 px-2 text-muted-foreground hover:text-foreground"
           >
-            Mark all read
+            <FormattedMessage
+              id="portal.notifications.markAllRead"
+              defaultMessage="Mark all read"
+            />
           </Button>
         )}
       </div>
@@ -53,7 +59,12 @@ export function NotificationDropdown({ onClose }: NotificationDropdownProps) {
       ) : isError ? (
         <div className="flex flex-col items-center justify-center h-48">
           <ExclamationTriangleIcon className="h-8 w-8 text-muted-foreground/50 mb-2" />
-          <p className="text-sm text-muted-foreground">Failed to load</p>
+          <p className="text-sm text-muted-foreground">
+            <FormattedMessage
+              id="portal.notifications.error.title"
+              defaultMessage="Failed to load"
+            />
+          </p>
         </div>
       ) : hasNotifications ? (
         <div className="max-h-72 overflow-hidden">
@@ -73,7 +84,12 @@ export function NotificationDropdown({ onClose }: NotificationDropdownProps) {
       ) : (
         <div className="flex flex-col items-center justify-center h-48">
           <InboxIcon className="h-8 w-8 text-muted-foreground/50 mb-2" />
-          <p className="text-sm text-muted-foreground">No notifications yet</p>
+          <p className="text-sm text-muted-foreground">
+            <FormattedMessage
+              id="portal.notifications.dropdown.empty"
+              defaultMessage="No notifications yet"
+            />
+          </p>
         </div>
       )}
 
@@ -85,7 +101,10 @@ export function NotificationDropdown({ onClose }: NotificationDropdownProps) {
             onClick={onClose}
             className="block text-center text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
-            View all
+            <FormattedMessage
+              id="portal.notifications.dropdown.viewAll"
+              defaultMessage="View all"
+            />
           </Link>
         </div>
       )}

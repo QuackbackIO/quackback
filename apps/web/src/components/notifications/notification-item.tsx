@@ -1,6 +1,7 @@
 'use client'
 
 import { Link } from '@tanstack/react-router'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { ArchiveBoxIcon } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/shared/utils'
 import { Avatar } from '@/components/ui/avatar'
@@ -9,6 +10,7 @@ import { useLocalDateFormatter } from '@/components/ui/local-date'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { getNotificationTypeConfig } from './notification-type-config'
 import { getNotificationTarget } from './notification-target'
+import { notificationText, type NotificationText } from './notification-text'
 import type { SerializedNotification } from '@/lib/client/hooks/use-notifications-queries'
 
 interface NotificationItemProps {
@@ -38,6 +40,8 @@ export function NotificationItem({
   className,
   style,
 }: NotificationItemProps) {
+  const intl = useIntl()
+  const text = notificationText(notification, intl)
   const config = getNotificationTypeConfig(notification.type)
   const Icon = config.icon
   const isUnread = !notification.readAt
@@ -68,6 +72,7 @@ export function NotificationItem({
       iconClass={config.iconClass}
       bgClass={config.bgClass}
       isUnread={isUnread}
+      text={text}
       onArchive={onArchive}
     />
   ) : (
@@ -77,6 +82,7 @@ export function NotificationItem({
       iconClass={config.iconClass}
       bgClass={config.bgClass}
       isUnread={isUnread}
+      text={text}
     />
   )
 
@@ -135,6 +141,8 @@ interface ContentProps {
   iconClass: string
   bgClass: string
   isUnread: boolean
+  /** Title and body in the reader's language. */
+  text: NotificationText
   /** Full-variant only; ignored by CompactContent. */
   onArchive?: (id: SerializedNotification['id']) => void
 }
@@ -243,7 +251,14 @@ function NotificationTime({
   )
 }
 
-function CompactContent({ notification, icon: Icon, iconClass, bgClass, isUnread }: ContentProps) {
+function CompactContent({
+  notification,
+  icon: Icon,
+  iconClass,
+  bgClass,
+  isUnread,
+  text,
+}: ContentProps) {
   return (
     <div
       className={cn(
@@ -260,16 +275,17 @@ function CompactContent({ notification, icon: Icon, iconClass, bgClass, isUnread
       />
 
       <div className="flex-1 min-w-0 space-y-0.5">
-        {/* The dot below is aria-hidden, so this plain-English label is the
-            only unread signal exposed to screen readers. Both surfaces share
-            this component, so full i18n of the row is out of scope here. */}
-        {isUnread && <span className="sr-only">Unread</span>}
-        <p className={cn('text-sm leading-tight', isUnread ? 'font-medium' : 'text-foreground')}>
-          {notification.title}
-        </p>
-        {notification.body && (
-          <p className="text-xs text-muted-foreground line-clamp-2">{notification.body}</p>
+        {/* The dot below is aria-hidden, so this label is the only unread
+            signal exposed to screen readers. */}
+        {isUnread && (
+          <span className="sr-only">
+            <FormattedMessage id="portal.notifications.item.unread" defaultMessage="Unread" />
+          </span>
         )}
+        <p className={cn('text-sm leading-tight', isUnread ? 'font-medium' : 'text-foreground')}>
+          {text.title}
+        </p>
+        {text.body && <p className="text-xs text-muted-foreground line-clamp-2">{text.body}</p>}
         <NotificationTime
           createdAt={notification.createdAt}
           relative="always"
@@ -290,8 +306,10 @@ function FullContent({
   iconClass,
   bgClass,
   isUnread,
+  text,
   onArchive,
 }: ContentProps) {
+  const intl = useIntl()
   function handleArchiveClick(event: React.MouseEvent<HTMLButtonElement>): void {
     // The row itself is (or is wrapped by) a Link — stop the click from
     // bubbling into it so archiving never triggers a navigation.
@@ -318,10 +336,13 @@ function FullContent({
       {/* The time sits on the row's right edge and fades while the archive
           button, which takes its place, is showing. */}
       <div className="min-w-0 flex-1">
-        {/* The dot is aria-hidden, so this plain-English label is the only
-            unread signal exposed to screen readers. Both surfaces share this
-            component, so full i18n of the row is out of scope here. */}
-        {isUnread && <span className="sr-only">Unread</span>}
+        {/* The dot is aria-hidden, so this label is the only unread signal
+            exposed to screen readers. */}
+        {isUnread && (
+          <span className="sr-only">
+            <FormattedMessage id="portal.notifications.item.unread" defaultMessage="Unread" />
+          </span>
+        )}
         <div className="flex items-baseline justify-between gap-3">
           <p
             className={cn(
@@ -329,7 +350,7 @@ function FullContent({
               isUnread ? 'font-medium' : 'text-foreground'
             )}
           >
-            {notification.title}
+            {text.title}
           </p>
           <span className="flex shrink-0 items-center gap-2 transition-opacity group-focus-within:opacity-0 group-hover:opacity-0">
             {isUnread && (
@@ -342,10 +363,10 @@ function FullContent({
             />
           </span>
         </div>
-        {(notification.body || notification.post) && (
+        {(text.body || notification.post) && (
           <p className="mt-0.5 truncate text-xs text-muted-foreground">
-            {notification.body}
-            {notification.body && notification.post && (
+            {text.body}
+            {text.body && notification.post && (
               <span className="text-muted-foreground/40"> · </span>
             )}
             {notification.post && (
@@ -361,7 +382,10 @@ function FullContent({
           variant="ghost"
           size="icon"
           onClick={handleArchiveClick}
-          aria-label="Archive notification"
+          aria-label={intl.formatMessage({
+            id: 'portal.notifications.item.archive',
+            defaultMessage: 'Archive notification',
+          })}
           className={cn(
             'absolute end-0 top-1/2 h-7 w-7 -translate-y-1/2',
             'opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-within:opacity-100',

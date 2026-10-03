@@ -8,6 +8,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 const getUnreadCountFn = vi.hoisted(() => vi.fn<() => Promise<{ count: number }>>())
@@ -69,9 +70,11 @@ async function loadPortal(queryClient: QueryClient, principalType: 'user' | 'ano
 function renderBell(queryClient: QueryClient) {
   return render(
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <NotificationBell popoverSide="bottom" />
-      </TooltipProvider>
+      <IntlProvider locale="en" defaultLocale="en">
+        <TooltipProvider>
+          <NotificationBell popoverSide="bottom" />
+        </TooltipProvider>
+      </IntlProvider>
     </QueryClientProvider>
   )
 }
