@@ -90,6 +90,7 @@ const expected: WebsiteBranding = {
   domain: 'example.com',
   logoKey: 'logos/acme.ico',
   logoUrl: '/api/storage/logos/acme.ico',
+  quality: 'good',
   color: '#0F766E',
 }
 const read = async () =>

@@ -201,3 +201,54 @@ export function parseOpenGraph(html: string, baseUrl: string): OpenGraphData {
     }
   }
 }
+
+export interface IconLink {
+  url: string
+  /** `apple-touch-icon`, which sites publish at a large size. */
+  touch: boolean
+  /** The largest declared square side in px, or null when not declared. */
+  size: number | null
+  type: string | null
+}
+
+const MAX_ICON_LINKS = 12
+
+function largestDeclaredSize(sizes: string | null): number | null {
+  const sides = (sizes ?? '')
+    .toLowerCase()
+    .split(/\s+/)
+    .map((entry) => /^(\d{1,5})x(\d{1,5})$/.exec(entry))
+    .filter((match): match is RegExpExecArray => match !== null)
+    .map((match) => Math.min(Number(match[1]), Number(match[2])))
+  return sides.length ? Math.max(...sides) : null
+}
+
+/**
+ * Every icon and touch-icon link in the head, in document order, with its
+ * declared size and type. Pure: no I/O, never throws.
+ */
+export function parseIconLinks(html: string, baseUrl: string): IconLink[] {
+  try {
+    const scoped = html.slice(0, MAX_SCAN_BYTES)
+    const headEnd = scoped.search(/<\/head\s*>/i)
+    const head = headEnd !== -1 ? scoped.slice(0, headEnd) : scoped
+    const icons: IconLink[] = []
+    const linkTagRe = /<link\s[^>]+>/gi
+    let match: RegExpExecArray | null
+    while ((match = linkTagRe.exec(head)) !== null && icons.length < MAX_ICON_LINKS) {
+      const tag = match[0]
+      const tokens = (extractAttr(tag, 'rel') ?? '').trim().toLowerCase().split(/\s+/)
+      const touch =
+        tokens.includes('apple-touch-icon') || tokens.includes('apple-touch-icon-precomposed')
+      if (!touch && !tokens.includes('icon')) continue
+      const href = extractAttr(tag, 'href')
+      const url = href ? resolveHttpUrl(decodeEntities(href), baseUrl, 2048) : null
+      if (!url) continue
+      const type = extractAttr(tag, 'type')?.trim().toLowerCase() || null
+      icons.push({ url, touch, size: largestDeclaredSize(extractAttr(tag, 'sizes')), type })
+    }
+    return icons
+  } catch {
+    return []
+  }
+}

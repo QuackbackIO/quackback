@@ -7,6 +7,7 @@ import {
 } from '@/lib/shared/schemas/settings'
 import { officeHoursScheduleSchema } from '@/lib/shared/office-hours'
 import { changelogSettingsSchema } from '@/lib/shared/changelog-settings'
+import { parseWebsiteInput } from '@/lib/shared/website-branding'
 
 export const SETTINGS_AREAS = [
   'branding',
@@ -40,14 +41,7 @@ export const websiteBrandingInputSchema = z
   .trim()
   .min(1)
   .max(2048)
-  .refine((site) => {
-    try {
-      const url = new URL(/^[a-z][a-z\d+.-]*:/i.test(site) ? site : `https://${site}`)
-      return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password
-    } catch {
-      return false
-    }
-  })
+  .refine((site) => parseWebsiteInput(site) !== null)
 export const settingsProposalChangeInputSchema = z.discriminatedUnion('area', [
   z
     .object({

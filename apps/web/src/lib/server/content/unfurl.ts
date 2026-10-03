@@ -38,6 +38,20 @@ const FAVICON_CACHE_TTL_S = 7 * 24 * 60 * 60
 const FAVICON_CACHE_NEG_TTL_S = 60 * 60
 /** Negative-cache sentinel — distinguishable from any real proxied URL. */
 const FAVICON_NONE = '__none'
+/** Sent on page and image requests alike; some sites refuse requests without one. */
+const PAGE_USER_AGENT = 'QuackbackLinkPreview/1.0'
+
+/** An extra rule every fetched URL must pass, checked on each redirect hop too. */
+export type UrlGuard = (url: URL) => boolean
+
+function urlAllowed(rawUrl: string, allowUrl: UrlGuard | undefined): boolean {
+  if (!allowUrl) return true
+  try {
+    return allowUrl(new URL(rawUrl))
+  } catch {
+    return false
+  }
+}
 
 /**
  * Fetch a URL with SSRF protection and a redirect-following loop (max 3 hops).
@@ -45,17 +59,19 @@ const FAVICON_NONE = '__none'
  * Returns the final Response and the final URL, or null on any failure.
  */
 export async function fetchFollowingRedirects(
-  rawUrl: string
+  rawUrl: string,
+  opts: { allowUrl?: UrlGuard } = {}
 ): Promise<{ response: Response; finalUrl: string } | null> {
   let currentUrl = rawUrl
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    if (!urlAllowed(currentUrl, opts.allowUrl)) return null
     let response: Response
     try {
       response = await safeFetch(currentUrl, {
         method: 'GET',
         headers: {
           accept: 'text/html,application/xhtml+xml',
-          'user-agent': 'QuackbackLinkPreview/1.0',
+          'user-agent': PAGE_USER_AGENT,
         },
         timeoutMs: PAGE_TIMEOUT_MS,
         maxResponseBytes: PAGE_MAX_BYTES,
@@ -100,16 +116,26 @@ export interface RehostedImage {
   url: string
 }
 
-export interface RehostImageOptions {
+export interface FetchImageOptions {
   timeoutMs: number
   maxBytes: number
-  storagePrefix?: 'link-previews' | 'logos'
   followRedirects?: boolean
+  allowUrl?: UrlGuard
+}
+
+export interface RehostImageOptions extends FetchImageOptions {
+  storagePrefix?: 'link-previews' | 'logos'
+}
+
+/** Raster bytes whose declared type matches their magic bytes. Never SVG. */
+export interface VerifiedImage {
+  buffer: Buffer
+  mime: string
 }
 
 async function fetchImageResponse(
   rawUrl: string,
-  opts: RehostImageOptions
+  opts: FetchImageOptions
 ): Promise<Response | null> {
   const deadline = Date.now() + opts.timeoutMs
   let currentUrl = rawUrl,
@@ -117,10 +143,12 @@ async function fetchImageResponse(
   for (let hop = 0; hop <= (opts.followRedirects ? MAX_REDIRECTS : 0); hop++) {
     const timeoutMs = deadline - Date.now()
     if (timeoutMs <= 0 || remainingBytes <= 0) return null
+    if (!urlAllowed(currentUrl, opts.allowUrl)) return null
     let response: Response
     try {
       response = await safeFetch(currentUrl, {
         method: 'GET',
+        headers: { accept: 'image/*', 'user-agent': PAGE_USER_AGENT },
         timeoutMs,
         maxResponseBytes: remainingBytes,
         onOverflow: 'error',
@@ -140,11 +168,11 @@ async function fetchImageResponse(
   return null
 }
 
-/** Rehost verified raster bytes, with optional independently validated redirects. */
-export async function rehostImageFromUrl(
+/** Fetch raster bytes, with optional independently validated redirects, and verify them. */
+export async function fetchVerifiedImage(
   rawUrl: string,
-  opts: RehostImageOptions
-): Promise<RehostedImage | null> {
+  opts: FetchImageOptions
+): Promise<VerifiedImage | null> {
   const response = await fetchImageResponse(rawUrl, opts)
   if (!response?.ok) return null
   const rawMime = (response.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase()
@@ -158,10 +186,25 @@ export async function rehostImageFromUrl(
   }
   const sniffed = sniffImageMime(buffer)
   if (sniffed === null || sniffed !== headerMime) return null
+  return { buffer, mime: sniffed }
+}
+
+/** Rehost verified raster bytes into workspace storage. */
+export async function rehostImageFromUrl(
+  rawUrl: string,
+  opts: RehostImageOptions
+): Promise<RehostedImage | null> {
+  const image = await fetchVerifiedImage(rawUrl, opts)
+  if (!image) return null
   try {
-    return await uploadImageBuffer(buffer, sniffed, opts.storagePrefix ?? 'link-previews', {
-      contentAddressed: true,
-    })
+    return await uploadImageBuffer(
+      image.buffer,
+      image.mime,
+      opts.storagePrefix ?? 'link-previews',
+      {
+        contentAddressed: true,
+      }
+    )
   } catch {
     return null
   }

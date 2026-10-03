@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseOpenGraph } from '../og-parse'
+import { parseIconLinks, parseOpenGraph } from '../og-parse'
 
 const BASE = 'https://example.com/page'
 
@@ -240,5 +240,38 @@ describe('theme-color parsing', () => {
       parseOpenGraph(' '.repeat(205000) + '<meta name="theme-color" content="#ffffff">', BASE)
         .themeColor
     ).toBeNull()
+  })
+})
+
+describe('parseIconLinks', () => {
+  it('lists touch and regular icons with their largest declared size and type', () => {
+    expect(
+      parseIconLinks(
+        `<head>
+          <link rel="icon" href="/favicon-32.png" sizes="16x16 32x32" type="image/png">
+          <link rel="apple-touch-icon" href="/touch.png">
+          <link rel="shortcut icon" href="/favicon.ico">
+          <link rel="icon" href="/brand.svg" sizes="any" type="image/svg+xml">
+          <link rel="stylesheet" href="/site.css">
+        </head>`,
+        BASE
+      )
+    ).toEqual([
+      { url: 'https://example.com/favicon-32.png', touch: false, size: 32, type: 'image/png' },
+      { url: 'https://example.com/touch.png', touch: true, size: null, type: null },
+      { url: 'https://example.com/favicon.ico', touch: false, size: null, type: null },
+      { url: 'https://example.com/brand.svg', touch: false, size: null, type: 'image/svg+xml' },
+    ])
+  })
+  it('drops unsafe hrefs, stops at the head and caps the list', () => {
+    expect(
+      parseIconLinks(
+        '<link rel="icon" href="javascript:alert(1)"><link rel="icon" href="data:,x">',
+        BASE
+      )
+    ).toEqual([])
+    expect(parseIconLinks('</head><link rel="icon" href="/late.png">', BASE)).toEqual([])
+    const many = Array.from({ length: 30 }, (_, i) => `<link rel="icon" href="/${i}.png">`).join('')
+    expect(parseIconLinks(many, BASE)).toHaveLength(12)
   })
 })
