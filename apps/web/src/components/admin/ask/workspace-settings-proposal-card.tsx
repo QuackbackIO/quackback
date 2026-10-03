@@ -85,6 +85,31 @@ export interface SettingsChangeCardProps {
   onOpenSettings: (href: string) => void
 }
 
+/** Office hours and other structured values as one readable line. */
+function readableValue(value: unknown, locale: string): string {
+  if (!Array.isArray(value)) {
+    if (value && typeof value === 'object')
+      return Object.values(value as Record<string, unknown>)
+        .map((item) => readableValue(item, locale))
+        .join(', ')
+    return String(value)
+  }
+  const weekday = new Intl.DateTimeFormat(locale, { weekday: 'short', timeZone: 'UTC' })
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') return String(item)
+      const entry = item as Record<string, unknown>
+      if (typeof entry.day === 'number' && typeof entry.start === 'string')
+        return `${weekday.format(Date.UTC(2023, 0, 1 + entry.day))} ${entry.start}-${String(entry.end)}`
+      if (typeof entry.date === 'string')
+        return typeof entry.name === 'string' && entry.name
+          ? `${entry.name} (${entry.date})`
+          : entry.date
+      return readableValue(entry, locale)
+    })
+    .join(', ')
+}
+
 function SettingsValue({ value, preview }: { value: unknown; preview?: string | null }) {
   const intl = useIntl()
   const enums: Record<string, string> = {
@@ -95,7 +120,7 @@ function SettingsValue({ value, preview }: { value: unknown; preview?: string | 
     authenticated: 'Signed-in users',
   }
   const text =
-    value == null || value === ''
+    value == null || value === '' || (Array.isArray(value) && value.length === 0)
       ? intl.formatMessage({ id: 'ask.settings.notSet', defaultMessage: 'Not set' })
       : typeof value === 'boolean'
         ? intl.formatMessage({
@@ -104,9 +129,7 @@ function SettingsValue({ value, preview }: { value: unknown; preview?: string | 
           })
         : typeof value === 'string' && enums[value]
           ? intl.formatMessage({ id: `ask.settings.value.${value}`, defaultMessage: enums[value] })
-          : typeof value === 'object'
-            ? JSON.stringify(value)
-            : String(value)
+          : readableValue(value, intl.locale)
   const color =
     typeof value === 'string' &&
     /^(?:#[\da-f]{3,8}|(?:oklch|oklab|hsl|hsla|rgb|rgba)\([\d\s.,%+\-/]+\)|transparent)$/i.test(

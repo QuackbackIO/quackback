@@ -18,12 +18,22 @@ export const SETTINGS_AREAS = [
 ] as const
 export const settingsAreaSchema = z.enum(SETTINGS_AREAS)
 export type SettingsArea = z.infer<typeof settingsAreaSchema>
+const officeHoursShape = officeHoursScheduleSchema.shape
+/** Only the office hours fields a request names; Apply merges them onto the schedule. */
+const officeHoursPatchSchema = z
+  .object({
+    enabled: officeHoursShape.enabled.optional(),
+    timezone: officeHoursShape.timezone.optional(),
+    intervals: officeHoursShape.intervals.optional(),
+    holidays: officeHoursShape.holidays.unwrap().optional(),
+  })
+  .strict()
 export const settingsPatchSchemas = {
   branding: brandingPatchSchema,
   portal: portalBasicsSchema,
   messenger: messengerBasicsSchema,
   modules: modulesSchema,
-  office_hours: officeHoursScheduleSchema.strict(),
+  office_hours: officeHoursPatchSchema,
   changelog: changelogSettingsSchema.strict(),
 } as const
 export const settingsChangeInputSchema = z.discriminatedUnion('area', [

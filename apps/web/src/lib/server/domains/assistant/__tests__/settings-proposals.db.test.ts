@@ -362,6 +362,41 @@ describe.skipIf(!fixture.available)('settings proposal adapters (real Postgres)'
     await undoSettingsChangesInTransaction(tx(), actor, receipt)
     expect((await read()).name).toBe('Acme')
   })
+  it('applies a partial office hours patch onto the stored schedule', async () => {
+    const intervals = [
+      { day: 1, start: '09:00', end: '17:00' },
+      { day: 2, start: '10:00', end: '18:00' },
+    ]
+    const first = await prepareSettingsChanges(actor, [
+      {
+        area: 'office_hours',
+        patch: { enabled: true, timezone: 'UTC', intervals, holidays: [] },
+      },
+    ])
+    await applySettingsChangesInTransaction(
+      tx(),
+      actor,
+      first,
+      first.changes.map((change) => change.id)
+    )
+    const proposal = await prepareSettingsChanges(actor, [
+      { area: 'office_hours', patch: { timezone: 'Europe/Paris' } },
+    ])
+    expect(proposal.changes.map((change) => change.id)).toEqual(['office_hours.timezone'])
+    const receipt = await applySettingsChangesInTransaction(tx(), actor, proposal, [
+      'office_hours.timezone',
+    ])
+    expect((await getSettingsForActor(actor, 'office_hours')).settings).toMatchObject({
+      enabled: true,
+      timezone: 'Europe/Paris',
+      intervals,
+    })
+    await undoSettingsChangesInTransaction(tx(), actor, receipt)
+    expect((await getSettingsForActor(actor, 'office_hours')).settings).toMatchObject({
+      timezone: 'UTC',
+      intervals,
+    })
+  })
   it('turns Messenger off with its own switch and leaves Support on', async () => {
     const liveWidget = { enabled: true, tabs: { messenger: true, feedback: true } }
     await testDb

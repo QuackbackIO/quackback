@@ -20,6 +20,7 @@ import {
 export type { SettingsApplyReceipt } from './settings-proposals.storage'
 import type { BrandingConfig } from '@/lib/server/domains/settings/settings.types'
 import { assertNotManaged } from '@/lib/server/config-file/managed-guard'
+import { officeHoursScheduleSchema } from '@/lib/shared/office-hours'
 import { db, eq, settings, type Database, type Transaction } from '@/lib/server/db'
 import type { Actor } from '@/lib/server/policy/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -165,9 +166,9 @@ async function writeArea(
       break
     case 'office_hours':
       await updateOfficeHoursSchedule(
-        settingsPatchSchemas.office_hours.parse({
+        officeHoursScheduleSchema.parse({
           ...areaValues(await requireSettings(tx), area),
-          ...patch,
+          ...settingsPatchSchemas.office_hours.parse(patch),
         }),
         options
       )
@@ -220,10 +221,12 @@ export async function applySettingsChangesInTransaction(
       const { logoKey, ...configPatch } = patch
       await verifyRehostedLogoKey(logoKey)
       settingsPatchSchemas.branding.parse(configPatch)
-    } else
-      settingsPatchSchemas[area].parse(
-        area === 'office_hours' ? { ...areaValues(before, area), ...patch } : patch
-      )
+    } else if (area === 'office_hours')
+      officeHoursScheduleSchema.parse({
+        ...areaValues(before, area),
+        ...settingsPatchSchemas.office_hours.parse(patch),
+      })
+    else settingsPatchSchemas[area].parse(patch)
   }
   for (const [area, patch] of patches) await writeArea(tx, area, patch, effects)
   const after = await requireSettings(tx)

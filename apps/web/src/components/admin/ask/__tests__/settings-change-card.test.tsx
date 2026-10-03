@@ -73,6 +73,35 @@ describe('settings change cards', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
     expect(props.onUndo).toHaveBeenCalledOnce()
   })
+  it('shows office hours as readable text, never raw JSON', () => {
+    mount({
+      changes: [
+        {
+          id: 'office_hours.intervals',
+          area: 'office_hours',
+          path: ['intervals'],
+          before: [],
+          after: [
+            { day: 1, start: '09:00', end: '17:00' },
+            { day: 2, start: '10:00', end: '18:00' },
+          ],
+          settingsHref: '/admin/settings/office-hours',
+        },
+        {
+          id: 'office_hours.holidays',
+          area: 'office_hours',
+          path: ['holidays'],
+          before: [],
+          after: [{ date: '2026-12-25', name: 'Christmas', recurringAnnual: true }],
+          settingsHref: '/admin/settings/office-hours',
+        },
+      ],
+    })
+    expect(screen.getByText('Mon 09:00-17:00, Tue 10:00-18:00')).toBeTruthy()
+    expect(screen.getByText('Christmas (2026-12-25)')).toBeTruthy()
+    expect(screen.getAllByText('Not set')).toHaveLength(2)
+    expect(document.body.textContent).not.toContain('{')
+  })
   it('lists every effect of turning Messenger on or off', () => {
     mount({
       changes: [
