@@ -580,12 +580,6 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
     'route is already key-gated (member.view/manage); this returns 404 for non-team principals'
   ),
 
-  'lib/server/functions/onboarding.ts::saveCloudOnboardingGoalFn::isAdmin': {
-    intent: 'SECONDARY_GATE',
-    roleBar: 'admin',
-    why: 'the control-plane-provisioned variant of the same step: the workspace already exists, so there is no bootstrap case and an existing admin is always required',
-  },
-
   'lib/server/functions/contact-email.ts::confirmEmailChangeFn::isTeamMember': NOT_A_GATE(
     'decides whether the confirmed address changes a control-plane seat — a teammate is a seat, an end-user is not; the address was already written above it'
   ),
