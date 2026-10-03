@@ -10,7 +10,9 @@ import {
 import type { PrincipalId } from '@quackback/ids'
 import { isTeamMember } from '@/lib/shared/roles'
 import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
-// From the package itself, so suites that stub `@/lib/server/db` keep the real predicates.
+// From the package itself, so suites that stub `@/lib/server/db` keep the real
+// predicates. Pure SQL builders: no client or connection comes with them.
+// oxlint-disable-next-line no-restricted-imports
 export {
   isTestPrincipalSql,
   notTestPrincipal,
