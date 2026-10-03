@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
 import { useIntl } from 'react-intl'
@@ -13,10 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { MessageMarkdown } from '@/components/shared/conversation/message-markdown'
-import { AskComposer } from './ask-composer'
 import { WorkspaceCopilotContext } from './workspace-copilot-context'
-import { WorkspaceSettingsProposalCard } from './workspace-settings-proposal-card'
 import { usePermissions } from '@/lib/client/use-permissions'
 import {
   useBillingEnabled,
@@ -24,7 +21,7 @@ import {
   useFeatureFlags,
   usePrincipalId,
 } from '@/lib/client/hooks/use-root-context'
-import { useAguiTurn } from '@/lib/client/hooks/use-agui-turn'
+import { useWorkspaceTransport } from './use-workspace-transport'
 import { adminQueries } from '@/lib/client/queries/admin'
 import {
   buildAskDestinations,
@@ -44,6 +41,20 @@ import {
   getWorkspaceCopilotThreadFn,
   listWorkspaceCopilotThreadsFn,
 } from '@/lib/server/functions/workspace-copilot'
+
+const AskComposer = lazy(() =>
+  import('./ask-composer').then((module) => ({ default: module.AskComposer }))
+)
+const MessageMarkdown = lazy(() =>
+  import('@/components/shared/conversation/message-markdown').then((module) => ({
+    default: module.MessageMarkdown,
+  }))
+)
+const WorkspaceSettingsProposalCard = lazy(() =>
+  import('./workspace-settings-proposal-card').then((module) => ({
+    default: module.WorkspaceSettingsProposalCard,
+  }))
+)
 
 type DraftTurn = {
   history: WorkspaceCopilotMessage[]
@@ -67,15 +78,19 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
     select: (state) => new URLSearchParams(state.location.searchStr).get('copilotThread'),
   })
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const paletteReturnFocus = useRef<HTMLElement | null>(null)
   const [panelOpen, setPanelOpen] = useState(false)
+  const [paletteMounted, setPaletteMounted] = useState(false)
+  const [panelMounted, setPanelMounted] = useState(false)
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [threadKey, setThreadKey] = useState<string | null>(null)
   const [draft, setDraft] = useState<DraftTurn | null>(null)
   const [busy, setBusy] = useState(false)
   const busyRef = useRef(false)
+  const requestEpoch = useRef(0)
   const [error, setError] = useState<string | null>(null)
-  const { start, stop, clear } = useAguiTurn({ url: '/api/admin/assistant/workspace' })
+  const { start, stop, clear, renderer: transport } = useWorkspaceTransport()
   const canUseCopilot = permissions.has(PERMISSIONS.COPILOT_USE)
   const availability = useQuery({
     queryKey: ['admin', 'workspace-copilot', 'availability', principalId],
@@ -84,6 +99,10 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
     enabled: canUseCopilot && (isHome || paletteOpen || panelOpen),
   })
   const canAsk = canUseCopilot && availability.data?.enabled === true
+  useEffect(() => {
+    if (paletteOpen) setPaletteMounted(true)
+    if (panelOpen && !isHome) setPanelMounted(true)
+  }, [paletteOpen, panelOpen, isHome])
   const thread = useQuery({
     queryKey: ['admin', 'workspace-copilot', 'thread', principalId, threadKey],
     queryFn: () => getWorkspaceCopilotThreadFn({ data: { threadKey: threadKey! } }),
@@ -107,10 +126,19 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
     const timer = setTimeout(() => setDebouncedQuery(query.trim()), 200)
     return () => clearTimeout(timer)
   }, [query])
-  useEffect(() => stop, [stop])
+  useEffect(
+    () => () => {
+      requestEpoch.current++
+      stop()
+    },
+    [stop]
+  )
   useEffect(() => {
+    requestEpoch.current++
     stop()
     clear()
+    busyRef.current = false
+    setBusy(false)
     setThreadKey(null)
     setDraft(null)
     setError(null)
@@ -128,12 +156,13 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k' && !event.altKey) {
         event.preventDefault()
-        setPaletteOpen((open) => !open)
+        if (!paletteOpen) paletteReturnFocus.current = document.activeElement as HTMLElement
+        setPaletteOpen(!paletteOpen)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [paletteOpen])
   useEffect(() => {
     if (
       draft?.final &&
@@ -168,6 +197,7 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
   }
   const ask = async (question: string) => {
     if (!canAsk || !question.trim() || busyRef.current) return
+    const requestedAt = ++requestEpoch.current
     busyRef.current = true
     setBusy(true)
     setError(null)
@@ -181,6 +211,7 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
         const created = await createWorkspaceCopilotThreadFn({
           data: { title: question.trim().slice(0, 120) },
         })
+        if (requestEpoch.current !== requestedAt) return
         key = created.key
         setThreadKey(key)
         clear()
@@ -189,13 +220,17 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
         question: question.trim(),
         forwardedProps: { threadKey: key },
         handlers: {
-          onTextDelta: (_delta, text) =>
-            setDraft((previous) => (previous ? { ...previous, text } : previous)),
+          onTextDelta: (_delta, text) => {
+            if (requestEpoch.current !== requestedAt) return
+            setDraft((previous) => (previous ? { ...previous, text } : previous))
+          },
           onFinal: (payload) => {
+            if (requestEpoch.current !== requestedAt) return
             const final = payload as WorkspaceCopilotFinalPayload
             setDraft((previous) => (previous ? { ...previous, text: final.text, final } : previous))
           },
           onError: () => {
+            if (requestEpoch.current !== requestedAt) return
             setError(
               intl.formatMessage({
                 id: 'ask.chat.failed',
@@ -206,7 +241,13 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
           },
         },
       })
-    } catch {
+    } catch (failure) {
+      if (requestEpoch.current !== requestedAt) return
+      if (failure instanceof Error && failure.name === 'AbortError') {
+        setDraft(null)
+        setQuery(question)
+        return
+      }
       setError(
         intl.formatMessage({
           id: 'ask.chat.failed',
@@ -215,9 +256,11 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
       )
       setQuery(question)
     } finally {
-      busyRef.current = false
-      setBusy(false)
-      void queryClient.invalidateQueries({ queryKey: ['admin', 'workspace-copilot'] })
+      if (requestEpoch.current === requestedAt) {
+        busyRef.current = false
+        setBusy(false)
+        void queryClient.invalidateQueries({ queryKey: ['admin', 'workspace-copilot'] })
+      }
     }
   }
   const newThread = () => {
@@ -232,7 +275,9 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
       <>
         {payload.proposedActions.map((action) =>
           action.toolName === 'propose_settings_change' ? (
-            <WorkspaceSettingsProposalCard key={action.id} action={action} />
+            <Suspense key={action.id} fallback={null}>
+              <WorkspaceSettingsProposalCard action={action} />
+            </Suspense>
           ) : (
             <p key={action.id} className="text-sm text-muted-foreground">
               {intl.formatMessage({
@@ -321,19 +366,25 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
             {message.sender === 'assistant' && (
               <span className="text-xs font-medium">{copilotLabel}</span>
             )}
-            <MessageMarkdown text={message.text} />
+            <Suspense fallback={message.text}>
+              <MessageMarkdown text={message.text} />
+            </Suspense>
             {renderPayload(message.payload)}
           </div>
         ))}
         {draft && (
           <>
             <div className="rounded-lg bg-muted p-3">
-              <MessageMarkdown text={draft.question} />
+              <Suspense fallback={draft.question}>
+                <MessageMarkdown text={draft.question} />
+              </Suspense>
             </div>
             <div className="space-y-2" aria-live="polite" aria-busy={busy}>
               <span className="text-xs font-medium">{copilotLabel}</span>
               {draft.text ? (
-                <MessageMarkdown text={draft.text} />
+                <Suspense fallback={draft.text}>
+                  <MessageMarkdown text={draft.text} />
+                </Suspense>
               ) : (
                 busy && (
                   <p className="text-sm text-muted-foreground">
@@ -355,7 +406,12 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
             type="button"
             variant="ghost"
             size="sm"
-            onClick={stop}
+            onClick={() => {
+              requestEpoch.current++
+              busyRef.current = false
+              setBusy(false)
+              stop()
+            }}
             className="focus-visible:ring-foreground/25"
           >
             <StopIcon className="size-4" />
@@ -365,16 +421,18 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
       </section>
     ) : null
   const composer = (
-    <AskComposer
-      query={query}
-      onQueryChange={setQuery}
-      canAsk={canAsk && !busy}
-      onAsk={(question) => void ask(question)}
-      onNavigate={navigate}
-      results={results}
-      loading={entitySearch.isFetching}
-      variant="home"
-    />
+    <Suspense fallback={null}>
+      <AskComposer
+        query={query}
+        onQueryChange={setQuery}
+        canAsk={canAsk && !busy}
+        onAsk={(question) => void ask(question)}
+        onNavigate={navigate}
+        results={results}
+        loading={entitySearch.isFetching}
+        variant="home"
+      />
+    </Suspense>
   )
   const completed = launch.data
     ? buildLaunchTasks(
@@ -410,34 +468,55 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
 
   return (
     <WorkspaceCopilotContext.Provider
-      value={{ composer, conversation, starters, openPalette: () => setPaletteOpen(true) }}
+      value={{
+        composer,
+        conversation,
+        starters,
+        openPalette: () => {
+          paletteReturnFocus.current = document.activeElement as HTMLElement
+          setPaletteOpen(true)
+        },
+      }}
     >
       {children}
-      <Dialog open={paletteOpen} onOpenChange={setPaletteOpen}>
-        <DialogContent className="max-w-xl gap-0 p-0 [&>button]:top-3 [&>button]:right-3">
-          <DialogTitle className="sr-only">
-            {intl.formatMessage({ id: 'ask.composer.search', defaultMessage: 'Search Quackback' })}
-          </DialogTitle>
-          <AskComposer
-            query={query}
-            onQueryChange={setQuery}
-            canAsk={canAsk && !busy}
-            onAsk={(question) => void ask(question)}
-            onNavigate={navigate}
-            results={results}
-            loading={entitySearch.isFetching}
-          />
-        </DialogContent>
-      </Dialog>
-      <Sheet open={panelOpen && !isHome} onOpenChange={setPanelOpen}>
-        <SheetContent className="w-full sm:max-w-xl">
-          <SheetHeader>
-            <SheetTitle>{copilotLabel}</SheetTitle>
-          </SheetHeader>
-          <ScrollArea className="min-h-0 flex-1 px-4">{conversation}</ScrollArea>
-          <div className="p-4">{composer}</div>
-        </SheetContent>
-      </Sheet>
+      {transport}
+      {(paletteOpen || paletteMounted) && (
+        <Dialog open={paletteOpen} onOpenChange={setPaletteOpen}>
+          <DialogContent
+            finalFocus={paletteReturnFocus}
+            className="max-w-xl gap-0 p-0 [&>button]:top-3 [&>button]:right-3"
+          >
+            <DialogTitle className="sr-only">
+              {intl.formatMessage({
+                id: 'ask.composer.search',
+                defaultMessage: 'Search Quackback',
+              })}
+            </DialogTitle>
+            <Suspense fallback={null}>
+              <AskComposer
+                query={query}
+                onQueryChange={setQuery}
+                canAsk={canAsk && !busy}
+                onAsk={(question) => void ask(question)}
+                onNavigate={navigate}
+                results={results}
+                loading={entitySearch.isFetching}
+              />
+            </Suspense>
+          </DialogContent>
+        </Dialog>
+      )}
+      {(panelMounted || (panelOpen && !isHome)) && (
+        <Sheet open={panelOpen && !isHome} onOpenChange={setPanelOpen}>
+          <SheetContent className="w-full sm:max-w-xl">
+            <SheetHeader>
+              <SheetTitle>{copilotLabel}</SheetTitle>
+            </SheetHeader>
+            <ScrollArea className="min-h-0 flex-1 px-4">{conversation}</ScrollArea>
+            <div className="p-4">{composer}</div>
+          </SheetContent>
+        </Sheet>
+      )}
     </WorkspaceCopilotContext.Provider>
   )
 }

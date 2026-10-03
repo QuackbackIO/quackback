@@ -73,6 +73,7 @@ export function AskComposer({
       }}
     >
       <CommandInput
+        autoFocus={variant === 'palette'}
         value={query}
         onValueChange={onQueryChange}
         placeholder={placeholder}

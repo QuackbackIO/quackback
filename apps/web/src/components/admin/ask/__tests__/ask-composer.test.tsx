@@ -25,6 +25,16 @@ function mount(overrides: Partial<AskComposerProps> = {}) {
 }
 
 describe('the shared Ask composer', () => {
+  it('focuses the palette input when its deferred composer mounts', () => {
+    mount({ variant: 'palette' })
+    expect(document.activeElement).toBe(screen.getByRole('combobox'))
+  })
+
+  it('keeps focus unchanged when the inline Home composer mounts', () => {
+    mount({ variant: 'home' })
+    expect(document.activeElement).not.toBe(screen.getByRole('combobox'))
+  })
+
   it('shows local Jump to results while entity search is still loading', () => {
     mount({ loading: true })
     expect(screen.getByRole('option', { name: 'Messenger' })).toBeTruthy()
