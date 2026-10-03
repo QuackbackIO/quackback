@@ -83,6 +83,7 @@ import {
 // translation API surface from.
 import { conversationToDTO, translationStateFrom } from './conversation.query'
 import { publishConversationUpdate } from '@/lib/server/realtime/conversation-channels'
+import { isTestCustomer } from '@/lib/server/test-data'
 import { logger } from '@/lib/server/logger'
 
 export { translationStateFrom }
@@ -232,6 +233,8 @@ export async function maybeDetectCustomerLanguage(
 ): Promise<Conversation> {
   if (conversation.detectedCustomerLanguage) return conversation
   try {
+    // A teammate's test thread spends no AI tokens.
+    if (await isTestCustomer(conversation.visitorPrincipalId)) return conversation
     const rows = await db
       .select({ content: conversationMessages.content })
       .from(conversationMessages)

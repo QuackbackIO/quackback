@@ -32,7 +32,11 @@ import {
 } from '@/lib/server/db'
 import { DEFAULT_BOARD_ACCESS, type BoardAccess } from '@/lib/shared/db-types'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
-import { getPublicRoadmapPosts, getRoadmapPosts } from '../roadmap.query'
+import {
+  getPublicRoadmapDateBuckets,
+  getPublicRoadmapPosts,
+  getRoadmapPosts,
+} from '../roadmap.query'
 import { listPublicRoadmaps } from '../roadmap.service'
 
 const fixture = await createDbTestFixture({
@@ -427,5 +431,46 @@ describe.skipIf(!fixture.available)('roadmap derived membership (real DB)', () =
         actor({ role: 'member', principalId: seeded.authorA })
       )
     ).resolves.toMatchObject({ total: 1 })
+  })
+
+  it('keeps a test customer idea off the public roadmap, its count and its date range', async () => {
+    const seeded = await seedBase()
+    const owner = await seedPrincipal(`Roadmap teammate ${suffix()}`)
+    const customer = createId('principal') as PrincipalId
+    await testDb.insert(principal).values({
+      id: customer,
+      role: 'user',
+      type: 'anonymous',
+      testOwnerPrincipalId: owner,
+      createdAt: new Date(),
+    })
+    const columns = await seedRoadmap(seeded, {})
+    const dated = await seedRoadmap(seeded, { type: 'date' })
+    const real = await seedPost(seeded, { eta: new Date('2026-10-15T00:00:00Z') })
+    const test = await seedPost(seeded, {
+      principalId: customer,
+      eta: new Date('2031-03-15T00:00:00Z'),
+    })
+
+    const publicPage = await getPublicRoadmapPosts(
+      columns,
+      { statusId: seeded.statusA },
+      ANONYMOUS_ACTOR
+    )
+    expect(publicPage.items.map((item) => item.id)).toEqual([real])
+    expect(publicPage.total).toBe(1)
+    const buckets = await getPublicRoadmapDateBuckets(dated, ANONYMOUS_ACTOR)
+    expect(buckets.some((bucket) => bucket.start?.startsWith('2031'))).toBe(false)
+    expect(buckets.some((bucket) => bucket.start?.startsWith('2026'))).toBe(true)
+
+    // The test customer still sees its own idea; the team sees both.
+    const own = await getPublicRoadmapPosts(
+      columns,
+      { statusId: seeded.statusA },
+      actor({ principalId: customer, role: 'user', principalType: 'anonymous' })
+    )
+    expect(own.items.map((item) => item.id).sort()).toEqual([real, test].sort())
+    const team = await getRoadmapPosts(columns, { statusId: seeded.statusA })
+    expect(team.total).toBe(2)
   })
 })

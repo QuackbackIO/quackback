@@ -143,7 +143,6 @@ describe('test comments never change stored post counts', () => {
         principalId: testAuthor,
         title: 'Acme test idea',
         content: 'Please',
-        widgetMetadata: { test: 'true' },
       },
     ])
   })

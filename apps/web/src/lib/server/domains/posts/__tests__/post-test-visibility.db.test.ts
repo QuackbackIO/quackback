@@ -112,7 +112,6 @@ describe('test feedback stays inside its customer session and team workspace', (
         principalId: customerId,
         title: 'Acme test idea',
         content: 'Please',
-        widgetMetadata: { test: 'true' },
       },
       {
         id: otherTestPost,
@@ -120,7 +119,6 @@ describe('test feedback stays inside its customer session and team workspace', (
         principalId: otherCustomerId,
         title: 'Acme other test idea',
         content: 'Please',
-        widgetMetadata: { test: 'true' },
       },
       { id: realPost, boardId, principalId: visitorId, title: 'Acme real idea', content: 'Please' },
     ])

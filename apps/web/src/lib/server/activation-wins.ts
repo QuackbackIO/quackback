@@ -19,7 +19,7 @@ import {
   type OnboardingOutcome,
   type SetupState,
 } from '@/lib/server/db'
-import { notTestRecord, notTestPrincipal } from '@/lib/server/test-data'
+import { notTestPrincipal } from '@/lib/server/test-data'
 
 export interface FirstWinFacts {
   customerOriginatedConversation?: boolean
@@ -56,7 +56,10 @@ export interface FirstWinResult {
   reachedAt: string | null
 }
 
-const notGeneratedPost = notTestRecord(posts.widgetMetadata)
+const notGeneratedPost = and(
+  sql`coalesce(${posts.widgetMetadata}->>'onboardingGenerated', 'false') <> 'true'`,
+  notTestPrincipal(posts.principalId)
+)!
 const externalPrincipal = and(
   or(eq(principal.role, 'user'), eq(principal.type, 'anonymous')),
   notTestPrincipal(principal.id)
@@ -80,7 +83,8 @@ export async function detectFirstWin(state: SetupState | null): Promise<FirstWin
           // is the question this actually asks.
           eq(conversations.source, 'widget'),
           isNotNull(conversations.visitorPrincipalId),
-          notTestRecord(conversations.customAttributes),
+          sql`coalesce(${conversations.customAttributes}->>'onboardingGenerated', 'false') <> 'true'`,
+          sql`coalesce(${conversations.customAttributes}->>'test', 'false') <> 'true'`,
           notTestPrincipal(conversations.visitorPrincipalId)
         )
       )

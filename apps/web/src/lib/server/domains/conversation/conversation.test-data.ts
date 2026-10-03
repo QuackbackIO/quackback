@@ -1,11 +1,14 @@
 /**
- * Test conversations and test ideas (the "Try Messenger" round trip, or a
- * teammate writing in as a customer) are kept for a week and then deleted.
- * Hard delete, like the spam sweep: child rows go through the FK cascades.
+ * Test conversations, test ideas and test tickets (the "Try Messenger" round
+ * trip) are kept for a week and then deleted. A row is test only when a test
+ * customer authored it, so every delete here joins through that identity and a
+ * teammate's own ingress, or a legacy `test` attribute a client once wrote,
+ * is never touched. Hard delete, like the spam sweep: child rows go through
+ * the FK cascades.
  */
-import { sql, type SQL } from 'drizzle-orm'
-import type { PrincipalId } from '@quackback/ids'
-import { db, conversations } from '@/lib/server/db'
+import { sql, type SQL, type SQLWrapper } from 'drizzle-orm'
+import { db, conversations, tickets, ticketConversations, and, inArray } from '@/lib/server/db'
+import { isTestPrincipalSql } from '@/lib/server/test-data'
 import { conversationFilter } from '@/lib/server/policy/conversations'
 import type { Actor } from '@/lib/server/policy/types'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
@@ -15,28 +18,40 @@ const log = logger.child({ component: 'test-data-retention' })
 
 export const TEST_DATA_RETENTION_DAYS = 7
 
-/** The marker the visitor-ingress seam stamps; sample data is not test data. */
-export function isTestThreadSql(attributes: SQL | typeof conversations.customAttributes): SQL {
-  return sql`coalesce(${attributes}->>'test', 'false') = 'true'`
+/** A test thread is one whose visitor is a test customer. */
+export function isTestThreadSql(visitorPrincipalId: SQLWrapper): SQL {
+  return isTestPrincipalSql(visitorPrincipalId)
 }
 
-function ownedBy(attributes: SQL, owner: PrincipalId | undefined): SQL {
-  return owner ? sql`${attributes}->>'testOwnerPrincipalId' = ${owner}` : sql`true`
-}
-
-/** Every test conversation the actor can see, or only one owner's. */
-export async function deleteTestConversations(
-  actor: Actor,
-  opts?: { ownerPrincipalId?: PrincipalId }
-): Promise<number> {
-  const rows = await db
-    .delete(conversations)
-    .where(
-      sql`${conversationFilter(actor)} and ${isTestThreadSql(conversations.customAttributes)} and ${ownedBy(sql`${conversations.customAttributes}`, opts?.ownerPrincipalId)}`
-    )
-    .returning({ id: conversations.id })
-  log.info({ deleted: rows.length }, 'test conversations deleted')
-  return rows.length
+/** Every test conversation the actor can see, with the test tickets paired to them. */
+export async function deleteTestConversations(actor: Actor): Promise<number> {
+  return db.transaction(async (tx) => {
+    const doomed = tx
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(and(conversationFilter(actor), isTestThreadSql(conversations.visitorPrincipalId)))
+    // A pair ticket's requester is the same test customer; delete it with its thread.
+    await tx
+      .delete(tickets)
+      .where(
+        and(
+          isTestPrincipalSql(tickets.requesterPrincipalId),
+          inArray(
+            tickets.id,
+            tx
+              .select({ id: ticketConversations.ticketId })
+              .from(ticketConversations)
+              .where(inArray(ticketConversations.conversationId, doomed))
+          )
+        )
+      )
+    const rows = await tx
+      .delete(conversations)
+      .where(and(conversationFilter(actor), isTestThreadSql(conversations.visitorPrincipalId)))
+      .returning({ id: conversations.id })
+    log.info({ deleted: rows.length }, 'test conversations deleted')
+    return rows.length
+  })
 }
 
 async function sweepBatches(statement: () => SQL, batchSize: number): Promise<number> {
@@ -48,46 +63,50 @@ async function sweepBatches(statement: () => SQL, batchSize: number): Promise<nu
   }
 }
 
+/** One table's test rows older than the cutoff, found through their author's identity. */
+function sweepStatement(
+  table: 'conversations' | 'posts' | 'tickets',
+  author: 'visitor_principal_id' | 'principal_id' | 'requester_principal_id',
+  cutoffIso: string,
+  batchSize: number
+): () => SQL {
+  return () => sql`
+    DELETE FROM ${sql.identifier(table)} WHERE id IN (
+      SELECT doomed.id FROM ${sql.identifier(table)} doomed
+      INNER JOIN principal test_author ON test_author.id = doomed.${sql.identifier(author)}
+      WHERE test_author.test_owner_principal_id IS NOT NULL
+        AND doomed.created_at < ${cutoffIso}::timestamptz
+      LIMIT ${batchSize}
+    )
+    RETURNING id`
+}
+
 export async function sweepTestData(opts?: {
   olderThanDays?: number
   batchSize?: number
-  ownerPrincipalId?: PrincipalId
-}): Promise<{ conversations: number; posts: number }> {
+}): Promise<{ conversations: number; posts: number; tickets: number }> {
   const olderThanDays = opts?.olderThanDays ?? TEST_DATA_RETENTION_DAYS
   const batchSize = opts?.batchSize ?? 500
   const cutoffIso = new Date(Date.now() - olderThanDays * 86_400_000).toISOString()
-  const owner = opts?.ownerPrincipalId
 
+  const ticketCount = await sweepBatches(
+    sweepStatement('tickets', 'requester_principal_id', cutoffIso, batchSize),
+    batchSize
+  )
   const conversationCount = await sweepBatches(
-    () => sql`
-      DELETE FROM conversations WHERE id IN (
-        SELECT id FROM conversations
-        WHERE ${isTestThreadSql(sql`custom_attributes`)}
-          AND ${ownedBy(sql`custom_attributes`, owner)}
-          AND created_at < ${cutoffIso}::timestamptz
-        LIMIT ${batchSize}
-      )
-      RETURNING id`,
+    sweepStatement('conversations', 'visitor_principal_id', cutoffIso, batchSize),
     batchSize
   )
   const postCount = await sweepBatches(
-    () => sql`
-      DELETE FROM posts WHERE id IN (
-        SELECT id FROM posts
-        WHERE ${isTestThreadSql(sql`widget_metadata`)}
-          AND ${ownedBy(sql`widget_metadata`, owner)}
-          AND created_at < ${cutoffIso}::timestamptz
-        LIMIT ${batchSize}
-      )
-      RETURNING id`,
+    sweepStatement('posts', 'principal_id', cutoffIso, batchSize),
     batchSize
   )
 
-  if (conversationCount + postCount > 0) {
+  if (conversationCount + postCount + ticketCount > 0) {
     log.info(
-      { conversations: conversationCount, posts: postCount, olderThanDays },
+      { conversations: conversationCount, posts: postCount, tickets: ticketCount, olderThanDays },
       'test data retention sweep deleted test rows'
     )
   }
-  return { conversations: conversationCount, posts: postCount }
+  return { conversations: conversationCount, posts: postCount, tickets: ticketCount }
 }

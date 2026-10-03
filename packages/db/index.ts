@@ -62,8 +62,7 @@ export { seedSystemData } from './src/seed-system'
 // Types
 export * from './src/types'
 export {
-  isTestRecord,
-  notTestRecord,
+  isTestPrincipalSql,
   notTestPrincipal,
   notTestConversation,
   notTestTicket,

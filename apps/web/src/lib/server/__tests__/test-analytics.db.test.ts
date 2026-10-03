@@ -50,7 +50,6 @@ it('keeps live support metrics and the lead directory unchanged for a test custo
       resolvedAt: new Date(),
       csatRating: 5,
       csatSubmittedAt: new Date(),
-      customAttributes: { test: true, testOwnerPrincipalId: owner },
     })
     .returning()
   await testDb.insert(conversationMessages).values({
@@ -75,17 +74,29 @@ it('keeps live support metrics and the lead directory unchanged for a test custo
     contactEmail: 'real@example.com',
     createdAt: new Date(),
   })
-  await testDb.insert(conversations).values({
-    channel: 'messenger',
-    visitorPrincipalId: real,
-    status: 'closed',
-    resolvedAt: new Date(),
-    csatRating: 3,
-    csatSubmittedAt: new Date(),
-  })
+  // A real thread, and one carrying a legacy client `test` attribute: both count.
+  await testDb.insert(conversations).values([
+    {
+      channel: 'messenger',
+      visitorPrincipalId: real,
+      status: 'closed',
+      resolvedAt: new Date(),
+      csatRating: 3,
+      csatSubmittedAt: new Date(),
+    },
+    {
+      channel: 'messenger',
+      visitorPrincipalId: real,
+      status: 'closed',
+      resolvedAt: new Date(),
+      csatRating: 4,
+      csatSubmittedAt: new Date(),
+      customAttributes: { test: true, testOwnerPrincipalId: owner },
+    },
+  ])
   const actual = await analytics()
-  expect(actual.conversationVolume.total).toBe(before.conversationVolume.total + 1)
-  expect(actual.csat.responseCount).toBe(before.csat.responseCount + 1)
+  expect(actual.conversationVolume.total).toBe(before.conversationVolume.total + 2)
+  expect(actual.csat.responseCount).toBe(before.csat.responseCount + 2)
   expect((await listPortalUsers({ lifecycle: 'leads' })).total).toBe(leads.total + 1)
 })
 
@@ -100,7 +111,6 @@ it('keeps test replies out of Quinn performance and action metrics', async () =>
     .values({
       channel: 'messenger',
       visitorPrincipalId: customer.id,
-      customAttributes: { test: true },
       status: 'closed',
       csatRating: 5,
       csatSubmittedAt: new Date(),
@@ -117,9 +127,10 @@ it('keeps test replies out of Quinn performance and action metrics', async () =>
   })
   expect(await getQuinnPerformance(from, to)).toEqual(before)
   expect(await getQuinnToolMetrics(from, to)).toEqual(tools)
+  // The teammate's own thread with a legacy marker is real and counts.
   const [real] = await testDb
     .insert(conversations)
-    .values({ channel: 'messenger', visitorPrincipalId: owner })
+    .values({ channel: 'messenger', visitorPrincipalId: owner, customAttributes: { test: true } })
     .returning()
   await testDb
     .insert(assistantInvolvements)

@@ -28,6 +28,7 @@ import {
   consumeTestCustomerToken,
 } from '../test-customer'
 import { resolveTestFeedbackActor } from '../test-customer-feedback'
+import { isTestCustomer } from '../test-data'
 import { policyActorFromAuth, type AuthContext } from '../functions/auth-helpers'
 import { runFetchBoardCapabilities } from '../functions/portal'
 import { runCreatePublicPost } from '../functions/public-posts'
@@ -104,7 +105,7 @@ const actorFor = (id: PrincipalId): Actor => ({
 
 beforeEach(async () => {
   expect(fixture.available).toBe(true)
-  expect(process.env.DATABASE_URL).toMatch(/\/quackback_test(?:\?|$)/)
+  expect(process.env.DATABASE_URL).toMatch(/\/quackback_test(?:_\w+)?(?:\?|$)/)
   await fixture.begin()
   effects.beforeRehost = null
   effects.headers = new Headers()
@@ -177,7 +178,12 @@ async function grantOwner(keys: PermissionKey[]) {
 
 it('uses stored ownership and live permissions without granting the owner role or any team permission', async () => {
   const actor = await resolveTestFeedbackActor(actorFor(customer))
-  expect(actor.testFeedback).toEqual({ ownerPrincipalId: owner, canView: true, canSubmit: true })
+  expect(actor.testFeedback).toEqual({
+    ownerPrincipalId: owner,
+    active: true,
+    canView: true,
+    canSubmit: true,
+  })
   expect(actor.role).toBe('user')
   expect(actor.principalType).toBe('anonymous')
   expect(can(actor, PERMISSIONS.POST_VIEW_PRIVATE)).toBe(false)
@@ -189,19 +195,22 @@ it('uses stored ownership and live permissions without granting the owner role o
   )
 })
 
-it('advertises and creates a server-tagged private-board test idea with anonymous posting disabled', async () => {
+it('advertises and creates a private-board test idea with anonymous posting disabled', async () => {
   const capabilities = await runFetchBoardCapabilities(auth)
   expect(capabilities.boards.map((board) => board.id)).toContain(privateBoard)
   expect(capabilities.permissions[privateBoard]).toEqual({ canSubmit: true, canVote: false })
+  const claimed = { test: 'false', testOwnerPrincipalId: createId('principal') }
   const created = await runCreatePublicPost(auth, {
     boardId: privateBoard,
     title: 'Acme test idea',
     content: 'A real customer path',
-    metadata: { test: 'false', testOwnerPrincipalId: createId('principal') },
+    metadata: claimed,
   })
   const saved = (await testDb.query.posts.findFirst({ where: eq(posts.id, created.id) }))!
+  // Test status is the author's identity; the client's metadata is kept as sent.
   expect(saved.principalId).toBe(customer)
-  expect(saved.widgetMetadata).toMatchObject({ test: 'true', testOwnerPrincipalId: owner })
+  expect(await isTestCustomer(saved.principalId)).toBe(true)
+  expect(saved.widgetMetadata).toEqual(claimed)
 })
 
 it('reads private-board submission capabilities from the exchanged widget Bearer and revokes them with the owner permission', async () => {
@@ -222,7 +231,6 @@ it('reads private-board submission capabilities from the exchanged widget Bearer
   })
   const saved = (await testDb.query.posts.findFirst({ where: eq(posts.id, created.id) }))!
   expect(saved.principalId).toBe(customer)
-  expect(saved.widgetMetadata).toMatchObject({ test: 'true', testOwnerPrincipalId: owner })
 
   await grantOwner([PERMISSIONS.POST_VIEW_PRIVATE])
   const revoked = await runFetchBoardCapabilities(await getOptionalWidgetAuth())
@@ -233,7 +241,7 @@ it('reads private-board submission capabilities from the exchanged widget Bearer
       title: 'Acme denied idea',
       content: '',
     })
-  ).rejects.toThrow(/post.create/)
+  ).rejects.toThrow(/post.create|anonymous interaction/i)
 
   effects.headers = new Headers({ Cookie: 'better-auth.session_token=teammate-cookie' })
   expect(await getOptionalWidgetAuth()).toBeNull()
@@ -277,6 +285,7 @@ it('denies test feedback after the owner is demoted or removed', async () => {
   const demoted = await resolveTestFeedbackActor(staleActor)
   expect(demoted.testFeedback).toEqual({
     ownerPrincipalId: owner,
+    active: false,
     canView: false,
     canSubmit: false,
   })
@@ -284,6 +293,10 @@ it('denies test feedback after the owner is demoted or removed', async () => {
   await expect(
     runCreatePublicPost(auth, { boardId: privateBoard, title: 'Acme denied idea', content: '' })
   ).rejects.toThrow(/board not found/i)
+  // An orphaned test customer cannot post anywhere, public boards included.
+  await expect(
+    runCreatePublicPost(auth, { boardId: publicBoard, title: 'Acme denied idea', content: '' })
+  ).rejects.toThrow(/post.create/)
   await testDb.delete(principal).where(eq(principal.id, owner))
   const removed = await resolveTestFeedbackActor(staleActor)
   expect(removed.testFeedback?.canView).not.toBe(true)
@@ -293,18 +306,30 @@ it('denies test feedback after the owner is demoted or removed', async () => {
 it('uses assignment permissions and distinguishes private-board viewing from posting', async () => {
   await grantOwner([PERMISSIONS.POST_VIEW_PRIVATE])
   const actor = await resolveTestFeedbackActor(actorFor(customer))
-  expect(actor.testFeedback).toEqual({ ownerPrincipalId: owner, canView: true, canSubmit: false })
+  expect(actor.testFeedback).toEqual({
+    ownerPrincipalId: owner,
+    active: true,
+    canView: true,
+    canSubmit: false,
+  })
   expect(await getPublicBoardById(privateBoard, actor)).not.toBeNull()
   expect((await runFetchBoardCapabilities(auth)).permissions[privateBoard].canSubmit).toBe(false)
   await expect(
     runCreatePublicPost(auth, { boardId: privateBoard, title: 'Acme denied idea', content: '' })
-  ).rejects.toThrow(/permission|submissions/i)
+  ).rejects.toThrow(/permission|submissions|anonymous interaction/i)
 })
 
-it('does not fall back to anonymous posting when a team owner has an empty assigned role', async () => {
+it('posts to a public board like any visitor when its owner has no private access', async () => {
   await grantOwner([])
   const actor = await resolveTestFeedbackActor(actorFor(customer))
-  expect(actor.testFeedback).toEqual({ ownerPrincipalId: owner, canView: false, canSubmit: false })
+  expect(actor.testFeedback).toEqual({
+    ownerPrincipalId: owner,
+    active: true,
+    canView: false,
+    canSubmit: false,
+  })
+  // With the workspace closed to anonymous posting there is nowhere to post.
+  expect((await runFetchBoardCapabilities(auth)).permissions[publicBoard].canSubmit).toBe(false)
   const row = (await testDb.query.settings.findFirst())!
   await testDb
     .update(settings)
@@ -315,10 +340,19 @@ it('does not fall back to anonymous posting when a team owner has an empty assig
       }),
     })
     .where(eq(settings.id, row.id))
-  expect((await runFetchBoardCapabilities(auth)).permissions[publicBoard].canSubmit).toBe(false)
+  const capabilities = await runFetchBoardCapabilities(auth)
+  expect(capabilities.boards.map((board) => board.id)).not.toContain(privateBoard)
+  expect(capabilities.permissions[publicBoard].canSubmit).toBe(true)
+  const created = await runCreatePublicPost(auth, {
+    boardId: publicBoard,
+    title: 'Acme public test idea',
+    content: '',
+  })
+  const saved = (await testDb.query.posts.findFirst({ where: eq(posts.id, created.id) }))!
+  expect(saved.principalId).toBe(customer)
   await expect(
-    runCreatePublicPost(auth, { boardId: publicBoard, title: 'Acme denied idea', content: '' })
-  ).rejects.toThrow(/permission|submissions/i)
+    runCreatePublicPost(auth, { boardId: privateBoard, title: 'Acme denied idea', content: '' })
+  ).rejects.toThrow(/board not found/i)
 })
 
 it('rechecks owner authority after image processing before inserting the post', async () => {

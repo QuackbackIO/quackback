@@ -20,7 +20,7 @@ import { canViewBoard, boardViewFilter } from './boards'
 import { tierAllows } from './access'
 import { resolveWorkspaceModeration, type ModerationAxis } from '@/lib/shared/moderation-policy'
 import { normalizeBoardAccess } from '@/lib/shared/schemas/boards'
-import { isTestRecord, notTestPrincipal, notTestRecord } from '@/lib/server/test-data'
+import { notTestPrincipal } from '@/lib/server/test-data'
 
 /** The workspace moderation policy — the fallback that per-board
  *  `moderation` rules resolve against when set to `'inherit'`. */
@@ -59,7 +59,8 @@ export function resolveModerationRule(
 interface PostShape {
   moderationState: ModerationState
   principalId?: PrincipalId | null
-  widgetMetadata?: unknown
+  /** The author is a test customer (callers that load the row select `isTestPrincipalSql`). */
+  authorIsTest?: boolean
 }
 
 interface BoardShape {
@@ -73,12 +74,13 @@ function accessOf(board: BoardShape): BoardAccess {
 const isTeam = isTeamActor
 
 export function canViewPost(actor: Actor, post: PostShape, board: BoardShape): Decision {
-  const test = isTestRecord(post.widgetMetadata)
+  // A test customer sees only its own ideas, which are test by identity, and
+  // nothing once its owner has left the team.
   if (actor.testFeedback) {
-    if (!actor.testFeedback.canView || !test || post.principalId !== actor.principalId) {
+    if (!actor.testFeedback.active || !post.principalId || post.principalId !== actor.principalId) {
       return denyDecision('Post is not visible')
     }
-  } else if (test && !isTeam(actor) && post.principalId !== actor.principalId) {
+  } else if (post.authorIsTest && !isTeam(actor) && post.principalId !== actor.principalId) {
     return denyDecision('Post is not visible')
   }
   const boardDecision = canViewBoard(actor, board)
@@ -100,17 +102,11 @@ export function canViewPost(actor: Actor, post: PostShape, board: BoardShape): D
   return denyDecision('Post is not yet visible')
 }
 
-/** Test visibility depends on stored post markers and identity, independent of its board. */
+/** Test visibility depends on the author's identity, independent of the post's board. */
 export function postTestViewFilter(actor: Actor): SQL {
-  const realPost = and(notTestRecord(posts.widgetMetadata), notTestPrincipal(posts.principalId))!
   const ownPost = actor.principalId ? eq(posts.principalId, actor.principalId) : sql`false`
-  return actor.testFeedback
-    ? actor.testFeedback.canView
-      ? and(ownPost, sql`not (${realPost})`)!
-      : sql`false`
-    : isTeam(actor)
-      ? sql`true`
-      : or(realPost, ownPost)!
+  if (actor.testFeedback) return actor.testFeedback.active ? ownPost : sql`false`
+  return isTeam(actor) ? sql`true` : or(notTestPrincipal(posts.principalId), ownPost)!
 }
 
 /** Caller joins boards before applying the complete view predicate. */
@@ -238,7 +234,7 @@ export function canCreatePost(
   // on a board they cannot see.
   const view = canViewBoard(actor, board)
   if (!view.allowed) return { allowed: false, reason: view.reason }
-  if (actor.testFeedback && !actor.testFeedback.canSubmit) {
+  if (actor.testFeedback && !actor.testFeedback.active) {
     return { allowed: false, reason: 'insufficient_permission:post.create' }
   }
 

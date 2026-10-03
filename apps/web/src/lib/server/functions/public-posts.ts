@@ -414,7 +414,7 @@ export const runCreatePublicPost = createServerOnlyFn(async function runCreatePu
   if (!settings) {
     throw new Error('Organization settings not found')
   }
-  if (actor.testFeedback && !actor.testFeedback.canSubmit) {
+  if (actor.testFeedback && !actor.testFeedback.active) {
     throw new Error('insufficient_permission:post.create')
   }
 
@@ -454,7 +454,7 @@ export const runCreatePublicPost = createServerOnlyFn(async function runCreatePu
       customFields,
     },
     author,
-    { headers: getRequestHeaders(), visitorIngress: true }
+    { headers: getRequestHeaders() }
   )
 
   log.info({ post_id: post.id }, 'created public post')

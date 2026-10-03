@@ -75,6 +75,7 @@ import {
   cleanupColdInboundLead,
 } from './conversation.email-cold-inbound'
 import { maybeAutoFileSpam } from './conversation.spam-filter'
+import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import { senderAuthSpamSignal } from './conversation.spam-signals'
 
 export type IngestInboundResult =
@@ -671,6 +672,19 @@ async function ingestColdInbound(
     throw err
   }
 
+  // A teammate's test alias: the mail belongs to that teammate's test
+  // customer, whoever sent it, and never to the sender's own identity.
+  const { testAliasOwnerFor } = await import('@/lib/server/test-email-alias')
+  const testOwner = await testAliasOwnerFor(recipients, currentMailSlug())
+  if (testOwner) {
+    return ingestTestAliasMail(parsed, testOwner, {
+      inboundRoute,
+      recipients,
+      plainText,
+      quarantineCause: opts.quarantineCause ?? null,
+    })
+  }
+
   const resolution = await resolveColdInboundSender(parsed.from, parsed.authenticationResults)
 
   // Blocked people cannot open a new thread by email either. Unconditional
@@ -789,6 +803,58 @@ async function ingestColdInbound(
         })
       )
       .catch((err) => log.error({ err, conversationId }, 'cold-inbound auto-ack failed'))
+  }
+  return { status: 'ingested', conversationId }
+}
+
+/**
+ * Mail to a teammate's test alias opens a test conversation as that
+ * teammate's test customer. The sender's authentication confers nothing here,
+ * because the alias, not the sender, decides the identity; the thread is test
+ * data, so it raises no spam classification and no acknowledgement mail.
+ */
+async function ingestTestAliasMail(
+  parsed: ParsedInboundEmail,
+  ownerPrincipalId: PrincipalId,
+  opts: {
+    inboundRoute: Awaited<ReturnType<typeof resolveChannelAccountByRecipient>> | null
+    recipients: string[]
+    plainText: string
+    quarantineCause: QuarantineCause | null
+  }
+): Promise<IngestInboundResult> {
+  const { getOrCreateTestCustomer } = await import('@/lib/server/test-customer')
+  const customer = await getOrCreateTestCustomer(ownerPrincipalId, DEFAULT_LOCALE)
+  const channelAccount = opts.inboundRoute ?? (await ensurePlatformInboundRoute(opts.recipients))
+  if (!channelAccount) {
+    log.warn({ reason: 'no_inbound_route' }, 'test alias mail dropped')
+    return { status: 'no_conversation' }
+  }
+  const media = await rehostInboundMedia(parsed, customer.id)
+  const converted = media.html ? emailHtmlToContent(media.html) : null
+  const content =
+    opts.plainText ||
+    converted?.text ||
+    (media.attachments.length > 0 ? '' : '(no plain-text body)')
+  const quarantine = opts.quarantineCause
+  const conversationId = await createEmailConversation({
+    parsed,
+    channelAccountId: channelAccount.id,
+    principalId: customer.id,
+    unverified: false,
+    content,
+    contentJson: converted?.contentJson ?? null,
+    attachments: media.attachments,
+    quarantine: quarantine
+      ? {
+          cause: quarantine,
+          note: 'Refused as a suspected mail loop: the message carried a reply address this workspace minted.',
+        }
+      : null,
+  })
+  if (quarantine) {
+    logRefusal(quarantine, true)
+    return { status: 'quarantined', conversationId, cause: quarantine }
   }
   return { status: 'ingested', conversationId }
 }

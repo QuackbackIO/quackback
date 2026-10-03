@@ -35,7 +35,7 @@ import { announcePublishedPost } from '@/lib/server/domains/posts/post.announce'
 import { announcePublishedComment } from '@/lib/server/domains/comments/comment.announce'
 import { logger } from '@/lib/server/logger'
 import { adjustCanonicalCommentCount } from '@/lib/server/domains/posts/post.merge-ids'
-import { notTestPrincipal, notTestRecord } from '@/lib/server/test-data'
+import { notTestPrincipal } from '@/lib/server/test-data'
 
 const log = logger.child({ component: 'moderation' })
 
@@ -312,7 +312,6 @@ export async function approveComment(
           and(
             eq(posts.id, row.postId),
             and(
-              notTestRecord(posts.widgetMetadata),
               notTestPrincipal(posts.principalId),
               notTestPrincipal(
                 sql`(SELECT ${principal.id} FROM ${principal} WHERE ${eq(principal.id, row.principalId)})`

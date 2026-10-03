@@ -79,6 +79,7 @@ export const Route = createFileRoute('/api/v1/posts/')({
           }
 
           const result = await listInboxPosts({
+            excludeTest: true,
             boardIds: boardId ? [boardId] : undefined,
             statusSlugs: statusSlug ? [statusSlug] : undefined,
             tagIds: tagIdArray,

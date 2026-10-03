@@ -13,6 +13,8 @@ import {
   events,
   settings,
   sql,
+  and,
+  inArray,
   type SetupState,
 } from '@/lib/server/db'
 import { DEFAULT_BOARD_ACCESS } from '@/lib/shared/db-types'
@@ -29,6 +31,7 @@ import { parseRawEmail } from '../domains/conversation/conversation.email-inboun
 import { refreshAnalytics } from '../domains/analytics/analytics.service'
 import { detectFirstWin } from '../activation-wins'
 import { emit } from '../events/emit'
+import { notTestConversation, notTestPrincipal } from '../test-data'
 import { postCreated } from '../events/catalogue/post'
 import { createSlaPolicy } from '../domains/sla/sla-policy.service'
 import { updateDefaultSlaPolicySettings } from '../domains/settings/settings.sla-default'
@@ -72,44 +75,47 @@ function actor(id: PrincipalId): Actor {
   }
 }
 
-it('writes protected test markers on customer ideas and teammate visitor ideas only', async () => {
-  const create = (id: PrincipalId, visitorIngress: boolean, metadata: Record<string, string>) =>
+it('treats a teammate idea and a legacy client marker as real, and only the test customer idea as test', async () => {
+  const create = (id: PrincipalId, metadata?: Record<string, string>) =>
     createPost(
       { boardId, title: 'An idea', content: '', widgetMetadata: metadata },
       { principalId: id, actor: actor(id) },
-      { skipDispatch: true, visitorIngress }
+      { skipDispatch: true }
     )
-  const demo = await create(customer, true, { test: 'false' })
-  const self = await create(owner, true, {})
-  const real = await create(owner, false, { test: 'true', onboardingGenerated: 'true' })
-  const forged = await create(ordinary, true, {
-    test: 'true',
-    testOwnerPrincipalId: owner,
-    source: 'widget',
-  })
+  const demo = await create(customer)
+  const teammate = await create(owner, { source: 'widget' })
+  const legacy = await create(ordinary, { test: 'true', onboardingGenerated: 'true' })
   const read = (id: typeof demo.id) => testDb.query.posts.findFirst({ where: eq(posts.id, id) })
-  expect((await read(demo.id))!.widgetMetadata).toMatchObject({
+  // Client metadata is stored as sent: it carries no meaning for test status.
+  expect((await read(teammate.id))!.widgetMetadata).toEqual({ source: 'widget' })
+  expect((await read(legacy.id))!.widgetMetadata).toEqual({
     test: 'true',
-    testOwnerPrincipalId: owner,
+    onboardingGenerated: 'true',
   })
-  expect((await read(self.id))!.widgetMetadata).toMatchObject({
-    test: 'true',
-    testOwnerPrincipalId: owner,
-  })
-  expect((await read(real.id))!.widgetMetadata).toEqual({})
-  expect((await read(forged.id))!.widgetMetadata).toEqual({ source: 'widget' })
+  const real = await testDb
+    .select({ id: posts.id })
+    .from(posts)
+    .where(
+      and(inArray(posts.id, [demo.id, teammate.id, legacy.id]), notTestPrincipal(posts.principalId))
+    )
+  expect(real.map((row) => row.id).sort()).toEqual([teammate.id, legacy.id].sort())
 })
 
-it('tags cold email from a teammate but keeps an ordinary sender real', async () => {
-  const parsed = parseRawEmail(
-    'From: you@example.com\r\nTo: inbox@example.com\r\nSubject: Hello\r\n\r\nHello'
-  )
+async function emailChannel() {
   const team = await testDb.query.teams.findFirst()
   expect(team).toBeDefined()
   const [channel] = await testDb
     .insert(channelAccounts)
     .values({ owningTeamId: team!.id, role: 'sending', address: `${boardId}@example.com` })
     .returning()
+  return channel
+}
+
+it('keeps cold email from a teammate real, like any other sender', async () => {
+  const parsed = parseRawEmail(
+    'From: you@example.com\r\nTo: inbox@example.com\r\nSubject: Hello\r\n\r\nHello'
+  )
+  const channel = await emailChannel()
   const create = (id: PrincipalId) =>
     createEmailConversation({
       parsed,
@@ -120,28 +126,26 @@ it('tags cold email from a teammate but keeps an ordinary sender real', async ()
       quarantine: { cause: 'manual', note: 'Held' },
     })
   const self = await create(owner),
-    real = await create(ordinary)
-  expect(
-    (await testDb.query.conversations.findFirst({ where: eq(conversations.id, self) }))!
-      .customAttributes
-  ).toEqual({ unverifiedSender: true, test: true, testOwnerPrincipalId: owner })
-  expect(
-    (await testDb.query.conversations.findFirst({ where: eq(conversations.id, real) }))!
-      .customAttributes
-  ).toEqual({ unverifiedSender: true })
+    other = await create(ordinary)
+  for (const id of [self, other]) {
+    const [row] = await testDb
+      .select({
+        attributes: conversations.customAttributes,
+        real: sql<boolean>`${notTestConversation(conversations.id)}`,
+      })
+      .from(conversations)
+      .where(eq(conversations.id, id))
+    expect(row).toEqual({ attributes: { unverifiedSender: true }, real: true })
+  }
 })
 
-it('starts the default SLA on a real conversation but never on a test one', async () => {
+it('starts the default SLA on a teammate conversation but never on a test customer one', async () => {
   const policy = await createSlaPolicy({ name: 'Default', firstResponseTargetSecs: 3600 })
   await updateDefaultSlaPolicySettings({ policyId: policy.id })
   const parsed = parseRawEmail(
     'From: you@example.com\r\nTo: inbox@example.com\r\nSubject: Hello\r\n\r\nHello'
   )
-  const team = await testDb.query.teams.findFirst()
-  const [channel] = await testDb
-    .insert(channelAccounts)
-    .values({ owningTeamId: team!.id, role: 'sending', address: `${boardId}@example.com` })
-    .returning()
+  const channel = await emailChannel()
   const create = (id: PrincipalId) =>
     createEmailConversation({
       parsed,
@@ -150,12 +154,12 @@ it('starts the default SLA on a real conversation but never on a test one', asyn
       unverified: true,
       content: 'Hello',
     })
-  const self = await create(owner),
-    real = await create(ordinary)
+  const test = await create(customer),
+    self = await create(owner)
   const stamp = async (id: typeof self) =>
     (await testDb.query.conversations.findFirst({ where: eq(conversations.id, id) }))!.slaApplied
-  expect(await stamp(self)).toBeNull()
-  expect(await stamp(real)).toMatchObject({ policyId: policy.id })
+  expect(await stamp(test)).toBeNull()
+  expect(await stamp(self)).toMatchObject({ policyId: policy.id })
 })
 
 it('keeps an identified test customer out of a dynamic segment a real person matches', async () => {
@@ -199,7 +203,7 @@ it('keeps hourly feedback rollups unchanged for test ideas and counts real work'
   await createPost(
     { boardId, title: 'A test idea', content: '' },
     { principalId: customer, actor: actor(customer) },
-    { skipDispatch: true, visitorIngress: true }
+    { skipDispatch: true }
   )
   expect(await snapshot()).toEqual(before)
   await createPost(
@@ -234,7 +238,7 @@ it('waits for a real idea for the private-feedback first win', async () => {
   await createPost(
     { boardId, title: 'A test idea', content: '' },
     { principalId: customer, actor: actor(customer) },
-    { skipDispatch: true, visitorIngress: true }
+    { skipDispatch: true }
   )
   expect(await detectFirstWin(state)).toEqual({ reached: false, reachedAt: null })
   const real = await createPost(

@@ -53,15 +53,16 @@ export async function isConversationsEnabled(): Promise<boolean> {
 /**
  * `isConversationsEnabled` for one caller. A teammate's test customer reaches
  * its own conversations before any visitor surface is public, so a workspace
- * can try Messenger without turning it on for everyone.
+ * can try Messenger without turning it on for everyone, but only while its
+ * owner is still on the team.
  */
 export async function isConversationsEnabledFor(
   principalId: PrincipalId | null | undefined
 ): Promise<boolean> {
   if (await isConversationsEnabled()) return true
   if (!principalId) return false
-  const { isTestCustomer } = await import('@/lib/server/test-data')
-  return isTestCustomer(principalId)
+  const { activeTestOwnerOf } = await import('@/lib/server/test-data')
+  return (await activeTestOwnerOf(principalId)) !== null
 }
 
 /**

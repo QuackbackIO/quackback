@@ -55,7 +55,7 @@ let rows: Record<
 
 beforeEach(async () => {
   expect(fixture.available).toBe(true)
-  expect(process.env.DATABASE_URL).toMatch(/\/quackback_test(?:\?|$)/)
+  expect(process.env.DATABASE_URL).toMatch(/\/quackback_test(?:_\w+)?(?:\?|$)/)
   await fixture.begin()
   delivered.mockClear()
   owner = createId('principal')
@@ -144,7 +144,7 @@ function assignment(ticket: Ticket): EventData & { type: 'ticket.assigned' } {
   }
 }
 
-it.each(['marked', 'requester', 'markedConversation', 'testConversation'] as const)(
+it.each(['requester', 'testConversation'] as const)(
   'keeps %s ticket events in the outbox without a delivery or reaction job',
   async (kind) => {
     const event = assignment(rows[kind])
@@ -162,7 +162,7 @@ it.each(['marked', 'requester', 'markedConversation', 'testConversation'] as con
   }
 )
 
-it.each(['marked', 'requester', 'markedConversation', 'testConversation'] as const)(
+it.each(['requester', 'testConversation'] as const)(
   'suppresses an already queued %s ticket webhook using its current stored provenance',
   async (kind) => {
     const event = assignment(rows[kind])
@@ -242,36 +242,41 @@ it('uses the stored ticket parent of a teammate-authored message and keeps a rea
   expect(delivered).toHaveBeenCalledExactlyOnceWith(rows.real.id)
 })
 
-it('continues to enqueue and deliver a real ticket assignment', async () => {
-  const event = assignment(rows.real)
-  const id = await emit(testDb, ticketAssigned, {
-    entityId: rows.real.id,
-    payload: { ...event.data },
-    actor: { type: 'user', id: owner },
-  })
-  const stored = await testDb.query.events.findFirst({ where: eq(events.eventId, id) })
-  expect(stored?.publishedAt).toBeNull()
-  const jobs = getExecuteRows(
-    await testDb.execute(sql`SELECT queue FROM job_queue WHERE payload->>'eventId' = ${id}`)
-  )
-  expect(jobs).toEqual([{ queue: 'event-dispatch' }])
-  await runHookJob({
-    id: '1',
-    jobId: createId('job'),
-    queue: 'events',
-    dedupeKey: event.id,
-    payload: {
-      hookType: 'webhook',
-      event,
-      target: { url: 'https://example.com/events' },
-      config: { testDelivery: true },
-    },
-    workspaceKey: null,
-    attempts: 1,
-    maxAttempts: 1,
-    leaseToken: crypto.randomUUID(),
-    lockedUntil: new Date(Date.now() + 60_000),
-    runAt: new Date(),
-  })
-  expect(delivered).toHaveBeenCalledExactlyOnceWith(rows.real.id)
-})
+// A legacy client `test` attribute, on the ticket or on a teammate's linked
+// thread, is real data and must still be delivered.
+it.each(['real', 'marked', 'markedConversation'] as const)(
+  'continues to enqueue and deliver a %s ticket assignment',
+  async (kind) => {
+    const event = assignment(rows[kind])
+    const id = await emit(testDb, ticketAssigned, {
+      entityId: rows[kind].id,
+      payload: { ...event.data },
+      actor: { type: 'user', id: owner },
+    })
+    const stored = await testDb.query.events.findFirst({ where: eq(events.eventId, id) })
+    expect(stored?.publishedAt).toBeNull()
+    const jobs = getExecuteRows(
+      await testDb.execute(sql`SELECT queue FROM job_queue WHERE payload->>'eventId' = ${id}`)
+    )
+    expect(jobs).toEqual([{ queue: 'event-dispatch' }])
+    await runHookJob({
+      id: '1',
+      jobId: createId('job'),
+      queue: 'events',
+      dedupeKey: event.id,
+      payload: {
+        hookType: 'webhook',
+        event,
+        target: { url: 'https://example.com/events' },
+        config: { testDelivery: true },
+      },
+      workspaceKey: null,
+      attempts: 1,
+      maxAttempts: 1,
+      leaseToken: crypto.randomUUID(),
+      lockedUntil: new Date(Date.now() + 60_000),
+      runAt: new Date(),
+    })
+    expect(delivered).toHaveBeenCalledExactlyOnceWith(rows[kind].id)
+  }
+)

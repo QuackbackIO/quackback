@@ -58,7 +58,7 @@ import {
   type OverviewSectionState,
 } from '@/lib/shared/admin-overview'
 import type { ConversationPriority } from '@/lib/shared/conversation/types'
-import { notTestRecord, notTestPrincipal } from '@/lib/server/test-data'
+import { notTestPrincipal } from '@/lib/server/test-data'
 
 const log = logger.child({ component: 'admin-overview' })
 
@@ -137,17 +137,13 @@ export async function getAdminOverview(input: {
     supportOn
       ? db.query.conversations.findFirst({
           columns: { id: true },
-          where: and(
-            conversationFilter(actor),
-            notTestRecord(conversations.customAttributes),
-            notTestPrincipal(conversations.visitorPrincipalId)
-          ),
+          where: and(conversationFilter(actor), notTestPrincipal(conversations.visitorPrincipalId)),
         })
       : undefined,
     feedbackOn
       ? db.query.posts.findFirst({
           columns: { id: true },
-          where: and(isNull(posts.deletedAt), notTestRecord(posts.widgetMetadata)),
+          where: and(isNull(posts.deletedAt), notTestPrincipal(posts.principalId)),
         })
       : undefined,
     helpOn
@@ -257,7 +253,6 @@ async function loadSupport(actor: Actor, viewerId: PrincipalId | null, now: Date
 
   const conditions = and(
     visibility,
-    notTestRecord(conversations.customAttributes),
     notTestPrincipal(conversations.visitorPrincipalId),
     isNotNull(conversations.waitingSince),
     ne(conversations.status, 'closed')
@@ -425,7 +420,7 @@ async function loadFeedback(viewerId: PrincipalId | null, now: Date) {
   const livePost = and(
     isNull(posts.deletedAt),
     isNull(posts.canonicalPostId),
-    notTestRecord(posts.widgetMetadata)
+    notTestPrincipal(posts.principalId)
   )
 
   const reviewLink: OverviewLink = defaultStatus
@@ -510,7 +505,7 @@ async function loadMomentum(now: Date): Promise<OverviewMomentumItem[]> {
       and(
         isNull(posts.deletedAt),
         isNull(posts.canonicalPostId),
-        notTestRecord(posts.widgetMetadata)
+        notTestPrincipal(posts.principalId)
       )
     )
     .groupBy(posts.id, posts.title)

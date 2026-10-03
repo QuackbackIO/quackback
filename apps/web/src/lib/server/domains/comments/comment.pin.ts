@@ -12,7 +12,7 @@ import { isTeamMember, Role } from '@/lib/shared/roles'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { logger } from '@/lib/server/logger'
 import { adjustCanonicalCommentCount } from '@/lib/server/domains/posts/post.merge-ids'
-import { notTestPrincipal, notTestRecord } from '@/lib/server/test-data'
+import { notTestPrincipal } from '@/lib/server/test-data'
 
 const log = logger.child({ component: 'comment-pin' })
 
@@ -68,7 +68,6 @@ export async function restoreComment(
           and(
             eq(posts.id, comment.postId),
             and(
-              notTestRecord(posts.widgetMetadata),
               notTestPrincipal(posts.principalId),
               notTestPrincipal(
                 sql`(SELECT ${principal.id} FROM ${principal} WHERE ${eq(principal.id, updatedComment.principalId)})`

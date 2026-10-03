@@ -9,8 +9,6 @@ import { useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { PlusIcon, XMarkIcon, SparklesIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
-import { useIntl } from 'react-intl'
-import { isReservedTestAttributeError } from '@/lib/shared/test-attributes'
 import type { ConversationAttributeId } from '@quackback/ids'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -618,7 +616,6 @@ function AttributeFormDialog({
 }
 
 export function ConversationAttributesList() {
-  const intl = useIntl()
   const queryClient = useQueryClient()
   const registryQuery = useSuspenseQuery(conversationAttributeQueries.registry())
   const attributes = registryQuery.data
@@ -630,17 +627,7 @@ export function ConversationAttributesList() {
     mutationFn: (input: Parameters<typeof createConversationAttributeFn>[0]['data']) =>
       createConversationAttributeFn({ data: input }),
     onSuccess: invalidate,
-    onError: (e) =>
-      toast.error(
-        isReservedTestAttributeError(e)
-          ? intl.formatMessage({
-              id: 'conversationAttributes.reservedKey',
-              defaultMessage: 'Quackback manages this attribute.',
-            })
-          : e instanceof Error
-            ? e.message
-            : 'Failed to create attribute'
-      ),
+    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed to create attribute'),
   })
   const updateAttr = useMutation({
     mutationFn: (input: Parameters<typeof updateConversationAttributeFn>[0]['data']) =>

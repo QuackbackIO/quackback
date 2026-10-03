@@ -28,7 +28,7 @@ import {
 } from '@/lib/server/db'
 import { toIsoDateOnly } from '@/lib/shared/utils/date'
 import { logger } from '@/lib/server/logger'
-import { notTestRecord, notTestPrincipal } from '@/lib/server/test-data'
+import { notTestPrincipal } from '@/lib/server/test-data'
 
 const log = logger.child({ component: 'analytics' })
 
@@ -60,7 +60,7 @@ export async function refreshAnalytics(): Promise<void> {
           gte(posts.createdAt, dayStart),
           lte(posts.createdAt, dayEnd),
           isNull(posts.deletedAt),
-          notTestRecord(posts.widgetMetadata)
+          notTestPrincipal(posts.principalId)
         )
       ),
     db
@@ -71,7 +71,7 @@ export async function refreshAnalytics(): Promise<void> {
         and(
           gte(postVotes.createdAt, dayStart),
           lte(postVotes.createdAt, dayEnd),
-          notTestRecord(posts.widgetMetadata),
+          notTestPrincipal(posts.principalId),
           notTestPrincipal(postVotes.principalId)
         )
       ),
@@ -84,7 +84,7 @@ export async function refreshAnalytics(): Promise<void> {
           gte(postComments.createdAt, dayStart),
           lte(postComments.createdAt, dayEnd),
           isNull(postComments.deletedAt),
-          notTestRecord(posts.widgetMetadata),
+          notTestPrincipal(posts.principalId),
           notTestPrincipal(postComments.principalId)
         )
       ),
@@ -108,7 +108,7 @@ export async function refreshAnalytics(): Promise<void> {
       .select({ slug: postStatuses.slug, value: count() })
       .from(posts)
       .innerJoin(postStatuses, eq(posts.statusId, postStatuses.id))
-      .where(and(isNull(posts.deletedAt), notTestRecord(posts.widgetMetadata)))
+      .where(and(isNull(posts.deletedAt), notTestPrincipal(posts.principalId)))
       .groupBy(postStatuses.slug),
     db
       .select({ boardId: posts.boardId, value: count() })
@@ -118,7 +118,7 @@ export async function refreshAnalytics(): Promise<void> {
           gte(posts.createdAt, dayStart),
           lte(posts.createdAt, dayEnd),
           isNull(posts.deletedAt),
-          notTestRecord(posts.widgetMetadata)
+          notTestPrincipal(posts.principalId)
         )
       )
       .groupBy(posts.boardId),
@@ -209,7 +209,7 @@ async function refreshTopPosts(): Promise<void> {
         and(
           isNull(posts.deletedAt),
           gte(posts.createdAt, since),
-          notTestRecord(posts.widgetMetadata)
+          notTestPrincipal(posts.principalId)
         )
       )
       .groupBy(posts.id, posts.title, boards.name, postStatuses.name)

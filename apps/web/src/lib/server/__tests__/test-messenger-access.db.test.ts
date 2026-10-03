@@ -60,6 +60,9 @@ it('opens conversations to a test customer while every visitor surface is off', 
   expect(await isConversationsEnabledFor(owner)).toBe(false)
   expect(await isConversationsEnabledFor(null)).toBe(false)
   expect(await isConversationsEnabledFor(customer)).toBe(true)
+  // Only while its owner is on the team.
+  await testDb.update(principal).set({ role: 'user' }).where(eq(principal.id, owner))
+  expect(await isConversationsEnabledFor(customer)).toBe(false)
 })
 
 it('lets a test customer send and read its thread, and still refuses an ordinary visitor', async () => {
@@ -78,7 +81,9 @@ it('lets a test customer send and read its thread, and still refuses an ordinary
     .select()
     .from(conversations)
     .where(eq(conversations.visitorPrincipalId, customer))
-  expect(stored.customAttributes).toMatchObject({ test: true })
+  // No marker is written; the thread goes to the teammate trying it out.
+  expect(stored.customAttributes).toEqual({})
+  expect(stored.assignedAgentPrincipalId).toBe(owner)
 })
 
 it('exchanges a test token for a Bearer once, without setting a cookie', async () => {

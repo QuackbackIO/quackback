@@ -31,7 +31,7 @@ let statusId: typeof ticketStatuses.$inferSelect.id
 
 beforeEach(async () => {
   expect(fixture.available).toBe(true)
-  expect(process.env.DATABASE_URL).toMatch(/\/quackback_test(?:\?|$)/)
+  expect(process.env.DATABASE_URL).toMatch(/\/quackback_test(?:_\w+)?(?:\?|$)/)
   await fixture.begin()
   const ownerUser = createId('user')
   owner = createId('principal')
@@ -101,7 +101,7 @@ async function realTicketCount(id: TicketId) {
   ).length
 }
 
-it.each(['marker', 'identity'] as const)(
+it.each(['identity'] as const)(
   'rejects linking a %s conversation into a real ticket before writing a link or announcement',
   async (kind) => {
     const { ticket } = await seed('real')
@@ -124,7 +124,7 @@ it.each(['marker', 'identity'] as const)(
   }
 )
 
-it.each(['marker', 'identity'] as const)(
+it.each(['identity'] as const)(
   'rejects linking a real conversation into a %s ticket',
   async (kind) => {
     const { ticket } = await seed(kind)
@@ -158,13 +158,14 @@ it.each(['real', 'marker', 'identity'] as const)(
         ),
       })
     ).toBeDefined()
-    expect(await realTicketCount(ticket.id)).toBe(kind === 'real' ? 1 : 0)
+    // A legacy client marker is real data: only the test customer's identity is test.
+    expect(await realTicketCount(ticket.id)).toBe(kind === 'identity' ? 0 : 1)
   }
 )
 
 it('uses an existing linked test conversation when classifying an otherwise unmarked ticket', async () => {
   const { ticket, conversation: realConversation } = await seed('real')
-  const { conversation: testConversation } = await seed('marker')
+  const { conversation: testConversation } = await seed('identity')
   await testDb
     .insert(ticketConversations)
     .values({ ticketId: ticket.id, conversationId: testConversation.id, ticketType: 'back_office' })

@@ -5,7 +5,7 @@
  * slots coalesce onto a per-month key; the handler reports previousUtcMonth()
  * of now (UTC) rather than the local scheduledFor wall time.
  */
-import { isNull, sql } from 'drizzle-orm'
+import { and, isNull, sql } from 'drizzle-orm'
 import { db, posts, boards } from '@/lib/server/db'
 import { reportWorkspaceUsage } from '@/lib/server/control-plane/client'
 import { aiTokensInUtcMonth } from '@/lib/server/domains/ai/usage-counter'
@@ -14,6 +14,7 @@ import { countSeatUsage } from '@/lib/server/domains/principals/seat-usage'
 import { logger } from '@/lib/server/logger'
 import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
 import { TerminalJobError } from '@/lib/server/jobs/definitions'
+import { notTestPrincipal } from '@/lib/server/test-data'
 import {
   enqueueUsageReport,
   isHostedBillingConfigured,
@@ -60,7 +61,7 @@ export async function runUsageReport(job: ClaimedJob): Promise<void> {
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(posts)
-      .where(isNull(posts.deletedAt)),
+      .where(and(isNull(posts.deletedAt), notTestPrincipal(posts.principalId))),
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(boards)

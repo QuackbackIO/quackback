@@ -41,7 +41,7 @@ const txLockedBoardRows: { value: Array<{ deletedAt: Date | null; access?: unkno
 
 vi.mock('@/lib/server/db', async (importOriginal) => {
   const { sql: realSql } = await vi.importActual<typeof import('drizzle-orm')>('drizzle-orm')
-  const { isTestRecord, notTestRecord } = await importOriginal<typeof import('@/lib/server/db')>()
+  const { notTestPrincipal } = await importOriginal<typeof import('@/lib/server/db')>()
 
   function chain(label: string) {
     const c: Record<string, unknown> = {}
@@ -132,8 +132,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
     eq: vi.fn(),
     and: vi.fn((...args: unknown[]) => args),
     sql: realSql,
-    isTestRecord,
-    notTestRecord,
+    notTestPrincipal,
   }
 })
 
