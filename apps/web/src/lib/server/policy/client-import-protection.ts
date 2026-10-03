@@ -12,6 +12,8 @@ export const CLIENT_PROTECTED_SPECIFIERS = [
   '@quackback/db',
   '@quackback/db/client',
   '@quackback/db/schema',
+  // The personal email domain list is about 270 KB of data.
+  '@quackback/db/email/personal-email-domains',
   'openai',
   '@quackback/logger',
   'pino',
