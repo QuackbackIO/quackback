@@ -1325,5 +1325,7 @@
   "onboarding.task.first-win.feedback": "Recibir tu primera idea",
   "onboarding.task.first-win.support": "Responder tu primera conversación",
   "onboarding.task.first-win.helpCenter": "Publicar tu primer artículo",
-  "onboarding.task.first-win.status": "Añadir tu primer servicio"
+  "onboarding.task.first-win.status": "Añadir tu primer servicio",
+  "onboarding.test.sendTestMessage": "Enviar un mensaje de prueba",
+  "onboarding.test.postTestIdea": "Publicar una idea de prueba"
 }

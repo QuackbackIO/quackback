@@ -1325,5 +1325,7 @@
   "onboarding.task.first-win.feedback": "Je eerste idee ontvangen",
   "onboarding.task.first-win.support": "Je eerste gesprek beantwoorden",
   "onboarding.task.first-win.helpCenter": "Je eerste artikel publiceren",
-  "onboarding.task.first-win.status": "Je eerste dienst toevoegen"
+  "onboarding.task.first-win.status": "Je eerste dienst toevoegen",
+  "onboarding.test.sendTestMessage": "Testbericht versturen",
+  "onboarding.test.postTestIdea": "Testidee plaatsen"
 }

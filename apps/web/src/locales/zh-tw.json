@@ -1325,5 +1325,7 @@
   "onboarding.task.first-win.feedback": "收到第一則想法",
   "onboarding.task.first-win.support": "回覆第一則對話",
   "onboarding.task.first-win.helpCenter": "發布第一篇文章",
-  "onboarding.task.first-win.status": "新增第一個服務"
+  "onboarding.task.first-win.status": "新增第一個服務",
+  "onboarding.test.sendTestMessage": "傳送測試訊息",
+  "onboarding.test.postTestIdea": "發布測試想法"
 }

@@ -1325,5 +1325,7 @@
   "onboarding.task.first-win.feedback": "الحصول على أول فكرة",
   "onboarding.task.first-win.support": "الرد على أول محادثة",
   "onboarding.task.first-win.helpCenter": "نشر أول مقال",
-  "onboarding.task.first-win.status": "إضافة أول خدمة"
+  "onboarding.task.first-win.status": "إضافة أول خدمة",
+  "onboarding.test.sendTestMessage": "إرسال رسالة تجريبية",
+  "onboarding.test.postTestIdea": "نشر فكرة تجريبية"
 }
