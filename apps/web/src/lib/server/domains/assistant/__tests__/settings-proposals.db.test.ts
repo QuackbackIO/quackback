@@ -10,6 +10,8 @@ import {
   roles,
   apiKeys,
   principalRoleAssignments,
+  permissions,
+  rolePermissions,
   type Transaction,
 } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
@@ -216,7 +218,7 @@ describe.skipIf(!fixture.available)('settings proposal adapters (real Postgres)'
     })
     expect((await read()).name).toBe('Acme team')
   })
-  it('exposes only the real portal name and requires both page and writer permissions', async () => {
+  it('exposes only the real portal name and requires the branding permission its writer uses', async () => {
     await testDb
       .update(settings)
       .set({ headerDisplayName: 'Unused header', headerDisplayMode: 'logo_only' })
@@ -226,20 +228,20 @@ describe.skipIf(!fixture.available)('settings proposal adapters (real Postgres)'
       { area: 'portal', patch: { displayName: 'Acme team' } },
     ])
     expect(proposal.changes[0].settingsHref).toBe('/admin/settings/general')
-    for (const missing of [PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.SETTINGS_BRANDING]) {
+    for (const missing of [PERMISSIONS.SETTINGS_BRANDING]) {
       const restricted = {
         ...actor,
         permissions: new Set(ALL_PERMISSIONS.filter((permission) => permission !== missing)),
       }
-      await expect(getSettingsForActor(restricted, 'portal')).rejects.toThrow(/Owner/)
+      await expect(getSettingsForActor(restricted, 'portal')).rejects.toThrow(/workspace owner/)
       await expect(
         prepareSettingsChanges(restricted, [
           { area: 'portal', patch: { displayName: 'Forbidden' } },
         ])
-      ).rejects.toThrow(/Owner/)
+      ).rejects.toThrow(/workspace owner/)
       await expect(
         applySettingsChangesInTransaction(tx(), restricted, proposal, ['portal.displayName'])
-      ).rejects.toThrow(/Owner/)
+      ).rejects.toThrow(/workspace owner/)
     }
     const receipt = await applySettingsChangesInTransaction(tx(), actor, proposal, [
       'portal.displayName',
@@ -247,7 +249,7 @@ describe.skipIf(!fixture.available)('settings proposal adapters (real Postgres)'
     expect((await getSettingsForActor(actor, 'portal')).settings).toEqual({
       displayName: 'Acme team',
     })
-    for (const missing of [PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.SETTINGS_BRANDING]) {
+    for (const missing of [PERMISSIONS.SETTINGS_BRANDING]) {
       await expect(
         undoSettingsChangesInTransaction(
           tx(),
@@ -257,7 +259,7 @@ describe.skipIf(!fixture.available)('settings proposal adapters (real Postgres)'
           },
           receipt
         )
-      ).rejects.toThrow(/Owner/)
+      ).rejects.toThrow(/workspace owner/)
     }
     await undoSettingsChangesInTransaction(tx(), actor, receipt)
     expect((await getSettingsForActor(actor, 'portal')).settings).toEqual({ displayName: 'Acme' })
@@ -499,6 +501,28 @@ describe.skipIf(!fixture.available)('settings proposal adapters (real Postgres)'
     await expect(undoSettingsChangesInTransaction(tx(), actor, receipt)).rejects.toThrow(/changed/i)
     expect((await read()).name).toBe('Later name')
   })
+  it('lets a branding-only teammate rename the workspace, as the settings page does', async () => {
+    const [brandingRole] = await testDb
+      .insert(roles)
+      .values({ key: `branding-${createId('role')}`, name: 'Branding', isSystem: false })
+      .returning()
+    const [permission] = await testDb
+      .select({ id: permissions.id })
+      .from(permissions)
+      .where(eq(permissions.key, PERMISSIONS.SETTINGS_BRANDING))
+    await testDb
+      .insert(rolePermissions)
+      .values({ roleId: brandingRole.id, permissionId: permission.id })
+    await testDb
+      .insert(principalRoleAssignments)
+      .values({ principalId: actor.principalId!, roleId: brandingRole.id })
+    const branding: Actor = { ...actor, permissions: new Set([PERMISSIONS.SETTINGS_BRANDING]) }
+    const proposal = await prepareSettingsChanges(branding, [
+      { area: 'portal', patch: { displayName: 'Acme team' } },
+    ])
+    await applySettingsChangesInTransaction(tx(), branding, proposal, ['portal.displayName'])
+    expect((await read()).name).toBe('Acme team')
+  })
   it('rechecks assignment-derived permission on Apply and Undo', async () => {
     const proposal = await prepareSettingsChanges(actor, [
       { area: 'portal', patch: { displayName: 'Acme team' } },
@@ -585,7 +609,7 @@ describe.skipIf(!fixture.available)('settings proposal adapters (real Postgres)'
         { ...actor, permissions: new Set([PERMISSIONS.SETTINGS_BRANDING]) },
         'logos/rehosted.png'
       )
-    ).rejects.toThrow(/Owner/)
+    ).rejects.toThrow(/workspace owner/)
     await expect(
       prepareRehostedBrandingLogoChange(actor, 'https://example.com/logo.png')
     ).rejects.toThrow()
@@ -599,7 +623,7 @@ describe.skipIf(!fixture.available)('settings proposal adapters (real Postgres)'
       prepareSettingsChanges({ ...actor, permissions: new Set() }, [
         { area: 'portal', patch: { displayName: 'Acme team' } },
       ])
-    ).rejects.toThrow(/Owner/)
+    ).rejects.toThrow(/workspace owner/)
   })
   it('binds an API-key proposal to its current human creator and refuses revoked ownership', async () => {
     const serviceId = createId('principal') as PrincipalId

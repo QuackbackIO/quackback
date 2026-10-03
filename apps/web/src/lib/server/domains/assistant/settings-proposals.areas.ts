@@ -52,7 +52,7 @@ export async function requireAreaPermission(
   if (!actor.principalId)
     throw new ForbiddenError(
       'SETTINGS_PERMISSION_REQUIRED',
-      'Ask a workspace Owner to make this change.'
+      'Ask a workspace owner to make this change.'
     )
   const [record] = await executor
     .select({ role: principal.role })
@@ -62,23 +62,16 @@ export async function requireAreaPermission(
   if (!record || (record.role !== 'admin' && record.role !== 'member'))
     throw new ForbiddenError(
       'SETTINGS_PERMISSION_REQUIRED',
-      'Ask a workspace Owner to make this change.'
+      'Ask a workspace owner to make this change.'
     )
   const permissions = await permissionsForPrincipal(actor.principalId, record.role, executor)
-  const required =
-    area === 'portal'
-      ? [PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.SETTINGS_BRANDING]
-      : [requiredPermission]
   if (
-    required.some(
-      (permission) =>
-        !permissions.has(permission) ||
-        (actor.permissions !== undefined && !actor.permissions.has(permission))
-    )
+    !permissions.has(requiredPermission) ||
+    (actor.permissions !== undefined && !actor.permissions.has(requiredPermission))
   )
     throw new ForbiddenError(
       'SETTINGS_PERMISSION_REQUIRED',
-      'Ask a workspace Owner to make this change.'
+      'Ask a workspace owner to make this change.'
     )
 }
 
