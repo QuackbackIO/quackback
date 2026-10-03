@@ -66,7 +66,7 @@ describe('test feedback stays inside its customer session and team workspace', (
     expect(fixture.available).toBe(true)
     await fixture.begin()
     const [database] = await testDb.execute(sql`select current_database() as name`)
-    expect(database.name).toBe('quackback_test')
+    expect(String(database.name)).toMatch(/^quackback_test(?:_\w+)?$/)
     const owner = await teamMember()
     const otherOwner = await teamMember()
     const customerId = createId('principal'),
@@ -92,11 +92,11 @@ describe('test feedback stays inside its customer session and team workspace', (
     team = actor(owner, 'admin', 'user')
     customer = {
       ...actor(customerId, 'user', 'anonymous'),
-      testFeedback: { ownerPrincipalId: owner, canView: true, canSubmit: true },
+      testFeedback: { ownerPrincipalId: owner, active: true, canView: true, canSubmit: true },
     } as Actor
     otherCustomer = {
       ...actor(otherCustomerId, 'user', 'anonymous'),
-      testFeedback: { ownerPrincipalId: otherOwner, canView: true, canSubmit: true },
+      testFeedback: { ownerPrincipalId: otherOwner, active: true, canView: true, canSubmit: true },
     } as Actor
     visitor = actor(visitorId, 'user', 'user')
     const boardId = createId('board')
@@ -155,7 +155,12 @@ describe('test feedback stays inside its customer session and team workspace', (
     expect(await getPublicPostDetail(realPost, customer)).toBeNull()
     const revoked = {
       ...customer,
-      testFeedback: { ownerPrincipalId: team.principalId!, canView: false, canSubmit: false },
+      testFeedback: {
+        ownerPrincipalId: team.principalId!,
+        active: false,
+        canView: false,
+        canSubmit: false,
+      },
     } as Actor
     expect(await getPublicPostDetail(testPost, revoked)).toBeNull()
     expect((await listPublicPosts({ boardSlug, actor: revoked })).items).toHaveLength(0)

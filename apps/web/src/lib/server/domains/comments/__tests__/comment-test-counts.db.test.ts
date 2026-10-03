@@ -106,7 +106,7 @@ describe('test comments never change stored post counts', () => {
     expect(fixture.available).toBe(true)
     await fixture.begin()
     const [database] = await testDb.execute(sql`select current_database() as name`)
-    expect(database.name).toBe('quackback_test')
+    expect(String(database.name)).toMatch(/^quackback_test(?:_\w+)?$/)
     settingsState.holdLinks = false
     const ownerId = createId('principal'),
       userId = createId('user')

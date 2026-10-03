@@ -206,24 +206,21 @@ it.each(['create', 'upvote'] as const)(
 
 it.each([
   ['create', true],
-  ['upvote', true],
-  ['create', 'true'],
   ['upvote', 'true'],
-] as const)('rejects %s from a teammate test conversation with marker %s', async (mode, test) => {
-  const conversationId = await seed(owner, { test, testOwnerPrincipalId: owner })
-  await expect(convert(conversationId, mode)).rejects.toMatchObject({
-    code: 'CANNOT_CONVERT_TEST_CONVERSATION',
-  })
-  expect(mutations.createPost).not.toHaveBeenCalled()
-  expect(mutations.addVoteOnBehalf).not.toHaveBeenCalled()
-  expect(mutations.createComment).not.toHaveBeenCalled()
-  expect(mutations.sendAgentMessage).not.toHaveBeenCalled()
-  expect(
-    await testDb.query.postExternalLinks.findMany({
-      where: eq(postExternalLinks.externalId, conversationId),
-    })
-  ).toHaveLength(0)
-})
+] as const)(
+  'converts a teammate thread carrying a legacy test attribute (%s, %s) as real',
+  async (mode, test) => {
+    // Decision 1: only the test customer's identity is test; a client-written
+    // attribute and a teammate's own thread are ordinary data.
+    const conversationId = await seed(owner, { test, testOwnerPrincipalId: owner })
+    await expect(convert(conversationId, mode)).resolves.toMatchObject({ postId })
+    expect(
+      await testDb.query.postExternalLinks.findMany({
+        where: eq(postExternalLinks.externalId, conversationId),
+      })
+    ).toHaveLength(1)
+  }
+)
 
 it.each(['create', 'upvote'] as const)(
   'preserves ordinary %s conversion and its durable link',
