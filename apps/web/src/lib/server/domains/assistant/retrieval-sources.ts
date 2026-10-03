@@ -1,5 +1,5 @@
 import { can } from '@/lib/server/policy/authorize'
-import { PERMISSIONS } from '@/lib/shared/permissions'
+import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import type { Actor } from '@/lib/server/policy/types'
 /**
  * Source-adapter seam for Quinn's grounding retrieval.
@@ -287,36 +287,53 @@ export async function resolveKnowledgeSources(
   actor?: Actor
 ): Promise<KnowledgeSource[]> {
   const enabledSet = enabled ?? new Set<AssistantCitationType>(['article'])
+  // Workspace search reads each source only as far as the teammate's own
+  // permission for it reaches: without it, the source answers as it would
+  // for a customer (published articles, public posts, published entries).
+  const allowed = (permission: PermissionKey) =>
+    !workspaceSearch || (actor !== undefined && can(actor, permission))
+  const scoped = (source: KnowledgeSource, permission: PermissionKey) =>
+    allowed(permission) ? source : publicOnly(source)
   const sources: KnowledgeSource[] = []
-  if (enabledSet.has('article')) sources.push(kbKnowledgeSource)
-  if (
-    enabledSet.has('post') &&
-    (!workspaceSearch || (actor && can(actor, PERMISSIONS.POST_VIEW_PRIVATE)))
-  ) {
-    sources.push((await import('./posts-retrieval')).postsKnowledgeSource)
+  if (enabledSet.has('article'))
+    sources.push(scoped(kbKnowledgeSource, PERMISSIONS.HELP_CENTER_MANAGE))
+  if (enabledSet.has('post')) {
+    sources.push(
+      scoped(
+        (await import('./posts-retrieval')).postsKnowledgeSource,
+        PERMISSIONS.POST_VIEW_PRIVATE
+      )
+    )
   }
   if (enabledSet.has('snippet')) {
     sources.push((await import('./snippets-retrieval')).snippetsKnowledgeSource)
   }
   if (enabledSet.has('summary')) {
-    sources.push(
-      workspaceSearch
-        ? (await import('./workspace-retrieval')).workspaceConversationSource(
-            includeInternalNotes,
-            notesOnly,
-            actor
-          )
-        : (await import('./conversation-summary-retrieval')).conversationSummariesKnowledgeSource
-    )
+    const notes = allowed(PERMISSIONS.CONVERSATION_NOTE)
+    if (workspaceSearch && (notes || !notesOnly)) {
+      sources.push(
+        (await import('./workspace-retrieval')).workspaceConversationSource(
+          includeInternalNotes && notes,
+          notesOnly,
+          actor
+        )
+      )
+    } else if (!workspaceSearch) {
+      sources.push(
+        (await import('./conversation-summary-retrieval')).conversationSummariesKnowledgeSource
+      )
+    }
   }
-  if (
-    enabledSet.has('ticket') &&
-    (!workspaceSearch || (actor && can(actor, PERMISSIONS.TICKET_VIEW_ALL)))
-  ) {
+  if (enabledSet.has('ticket') && allowed(PERMISSIONS.TICKET_VIEW_ALL)) {
     sources.push((await import('./tickets-retrieval')).ticketsKnowledgeSource)
   }
   if (enabledSet.has('changelog')) {
-    sources.push((await import('./changelog-retrieval')).changelogKnowledgeSource)
+    sources.push(
+      scoped(
+        (await import('./changelog-retrieval')).changelogKnowledgeSource,
+        PERMISSIONS.CHANGELOG_VIEW_DRAFT
+      )
+    )
   }
   if (enabledSet.has('document')) {
     sources.push((await import('./documents-retrieval')).documentsKnowledgeSource)
@@ -325,6 +342,14 @@ export async function resolveKnowledgeSources(
     sources.push((await import('./web-sources-retrieval')).webpageKnowledgeSource)
   }
   return sources
+}
+
+/** The same source, retrieving at the public ceiling whatever the turn's ceiling. */
+function publicOnly(source: KnowledgeSource): KnowledgeSource {
+  return {
+    ...source,
+    retrieve: (query, _ceiling, options) => source.retrieve(query, 'public', options),
+  }
 }
 
 /**

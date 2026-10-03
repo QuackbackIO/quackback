@@ -72,6 +72,15 @@ vi.mock('../web-sources-retrieval', () => ({
   },
 }))
 
+// The member-scoped workspace conversation source; records what it was built with.
+const mockWorkspaceConversationSource = vi.fn()
+vi.mock('../workspace-retrieval', () => ({
+  workspaceConversationSource: (...args: unknown[]) => {
+    mockWorkspaceConversationSource(...args)
+    return { sourceType: 'summary', retrieve: async () => [] }
+  },
+}))
+
 import {
   retrieveKnowledge,
   resolveKnowledgeSources,
@@ -99,29 +108,70 @@ beforeEach(() => {
   mockWebSourcesRetrieve.mockResolvedValue([])
 })
 
-it('requires actor permissions before registering private workspace post and ticket retrieval', async () => {
-  const actor: Actor = {
-    principalId: null,
+describe('workspace search reads each source only as far as its own permission', () => {
+  const member = (permissions: string[] = []): Actor => ({
+    principalId: 'principal_member' as never,
     principalType: 'user',
     role: 'member',
     segmentIds: new Set(),
-    permissions: new Set(),
+    permissions: new Set(permissions) as Actor['permissions'],
+  })
+  const enabledSources = new Set<AssistantCitationType>(['article', 'post', 'changelog', 'ticket'])
+  async function ceilings(actor?: Actor) {
+    mockRetrieveKbArticles.mockResolvedValue([])
+    mockPostsRetrieve.mockResolvedValue([])
+    await retrieveKnowledge('Acme pricing', 'team', {
+      workspaceSearch: true,
+      actor,
+      enabledSources,
+    })
+    return {
+      article: mockRetrieveKbArticles.mock.calls.at(-1)?.[1]?.audience,
+      post: mockPostsRetrieve.mock.calls.at(-1)?.[1],
+      changelog: mockChangelogRetrieve.mock.calls.at(-1)?.[1],
+      ticket: mockTicketsRetrieve.mock.calls.length,
+    }
   }
-  const enabled = new Set<AssistantCitationType>(['article', 'post', 'ticket'])
-  expect(
-    (await resolveKnowledgeSources(enabled, true, false, false, actor)).map(
-      (source) => source.sourceType
-    )
-  ).toEqual(['article'])
-  expect((await resolveKnowledgeSources(enabled, true)).map((source) => source.sourceType)).toEqual(
-    ['article']
-  )
-  actor.permissions = new Set([PERMISSIONS.POST_VIEW_PRIVATE, PERMISSIONS.TICKET_VIEW_ALL])
-  expect(
-    (await resolveKnowledgeSources(enabled, true, false, false, actor)).map(
-      (source) => source.sourceType
-    )
-  ).toEqual(['article', 'post', 'ticket'])
+  it('keeps private articles, private posts, drafts and tickets from a teammate without access', async () => {
+    expect(await ceilings(member())).toEqual({
+      article: 'public',
+      post: 'public',
+      changelog: 'public',
+      ticket: 0,
+    })
+  })
+  it('fails closed without an actor', async () => {
+    expect(await ceilings()).toEqual({
+      article: 'public',
+      post: 'public',
+      changelog: 'public',
+      ticket: 0,
+    })
+  })
+  it('reads team content for a teammate holding each permission', async () => {
+    expect(
+      await ceilings(
+        member([
+          PERMISSIONS.HELP_CENTER_MANAGE,
+          PERMISSIONS.POST_VIEW_PRIVATE,
+          PERMISSIONS.CHANGELOG_VIEW_DRAFT,
+          PERMISSIONS.TICKET_VIEW_ALL,
+        ])
+      )
+    ).toEqual({ article: 'team', post: 'team', changelog: 'team', ticket: 1 })
+  })
+  it('includes internal notes only for a teammate allowed to read them', async () => {
+    const summary = new Set<AssistantCitationType>(['summary'])
+    const actor = member([PERMISSIONS.CONVERSATION_VIEW])
+    await resolveKnowledgeSources(summary, true, true, false, actor)
+    expect(mockWorkspaceConversationSource).toHaveBeenLastCalledWith(false, false, actor)
+    mockWorkspaceConversationSource.mockClear()
+    expect(await resolveKnowledgeSources(summary, true, true, true, actor)).toEqual([])
+    expect(mockWorkspaceConversationSource).not.toHaveBeenCalled()
+    const noteReader = member([PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.CONVERSATION_NOTE])
+    await resolveKnowledgeSources(summary, true, true, false, noteReader)
+    expect(mockWorkspaceConversationSource).toHaveBeenLastCalledWith(true, false, noteReader)
+  })
 })
 
 describe('kbKnowledgeSource', () => {
