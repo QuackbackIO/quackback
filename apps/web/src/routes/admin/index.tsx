@@ -69,8 +69,9 @@ function AdminOverviewPage() {
             banner={
               admin ? (
                 <Suspense fallback={null}>
-                  <HomeGettingStarted portalUrl={baseUrl} />
-                  <HomeTryItYourself flags={flags} />
+                  <HomeGettingStarted portalUrl={baseUrl}>
+                    <HomeTryItYourself flags={flags} />
+                  </HomeGettingStarted>
                 </Suspense>
               ) : null
             }
