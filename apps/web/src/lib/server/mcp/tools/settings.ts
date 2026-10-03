@@ -34,7 +34,7 @@ export function registerSettingsTools(server: McpServer, auth: McpAuthContext) {
 Examples:
 {"changes":[{"area":"branding","patch":{"light":{"primary":"#0F766E"}}},{"area":"messenger","patch":{"enabled":true}}]}
 {"changes":[{"area":"portal","patch":{"displayName":"Acme"}}]}
-{"changes":[{"area":"office_hours","patch":{"enabled":true,"timezone":"UTC","intervals":[{"day":1,"start":"09:00","end":"17:00"}],"holidays":[]}}]}`,
+{"changes":[{"area":"office_hours","patch":{"intervals":[{"day":1,"start":"09:00","end":"17:00"}]}}]}`,
     schema: settingsProposalInputSchema.shape,
     annotations: WRITE,
     scope: 'write:settings',
