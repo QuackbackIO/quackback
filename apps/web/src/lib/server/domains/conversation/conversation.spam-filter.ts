@@ -161,6 +161,9 @@ export async function maybeAutoFileSpam(
   input: ClassifyInboundSpamInput & { signals?: SpamSignalHints }
 ): Promise<boolean> {
   try {
+    // A teammate's test thread is never spam, and spends no classification.
+    const { isTestConversation } = await import('@/lib/server/test-data')
+    if (await isTestConversation(conversationId)) return false
     if (await isTrustedInboundSender(input.senderEmail)) return false
     const { detectSpamSignal } = await import('./conversation.spam-signals')
     const signal = await detectSpamSignal({ senderEmail: input.senderEmail, ...input.signals })

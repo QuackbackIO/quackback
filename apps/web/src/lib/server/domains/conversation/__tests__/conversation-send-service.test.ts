@@ -143,6 +143,15 @@ vi.mock('@/lib/server/db', () => {
     select: vi.fn(() => chain('select')),
     insert: vi.fn((table: { __name?: string }) => chain(table?.__name ?? 'unknown')),
     update: vi.fn((table: { __name?: string }) => chain(table?.__name ?? 'unknown')),
+    query: {
+      principal: {
+        findFirst: vi.fn(async () => ({
+          testOwnerPrincipalId: null,
+          type: 'anonymous',
+          role: 'user',
+        })),
+      },
+    },
   }
 
   return {

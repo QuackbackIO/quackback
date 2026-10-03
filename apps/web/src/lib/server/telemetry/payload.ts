@@ -194,10 +194,10 @@ async function getScale(): Promise<TelemetryPayload['scale']> {
       incidents: number
     }>(
       sql`SELECT
-        (SELECT count(*)::int FROM "user") as users,
-        (SELECT count(*)::int FROM "posts" WHERE "deleted_at" IS NULL) as posts,
+        (SELECT count(*)::int FROM "user" u WHERE NOT EXISTS (SELECT 1 FROM "principal" p WHERE p.user_id = u.id AND p.test_owner_principal_id IS NOT NULL)) as users,
+        (SELECT count(*)::int FROM "posts" po WHERE po."deleted_at" IS NULL AND NOT EXISTS (SELECT 1 FROM "principal" p WHERE p.id = po.principal_id AND p.test_owner_principal_id IS NOT NULL)) as posts,
         (SELECT count(*)::int FROM "boards" WHERE "deleted_at" IS NULL) as boards,
-        (SELECT count(*)::int FROM "conversations") as conversations,
+        (SELECT count(*)::int FROM "conversations" c WHERE NOT EXISTS (SELECT 1 FROM "principal" p WHERE p.id = c.visitor_principal_id AND p.test_owner_principal_id IS NOT NULL)) as conversations,
         (SELECT count(*)::int FROM "kb_articles" WHERE "deleted_at" IS NULL AND "published_at" IS NOT NULL) as published_articles,
         (SELECT count(*)::int FROM "changelog_entries" WHERE "deleted_at" IS NULL AND "published_at" IS NOT NULL) as changelog_entries,
         (SELECT count(*)::int FROM "status_incidents" WHERE "deleted_at" IS NULL) as incidents`

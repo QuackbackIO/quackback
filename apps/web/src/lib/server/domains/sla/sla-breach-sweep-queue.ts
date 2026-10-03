@@ -23,6 +23,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { logger } from '@/lib/server/logger'
+import { notTestConversation, notTestTicket } from '@/lib/server/test-data'
 import { dueWithin, registerWorkspaceDeadline } from '@/lib/server/jobs/deadlines'
 import { sweepOverdueSlaBreaches } from './sla.sweep'
 import { sweepOverdueTicketSlaBreaches } from './ticket-sla.sweep'
@@ -63,12 +64,14 @@ async function nextSlaBreachAt(): Promise<Date | null> {
                       AND sla_applied ->> 'resolutionBreachedAt' IS NULL
                      THEN sla_applied ->> 'timeToCloseDueAt' END))
          FROM conversations
-        WHERE sla_applied IS NOT NULL AND (sla_applied ->> 'pausedAt') IS NULL),
+        WHERE sla_applied IS NOT NULL AND (sla_applied ->> 'pausedAt') IS NULL
+          AND ${notTestConversation(sql`conversations.id`)}),
       (SELECT min(CASE WHEN sla_applied ->> 'resolvedAt' IS NULL
                         AND sla_applied ->> 'resolutionBreachedAt' IS NULL
                        THEN sla_applied ->> 'timeToResolveDueAt' END)
          FROM tickets
-        WHERE sla_applied IS NOT NULL AND (sla_applied ->> 'pausedAt') IS NULL)
+        WHERE sla_applied IS NOT NULL AND (sla_applied ->> 'pausedAt') IS NULL
+          AND ${notTestTicket(sql`tickets.id`)})
     ) AS due_at
   `)
   const rows = getExecuteRows<{ due_at: string | null }>(result)

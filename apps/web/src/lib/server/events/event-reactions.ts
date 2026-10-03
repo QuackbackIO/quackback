@@ -37,6 +37,7 @@ import { logger } from '@/lib/server/logger'
 import { hydrateEvent } from './outbox'
 import { toLegacyEvent } from './to-legacy-event'
 import type { EventData } from './types'
+import { isTestEvent } from './test-event'
 
 const log = logger.child({ component: 'event-reactions' })
 
@@ -127,6 +128,8 @@ export async function runReactionJob<Q extends ReactionQueue>(
     log.warn({ event_id: eventId, queue }, 'reaction job: event row gone, skipping')
     return
   }
+
+  if (await isTestEvent(hydrateEvent(row))) return
 
   const event = toLegacyEvent(hydrateEvent(row))
   const matching = reactionsFor(queue, event.type)

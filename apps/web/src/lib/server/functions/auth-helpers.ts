@@ -328,11 +328,14 @@ export function normalizePrincipalType(raw: string | null | undefined): Principa
 export async function policyActorFromAuth(auth: AuthContext | null): Promise<Actor> {
   if (!auth) return ANONYMOUS_ACTOR
   const segmentIds = await segmentIdsForPrincipal(auth.principal.id)
-  return {
+  const actor: Actor = {
     principalId: auth.principal.id,
     role: auth.principal.role,
     principalType: normalizePrincipalType(auth.principal.type),
     segmentIds,
     permissions: new Set(auth.permissions),
   }
+  if (actor.principalType !== 'anonymous') return actor
+  const { resolveTestFeedbackActor } = await import('@/lib/server/test-customer-feedback')
+  return resolveTestFeedbackActor(actor)
 }

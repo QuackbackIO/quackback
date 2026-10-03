@@ -45,6 +45,7 @@ export type InboxView =
   | 'quinn'
   | 'spam'
   | 'created_by_me'
+  | 'test'
   // UNIFIED-INBOX-SPEC.md §2.3: the Tickets nav section. A separate group in
   // the sidebar (see inbox-nav-sidebar.tsx), but the same InboxView/InboxNavItem
   // machinery carries them through the URL + query layer.
@@ -63,6 +64,7 @@ const INBOX_VIEWS: Record<InboxView, true> = {
   quinn: true,
   spam: true,
   created_by_me: true,
+  test: true,
   tickets_all: true,
   tickets_customer: true,
   tickets_back_office: true,
@@ -130,7 +132,7 @@ export function inboxNavKey(nav: InboxNavItem): string {
 
 /**
  * Whether the list offers the status, priority and company refinements. A
- * custom view owns its own rules, and Mentions, Spam and Created by me are
+ * custom view owns its own rules, and Mentions, Spam, Created by me and Test are
  * self-contained feeds, so a refinement carried into them would narrow the
  * list with no control to undo it.
  */
@@ -138,7 +140,10 @@ export function inboxScopeHasRefinements(nav: InboxNavItem): boolean {
   if (nav.kind === 'custom') return false
   return !(
     nav.kind === 'view' &&
-    (nav.view === 'mentions' || nav.view === 'spam' || nav.view === 'created_by_me')
+    (nav.view === 'mentions' ||
+      nav.view === 'spam' ||
+      nav.view === 'created_by_me' ||
+      nav.view === 'test')
   )
 }
 
@@ -268,6 +273,9 @@ export function buildListParams(
   // spam-only scope, so status/priority chips don't apply within it.
   if (nav.view === 'spam')
     return { view: 'spam' as const, search: q, companyId: company, sort: sortParam }
+  // Test threads are listed whatever their status, so they can be cleared out.
+  if (nav.view === 'test')
+    return { view: 'test' as const, search: q, companyId: company, sort: sortParam }
   // Created-by-me is a personal feed (like Mentions): self-contained, no
   // status/priority chips.
   if (nav.view === 'created_by_me')

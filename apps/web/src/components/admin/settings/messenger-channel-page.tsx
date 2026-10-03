@@ -4,6 +4,8 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { useUpdatePortalConfig, useUpdateWidgetConfig } from '@/lib/client/mutations/settings'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
+import { TryMessengerButton } from '@/components/onboarding/try-messenger-button'
+import { FormattedMessage } from 'react-intl'
 import { moduleCrumb } from '@/components/admin/settings/settings-nav-sections'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
@@ -64,6 +66,11 @@ export function MessengerChannelPage() {
     <SettingsPage
       page="/admin/settings/channels/messenger"
       description="Live chat in the widget and on the portal."
+      actions={
+        <TryMessengerButton variant="outline" size="sm">
+          <FormattedMessage id="onboarding.test.title" defaultMessage="Try Messenger" />
+        </TryMessengerButton>
+      }
       crumbs={[
         moduleCrumb('/admin/settings/support'),
         { label: 'Channels', to: '/admin/settings/channels' },

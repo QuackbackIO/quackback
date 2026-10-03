@@ -123,7 +123,11 @@ export const Route = createFileRoute('/widget/')({
   validateSearch: searchSchema,
   loader: async ({ context, location }) => {
     const { queryClient, settings, session } = context
-    const search = location.search as z.infer<typeof searchSchema>
+    const search = location.search as z.infer<typeof searchSchema> & { test?: true }
+    // A test frame shows Messenger and Feedback before either is public. Only
+    // the tabs follow the flag: every conversation read and write is still
+    // gated server-side on the session being a teammate's test customer.
+    const testMode = search.test === true
     const feedbackProductEnabled = settings?.featureFlags?.feedback ?? true
     const changelogProductEnabled = settings?.featureFlags?.changelog ?? true
 
@@ -131,8 +135,10 @@ export const Route = createFileRoute('/widget/')({
     // module is; the tab is the widget surface. Hoisted so we only compute
     // presence when Messenger shows.
     const messengerTabEnabled =
-      ((settings?.featureFlags as { supportInbox?: boolean } | undefined)?.supportInbox ?? false) &&
-      (settings?.publicWidgetConfig?.tabs?.messenger ?? false)
+      testMode ||
+      (((settings?.featureFlags as { supportInbox?: boolean } | undefined)?.supportInbox ??
+        false) &&
+        (settings?.publicWidgetConfig?.tabs?.messenger ?? false))
 
     const helpTabEnabled =
       ((settings?.featureFlags as { helpCenter?: boolean } | undefined)?.helpCenter ?? false) &&
@@ -271,7 +277,9 @@ export const Route = createFileRoute('/widget/')({
       // advertises an action the board's tier rejects (#191). Keyed by board id.
       boardPermissions: portalData.boardPermissions,
       tabs: {
-        feedback: feedbackProductEnabled && (settings?.publicWidgetConfig?.tabs?.feedback ?? true),
+        feedback:
+          feedbackProductEnabled &&
+          (testMode || (settings?.publicWidgetConfig?.tabs?.feedback ?? true)),
         changelog: changelogTabEnabled,
         help: helpTabEnabled,
         // The persisted config names the messenger surface `messenger`; the
@@ -473,6 +481,9 @@ function WidgetPage() {
   const [conversationTarget, setConversationTarget] = useState<ConversationId | 'new' | null>(
     resumeConversationId ? (resumeConversationId as ConversationId) : null
   )
+  // A host's `open({ view: 'chat', body })`. The nonce remounts the messenger
+  // so a draft sent while it is already open still lands in the composer.
+  const [messengerDraft, setMessengerDraft] = useState<{ nonce: number; body: string } | null>(null)
   // Manual size preference: the header's expand/collapse button flips this,
   // and it is STICKY — collapsing turns auto-expansion off for every later
   // item view until the visitor expands again. Persisted per browser.
@@ -660,6 +671,10 @@ function WidgetPage() {
           setView('help')
           break
         case 'messenger':
+          if (command.body) {
+            const body = command.body
+            setMessengerDraft((prev) => ({ nonce: (prev?.nonce ?? 0) + 1, body }))
+          }
           openMessenger()
           break
         case 'tickets':
@@ -974,7 +989,8 @@ function WidgetPage() {
           fallback={<WidgetMessengerViewSkeleton isNew={conversationTarget === 'new'} />}
         >
           <WidgetMessenger
-            key={conversationTarget ?? 'active'}
+            key={`${conversationTarget ?? 'active'}:${messengerDraft?.nonce ?? 0}`}
+            initialDraft={messengerDraft?.body}
             helpEnabled={tabs.help}
             onArticleSelect={handleHelpArticleSelect}
             conversationTarget={conversationTarget === null ? undefined : conversationTarget}

@@ -21,6 +21,7 @@ vi.mock('@/lib/server/db', () => ({
     query: {
       session: { findFirst: (...args: unknown[]) => mockSessionFindFirst(...args) },
       principal: { findFirst: (...args: unknown[]) => mockPrincipalFindFirst(...args) },
+      user: { findFirst: async () => ({ metadata: null }) },
     },
     insert: (...args: unknown[]) => {
       mockInsert(...args)
@@ -29,6 +30,7 @@ vi.mock('@/lib/server/db', () => ({
   },
   session: { token: 'token', expiresAt: 'expiresAt', userId: 'userId' },
   principal: { userId: 'userId' },
+  user: { id: 'id' },
   eq: vi.fn(),
   and: vi.fn(),
   gt: vi.fn(),
@@ -145,6 +147,21 @@ describe('getWidgetSession', () => {
       principal: { id: 'principal_1', role: 'user', type: 'user' },
       canPortalHandoff: true,
     })
+  })
+
+  it("vetoes the portal handoff for a teammate's test customer", async () => {
+    mockGet.mockReturnValue('Bearer customer-session-1')
+    mockSessionFindFirst.mockResolvedValue(widgetSession())
+    mockPrincipalFindFirst.mockResolvedValue({
+      id: 'principal_1',
+      role: 'user',
+      type: 'anonymous',
+      testOwnerPrincipalId: 'principal_owner',
+    })
+
+    const result = await getWidgetSession()
+
+    expect(result?.canPortalHandoff).toBe(false)
   })
 
   it('should auto-create principal when none exists', async () => {

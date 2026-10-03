@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { Actor } from '@/lib/server/policy/types'
 import type { AuthContext } from '../auth-helpers'
 import type { PrincipalId, SegmentId, UserId, WorkspaceId } from '@quackback/ids'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
@@ -8,6 +9,33 @@ vi.mock('@/lib/server/domains/segments/segment-membership.service', () => ({
     principalId === null ? new Set() : new Set(['segment_a', 'segment_b'])
   ),
 }))
+
+const mockResolveTestFeedbackActor = vi.hoisted(() =>
+  vi.fn(async (actor: Actor): Promise<Actor> => {
+    expect(actor.principalType).toBe('anonymous')
+    expect(actor.principalId).not.toBeNull()
+    expect(actor.permissions).toBeInstanceOf(Set)
+    expect(actor.segmentIds).toBeInstanceOf(Set)
+    if (actor.principalId === 'principal_test_feedback') {
+      return {
+        ...actor,
+        testFeedback: {
+          ownerPrincipalId: 'principal_test_owner' as PrincipalId,
+          active: true,
+          canView: true,
+          canSubmit: true,
+        },
+      }
+    }
+    return actor
+  })
+)
+vi.mock('@/lib/server/test-customer-feedback', () => ({
+  resolveTestFeedbackActor: mockResolveTestFeedbackActor,
+}))
+beforeEach(() => {
+  mockResolveTestFeedbackActor.mockClear()
+})
 
 import { policyActorFromAuth, normalizePrincipalType } from '../auth-helpers'
 
@@ -77,6 +105,32 @@ describe('policyActorFromAuth', () => {
     // satisfy audience.kind='authenticated' or bypass requireApproval='anonymous'.
     const actor = await policyActorFromAuth(buildAuth({ principalType: 'anonymous' }))
     expect(actor.principalType).toBe('anonymous')
+  })
+
+  it('passes the complete anonymous actor through the feedback resolver without changing identity', async () => {
+    const actor = await policyActorFromAuth(
+      buildAuth({
+        principalId: 'principal_test_feedback',
+        principalType: 'anonymous',
+        permissions: [PERMISSIONS.POST_CREATE],
+      })
+    )
+    expect(mockResolveTestFeedbackActor).toHaveBeenCalledExactlyOnceWith({
+      principalId: 'principal_test_feedback',
+      role: 'user',
+      principalType: 'anonymous',
+      segmentIds: new Set(['segment_a', 'segment_b']),
+      permissions: new Set([PERMISSIONS.POST_CREATE]),
+    })
+    expect(actor.principalId).toBe('principal_test_feedback')
+    expect(actor.principalType).toBe('anonymous')
+    expect(actor.permissions).toEqual(new Set([PERMISSIONS.POST_CREATE]))
+    expect(actor.testFeedback).toEqual({
+      ownerPrincipalId: 'principal_test_owner',
+      active: true,
+      canView: true,
+      canSubmit: true,
+    })
   })
 
   it('preserves principalType=service for API-key principals', async () => {

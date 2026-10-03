@@ -117,6 +117,11 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   db: mockDb,
 }))
 
+const testConversations = vi.hoisted(() => new Set<string>())
+vi.mock('@/lib/server/test-data', () => ({
+  isTestConversation: async (id: string) => testConversations.has(id),
+}))
+
 const mockPublishAgentConversationEvent = vi.fn()
 vi.mock('@/lib/server/realtime/conversation-channels', () => ({
   publishAgentConversationEvent: (...args: unknown[]) => mockPublishAgentConversationEvent(...args),
@@ -166,9 +171,18 @@ beforeEach(() => {
   })
   mockInsertReturning.mockResolvedValue([{ id: 'message_1' }])
   mockConversationRow.current = { customAttributes: {} }
+  testConversations.clear()
 })
 
 describe('classifyConversationAttributes: gating', () => {
+  it("is a no-op on a teammate's test thread", async () => {
+    testConversations.add(conversationId)
+    const result = await classifyConversationAttributes(conversationId, { trigger: 'handoff' })
+    expect(result).toEqual([])
+    expect(mockChat).not.toHaveBeenCalled()
+    expect(mockSetConversationAttribute).not.toHaveBeenCalled()
+  })
+
   it('is a no-op when the AI client is not configured', async () => {
     mockConfig.openaiApiKey = undefined
     const result = await classifyConversationAttributes(conversationId, { trigger: 'handoff' })

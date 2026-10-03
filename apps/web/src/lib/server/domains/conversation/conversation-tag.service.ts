@@ -24,6 +24,7 @@ import {
 } from '@/lib/server/db'
 import type { ConversationTagId, ConversationId } from '@quackback/ids'
 import { ValidationError, NotFoundError } from '@/lib/shared/errors'
+import { notTestPrincipal } from '@/lib/server/test-data'
 import { TAXONOMY_DEFAULT_COLOR } from '@/lib/shared/schemas/taxonomy'
 import { assertHexColor, assertTrimmedName } from '@/lib/server/utils'
 import { isUniqueViolation } from '@/lib/server/utils'
@@ -150,7 +151,9 @@ export async function listConversationTagsWithCounts(): Promise<
       conversations,
       and(
         eq(conversations.id, conversationTagAssignments.conversationId),
-        eq(conversations.status, 'open')
+        eq(conversations.status, 'open'),
+        // A teammate's test thread is not inbox work.
+        notTestPrincipal(conversations.visitorPrincipalId)
       )
     )
     .where(isNull(conversationTags.deletedAt))

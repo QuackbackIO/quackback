@@ -12,6 +12,7 @@ import { assessMergeCandidates, determineDirection } from './merge-assessment.se
 import { createMergeSuggestion, expireStaleMergeSuggestions } from './merge-suggestion.service'
 import { logger } from '@/lib/server/logger'
 import { withWorkspaceSweepReentrancyGuard } from '@/lib/server/sweep-lock'
+import { isTestCustomer, notTestPrincipal } from '@/lib/server/test-data'
 import type { PostId } from '@quackback/ids'
 
 const log = logger.child({ component: 'merge-check' })
@@ -38,6 +39,7 @@ export async function checkPostForMergeCandidates(postId: PostId): Promise<void>
       deletedAt: true,
       canonicalPostId: true,
       embedding: true,
+      principalId: true,
     },
   })
 
@@ -45,6 +47,8 @@ export async function checkPostForMergeCandidates(postId: PostId): Promise<void>
   if (!post || post.deletedAt || post.canonicalPostId || !post.embedding) {
     return
   }
+  // A test customer's idea is never assessed against real feedback.
+  if (await isTestCustomer(post.principalId)) return
 
   // Bail early if AI is not configured — skip the candidate search entirely
   const model = getChatModel('merge')
@@ -144,6 +148,7 @@ async function _doSweep(): Promise<void> {
           isNull(posts.canonicalPostId),
           isNotNull(posts.embedding),
           isNull(posts.mergeCheckedAt),
+          notTestPrincipal(posts.principalId),
           attempted.size > 0 ? notInArray(posts.id, [...attempted]) : undefined
         )
       )

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useIntl } from 'react-intl'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -66,6 +67,7 @@ export function ConvertToPostDialog({
   open: controlledOpen,
   onOpenChange,
 }: ConvertToPostDialogProps) {
+  const intl = useIntl()
   const [internalOpen, setInternalOpen] = useState(false)
   const open = controlledOpen ?? internalOpen
   const setOpen = onOpenChange ?? setInternalOpen
@@ -127,7 +129,24 @@ export function ConvertToPostDialog({
       setOpen(false)
       onConverted?.()
     },
-    onError: () => toast.error('Failed to convert conversation'),
+    onError: (error) => {
+      const testConversation =
+        (error as { code?: string }).code === 'CANNOT_CONVERT_TEST_CONVERSATION' ||
+        error.message === 'Test conversations cannot be tracked as feedback'
+      toast.error(
+        intl.formatMessage(
+          testConversation
+            ? {
+                id: 'inbox.convert.error.testConversation',
+                defaultMessage: 'Test conversations cannot be tracked as feedback.',
+              }
+            : {
+                id: 'inbox.convert.error.failed',
+                defaultMessage: 'Failed to convert conversation',
+              }
+        )
+      )
+    },
   })
 
   const share = useMutation({

@@ -25,6 +25,7 @@
  * workspace's window ever gets large enough for it to matter.
  */
 import { db, and, gte, lt, sql, conversations } from '@/lib/server/db'
+import { notTestConversation } from '@/lib/server/test-data'
 
 export interface AttributeValueBreakdownCount {
   /** The stored value's string form — an option id for select/multi_select,
@@ -71,7 +72,13 @@ export async function attributeValueBreakdown(
   const rows = await db
     .select({ value: effectiveValueTextExpr(key) })
     .from(conversations)
-    .where(and(gte(conversations.createdAt, from), lt(conversations.createdAt, to)))
+    .where(
+      and(
+        gte(conversations.createdAt, from),
+        lt(conversations.createdAt, to),
+        notTestConversation(conversations.id)
+      )
+    )
 
   let unset = 0
   const counts = new Map<string, number>()

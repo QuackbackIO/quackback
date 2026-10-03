@@ -414,6 +414,9 @@ export const runCreatePublicPost = createServerOnlyFn(async function runCreatePu
   if (!settings) {
     throw new Error('Organization settings not found')
   }
+  if (actor.testFeedback && !actor.testFeedback.active) {
+    throw new Error('insufficient_permission:post.create')
+  }
 
   // Block anonymous users unless the workspace master switch allows
   // anonymous interaction. Per-board submit tiers are checked
@@ -423,7 +426,7 @@ export const runCreatePublicPost = createServerOnlyFn(async function runCreatePu
     // Fail closed on a missing flag (single source of truth; the per-board
     // submit tier is the inner gate, existing workspaces carry an explicit
     // value from migration 0084).
-    if (!workspaceAllowsAnonymous(settings.portalConfig)) {
+    if (!actor.testFeedback?.canSubmit && !workspaceAllowsAnonymous(settings.portalConfig)) {
       throw new Error('Anonymous interaction is not enabled')
     }
   } else if (!principalRecord) {

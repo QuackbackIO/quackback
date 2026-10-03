@@ -19,6 +19,7 @@ import { EVENT_DISPATCH_QUEUE } from './event-dispatch-queue'
 import { reactionQueuesFor } from './event-reactions'
 import type { EventDefinition } from './catalogue/define'
 import type { DomainEvent, EventActorType, EventContext } from './envelope'
+import { isTestEvent } from './test-event'
 
 const log = logger.child({ component: 'emit' })
 
@@ -48,6 +49,7 @@ export async function emit<P>(
   // Validate the payload against the catalogue schema. A bad payload is a
   // programming error — throw synchronously inside the tx so it rolls back.
   const payload = def.payload.parse(input.payload)
+  const test = await isTestEvent({ entityId: input.entityId, payload, actorId: input.actor.id }, tx)
 
   const eventId = createId('event')
   const context: EventContext = { depth: 0, ...input.context }
@@ -64,6 +66,7 @@ export async function emit<P>(
     schemaVersion: def.version,
     dedupeKey: input.dedupeKey ?? null,
     dispatchOwner: 'job',
+    ...(test ? { publishedAt: new Date() } : {}),
   })
 
   // Compliance audit rows are written in the SAME transaction when the
@@ -82,6 +85,9 @@ export async function emit<P>(
       metadata: { eventId, source: context.source ?? null },
     })
   }
+
+  // Test events retain their workspace audit trail without delivery or reactions.
+  if (test) return eventId
 
   // Same transaction as the event (and audit) row. Rollback leaves no
   // dispatch job. The job_queue wake trigger fires only if this commits.

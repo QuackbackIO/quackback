@@ -8,7 +8,7 @@ import { adminQueries } from '@/lib/client/queries/admin'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { unreadCountQuery } from '@/lib/client/hooks/use-notifications-queries'
 import { getLatestVersion, isNewerVersion } from '@/lib/server/functions/version'
-import { ProductTourProvider } from '@/components/onboarding/product-tour'
+import { AdminProductTourProvider } from '@/components/onboarding/admin-product-tour'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
 import { ArticleModal, ChangelogModal, PostModal } from '@/components/admin/entity-modals'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -254,7 +254,7 @@ function AdminLayout() {
   return (
     <IntlProvider locale={locale} defaultLocale={DEFAULT_LOCALE} messages={messages}>
       <CloudQuackbackWidget />
-      <ProductTourProvider>
+      <AdminProductTourProvider>
         <TooltipProvider delay={0}>
           <div className="flex h-screen bg-background">
             <AdminSidebar initialUserData={initialUserData} latestVersion={latestVersion} />
@@ -282,7 +282,7 @@ function AdminLayout() {
             <EntityModals currentUser={currentUser} />
           </div>
         </TooltipProvider>
-      </ProductTourProvider>
+      </AdminProductTourProvider>
     </IntlProvider>
   )
 }

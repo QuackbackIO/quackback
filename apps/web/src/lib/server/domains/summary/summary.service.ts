@@ -31,6 +31,7 @@ import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce
 import { commentPlainText } from '@/lib/server/markdown-tiptap'
 import { withWorkspaceSweepReentrancyGuard } from '@/lib/server/sweep-lock'
 import type { PostId } from '@quackback/ids'
+import { isTestCustomer, notTestPrincipal } from '@/lib/server/test-data'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'summary' })
@@ -131,12 +132,14 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
   // Fetch post (include existing summary for continuity on updates)
   const post = await db.query.posts.findFirst({
     where: eq(posts.id, postId),
-    columns: { title: true, content: true, summaryJson: true },
+    columns: { title: true, content: true, summaryJson: true, principalId: true },
   })
   if (!post) {
     log.warn({ post_id: postId }, 'post not found for summary')
     return
   }
+  // A test customer's idea spends no AI tokens.
+  if (await isTestCustomer(post.principalId)) return
 
   // Fetch comments (lightweight: just content and author name)
   const commentRows = await db
@@ -269,6 +272,8 @@ async function _doSweep(): Promise<void> {
       .where(
         and(
           isNull(posts.deletedAt),
+          // A test customer's idea spends no AI tokens.
+          notTestPrincipal(posts.principalId),
           or(
             isNull(posts.summaryJson),
             ne(posts.summaryCommentCount, sql`coalesce(${liveCommentCountSq.count}, 0)`)

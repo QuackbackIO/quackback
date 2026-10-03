@@ -52,6 +52,8 @@ export async function resolveAndMergeAnonymousToken(params: ResolveAndMergeParam
     })
     if (!prevPrincipal) return
     if (prevPrincipal.type !== 'anonymous') return
+    // A test customer's session never merges into the identified visitor.
+    if (prevPrincipal.testOwnerPrincipalId) return
 
     // Don't merge with self
     if (prevPrincipal.id === targetPrincipalId) return

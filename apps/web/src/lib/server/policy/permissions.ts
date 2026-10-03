@@ -13,6 +13,8 @@ import {
   permissions,
   principalRoleAssignments,
   rolePermissions,
+  type Database,
+  type Transaction,
 } from '@/lib/server/db'
 
 /**
@@ -57,9 +59,10 @@ export function resolveActorPermissions(role: Role | null): ReadonlySet<Permissi
 /** Resolve workspace-wide role assignments, with a legacy fallback for unmigrated principals. */
 export async function permissionsForPrincipal(
   principalId: PrincipalId,
-  legacyRole: Role
+  legacyRole: Role,
+  executor: Database | Transaction = db
 ): Promise<ReadonlySet<PermissionKey>> {
-  const rows = await db
+  const rows = await executor
     .select({ assignmentId: principalRoleAssignments.id, key: permissions.key })
     .from(principalRoleAssignments)
     .leftJoin(rolePermissions, eq(rolePermissions.roleId, principalRoleAssignments.roleId))

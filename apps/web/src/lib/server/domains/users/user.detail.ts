@@ -32,6 +32,7 @@ import { realEmail } from '@/lib/shared/anonymous-email'
 import { truncate } from '@/lib/shared/utils/string'
 import { logger } from '@/lib/server/logger'
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
+import { notTestPrincipal } from '@/lib/server/test-data'
 
 const log = logger.child({ component: 'user-detail' })
 import type {
@@ -113,7 +114,13 @@ export async function getPortalUserDetail(
       })
       .from(principal)
       .innerJoin(user, eq(principal.userId, user.id))
-      .where(and(eq(principal.id, principalId), eq(principal.role, 'user')))
+      .where(
+        and(
+          eq(principal.id, principalId),
+          eq(principal.role, 'user'),
+          notTestPrincipal(principal.id)
+        )
+      )
       .limit(1)
 
     if (principalResult.length === 0) {
@@ -121,6 +128,7 @@ export async function getPortalUserDetail(
     }
 
     const principalData = principalResult[0]
+    const realPost = and(isNull(posts.deletedAt), notTestPrincipal(posts.principalId))
 
     // Run independent queries in parallel for better performance
     const [authoredPosts, commentedPostIds, votedPostIds] = await Promise.all([
@@ -145,7 +153,7 @@ export async function getPortalUserDetail(
         .from(posts)
         .innerJoin(boards, eq(posts.boardId, boards.id))
         .leftJoin(postStatuses, eq(postStatuses.id, posts.statusId))
-        .where(and(eq(posts.principalId, principalData.principalId), isNull(posts.deletedAt)))
+        .where(and(eq(posts.principalId, principalData.principalId), realPost))
         .orderBy(desc(posts.createdAt))
         .limit(100),
 
@@ -157,9 +165,7 @@ export async function getPortalUserDetail(
         })
         .from(postComments)
         .innerJoin(posts, eq(posts.id, postComments.postId))
-        .where(
-          and(eq(postComments.principalId, principalData.principalId), isNull(posts.deletedAt))
-        )
+        .where(and(eq(postComments.principalId, principalData.principalId), realPost))
         .groupBy(postComments.postId)
         .limit(100),
 
@@ -171,7 +177,7 @@ export async function getPortalUserDetail(
         })
         .from(postVotes)
         .innerJoin(posts, eq(posts.id, postVotes.postId))
-        .where(and(eq(postVotes.principalId, principalData.principalId), isNull(posts.deletedAt)))
+        .where(and(eq(postVotes.principalId, principalData.principalId), realPost))
         .orderBy(desc(postVotes.createdAt))
         .limit(100),
     ])
@@ -210,7 +216,7 @@ export async function getPortalUserDetail(
             .from(posts)
             .innerJoin(boards, eq(posts.boardId, boards.id))
             .leftJoin(postStatuses, eq(postStatuses.id, posts.statusId))
-            .where(and(inArray(posts.id, otherPostIds), isNull(posts.deletedAt)))
+            .where(and(inArray(posts.id, otherPostIds), realPost))
         : [],
 
       // Get comment counts for all engaged posts in one query
@@ -222,7 +228,11 @@ export async function getPortalUserDetail(
             })
             .from(postComments)
             .where(
-              and(inArray(postComments.postId, allCommentPostIds), isNull(postComments.deletedAt))
+              and(
+                inArray(postComments.postId, allCommentPostIds),
+                isNull(postComments.deletedAt),
+                notTestPrincipal(postComments.principalId)
+              )
             )
             .groupBy(postComments.postId)
         : [],

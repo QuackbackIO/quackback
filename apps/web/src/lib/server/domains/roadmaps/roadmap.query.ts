@@ -20,7 +20,13 @@ import {
 } from '@/lib/server/db'
 import { type RoadmapId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
-import { ANONYMOUS_ACTOR, boardViewFilter, canViewRoadmap, type Actor } from '@/lib/server/policy'
+import {
+  ANONYMOUS_ACTOR,
+  boardViewFilter,
+  canViewRoadmap,
+  postTestViewFilter,
+  type Actor,
+} from '@/lib/server/policy'
 import { publicTagCondition } from '@/lib/server/domains/posts/post.public'
 import {
   parseRoadmapDateBucket,
@@ -164,7 +170,11 @@ async function queryRoadmapPosts(
   const { limit = 20, offset = 0 } = options
   const conditions: SQL[] = [isNull(posts.deletedAt), isNull(posts.canonicalPostId)]
   if (publicActor) {
-    conditions.push(eq(posts.moderationState, 'published'), boardViewFilter(publicActor))
+    conditions.push(
+      eq(posts.moderationState, 'published'),
+      boardViewFilter(publicActor),
+      postTestViewFilter(publicActor)
+    )
   } else {
     conditions.push(isNull(boards.deletedAt))
   }
@@ -260,7 +270,11 @@ async function dateBucketsFor(roadmapId: RoadmapId, actor?: Actor): Promise<Road
 
   const conditions: SQL[] = [isNull(posts.deletedAt), isNull(posts.canonicalPostId)]
   if (actor) {
-    conditions.push(eq(posts.moderationState, 'published'), boardViewFilter(actor))
+    conditions.push(
+      eq(posts.moderationState, 'published'),
+      boardViewFilter(actor),
+      postTestViewFilter(actor)
+    )
   } else {
     conditions.push(isNull(boards.deletedAt))
   }

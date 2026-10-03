@@ -92,6 +92,7 @@ vi.mock('@/lib/server/functions/auth-helpers', () => ({
 const mockSupportTicketsEnabled = vi.fn()
 vi.mock('@/lib/server/domains/settings/settings.support', () => ({
   isConversationsEnabled: (...a: unknown[]) => mockConversationsEnabled(...a),
+  isConversationsEnabledFor: () => mockConversationsEnabled(),
   isSupportTicketsEnabled: (...a: unknown[]) => mockSupportTicketsEnabled(...a),
 }))
 vi.mock('@/lib/server/functions/portal-access', () => ({

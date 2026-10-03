@@ -30,7 +30,7 @@ export type WidgetOpenCommand =
   | { type: 'article'; articleId: string } // slug or `article_` TypeID (`kb_article_` still accepted)
   | { type: 'changelog'; entryId?: string }
   | { type: 'help'; query?: string }
-  | { type: 'messenger' }
+  | { type: 'messenger'; body?: string }
   | { type: 'tickets' }
   | { type: 'messages' }
   | { type: 'home' }
@@ -71,7 +71,7 @@ export function resolveOpenCommand(
     case 'messages':
     case 'chat':
     case 'live-chat':
-      return tabs.messages ? { type: 'messenger' } : null
+      return tabs.messages ? { type: 'messenger', body: emptyToUndef(opts.body?.trim()) } : null
     case 'tickets':
       if (tabs.tickets) return { type: 'tickets' }
       if (tabs.messages) return { type: 'messages' }

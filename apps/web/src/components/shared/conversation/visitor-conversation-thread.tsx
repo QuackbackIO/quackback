@@ -175,6 +175,8 @@ export interface VisitorConversationThreadProps {
    *  rows there. The portal Support tab is wide and leaves this at its
    *  default. */
   compact?: boolean
+  /** Text the composer starts with on its first mount; a send clears it as usual. */
+  initialDraft?: string
 }
 
 /**
@@ -204,6 +206,7 @@ export function VisitorConversationThread({
   onConversationStarted,
   autofocusComposer = false,
   compact = false,
+  initialDraft,
 }: VisitorConversationThreadProps) {
   const intl = useIntl()
   const formatDate = useLocalDateFormatter()
@@ -246,6 +249,16 @@ export function VisitorConversationThread({
   // doc persists as contentJson; the reset signal clears the editor on send).
   // Typing writes the store without re-rendering this thread.
   const composer = useComposerDoc()
+  const [initialDraftDoc] = useState<JSONContent | undefined>(() => {
+    const text = initialDraft?.trim()
+    if (!text) return undefined
+    const doc: JSONContent = {
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+    }
+    composer.draft.set(text, doc)
+    return doc
+  })
   const [sending, setSending] = useState(false)
   // Phase C conversational block layer: the block message currently awaiting
   // its structured-send response — the optimistic tap-disable (contract
@@ -1366,6 +1379,7 @@ export function VisitorConversationThread({
                   placeholder={composerPlaceholder}
                   features={VISITOR_CONVERSATION_FEATURES}
                   autofocus={composer.resetSignal > 0 || autofocusComposer ? 'end' : false}
+                  value={composer.resetSignal === 0 ? initialDraftDoc : undefined}
                   onDocumentChange={handleEditorChange}
                   onSubmit={onComposerSubmit}
                 />

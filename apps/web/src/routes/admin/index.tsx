@@ -4,7 +4,7 @@ import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { OverviewDashboard } from '@/components/admin/admin-overview'
 import { HomeActions } from '@/components/admin/home-actions'
-import { HomeGettingStarted } from '@/components/onboarding/home-launch-plan'
+import { HomeLaunchArea } from '@/components/onboarding/home-try-it'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { adminOverviewQueries } from '@/lib/client/queries/admin-overview'
 import { ensureOnboardingHomeReadyFn } from '@/lib/server/functions/onboarding'
@@ -68,7 +68,7 @@ function AdminOverviewPage() {
             banner={
               admin ? (
                 <Suspense fallback={null}>
-                  <HomeGettingStarted portalUrl={baseUrl} />
+                  <HomeLaunchArea portalUrl={baseUrl} flags={flags} />
                 </Suspense>
               ) : null
             }

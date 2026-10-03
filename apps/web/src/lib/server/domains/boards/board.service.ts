@@ -68,6 +68,7 @@ export function accessToAudience(access: BoardAccess): LegacyBoardAudience {
   }
 }
 import { enforceCountLimit } from '@/lib/server/domains/settings/tier-enforce'
+import { notTestPrincipal } from '@/lib/server/test-data'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'boards' })
@@ -367,7 +368,12 @@ export async function listBoardsWithDetails(): Promise<BoardWithDetails[]> {
     })
     .from(posts)
     .where(
-      and(inArray(posts.boardId, boardIds), isNull(posts.deletedAt), isNull(posts.canonicalPostId))
+      and(
+        inArray(posts.boardId, boardIds),
+        isNull(posts.deletedAt),
+        isNull(posts.canonicalPostId),
+        notTestPrincipal(posts.principalId)
+      )
     )
     .groupBy(posts.boardId)
 

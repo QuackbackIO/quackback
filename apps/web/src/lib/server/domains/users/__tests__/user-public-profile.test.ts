@@ -46,6 +46,7 @@ const TABLES = vi.hoisted(() => ({
     contactEmail: 'principal.contactEmail',
     companyId: 'principal.companyId',
     blockedAt: 'principal.blockedAt',
+    testOwnerPrincipalId: 'principal.testOwnerPrincipalId',
   },
   user: {
     id: 'user.id',
@@ -63,6 +64,7 @@ const TABLES = vi.hoisted(() => ({
     principalId: 'posts.principalId',
     createdAt: 'posts.createdAt',
     deletedAt: 'posts.deletedAt',
+    widgetMetadata: 'posts.widgetMetadata',
   },
   postComments: {
     postId: 'postComments.postId',
@@ -121,7 +123,8 @@ function createChain(resolveValue: unknown) {
   return chain
 }
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     select: vi.fn(() => createChain(hoisted.selectResults.shift() ?? [])),
   },
@@ -251,10 +254,19 @@ describe('getPublicUserProfile', () => {
     // 7 where calls total: 1 owner + 3 lists + 3 counts. All six activity
     // predicates must include the viewer filter sentinel.
     expect(hoisted.whereCalls.length).toBe(7)
-    const activityPredicates = hoisted.mockAnd.mock.calls.filter((args) =>
-      args.includes('POST_VIEW_FILTER')
-    )
-    expect(activityPredicates.length).toBe(6)
+    const containsViewerFilter = (value: unknown): boolean => {
+      if (value === 'POST_VIEW_FILTER') return true
+      if (Array.isArray(value)) return value.some(containsViewerFilter)
+      if (value && typeof value === 'object' && 'args' in value) {
+        return containsViewerFilter(value.args)
+      }
+      return false
+    }
+    const activityPredicates = hoisted.whereCalls.slice(1)
+    expect(activityPredicates).toHaveLength(6)
+    for (const predicate of activityPredicates) {
+      expect(containsViewerFilter(predicate)).toBe(true)
+    }
   })
 
   it('excludes private comments from the comments activity predicate', async () => {

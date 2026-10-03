@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import type { SitemapUrl } from '@/lib/server/sitemap'
+import { notTestPrincipal } from '@/lib/server/test-data'
 import { publicWorkspaceCacheHeaders } from '@/lib/server/workspaces/http-cache'
 
 export const Route = createFileRoute('/sitemap.xml')({
@@ -100,7 +101,8 @@ async function collectUrls(baseUrl: string): Promise<SitemapUrl[]> {
           and(
             isNull(table.deletedAt),
             eq(table.moderationState, 'published'),
-            isNull(table.canonicalPostId)
+            isNull(table.canonicalPostId),
+            notTestPrincipal(table.principalId)
           ),
         columns: { id: true, updatedAt: true },
         with: {

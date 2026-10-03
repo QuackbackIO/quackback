@@ -11,6 +11,7 @@
 import { db, posts, postVotes, postComments, boards, eq, sql } from '@/lib/server/db'
 import { isValidTypeId, toUuid, type PostId } from '@quackback/ids'
 import { getExecuteRows } from '@/lib/server/utils'
+import { notTestPrincipal } from '@/lib/server/test-data'
 
 type TransactionalDb = Pick<typeof db, 'execute' | 'update'>
 
@@ -116,12 +117,14 @@ export async function recalculateCanonicalVoteCount(
         SELECT COUNT(DISTINCT v.principal_id)::int
         FROM ${postVotes} v
         WHERE v.post_id IN (SELECT post_id FROM related_post_ids)
+          AND ${notTestPrincipal(sql`v.principal_id`)}
       ) AS unique_voters,
       (
         SELECT COUNT(*)::int
         FROM ${postComments} c
         WHERE c.post_id IN (SELECT post_id FROM related_post_ids)
           AND c.deleted_at IS NULL
+          AND ${notTestPrincipal(sql`c.principal_id`)}
           AND c.is_private = false
           AND c.moderation_state <> 'pending'
       ) AS visible_comments

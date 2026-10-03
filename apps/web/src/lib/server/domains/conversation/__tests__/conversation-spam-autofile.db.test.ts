@@ -90,6 +90,7 @@ vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({
 
 import { ingestParsedEmail } from '../conversation.email-inbound.service'
 import { listConversationsForAgent } from '../conversation.query'
+import { maybeAutoFileSpam } from '../conversation.spam-filter'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -204,6 +205,36 @@ describe.skipIf(!fixture.available)('inbound auto-spam filter (real DB, rolled b
     // And the Spam view is the list that surfaces it — with the filing reason.
     await expect(spamViewIds()).resolves.toContain(res.conversationId)
     await expect(spamViewReason(res.conversationId)).resolves.toBe('ai_classifier')
+  })
+
+  it("never files a teammate's test thread, nor spends a classification on it", async () => {
+    await seedWorkspace()
+    mockChat.mockResolvedValue({ spam: true })
+    const customer = createId('principal') as PrincipalId
+    await testDb.insert(principal).values({
+      id: customer,
+      role: 'user',
+      type: 'anonymous',
+      testOwnerPrincipalId: agentPrincipalId,
+      createdAt: new Date(),
+    })
+    const [thread] = await testDb
+      .insert(conversations)
+      .values({ visitorPrincipalId: customer, channel: 'messenger', status: 'open' })
+      .returning()
+    const filed = await maybeAutoFileSpam(thread.id, {
+      senderEmail: null,
+      subject: null,
+      content: 'Hi! Is anyone there? Claim your prize now.',
+      signals: { autoResponder: true },
+    })
+    expect(filed).toBe(false)
+    const stored = await testDb.query.conversations.findFirst({
+      where: eq(conversations.id, thread.id),
+    })
+    expect(stored?.status).toBe('open')
+    expect(stored?.endReason).toBeNull()
+    expect(mockChat).not.toHaveBeenCalled()
   })
 
   it('leaves a legitimate message in triage untouched', async () => {

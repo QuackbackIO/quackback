@@ -1,8 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { isNull, sql } from 'drizzle-orm'
+import { and, isNull, sql } from 'drizzle-orm'
 import { db, posts, boards } from '@/lib/server/db'
 import { aiTokensThisMonth } from '@/lib/server/domains/ai/usage-counter'
 import { countSeatUsage } from '@/lib/server/domains/principals/seat-usage'
+import { notTestPrincipal } from '@/lib/server/test-data'
 import { authenticateAdminToken } from '@/lib/server/domains/api-keys/admin-token-auth'
 
 /**
@@ -25,7 +26,7 @@ export const Route = createFileRoute('/api/v1/admin/usage')({
           db
             .select({ count: sql<number>`count(*)::int` })
             .from(posts)
-            .where(isNull(posts.deletedAt)),
+            .where(and(isNull(posts.deletedAt), notTestPrincipal(posts.principalId))),
           db
             .select({ count: sql<number>`count(*)::int` })
             .from(boards)

@@ -31,6 +31,7 @@ import { hydrateMentions } from './hydrate-mentions'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { JSONContent } from '@tiptap/core'
 import { contentJsonForClient } from '@/lib/server/content/storage-read-urls'
+import { notTestPrincipal } from '@/lib/server/test-data'
 
 /**
  * Fetch the public-facing detail view for a post.
@@ -119,6 +120,13 @@ export async function getPublicPostDetail(
       ? sql`AND (c.moderation_state = 'published' OR (c.moderation_state = 'pending' AND c.principal_id = ${ownPendingPrincipalUuid}::uuid))`
       : sql`AND c.moderation_state = 'published'`
 
+  const testPrincipalVisible = (column: ReturnType<typeof sql>) =>
+    includePrivateComments
+      ? sql`true`
+      : ownPendingPrincipalUuid
+        ? sql`(${notTestPrincipal(column)} OR ${column} = ${ownPendingPrincipalUuid}::uuid)`
+        : notTestPrincipal(column)
+
   // Pre-compute which merged-source posts the actor is entitled to see.
   // Runs in parallel with the post + comments fetch so we don't pay an
   // extra round-trip. Team actors trivially get every id. Without this
@@ -176,7 +184,14 @@ export async function getPublicPostDetail(
       // from being read by id — soft-delete intent applies to both the
       // post and the board it lives on. Without this, a deleted-board
       // post stayed reachable via its direct URL.
-      .where(and(eq(posts.id, postId), isNull(posts.deletedAt), isNull(boards.deletedAt)))
+      .where(
+        and(
+          eq(posts.id, postId),
+          isNull(posts.deletedAt),
+          isNull(boards.deletedAt),
+          postViewFilter(actor)
+        )
+      )
       .limit(1),
 
     // Query 2: Per-actor merged-source allowlist. Computed in parallel with
@@ -199,7 +214,10 @@ export async function getPublicPostDetail(
   // existence to unauthorized callers).
   const viewDecision = canViewPost(
     actor,
-    { moderationState: postResult.postModerationState, principalId: postResult.postPrincipalId },
+    {
+      moderationState: postResult.postModerationState,
+      principalId: postResult.postPrincipalId,
+    },
     { access: postResult.boardAccess }
   )
   if (!viewDecision.allowed) {
@@ -276,11 +294,13 @@ export async function getPublicPostDetail(
       INNER JOIN ${principalTable} m ON c.principal_id = m.id
       LEFT JOIN ${userTable} u ON m.user_id = u.id
       LEFT JOIN ${postCommentReactions} cr ON cr.comment_id = c.id
+        AND ${notTestPrincipal(sql`cr.principal_id`)}
       LEFT JOIN ${postStatuses} scf ON scf.id = c.status_change_from_id
       LEFT JOIN ${postStatuses} sct ON sct.id = c.status_change_to_id
       WHERE c.post_id IN (${postIdInList})
       ${includePrivateComments ? sql`` : sql`AND c.is_private = false`}
       ${moderationFilterSql}
+      AND ${testPrincipalVisible(sql`c.principal_id`)}
       ${whereExtra}
       GROUP BY c.id, m.display_name, m.avatar_key, m.avatar_url, u.image, u.image_key, scf.name, scf.color, sct.name, sct.color
       ${orderLimit}
@@ -336,6 +356,7 @@ export async function getPublicPostDetail(
       ${includePrivateComments ? sql`` : sql`AND c.is_private = false`}
       ${includePrivateComments ? sql`` : sql`AND c.deleted_at IS NULL`}
       ${moderationFilterSql}
+      AND ${testPrincipalVisible(sql`c.principal_id`)}
   `)
   const totalRootRows = getExecuteRows<{ count: string | number }>(totalRootResult)
   const commentsTotalRootCount = Number(totalRootRows[0]?.count ?? 0)

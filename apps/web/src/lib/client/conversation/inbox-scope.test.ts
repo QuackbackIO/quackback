@@ -80,7 +80,7 @@ describe('inboxNavKey', () => {
 })
 
 describe('buildListParams', () => {
-  const view = (v: 'mine' | 'unassigned' | 'all' | 'mentions' | 'spam'): InboxNavItem => ({
+  const view = (v: 'mine' | 'unassigned' | 'all' | 'mentions' | 'spam' | 'test'): InboxNavItem => ({
     kind: 'view',
     view: v,
   })
@@ -114,6 +114,13 @@ describe('buildListParams', () => {
     expect(buildListParams(view('spam'), 'open', 'high', 'junk')).toEqual({
       view: 'spam',
       search: 'junk',
+    })
+  })
+
+  it('maps the test view to a self-contained feed across every status', () => {
+    expect(buildListParams(view('test'), 'open', 'high', 'hi')).toEqual({
+      view: 'test',
+      search: 'hi',
     })
   })
 
@@ -600,7 +607,7 @@ describe('inboxScopeHasRefinements', () => {
         viewId: 'conversation_view_v' as ConversationViewId,
       })
     ).toBe(false)
-    for (const view of ['mentions', 'spam', 'created_by_me'] as const) {
+    for (const view of ['mentions', 'spam', 'created_by_me', 'test'] as const) {
       expect(inboxScopeHasRefinements({ kind: 'view', view })).toBe(false)
     }
   })

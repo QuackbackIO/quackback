@@ -13,10 +13,17 @@
  * accepts a post id must call this before any mutation. It throws a
  * NotFoundError-shaped error (don't leak existence to denied callers).
  */
-import { db, eq, and, isNull, posts, boards, postComments } from '@/lib/server/db'
+import { db, eq, and, or, isNull, posts, boards, postComments } from '@/lib/server/db'
 import { type PostCommentId, type PostId } from '@quackback/ids'
 import { NotFoundError, ForbiddenError } from '@/lib/shared/errors'
-import { canViewPost, canVotePost, isTeamActor, type Actor } from '@/lib/server/policy'
+import { notTestPrincipal } from '@/lib/server/test-data'
+import {
+  canViewPost,
+  canVotePost,
+  isTeamActor,
+  postViewFilter,
+  type Actor,
+} from '@/lib/server/policy'
 
 /**
  * Resolve a post's board `access` matrix for capability gates, applying the
@@ -48,7 +55,14 @@ export async function assertPostViewable(postId: PostId, actor: Actor): Promise<
     })
     .from(posts)
     .innerJoin(boards, eq(posts.boardId, boards.id))
-    .where(and(eq(posts.id, postId), isNull(posts.deletedAt), isNull(boards.deletedAt)))
+    .where(
+      and(
+        eq(posts.id, postId),
+        isNull(posts.deletedAt),
+        isNull(boards.deletedAt),
+        postViewFilter(actor)
+      )
+    )
     .limit(1)
 
   const row = rows[0]
@@ -58,7 +72,10 @@ export async function assertPostViewable(postId: PostId, actor: Actor): Promise<
 
   const decision = canViewPost(
     actor,
-    { moderationState: row.moderationState, principalId: row.principalId },
+    {
+      moderationState: row.moderationState,
+      principalId: row.principalId,
+    },
     { access: row.access }
   )
   if (!decision.allowed) {
@@ -87,7 +104,14 @@ export async function assertPostVotable(postId: PostId, actor: Actor): Promise<v
     })
     .from(posts)
     .innerJoin(boards, eq(posts.boardId, boards.id))
-    .where(and(eq(posts.id, postId), isNull(posts.deletedAt), isNull(boards.deletedAt)))
+    .where(
+      and(
+        eq(posts.id, postId),
+        isNull(posts.deletedAt),
+        isNull(boards.deletedAt),
+        postViewFilter(actor)
+      )
+    )
     .limit(1)
 
   const row = rows[0]
@@ -97,7 +121,10 @@ export async function assertPostVotable(postId: PostId, actor: Actor): Promise<v
 
   const decision = canVotePost(
     actor,
-    { moderationState: row.moderationState, principalId: row.principalId },
+    {
+      moderationState: row.moderationState,
+      principalId: row.principalId,
+    },
     { access: row.access }
   )
   if (!decision.allowed) {
@@ -106,7 +133,10 @@ export async function assertPostVotable(postId: PostId, actor: Actor): Promise<v
     // NotFoundError shape — only "viewable but not votable" lands here.
     const viewDecision = canViewPost(
       actor,
-      { moderationState: row.moderationState, principalId: row.principalId },
+      {
+        moderationState: row.moderationState,
+        principalId: row.principalId,
+      },
       { access: row.access }
     )
     if (!viewDecision.allowed) {
@@ -145,7 +175,16 @@ export async function assertCommentViewable(commentId: PostCommentId, actor: Act
         eq(postComments.id, commentId),
         isNull(postComments.deletedAt),
         isNull(posts.deletedAt),
-        isNull(boards.deletedAt)
+        isNull(boards.deletedAt),
+        postViewFilter(actor),
+        isTeamActor(actor)
+          ? undefined
+          : actor.principalId
+            ? or(
+                notTestPrincipal(postComments.principalId),
+                eq(postComments.principalId, actor.principalId)
+              )
+            : notTestPrincipal(postComments.principalId)
       )
     )
     .limit(1)
@@ -157,7 +196,10 @@ export async function assertCommentViewable(commentId: PostCommentId, actor: Act
 
   const decision = canViewPost(
     actor,
-    { moderationState: row.postModerationState, principalId: row.postPrincipalId },
+    {
+      moderationState: row.postModerationState,
+      principalId: row.postPrincipalId,
+    },
     { access: row.access }
   )
   if (!decision.allowed) {

@@ -8,6 +8,7 @@ import {
   type DragEvent,
 } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useIntl } from 'react-intl'
 import { toast } from 'sonner'
 import { PaperClipIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import type { JSONContent } from '@tiptap/react'
@@ -140,6 +141,7 @@ export function CreateTicketDialog({
   defaultRequester,
   onChanged,
 }: CreateTicketDialogProps) {
+  const intl = useIntl()
   const fromConversation = !!conversationId
   const [type, setType] = useState<TicketType>('customer')
   const [title, setTitle] = useState('')
@@ -375,10 +377,19 @@ export function CreateTicketDialog({
               // The ticket itself was created successfully — a link failure
               // (e.g. this conversation already has one) is a secondary,
               // recoverable problem, not a reason to hide the new ticket.
+              const testLinkConflict =
+                (error as { code?: string } | null)?.code === 'TEST_DATA_LINK_CONFLICT' ||
+                (error instanceof Error &&
+                  error.message === 'Test and real conversations need separate tickets.')
               toast.warning(
-                error instanceof Error
-                  ? `Ticket created, but couldn't link it: ${error.message}`
-                  : "Ticket created, but couldn't link it to this conversation"
+                testLinkConflict
+                  ? intl.formatMessage({
+                      id: 'support.ticket.createDialog.testDataLinkConflict',
+                      defaultMessage: 'Test and real conversations need separate tickets.',
+                    })
+                  : error instanceof Error
+                    ? `Ticket created, but couldn't link it: ${error.message}`
+                    : "Ticket created, but couldn't link it to this conversation"
               )
             } finally {
               setLinking(false)

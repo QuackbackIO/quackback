@@ -8,6 +8,7 @@ const updateWidget = vi.fn()
 let prevent = false
 let assistant: Record<string, unknown> | undefined
 
+vi.mock('@/lib/client/hooks/use-permission', () => ({ usePermission: () => true }))
 vi.mock('@tanstack/react-router', async () => {
   const actual =
     await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router')

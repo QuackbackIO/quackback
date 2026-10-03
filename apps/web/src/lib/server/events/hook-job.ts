@@ -44,6 +44,7 @@ import type { HookResult } from './hook-types'
 import type { EventData } from './types'
 import type { ChangelogId, PostId, PrincipalId, StatusIncidentId, WebhookId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
+import { isTestEvent } from './test-event'
 
 const log = logger.child({ component: 'event-hook-job' })
 
@@ -58,6 +59,7 @@ export interface HookJobData {
 export async function runHookJob(job: ClaimedJob): Promise<void> {
   const data = job.payload as unknown as HookJobData
   const { hookType, event, target, config: hookConfig } = data
+  if (await isTestEvent({ payload: event.data, actorId: event.actor.principalId })) return
 
   // Integration delivery belongs exclusively to the durable sync worker.
   // Enforce the queue boundary even if an invalid job is submitted.

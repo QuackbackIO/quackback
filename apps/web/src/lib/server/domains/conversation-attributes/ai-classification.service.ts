@@ -185,6 +185,9 @@ export async function classifyConversationAttributes(
   try {
     const model = getChatModel('classification')
     if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) return []
+    // A teammate's test thread spends no AI tokens.
+    const { isTestConversation } = await import('@/lib/server/test-data')
+    if (await isTestConversation(conversationId)) return []
 
     try {
       await enforceAiTokenBudget()

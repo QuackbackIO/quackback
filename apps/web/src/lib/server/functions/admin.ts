@@ -352,6 +352,8 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
   const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
   const { hasEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
   const { isAssistantConfigured } = await import('@/lib/server/domains/assistant')
+  const { canTestCustomerPostIdea } = await import('@/lib/server/test-customer-feedback')
+  const { workspaceAllowsAnonymous } = await import('@/lib/server/domains/settings/settings.types')
 
   const [
     orgBoards,
@@ -458,6 +460,13 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
     hasIntegration,
     hasFirstWin: firstWin.reached,
     firstWinAt: firstWin.reachedAt,
+    // "Post an idea" as the caller's test customer is offered only where it can land.
+    canPostTestIdea: canTestCustomerPostIdea(
+      auth.principal.id,
+      new Set(auth.permissions),
+      orgBoards,
+      workspaceAllowsAnonymous(orgSettings?.portalConfig)
+    ),
     launchWindow,
     inLaunchWindow: isLaunchWindowOpen(launchWindow),
     useCase: setupState?.goals?.[0] ?? setupState?.useCase ?? null,
