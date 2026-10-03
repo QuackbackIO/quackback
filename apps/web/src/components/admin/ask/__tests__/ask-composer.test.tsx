@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'react-intl'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AskComposer, type AskComposerProps } from '../ask-composer'
@@ -33,6 +34,48 @@ describe('the shared Ask composer', () => {
   it('keeps focus unchanged when the inline Home composer mounts', () => {
     mount({ variant: 'home' })
     expect(document.activeElement).not.toBe(screen.getByRole('combobox'))
+  })
+
+  it('keeps conversation controls accessible in the Home composer footer', () => {
+    const reset = vi.fn()
+    mount({
+      variant: 'home',
+      query: '',
+      footerActions: (
+        <button aria-label="New conversation" onClick={reset}>
+          +
+        </button>
+      ),
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'New conversation' }))
+    expect(reset).toHaveBeenCalledOnce()
+  })
+
+  it.each([true, false])(
+    'lets a footer button handle Enter without submitting or navigating with AI enabled=%s',
+    async (canAsk) => {
+      const user = userEvent.setup()
+      const reset = vi.fn()
+      const props = mount({
+        variant: 'home',
+        canAsk,
+        footerActions: <button onClick={reset}>New conversation</button>,
+      })
+      screen.getByRole('button', { name: 'New conversation' }).focus()
+      await user.keyboard('{Enter}')
+      expect(reset).toHaveBeenCalledOnce()
+      expect(props.onAsk).not.toHaveBeenCalled()
+      expect(props.onNavigate).not.toHaveBeenCalled()
+    }
+  )
+
+  it('lets the send button submit its question exactly once with the keyboard', async () => {
+    const user = userEvent.setup()
+    const props = mount({ variant: 'home' })
+    screen.getByRole('button', { name: 'Ask Copilot' }).focus()
+    await user.keyboard('{Enter}')
+    expect(props.onAsk).toHaveBeenCalledExactlyOnceWith('messenger')
+    expect(props.onNavigate).not.toHaveBeenCalled()
   })
 
   it('shows local Jump to results while entity search is still loading', () => {

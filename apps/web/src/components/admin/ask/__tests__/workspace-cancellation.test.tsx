@@ -59,12 +59,13 @@ vi.mock('@/lib/client/hooks/use-agui-turn', () => ({
   },
 }))
 vi.mock('../ask-composer', () => ({
-  AskComposer: ({ query, onQueryChange, canAsk, onAsk }: AskComposerProps) => (
+  AskComposer: ({ query, onQueryChange, canAsk, onAsk, footerActions }: AskComposerProps) => (
     <>
       <input aria-label="Question" value={query} onChange={(e) => onQueryChange(e.target.value)} />
       <button disabled={!canAsk} onClick={() => onAsk(query)}>
         Ask
       </button>
+      {footerActions}
     </>
   ),
 }))

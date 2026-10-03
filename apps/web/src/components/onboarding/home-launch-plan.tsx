@@ -22,10 +22,12 @@ import {
 export function HomeGettingStarted({
   full = false,
   portalUrl,
+  compact = false,
   children,
 }: {
   full?: boolean
   portalUrl?: string
+  compact?: boolean
   children?: ReactNode
 }) {
   const intl = useIntl()
@@ -97,6 +99,7 @@ export function HomeGettingStarted({
         <GettingStartedCard
           full={full}
           portalUrl={portalUrl}
+          compact={compact}
           status={statusQuery.data}
           pending={resolutionMutation.isPending}
           onSkip={(taskId) => resolutionMutation.mutate({ taskId, resolution: 'dismissed' })}
@@ -106,7 +109,7 @@ export function HomeGettingStarted({
       {!full && (
         <div
           className={
-            progress.data && !progress.data.tourSeenAt && children
+            !compact && progress.data && !progress.data.tourSeenAt && children
               ? 'mt-4 grid gap-3 md:grid-cols-2'
               : 'mt-4 grid gap-3'
           }

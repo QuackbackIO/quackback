@@ -10,11 +10,16 @@ export interface WorkspaceCopilotContextValue {
 }
 
 export const WorkspaceCopilotContext = createContext<WorkspaceCopilotContextValue | null>(null)
+export const WorkspaceCopilotAvailabilityContext = createContext(false)
 
 function useWorkspaceCopilot() {
   const value = useContext(WorkspaceCopilotContext)
   if (!value) throw new Error('Workspace Copilot requires its provider')
   return value
+}
+
+export function useWorkspaceCopilotEnabled() {
+  return useContext(WorkspaceCopilotAvailabilityContext)
 }
 
 export function AskQuackbackInline() {

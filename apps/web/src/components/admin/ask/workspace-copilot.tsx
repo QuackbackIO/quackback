@@ -13,7 +13,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { WorkspaceCopilotContext } from './workspace-copilot-context'
+import {
+  WorkspaceCopilotAvailabilityContext,
+  WorkspaceCopilotContext,
+} from './workspace-copilot-context'
 import { usePermissions } from '@/lib/client/use-permissions'
 import {
   useBillingEnabled,
@@ -304,52 +307,65 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
       </>
     ) : null
   const messages = draft?.history ?? thread.data?.messages ?? []
+  const conversationControls = (
+    <>
+      {canUseCopilot && (threads.data?.length ?? 0) > 0 && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs font-normal focus-visible:ring-foreground/25"
+            >
+              {intl.formatMessage({
+                id: 'ask.chat.history',
+                defaultMessage: 'Your conversations',
+              })}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {(threads.data ?? []).map((item) => (
+              <DropdownMenuItem
+                key={item.key}
+                disabled={busy}
+                onClick={() => {
+                  setThreadKey(item.key)
+                  setDraft(null)
+                  setError(null)
+                  clear()
+                }}
+              >
+                {item.title ||
+                  intl.formatMessage({
+                    id: 'ask.settings.title',
+                    defaultMessage: 'Proposed changes',
+                  })}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+      {(threadKey || draft) && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          disabled={busy}
+          onClick={newThread}
+          className="rounded-full focus-visible:ring-foreground/25"
+          aria-label={intl.formatMessage({
+            id: 'ask.chat.new',
+            defaultMessage: 'New conversation',
+          })}
+        >
+          <PlusIcon className="size-4" />
+        </Button>
+      )}
+    </>
+  )
   const conversation =
-    threadKey || draft || (canUseCopilot && threads.data?.length) ? (
+    threadKey || draft ? (
       <section aria-label={copilotLabel} className="space-y-4">
-        <div className="flex items-center justify-between gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="focus-visible:ring-foreground/25">
-                {intl.formatMessage({
-                  id: 'ask.chat.history',
-                  defaultMessage: 'Your conversations',
-                })}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              {(threads.data ?? []).map((item) => (
-                <DropdownMenuItem
-                  key={item.key}
-                  disabled={busy}
-                  onClick={() => {
-                    setThreadKey(item.key)
-                    setDraft(null)
-                    setError(null)
-                    clear()
-                  }}
-                >
-                  {item.title ||
-                    intl.formatMessage({
-                      id: 'ask.settings.title',
-                      defaultMessage: 'Proposed changes',
-                    })}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={busy}
-            onClick={newThread}
-            className="focus-visible:ring-foreground/25"
-          >
-            <PlusIcon className="size-4" />
-            {intl.formatMessage({ id: 'ask.chat.new', defaultMessage: 'New conversation' })}
-          </Button>
-        </div>
         {thread.isError && (
           <p role="alert" className="text-sm text-destructive">
             {intl.formatMessage({
@@ -431,6 +447,7 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
         results={results}
         loading={entitySearch.isFetching}
         variant="home"
+        footerActions={conversationControls}
       />
     </Suspense>
   )
@@ -455,7 +472,7 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
             variant="outline"
             size="sm"
             disabled={busy}
-            className="rounded-full focus-visible:ring-foreground/25"
+            className="max-w-full rounded-full text-[13px] font-normal focus-visible:ring-foreground/25"
             onClick={() =>
               void ask(intl.formatMessage({ id: prompt.id, defaultMessage: prompt.defaultMessage }))
             }
@@ -478,7 +495,9 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
         },
       }}
     >
-      {children}
+      <WorkspaceCopilotAvailabilityContext.Provider value={canAsk}>
+        {children}
+      </WorkspaceCopilotAvailabilityContext.Provider>
       {transport}
       {(paletteOpen || paletteMounted) && (
         <Dialog open={paletteOpen} onOpenChange={setPaletteOpen}>
