@@ -71,9 +71,7 @@ it('names the first win and summary for private team feedback, including legacy 
       features: { ...status.features!, supportInbox: false, helpCenter: false, statusPage: false },
     }
     const tasks = buildLaunchTasks(privateStatus)
-    expect(tasks.find((task) => task.id === 'first-win')?.title).toBe(
-      'Collect your first team idea'
-    )
+    expect(tasks.find((task) => task.id === 'first-win')?.title).toBe('Get your first idea')
     expect(tasks.find((task) => task.id === 'create-board')?.title).toBe(
       'Create a private team board'
     )
@@ -90,8 +88,8 @@ it('keeps the primary goal when private feedback is secondary and keeps public f
     goals: ['product_feedback'],
     feedbackPrivate: false,
   }
-  expect(buildLaunchTasks(publicStatus).find((task) => task.id === 'first-win')?.title).toBe(
-    'Receive your first customer post or vote'
+  expect(buildLaunchTasks(publicStatus).find((task) => task.id === 'create-board')?.title).toBe(
+    'Create a feedback board'
   )
   expect(launchChecklistSummary(publicStatus).outcome).toBe('product_feedback')
 

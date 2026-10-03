@@ -90,6 +90,8 @@ export interface LaunchTaskBlocked {
 
 export interface LaunchTask {
   id: string
+  /** Which wording of the step this plan uses, when it depends on the goal. */
+  variant?: string
   title: string
   description: string
   availability: LaunchTaskAvailability
@@ -155,6 +157,15 @@ export const FIRST_WIN_NOUN: Record<OnboardingOutcome, string> = {
   help_center: 'published article',
   internal: 'team idea',
   status_page: 'service',
+}
+
+/** The first win names what it is for the primary goal. */
+const FIRST_WIN_WORDING: Record<OnboardingOutcome, { variant: string; title: string }> = {
+  product_feedback: { variant: 'feedback', title: 'Get your first idea' },
+  internal: { variant: 'feedback', title: 'Get your first idea' },
+  customer_support: { variant: 'support', title: 'Answer your first conversation' },
+  help_center: { variant: 'helpCenter', title: 'Publish your first article' },
+  status_page: { variant: 'status', title: 'Add your first service' },
 }
 
 const ALLOW_ALL: LaunchPermissions = {
@@ -238,6 +249,7 @@ function materializeTask(task: LaunchTaskInput, resolutions: TaskResolutionMap):
   const blockedReason = blocked ? (task.unavailableReason ?? blockedReasonFrom(blocked)) : undefined
   return {
     id: task.id,
+    ...(task.variant ? { variant: task.variant } : {}),
     title: task.title,
     description: task.description,
     classification: task.classification,
@@ -266,6 +278,7 @@ function buildOutcomeTasks(
     !status.hasBoards && status.maxBoards != null && (status.boardCount ?? 0) >= status.maxBoards
   const board: LaunchTaskInput = {
     id: 'create-board',
+    ...(outcome === 'internal' ? { variant: 'private' } : {}),
     title: outcome === 'internal' ? 'Create a private team board' : 'Create a feedback board',
     description:
       outcome === 'internal'
@@ -403,16 +416,7 @@ function buildOutcomeTasks(
   }
   const firstWin: LaunchTaskInput = {
     id: 'first-win',
-    title:
-      outcome === 'customer_support'
-        ? 'Receive your first customer conversation'
-        : outcome === 'help_center'
-          ? 'Publish your first article'
-          : outcome === 'status_page'
-            ? 'Add your first service'
-            : outcome === 'internal'
-              ? 'Collect your first team idea'
-              : 'Receive your first customer post or vote',
+    ...FIRST_WIN_WORDING[outcome],
     description: 'We’ll mark this complete automatically when it happens.',
     completed: Boolean(status.hasFirstWin),
     classification: 'first_win',

@@ -1228,11 +1228,10 @@
   "onboarding.task.connect-messenger": "Messenger verbinden",
   "onboarding.task.set-up-quinn": "Quinn instellen",
   "onboarding.task.help-article": "Je eerste artikel schrijven",
-  "onboarding.task.add-status-service": "Je eerste dienst toevoegen",
+  "onboarding.task.add-status-service": "Een dienst toevoegen",
   "onboarding.task.invite-team": "Een teamgenoot uitnodigen",
   "onboarding.task.customize-branding": "Je logo toevoegen",
   "onboarding.task.connect-integration": "Een integratie verbinden",
-  "onboarding.task.first-win": "Je eerste echte resultaat behalen",
   "onboarding.workspace.error.name": "Voer een werkruimtenaam van minstens 2 tekens in.",
   "onboarding.error.generic": "Er ging iets mis. Probeer het opnieuw.",
   "onboarding.workspace.title": "Maak je werkruimte",
@@ -1276,5 +1275,10 @@
   "onboarding.launch.group.support": "Support",
   "onboarding.launch.group.helpCenter": "Helpcentrum",
   "onboarding.launch.group.status": "Status",
-  "onboarding.launch.group.polish": "Afwerking"
+  "onboarding.launch.group.polish": "Afwerking",
+  "onboarding.task.create-board.private": "Een privé teambord maken",
+  "onboarding.task.first-win.feedback": "Je eerste idee ontvangen",
+  "onboarding.task.first-win.support": "Je eerste gesprek beantwoorden",
+  "onboarding.task.first-win.helpCenter": "Je eerste artikel publiceren",
+  "onboarding.task.first-win.status": "Je eerste dienst toevoegen"
 }

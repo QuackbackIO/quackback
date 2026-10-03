@@ -1228,11 +1228,10 @@
   "onboarding.task.connect-messenger": "Conectar Messenger",
   "onboarding.task.set-up-quinn": "Configurar Quinn",
   "onboarding.task.help-article": "Escribir tu primer artículo",
-  "onboarding.task.add-status-service": "Añadir tu primer servicio",
+  "onboarding.task.add-status-service": "Añadir un servicio",
   "onboarding.task.invite-team": "Invitar a un compañero",
   "onboarding.task.customize-branding": "Añadir tu logotipo",
   "onboarding.task.connect-integration": "Conectar una integración",
-  "onboarding.task.first-win": "Conseguir tu primer resultado real",
   "onboarding.workspace.error.name": "Introduce un nombre de espacio con al menos 2 caracteres.",
   "onboarding.error.generic": "Algo salió mal. Inténtalo de nuevo.",
   "onboarding.workspace.title": "Crea tu espacio de trabajo",
@@ -1276,5 +1275,10 @@
   "onboarding.launch.group.support": "Soporte",
   "onboarding.launch.group.helpCenter": "Centro de ayuda",
   "onboarding.launch.group.status": "Estado",
-  "onboarding.launch.group.polish": "Retoques"
+  "onboarding.launch.group.polish": "Retoques",
+  "onboarding.task.create-board.private": "Crear un tablero privado del equipo",
+  "onboarding.task.first-win.feedback": "Recibir tu primera idea",
+  "onboarding.task.first-win.support": "Responder tu primera conversación",
+  "onboarding.task.first-win.helpCenter": "Publicar tu primer artículo",
+  "onboarding.task.first-win.status": "Añadir tu primer servicio"
 }

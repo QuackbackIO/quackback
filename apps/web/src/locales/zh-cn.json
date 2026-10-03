@@ -1228,11 +1228,10 @@
   "onboarding.task.connect-messenger": "连接 Messenger",
   "onboarding.task.set-up-quinn": "设置 Quinn",
   "onboarding.task.help-article": "撰写第一篇文章",
-  "onboarding.task.add-status-service": "添加第一个服务",
+  "onboarding.task.add-status-service": "添加服务",
   "onboarding.task.invite-team": "邀请团队成员",
   "onboarding.task.customize-branding": "添加标志",
   "onboarding.task.connect-integration": "连接集成",
-  "onboarding.task.first-win": "达成第一个真实成果",
   "onboarding.workspace.error.name": "请输入至少 2 个字符的工作区名称。",
   "onboarding.error.generic": "出现错误，请重试。",
   "onboarding.workspace.title": "创建工作区",
@@ -1276,5 +1275,10 @@
   "onboarding.launch.group.support": "支持",
   "onboarding.launch.group.helpCenter": "帮助中心",
   "onboarding.launch.group.status": "状态",
-  "onboarding.launch.group.polish": "完善"
+  "onboarding.launch.group.polish": "完善",
+  "onboarding.task.create-board.private": "创建团队私有看板",
+  "onboarding.task.first-win.feedback": "收到第一条想法",
+  "onboarding.task.first-win.support": "回复第一条对话",
+  "onboarding.task.first-win.helpCenter": "发布第一篇文章",
+  "onboarding.task.first-win.status": "添加第一个服务"
 }

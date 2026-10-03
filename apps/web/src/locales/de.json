@@ -1228,11 +1228,10 @@
   "onboarding.task.connect-messenger": "Messenger verbinden",
   "onboarding.task.set-up-quinn": "Quinn einrichten",
   "onboarding.task.help-article": "Ersten Artikel schreiben",
-  "onboarding.task.add-status-service": "Ersten Dienst hinzufügen",
+  "onboarding.task.add-status-service": "Dienst hinzufügen",
   "onboarding.task.invite-team": "Teammitglied einladen",
   "onboarding.task.customize-branding": "Logo hinzufügen",
   "onboarding.task.connect-integration": "Integration verbinden",
-  "onboarding.task.first-win": "Erstes echtes Ergebnis erreichen",
   "onboarding.workspace.error.name": "Gib einen Workspace-Namen mit mindestens 2 Zeichen ein.",
   "onboarding.error.generic": "Etwas ist schiefgelaufen. Versuche es erneut.",
   "onboarding.workspace.title": "Erstelle deinen Workspace",
@@ -1276,5 +1275,10 @@
   "onboarding.launch.group.support": "Support",
   "onboarding.launch.group.helpCenter": "Hilfecenter",
   "onboarding.launch.group.status": "Status",
-  "onboarding.launch.group.polish": "Feinschliff"
+  "onboarding.launch.group.polish": "Feinschliff",
+  "onboarding.task.create-board.private": "Privates Team-Board erstellen",
+  "onboarding.task.first-win.feedback": "Erste Idee erhalten",
+  "onboarding.task.first-win.support": "Erste Konversation beantworten",
+  "onboarding.task.first-win.helpCenter": "Ersten Artikel veröffentlichen",
+  "onboarding.task.first-win.status": "Ersten Dienst hinzufügen"
 }

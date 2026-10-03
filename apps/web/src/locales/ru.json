@@ -1228,11 +1228,10 @@
   "onboarding.task.connect-messenger": "Подключить Messenger",
   "onboarding.task.set-up-quinn": "Настроить Quinn",
   "onboarding.task.help-article": "Написать первую статью",
-  "onboarding.task.add-status-service": "Добавить первый сервис",
+  "onboarding.task.add-status-service": "Добавить сервис",
   "onboarding.task.invite-team": "Пригласить коллегу",
   "onboarding.task.customize-branding": "Добавить логотип",
   "onboarding.task.connect-integration": "Подключить интеграцию",
-  "onboarding.task.first-win": "Получить первый реальный результат",
   "onboarding.workspace.error.name": "Введите название рабочего пространства длиной не менее 2 символов.",
   "onboarding.error.generic": "Что-то пошло не так. Попробуйте ещё раз.",
   "onboarding.workspace.title": "Создайте рабочее пространство",
@@ -1276,5 +1275,10 @@
   "onboarding.launch.group.support": "Поддержка",
   "onboarding.launch.group.helpCenter": "Справочный центр",
   "onboarding.launch.group.status": "Статус",
-  "onboarding.launch.group.polish": "Доработка"
+  "onboarding.launch.group.polish": "Доработка",
+  "onboarding.task.create-board.private": "Создать закрытую доску команды",
+  "onboarding.task.first-win.feedback": "Получить первую идею",
+  "onboarding.task.first-win.support": "Ответить на первый разговор",
+  "onboarding.task.first-win.helpCenter": "Опубликовать первую статью",
+  "onboarding.task.first-win.status": "Добавить первый сервис"
 }

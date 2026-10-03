@@ -103,7 +103,7 @@ describe('Launch plan page', () => {
 
   it('says automatic steps complete themselves and offers no skip for them', () => {
     mount()
-    const win = row('Reach your first real result')
+    const win = row('Get your first idea')
     expect(within(win).getByText('Marked done when it happens')).toBeVisible()
     expect(within(win).queryByRole('button')).toBeNull()
   })

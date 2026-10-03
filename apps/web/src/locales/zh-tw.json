@@ -1228,11 +1228,10 @@
   "onboarding.task.connect-messenger": "連接 Messenger",
   "onboarding.task.set-up-quinn": "設定 Quinn",
   "onboarding.task.help-article": "撰寫第一篇文章",
-  "onboarding.task.add-status-service": "新增第一個服務",
+  "onboarding.task.add-status-service": "新增服務",
   "onboarding.task.invite-team": "邀請團隊成員",
   "onboarding.task.customize-branding": "新增標誌",
   "onboarding.task.connect-integration": "連接整合",
-  "onboarding.task.first-win": "達成第一個實際成果",
   "onboarding.workspace.error.name": "請輸入至少 2 個字元的工作區名稱。",
   "onboarding.error.generic": "發生錯誤，請重試。",
   "onboarding.workspace.title": "建立工作區",
@@ -1276,5 +1275,10 @@
   "onboarding.launch.group.support": "支援",
   "onboarding.launch.group.helpCenter": "說明中心",
   "onboarding.launch.group.status": "狀態",
-  "onboarding.launch.group.polish": "完善"
+  "onboarding.launch.group.polish": "完善",
+  "onboarding.task.create-board.private": "建立團隊私人看板",
+  "onboarding.task.first-win.feedback": "收到第一則想法",
+  "onboarding.task.first-win.support": "回覆第一則對話",
+  "onboarding.task.first-win.helpCenter": "發布第一篇文章",
+  "onboarding.task.first-win.status": "新增第一個服務"
 }

@@ -1228,11 +1228,10 @@
   "onboarding.task.connect-messenger": "Connect Messenger",
   "onboarding.task.set-up-quinn": "Set up Quinn",
   "onboarding.task.help-article": "Write your first article",
-  "onboarding.task.add-status-service": "Add your first service",
+  "onboarding.task.add-status-service": "Add a service",
   "onboarding.task.invite-team": "Invite a teammate",
   "onboarding.task.customize-branding": "Add your logo",
   "onboarding.task.connect-integration": "Connect an integration",
-  "onboarding.task.first-win": "Reach your first real result",
   "onboarding.workspace.error.name": "Enter a workspace name with at least 2 characters.",
   "onboarding.error.generic": "Something went wrong. Try again.",
   "onboarding.workspace.title": "Create your workspace",
@@ -1276,5 +1275,10 @@
   "onboarding.launch.group.support": "Support",
   "onboarding.launch.group.helpCenter": "Help Center",
   "onboarding.launch.group.status": "Status",
-  "onboarding.launch.group.polish": "Polish"
+  "onboarding.launch.group.polish": "Polish",
+  "onboarding.task.create-board.private": "Create a private team board",
+  "onboarding.task.first-win.feedback": "Get your first idea",
+  "onboarding.task.first-win.support": "Answer your first conversation",
+  "onboarding.task.first-win.helpCenter": "Publish your first article",
+  "onboarding.task.first-win.status": "Add your first service"
 }
