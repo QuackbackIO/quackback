@@ -166,11 +166,30 @@ export function isViewerMessage(key: string): boolean {
   return VIEWER_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
 }
 
-/** A catalog without the viewer's strings, for seeding a page. */
+/**
+ * Copilot and search strings. Their chunks (the Home chat and the search
+ * dialog) load them as they open (see `AskMessages`); only the sidebar Search
+ * row renders on every page, so its strings stay in the seed.
+ */
+export function isAskMessage(key: string): boolean {
+  return key.startsWith('ask.') && !key.startsWith('ask.search.')
+}
+
+/** A catalog without the strings lazy chunks load themselves, for seeding a page. */
 export function withoutViewerMessages(all: Record<string, string>): Record<string, string> {
   const subset: Record<string, string> = {}
   for (const [key, value] of Object.entries(all)) {
-    if (!isViewerMessage(key)) subset[key] = value
+    if (!isViewerMessage(key) && !isAskMessage(key)) subset[key] = value
+  }
+  return subset
+}
+
+/** The Copilot and search strings in a locale. */
+export async function loadAskMessages(locale: SupportedLocale): Promise<Record<string, string>> {
+  const all = await loadMessages(locale)
+  const subset: Record<string, string> = {}
+  for (const [key, value] of Object.entries(all)) {
+    if (isAskMessage(key)) subset[key] = value
   }
   return subset
 }

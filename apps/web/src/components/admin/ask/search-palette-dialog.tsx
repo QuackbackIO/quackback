@@ -4,6 +4,7 @@ import { useRouter } from '@tanstack/react-router'
 import { useIntl } from 'react-intl'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { AskComposer } from './ask-composer'
+import { AskMessages } from './ask-messages'
 import { usePermissions } from '@/lib/client/use-permissions'
 import {
   useBillingEnabled,
@@ -14,16 +15,22 @@ import {
 import { buildAskDestinations, searchAskDestinations } from '@/lib/shared/ask-destinations'
 import { searchAskEntitiesFn } from '@/lib/server/functions/ask-search'
 
-/** Destinations and entity search; never starts a Copilot turn. */
-export function SearchPaletteDialog({
-  open,
-  onOpenChange,
-  returnFocus,
-}: {
+type SearchPaletteDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   returnFocus: RefObject<HTMLElement | null>
-}) {
+}
+
+export function SearchPaletteDialog(props: SearchPaletteDialogProps) {
+  return (
+    <AskMessages>
+      <SearchPaletteDialogView {...props} />
+    </AskMessages>
+  )
+}
+
+/** Destinations and entity search; never starts a Copilot turn. */
+function SearchPaletteDialogView({ open, onOpenChange, returnFocus }: SearchPaletteDialogProps) {
   const intl = useIntl()
   const router = useRouter()
   const principalId = usePrincipalId()

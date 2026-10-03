@@ -32,6 +32,7 @@ import {
   getWorkspaceCopilotThreadFn,
   listWorkspaceCopilotThreadsFn,
 } from '@/lib/server/functions/workspace-copilot'
+import { AskMessages } from './ask-messages'
 import { ChatComposer } from './chat-composer'
 import { ConnectorCallCard } from './connector-call-card'
 import { useSearchPalette, useSearchShortcutLabel } from './search-palette'
@@ -62,17 +63,22 @@ function overlayOpen() {
  * Continue row; a started chat goes full screen and lives in the URL
  * (`?copilotThread=`), so Back and Esc return to Home and reload restores it.
  */
-export function CopilotHome({
-  threadKey,
-  canAsk,
-  header,
-  below,
-}: {
+export interface CopilotHomeProps {
   threadKey?: string
   canAsk: boolean
   header: ReactNode
   below?: ReactNode
-}) {
+}
+
+export function CopilotHome(props: CopilotHomeProps) {
+  return (
+    <AskMessages>
+      <CopilotHomeView {...props} />
+    </AskMessages>
+  )
+}
+
+function CopilotHomeView({ threadKey, canAsk, header, below }: CopilotHomeProps) {
   const intl = useIntl()
   const router = useRouter()
   const queryClient = useQueryClient()

@@ -11,6 +11,8 @@ import {
   loadViewerMessages,
   loadWidgetMessages,
   withoutViewerMessages,
+  loadAskMessages,
+  isAskMessage,
 } from '../i18n'
 
 describe('normalizeLocale', () => {
@@ -183,8 +185,23 @@ describe('viewer strings', () => {
     expect(viewer['files.viewer.close']).toBe('Schließen')
     expect(Object.keys(viewer).length).toBeGreaterThan(0)
     expect(Object.keys(viewer).every(isViewerMessage)).toBe(true)
-    expect(Object.keys(viewer).length + Object.keys(withoutViewerMessages(all)).length).toBe(
-      Object.keys(all).length
-    )
+    const ask = await loadAskMessages('de')
+    expect(
+      Object.keys(viewer).length +
+        Object.keys(ask).length +
+        Object.keys(withoutViewerMessages(all)).length
+    ).toBe(Object.keys(all).length)
+  })
+
+  it('leaves Copilot and search strings to the chunks that render them', async () => {
+    const all = await loadMessages('fr')
+    const seeded = withoutViewerMessages(all)
+    const ask = await loadAskMessages('fr')
+    expect(Object.keys(seeded).filter(isAskMessage)).toEqual([])
+    // The sidebar Search row renders on every admin page.
+    expect(seeded['ask.search.row']).toBe(all['ask.search.row'])
+    expect(ask['ask.chat.newChat']).toBe(all['ask.chat.newChat'])
+    expect(ask['ask.destination.settings_portal']).toBe(all['ask.destination.settings_portal'])
+    expect(Object.keys(ask).every(isAskMessage)).toBe(true)
   })
 })
