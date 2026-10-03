@@ -852,8 +852,8 @@
     "sweep:ui:admin:/admin/settings/widget": {
       "dbQueries": 77,
       "serverRequests": 10,
-      "requests": 218,
-      "jsRequests": 202,
+      "requests": 220,
+      "jsRequests": 204,
       "jsKB": 813.8,
       "htmlTransferKB": 33.6,
       "componentRenders": 1340
@@ -865,8 +865,8 @@
     "sweep:ui:admin:/admin/settings/widget/install": {
       "dbQueries": 17,
       "serverRequests": 1,
-      "requests": 138,
-      "jsRequests": 134,
+      "requests": 140,
+      "jsRequests": 136,
       "jsKB": 447.1,
       "htmlTransferKB": 33.1,
       "componentRenders": 413
