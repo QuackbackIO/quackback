@@ -163,7 +163,7 @@ export const FIRST_WIN_NOUN: Record<OnboardingOutcome, string> = {
 const FIRST_WIN_WORDING: Record<OnboardingOutcome, { variant: string; title: string }> = {
   product_feedback: { variant: 'feedback', title: 'Get your first idea' },
   internal: { variant: 'feedback', title: 'Get your first idea' },
-  customer_support: { variant: 'support', title: 'Answer your first conversation' },
+  customer_support: { variant: 'support', title: 'Get your first conversation' },
   help_center: { variant: 'helpCenter', title: 'Publish your first article' },
   status_page: { variant: 'status', title: 'Add your first service' },
 }

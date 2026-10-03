@@ -54,7 +54,7 @@ describe('launch task labels', () => {
   it.each([
     [['product_feedback'], false, 'Get your first idea'],
     [['product_feedback'], true, 'Get your first idea'],
-    [['customer_support', 'product_feedback'], false, 'Answer your first conversation'],
+    [['customer_support', 'product_feedback'], false, 'Get your first conversation'],
     [['help_center'], false, 'Publish your first article'],
     [['status_page', 'help_center'], false, 'Add your first service'],
   ] as const)('names the first win for goals %j (private %s): %s', (goals, isPrivate, title) => {
