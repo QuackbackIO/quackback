@@ -94,14 +94,28 @@ interface RailItem {
   exact?: boolean
   /** The workspace product this item belongs to; hidden while it is off. */
   product?: ProductId
+  /** The guided tour's `data-tour` name for this item. */
+  tour?: string
 }
 
 // One product reads as one run: Feedback, Roadmap and Changelog sit together,
 // then Support, Help Center and Status.
 const RAIL_ITEMS: RailItem[] = [
   { label: 'Home', href: '/admin', icon: HomeIcon, exact: true },
-  { label: 'Feedback', href: '/admin/feedback', icon: ENTITY_ICONS.post, product: 'feedback' },
-  { label: 'Roadmap', href: '/admin/roadmap', icon: MapIcon, product: 'feedback' },
+  {
+    label: 'Feedback',
+    href: '/admin/feedback',
+    icon: ENTITY_ICONS.post,
+    product: 'feedback',
+    tour: 'nav-feedback',
+  },
+  {
+    label: 'Roadmap',
+    href: '/admin/roadmap',
+    icon: MapIcon,
+    product: 'feedback',
+    tour: 'nav-roadmap',
+  },
   {
     label: 'Changelog',
     href: '/admin/changelog',
@@ -110,14 +124,27 @@ const RAIL_ITEMS: RailItem[] = [
   },
   // One Support entry covers conversations and tickets: the unified inbox
   // shell serves both (gated on either flag being on).
-  { label: 'Support', href: '/admin/inbox', icon: ENTITY_ICONS.conversation, product: 'support' },
+  {
+    label: 'Support',
+    href: '/admin/inbox',
+    icon: ENTITY_ICONS.conversation,
+    product: 'support',
+    tour: 'nav-support',
+  },
   {
     label: 'Help Center',
     href: '/admin/help-center',
     icon: ENTITY_ICONS.article,
     product: 'helpCenter',
+    tour: 'nav-help-center',
   },
-  { label: 'Status', href: '/admin/status', icon: SignalIcon, product: 'status' },
+  {
+    label: 'Status',
+    href: '/admin/status',
+    icon: SignalIcon,
+    product: 'status',
+    tour: 'nav-status',
+  },
   { label: 'Analytics', href: '/admin/analytics', icon: ChartBarIcon },
   { label: 'Users', href: '/admin/users', icon: UsersIcon },
 ]
@@ -154,10 +181,13 @@ function NavItem({
   badgeLabel,
   dot,
   exact = false,
+  tour,
 }: {
   href: string
   icon: typeof ChatBubbleLeftIcon
   label: string
+  /** The guided tour's name for this item. */
+  tour?: string
   onClick?: () => void
   /** Optional count or short mark (e.g. remaining launch steps) */
   badge?: string | number | null
@@ -173,7 +203,7 @@ function NavItem({
       to={href}
       onClick={onClick}
       data-admin-rail-item=""
-      data-tour={href === '/admin/roadmap' ? 'roadmap' : undefined}
+      data-tour={tour}
       data-labeled=""
       {...railLinkProps(exact)}
     >
@@ -349,6 +379,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                   exact={item.exact}
                   badge={itemBadge(item)}
                   badgeLabel={itemBadgeLabel(item)}
+                  tour={item.tour}
                 />
               ))}
             </nav>

@@ -19,6 +19,7 @@ import {
   sql,
   isNull,
   isNotNull,
+  lte,
   inArray,
   notExists,
   conversations,
@@ -71,8 +72,14 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 export async function getAdminOverview(input: {
   actor: Actor
   flags: Partial<FeatureFlags> | undefined
+  /**
+   * Ask whether the workspace has any published, non-test content yet, so a
+   * new workspace's Home stays quiet. Only worth asking in the launch window:
+   * past it, Home always shows its numbers.
+   */
+  probeRealData?: boolean
 }): Promise<AdminOverviewData> {
-  const { actor, flags } = input
+  const { actor, flags, probeRealData = false } = input
   const viewerId = actor.principalId
   const now = new Date()
 
@@ -133,41 +140,60 @@ export async function getAdminOverview(input: {
     help: helpOn ? { draftCount: help.draftCount, draftLink: help.draftLink } : undefined,
   })
 
-  const [realConversation, realPost, realArticle, realUpdate, realService] = await Promise.all([
-    supportOn
-      ? db.query.conversations.findFirst({
-          columns: { id: true },
-          where: and(conversationFilter(actor), notTestPrincipal(conversations.visitorPrincipalId)),
-        })
-      : undefined,
-    feedbackOn
-      ? db.query.posts.findFirst({
-          columns: { id: true },
-          where: and(isNull(posts.deletedAt), notTestPrincipal(posts.principalId)),
-        })
-      : undefined,
-    helpOn
-      ? db.query.helpCenterArticles.findFirst({
-          columns: { id: true },
-          where: isNull(helpCenterArticles.deletedAt),
-        })
-      : undefined,
-    changelogOn
-      ? db.query.changelogEntries.findFirst({
-          columns: { id: true },
-          where: isNull(changelogEntries.deletedAt),
-        })
-      : undefined,
-    isProductEnabled(flags, 'status') && can(actor, PERMISSIONS.SETTINGS_MANAGE)
-      ? db.query.statusComponents.findFirst({
-          columns: { id: true },
-          where: isNull(statusComponents.deletedAt),
-        })
-      : undefined,
-  ])
+  const [realConversation, realPost, realArticle, realUpdate, realService] = probeRealData
+    ? await Promise.all([
+        supportOn
+          ? db.query.conversations.findFirst({
+              columns: { id: true },
+              where: and(
+                conversationFilter(actor),
+                notTestPrincipal(conversations.visitorPrincipalId)
+              ),
+            })
+          : undefined,
+        feedbackOn
+          ? db.query.posts.findFirst({
+              columns: { id: true },
+              where: and(
+                isNull(posts.deletedAt),
+                eq(posts.moderationState, 'published'),
+                notTestPrincipal(posts.principalId)
+              ),
+            })
+          : undefined,
+        helpOn
+          ? db.query.helpCenterArticles.findFirst({
+              columns: { id: true },
+              where: and(
+                isNull(helpCenterArticles.deletedAt),
+                isNotNull(helpCenterArticles.publishedAt),
+                lte(helpCenterArticles.publishedAt, now)
+              ),
+            })
+          : undefined,
+        changelogOn
+          ? db.query.changelogEntries.findFirst({
+              columns: { id: true },
+              where: and(
+                isNull(changelogEntries.deletedAt),
+                isNotNull(changelogEntries.publishedAt),
+                lte(changelogEntries.publishedAt, now)
+              ),
+            })
+          : undefined,
+        isProductEnabled(flags, 'status') && can(actor, PERMISSIONS.SETTINGS_MANAGE)
+          ? db.query.statusComponents.findFirst({
+              columns: { id: true },
+              where: isNull(statusComponents.deletedAt),
+            })
+          : undefined,
+      ])
+    : []
 
   return {
-    hasRealData: Boolean(realConversation || realPost || realArticle || realUpdate || realService),
+    hasRealData:
+      !probeRealData ||
+      Boolean(realConversation || realPost || realArticle || realUpdate || realService),
     metrics,
     attention: mixAttention(
       [support.attention, feedback.attention, feedback.announce],

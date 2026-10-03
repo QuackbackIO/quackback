@@ -222,7 +222,14 @@ function LiveHelpCenterFinder({
               <HelpCenterListSkeleton />
             </div>
           ) : articles.length === 0 ? (
-            <div className="px-4 py-8">
+            <div
+              className="px-4 py-8"
+              data-tour={
+                !filters.search && !hasActiveFilters && !currentCategory
+                  ? 'help-center-empty'
+                  : undefined
+              }
+            >
               <EmptyState
                 icon={QuestionMarkCircleIcon}
                 title={

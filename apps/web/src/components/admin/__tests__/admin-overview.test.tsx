@@ -134,6 +134,18 @@ describe('OverviewDashboard', () => {
     }
   })
 
+  it('keeps the create actions beside a custom Home header', () => {
+    render(
+      <OverviewDashboard
+        header={<h1>Welcome, Acme</h1>}
+        actions={<button type="button">Actions</button>}
+      />
+    )
+    expect(screen.getByRole('heading', { level: 1, name: 'Welcome, Acme' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Actions' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Home' })).toBeNull()
+  })
+
   it('renders each count under a single-line label', () => {
     const { container } = render(<OverviewDashboard />)
 

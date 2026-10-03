@@ -65,6 +65,17 @@ export function selectActivationAction({
   const outcome = startingPoint?.outcome ?? normalizeOutcome(status.useCase)
 
   if (surface === 'feedback_empty') {
+    // Private team feedback has no board to share: its next step is a teammate.
+    if (status.feedbackPrivate && !status.hasPublicBoard) {
+      if (status.memberCount > 1 || status.permissions?.memberManage === false) return null
+      return {
+        id: 'invite-teammate',
+        outcome,
+        label: 'Invite a teammate',
+        kind: 'link',
+        destination: '/admin/settings/members',
+      }
+    }
     if (!status.hasPublicBoard) {
       if (status.permissions?.boardManage === false) return null
       return {

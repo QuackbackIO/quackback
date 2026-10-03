@@ -7,6 +7,7 @@ import {
   conversations,
   eq,
   helpCenterArticles,
+  inArray,
   isNotNull,
   isNull,
   lte,
@@ -81,7 +82,8 @@ export async function detectFirstWin(state: SetupState | null): Promise<FirstWin
           // silently UN-REACH a genuine first win the moment that customer
           // answered from their inbox. `source` is immutable provenance, which
           // is the question this actually asks.
-          eq(conversations.source, 'widget'),
+          // Any conversation a customer starts counts, by Messenger or email.
+          inArray(conversations.source, ['widget', 'email']),
           isNotNull(conversations.visitorPrincipalId),
           sql`coalesce(${conversations.customAttributes}->>'onboardingGenerated', 'false') <> 'true'`,
           sql`coalesce(${conversations.customAttributes}->>'test', 'false') <> 'true'`,

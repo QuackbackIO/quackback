@@ -23,22 +23,33 @@ export function GoalSelector({
   feedbackPrivate,
   onPrivateChange,
   disabled,
+  managed = false,
 }: {
   goals: OnboardingOutcome[]
   onGoalsChange: (goals: OnboardingOutcome[]) => void
   feedbackPrivate: boolean
   onPrivateChange: (value: boolean) => void
   disabled?: boolean
+  /** A config file sets the goals: show its picks, read-only. */
+  managed?: boolean
 }) {
+  const locked = disabled || managed
   return (
-    <fieldset disabled={disabled} className="space-y-3">
+    <fieldset disabled={locked} className="space-y-3">
       <legend className="mb-3 text-sm font-medium">
         <FormattedMessage
           id="onboarding.goals.title"
           defaultMessage="What do you want to run first?"
         />
         <span className="ms-2 text-xs font-normal text-muted-foreground">
-          <FormattedMessage id="onboarding.goals.pickAny" defaultMessage="Pick any" />
+          {managed ? (
+            <FormattedMessage
+              id="onboarding.goals.managed"
+              defaultMessage="Set by your config file"
+            />
+          ) : (
+            <FormattedMessage id="onboarding.goals.pickAny" defaultMessage="Pick any" />
+          )}
         </span>
       </legend>
       <div className="grid grid-cols-2 gap-3">
@@ -47,11 +58,12 @@ export function GoalSelector({
             key={id}
             type="button"
             variant="outline"
-            disabled={disabled}
+            disabled={locked}
             aria-pressed={goals.includes(id)}
             className={cn(
               'h-auto justify-start gap-3 whitespace-normal p-4 text-start focus-visible:ring-zinc-400/50',
-              goals.includes(id) && 'border-foreground bg-muted'
+              goals.includes(id) && 'border-foreground bg-muted',
+              managed && goals.includes(id) && 'disabled:opacity-100'
             )}
             onClick={() =>
               onGoalsChange(
@@ -69,7 +81,7 @@ export function GoalSelector({
           <Checkbox
             id="feedback-private"
             checked={feedbackPrivate}
-            disabled={disabled}
+            disabled={locked}
             onCheckedChange={(value) => onPrivateChange(value === true)}
           />
           <label htmlFor="feedback-private" className="text-sm">

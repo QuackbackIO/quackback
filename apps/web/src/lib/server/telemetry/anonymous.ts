@@ -7,6 +7,7 @@ export const TELEMETRY_OUTCOMES = [
   'product_feedback',
   'customer_support',
   'help_center',
+  'status_page',
   'internal',
 ] as const
 export type TelemetryOutcome = (typeof TELEMETRY_OUTCOMES)[number]

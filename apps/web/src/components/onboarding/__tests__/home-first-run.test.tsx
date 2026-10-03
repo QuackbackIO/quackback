@@ -1,0 +1,156 @@
+// @vitest-environment happy-dom
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { ReactNode } from 'react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import en from '@/locales/en.json'
+import type { LaunchStatus } from '@/lib/shared/launch-checklist'
+
+const hoisted = vi.hoisted(() => ({
+  status: null as unknown,
+  progress: {} as Record<string, string>,
+  claim: vi.fn(),
+  dismiss: vi.fn(),
+  start: vi.fn(),
+}))
+
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ to, children }: { to: string; children: ReactNode }) => <a href={to}>{children}</a>,
+}))
+vi.mock('@/lib/server/functions/onboarding-progress', () => ({
+  getOnboardingProgressFn: async () => ({ ...hoisted.progress }),
+  claimFirstWinMomentFn: hoisted.claim,
+  dismissTourOfferFn: hoisted.dismiss,
+}))
+vi.mock('@/lib/client/queries/admin', () => ({
+  adminQueries: {
+    onboardingStatus: () => ({
+      queryKey: ['admin', 'onboarding'],
+      queryFn: async () => hoisted.status,
+    }),
+  },
+}))
+vi.mock('@/components/admin/settings/boards/create-board-dialog', () => ({
+  CreateBoardDialog: () => null,
+}))
+vi.mock('@/lib/server/functions/admin', () => ({ setLaunchTaskResolutionFn: vi.fn() }))
+vi.mock('../product-tour', () => ({ useProductTour: () => ({ start: hoisted.start }) }))
+
+import { HomeGettingStarted } from '../home-launch-plan'
+
+const NOW = Date.now()
+const OPEN = {
+  startsAt: new Date(NOW - 86_400_000).toISOString(),
+  endsAt: new Date(NOW + 13 * 86_400_000).toISOString(),
+}
+
+function status(overrides: Partial<LaunchStatus> = {}): LaunchStatus {
+  return {
+    hasBoards: true,
+    hasPublicBoard: true,
+    memberCount: 1,
+    hasBranding: false,
+    goals: ['customer_support'],
+    hasFirstWin: false,
+    launchWindow: OPEN,
+    inLaunchWindow: true,
+    features: {
+      supportInbox: true,
+      helpCenter: false,
+      statusPage: false,
+      integrations: true,
+      assistant: false,
+    },
+    ...overrides,
+  }
+}
+
+function mount() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const view = render(
+    <IntlProvider locale="en" messages={en}>
+      <QueryClientProvider client={client}>
+        <HomeGettingStarted tryIt={<section>Try it yourself</section>} />
+      </QueryClientProvider>
+    </IntlProvider>
+  )
+  return { ...view, client }
+}
+
+beforeEach(() => {
+  hoisted.progress = {}
+  hoisted.claim.mockReset()
+  hoisted.dismiss.mockReset()
+  // The server records Not now on the person, so the next read carries it.
+  hoisted.dismiss.mockImplementation(async () => {
+    hoisted.progress = { ...hoisted.progress, tourDismissedAt: new Date().toISOString() }
+    return { ok: true }
+  })
+  hoisted.start.mockReset()
+})
+afterEach(cleanup)
+
+describe('Home first-run cards', () => {
+  it('shows an established workspace none of them after an upgrade', async () => {
+    hoisted.status = status({ launchWindow: null, inLaunchWindow: false, hasFirstWin: true })
+    hoisted.claim.mockResolvedValue({ show: true })
+    const { client } = mount()
+    await waitFor(() => expect(client.getQueryData(['onboarding', 'progress'])).toBeDefined())
+    expect(screen.queryByText('Take the 60-second tour')).toBeNull()
+    expect(screen.queryByText('Try it yourself')).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Your launch plan' })).toBeNull()
+    expect(screen.queryByText('Your first real result is here.')).toBeNull()
+    expect(hoisted.claim).not.toHaveBeenCalled()
+  })
+
+  it('offers the tour in the launch window and remembers Not now', async () => {
+    hoisted.status = status()
+    const { client } = mount()
+    expect(await screen.findByText('Take the 60-second tour')).toBeVisible()
+    expect(screen.getByText('Try it yourself')).toBeVisible()
+    expect(screen.getByRole('region', { name: 'Your launch plan' })).toBeVisible()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Not now' }))
+    await waitFor(() => expect(hoisted.dismiss).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.queryByText('Take the 60-second tour')).toBeNull())
+    expect(hoisted.start).not.toHaveBeenCalled()
+    expect(screen.getByText('Try it yourself')).toBeVisible()
+
+    await client.invalidateQueries({ queryKey: ['onboarding', 'progress'] })
+    expect(screen.queryByText('Take the 60-second tour')).toBeNull()
+  })
+
+  it('starts the tour from the offer and hides the offer once it was seen', async () => {
+    hoisted.status = status()
+    mount()
+    fireEvent.click(await screen.findByRole('button', { name: 'Start' }))
+    expect(hoisted.start).toHaveBeenCalledTimes(1)
+    cleanup()
+
+    hoisted.progress = { tourSeenAt: new Date().toISOString() }
+    const { client } = mount()
+    await waitFor(() => expect(client.getQueryData(['onboarding', 'progress'])).toBeDefined())
+    expect(screen.queryByText('Take the 60-second tour')).toBeNull()
+  })
+
+  it('claims the celebration once and never replays a cached claim', async () => {
+    hoisted.status = status({ hasFirstWin: true, firstWinAt: new Date(NOW).toISOString() })
+    hoisted.claim.mockResolvedValueOnce({ show: true }).mockResolvedValueOnce({ show: false })
+    const first = mount()
+    expect(await screen.findByText('Your first real result is here.')).toBeVisible()
+    first.unmount()
+
+    mount()
+    await waitFor(() => expect(hoisted.claim).toHaveBeenCalledTimes(2))
+    expect(screen.queryByText('Your first real result is here.')).toBeNull()
+  })
+
+  it('does not ask for the celebration once this person has seen it', async () => {
+    hoisted.status = status({ hasFirstWin: true })
+    hoisted.progress = { firstWinShownAt: new Date().toISOString() }
+    const { client } = mount()
+    await waitFor(() => expect(client.getQueryData(['onboarding', 'progress'])).toBeDefined())
+    expect(hoisted.claim).not.toHaveBeenCalled()
+  })
+})

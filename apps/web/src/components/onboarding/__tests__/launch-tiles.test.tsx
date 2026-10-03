@@ -4,6 +4,7 @@ import { IntlProvider } from 'react-intl'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 import { GettingStartedCard } from '@/components/admin/getting-started-card'
+import en from '@/locales/en.json'
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ to, children }: { to: string; children: ReactNode }) => <a href={to}>{children}</a>,
@@ -12,7 +13,7 @@ afterEach(cleanup)
 
 it('shows three tiles drawn from Support and Help center with real destinations', () => {
   const { container } = render(
-    <IntlProvider locale="en">
+    <IntlProvider locale="en" messages={en}>
       <GettingStartedCard
         status={{
           hasBoards: false,
@@ -43,7 +44,7 @@ it('shows three tiles drawn from Support and Help center with real destinations'
 
 it('fills the next tile with shared work when a single goal has one prerequisite', () => {
   const { container } = render(
-    <IntlProvider locale="en">
+    <IntlProvider locale="en" messages={en}>
       <GettingStartedCard
         status={{
           hasBoards: false,

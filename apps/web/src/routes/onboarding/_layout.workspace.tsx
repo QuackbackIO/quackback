@@ -28,6 +28,12 @@ export const Route = createFileRoute('/onboarding/_layout/workspace')({
       isCloudProvisioned,
       cloudIdentity: isCloudProvisioned ? await getCloudIdentityFn() : null,
       existingWorkspaceName: context.settings?.name ?? '',
+      // The client settings payload never carries setup state, so the goals a
+      // config file or an earlier save chose come from the server here.
+      setupGoals: {
+        goals: state.setupState?.goals,
+        feedbackPrivate: state.setupState?.feedbackPrivate,
+      },
     }
   },
   component: WorkspaceStepRoute,
