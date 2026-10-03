@@ -17,6 +17,7 @@ import type { WorkspaceCopilotThread } from '@/lib/shared/assistant/workspace-co
 import messages from '@/locales/en.json'
 
 const state = vi.hoisted(() => ({
+  pathname: '/admin',
   enabled: true,
   permissions: new Set(['copilot.use']),
   threads: [] as WorkspaceCopilotThread[],
@@ -31,7 +32,7 @@ const state = vi.hoisted(() => ({
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ navigate: state.navigate }),
   useRouterState: ({ select }: { select: (value: unknown) => unknown }) =>
-    select({ location: { pathname: '/admin', searchStr: '' } }),
+    select({ location: { pathname: state.pathname, searchStr: '' } }),
 }))
 vi.mock('@/lib/client/use-permissions', () => ({ usePermissions: () => state.permissions }))
 vi.mock('@/lib/client/hooks/use-root-context', () => ({
@@ -147,6 +148,7 @@ function mount() {
 }
 beforeEach(() => {
   vi.clearAllMocks()
+  state.pathname = '/admin'
   state.enabled = true
   state.permissions = new Set(['copilot.use'])
   state.threads = []
@@ -359,4 +361,24 @@ it('keeps search independent from an unsent Home message and never starts Copilo
   expect(screen.getByRole('textbox', { name: 'Ask Copilot' })).toHaveValue(
     'Draft a help center article'
   )
+})
+
+it('leaves Ctrl+K to a handler that already took it, and to the Inbox command bar', async () => {
+  mount()
+  await screen.findByRole('textbox', { name: 'Ask Copilot' })
+  const taken = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, cancelable: true })
+  taken.preventDefault()
+  act(() => {
+    window.dispatchEvent(taken)
+  })
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 50)))
+  expect(screen.queryByTestId('search-palette')).toBeNull()
+  cleanup()
+  state.pathname = '/admin/inbox'
+  mount()
+  fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 50)))
+  expect(screen.queryByTestId('search-palette')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Search Quackback' }))
+  expect(await screen.findByTestId('search-palette')).toBeTruthy()
 })

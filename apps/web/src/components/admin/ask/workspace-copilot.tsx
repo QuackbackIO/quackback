@@ -86,6 +86,10 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
   const billingEnabled = useBillingEnabled()
   const domainsEnabled = useCloudEnabled()
   const isHome = useRouterState({ select: (state) => /^\/admin\/?$/.test(state.location.pathname) })
+  // Inbox binds Ctrl+K to its own command bar.
+  const onInbox = useRouterState({
+    select: (state) => /^\/admin\/inbox(?:\/|$)/.test(state.location.pathname),
+  })
   const reviewThreadKey = useRouterState({
     select: (state) => new URLSearchParams(state.location.searchStr).get('copilotThread'),
   })
@@ -175,6 +179,7 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
   }, [reviewThreadKey, canUseCopilot])
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || onInbox) return
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k' && !event.altKey) {
         event.preventDefault()
         if (!paletteOpen) paletteReturnFocus.current = document.activeElement as HTMLElement
@@ -183,7 +188,7 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [paletteOpen])
+  }, [paletteOpen, onInbox])
   useEffect(() => {
     if (
       draft?.final &&
