@@ -227,7 +227,7 @@ describe.skipIf(!fixture.available)('settings proposal adapters (real Postgres)'
     const proposal = await prepareSettingsChanges(actor, [
       { area: 'portal', patch: { displayName: 'Acme team' } },
     ])
-    expect(proposal.changes[0].settingsHref).toBe('/admin/settings/general')
+    expect(proposal.changes[0].settingsHref).toBe('/admin/settings/portal')
     for (const missing of [PERMISSIONS.SETTINGS_BRANDING]) {
       const restricted = {
         ...actor,

@@ -21,7 +21,8 @@ import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/ide
 
 export const AREAS: Record<SettingsArea, { permission: PermissionKey; href: string }> = {
   branding: { permission: PERMISSIONS.SETTINGS_BRANDING, href: '/admin/settings/portal' },
-  portal: { permission: PERMISSIONS.SETTINGS_BRANDING, href: '/admin/settings/general' },
+  // Portal settings opens with the branding permission alone.
+  portal: { permission: PERMISSIONS.SETTINGS_BRANDING, href: '/admin/settings/portal' },
   messenger: {
     permission: PERMISSIONS.SETTINGS_MANAGE,
     href: '/admin/settings/channels/messenger',
@@ -125,11 +126,13 @@ export async function getSettingsForActor(
   settingsAreaSchema.parse(area)
   await requireAreaPermission(actor, area, executor)
   const row = await requireSettings(executor)
+  const managedName = area === 'portal' && parseIdentityProjection(row.cloudIdentity) !== null
   return {
     area,
     settings: areaValues(row, area),
-    settingsHref: AREAS[area].href,
-    ...(area === 'portal' ? { readOnly: parseIdentityProjection(row.cloudIdentity) !== null } : {}),
+    // An operator-managed name is shown, read-only, on General.
+    settingsHref: managedName ? '/admin/settings/general' : AREAS[area].href,
+    ...(area === 'portal' ? { readOnly: managedName } : {}),
     ...(area === 'branding' ? { logoUrl: getPublicUrlOrNull(row.logoKey) } : {}),
   }
 }
