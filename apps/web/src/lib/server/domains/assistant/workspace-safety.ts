@@ -21,6 +21,7 @@ const WORKSPACE_WRITES = new Set([
 ])
 
 export function isWorkspaceToolAllowed(name: string, risk: string): boolean {
+  if (name === 'widget_install_status') return risk === 'read'
   if (risk !== 'write')
     return !/(delete|remove|install|oauth|billing|member|api_key|domain|sso)/i.test(name)
   return name === 'propose_settings_change'

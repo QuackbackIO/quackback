@@ -1460,5 +1460,13 @@
   "ask.settings.field.shadowLg": "陰影 L",
   "ask.settings.field.shadowXl": "陰影 XL",
   "ask.settings.field.shadow2xl": "陰影 2XL",
-  "ask.settings.nameManaged": "開啟一般設定以變更此工作區的名稱。"
+  "ask.settings.nameManaged": "開啟一般設定以變更此工作區的名稱。",
+  "ask.chat.keyboardHint": "Enter 傳送 · Shift+Enter 換行",
+  "assistant.citation.sourceLabel": "來源 {number}：{title}",
+  "assistant.citation.internalSourceLabel": "內部來源 {number}：{title}",
+  "assistant.citation.internal": "內部",
+  "widget.messenger.assistant.thinking": "思考中…",
+  "widget.messenger.assistant.searching": "正在搜尋知識庫…",
+  "widget.messenger.assistant.reviewing": "正在查看對話…",
+  "widget.messenger.assistant.searched": "已搜尋知識庫 · {count, plural, other {# 個來源}}"
 }

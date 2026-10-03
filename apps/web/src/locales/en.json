@@ -1460,5 +1460,13 @@
   "ask.settings.field.shadowLg": "Shadow L",
   "ask.settings.field.shadowXl": "Shadow XL",
   "ask.settings.field.shadow2xl": "Shadow 2XL",
-  "ask.settings.nameManaged": "Open General settings to change this workspace name."
+  "ask.settings.nameManaged": "Open General settings to change this workspace name.",
+  "ask.chat.keyboardHint": "Enter to send · Shift+Enter for a new line",
+  "assistant.citation.sourceLabel": "Source {number}: {title}",
+  "assistant.citation.internalSourceLabel": "Internal source {number}: {title}",
+  "assistant.citation.internal": "Internal",
+  "widget.messenger.assistant.thinking": "Thinking…",
+  "widget.messenger.assistant.searching": "Searching the knowledge base…",
+  "widget.messenger.assistant.reviewing": "Reviewing the conversation…",
+  "widget.messenger.assistant.searched": "Searched the knowledge base · {count, plural, one {# source} other {# sources}}"
 }

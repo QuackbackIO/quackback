@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
 import { useIntl } from 'react-intl'
-import { PlusIcon, StopIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, PlusIcon } from '@heroicons/react/24/outline'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
@@ -16,6 +16,7 @@ import {
 import {
   WorkspaceCopilotAvailabilityContext,
   WorkspaceCopilotContext,
+  WorkspaceCopilotFocusedContext,
 } from './workspace-copilot-context'
 import { usePermissions } from '@/lib/client/use-permissions'
 import {
@@ -47,6 +48,14 @@ import {
 
 const AskComposer = lazy(() =>
   import('./ask-composer').then((module) => ({ default: module.AskComposer }))
+)
+const ChatComposer = lazy(() =>
+  import('./chat-composer').then((module) => ({ default: module.ChatComposer }))
+)
+const WorkspaceAssistantMessage = lazy(() =>
+  import('./workspace-assistant-message').then((module) => ({
+    default: module.WorkspaceAssistantMessage,
+  }))
 )
 const MessageMarkdown = lazy(() =>
   import('@/components/shared/conversation/message-markdown').then((module) => ({
@@ -86,8 +95,13 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
   const [paletteMounted, setPaletteMounted] = useState(false)
   const [panelMounted, setPanelMounted] = useState(false)
   const [query, setQuery] = useState('')
+  const [chatQuery, setChatQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [threadKey, setThreadKey] = useState<string | null>(null)
+  const [focused, setFocused] = useState(false)
+  const [homeAutoFocus, setHomeAutoFocus] = useState(false)
+  const transcriptViewport = useRef<HTMLDivElement>(null)
+  const followTranscript = useRef(true)
   const [draft, setDraft] = useState<DraftTurn | null>(null)
   const [busy, setBusy] = useState(false)
   const busyRef = useRef(false)
@@ -146,6 +160,9 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
     setDraft(null)
     setError(null)
     setQuery('')
+    setChatQuery('')
+    setFocused(false)
+    setHomeAutoFocus(false)
   }, [principalId, stop, clear])
   useEffect(() => {
     if (reviewThreadKey?.startsWith('workspace:') && canUseCopilot) {
@@ -153,6 +170,7 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
       setDraft(null)
       setError(null)
       setPanelOpen(true)
+      setFocused(true)
     }
   }, [reviewThreadKey, canUseCopilot])
   useEffect(() => {
@@ -206,7 +224,10 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
     setError(null)
     setPaletteOpen(false)
     setPanelOpen(true)
-    setQuery('')
+    setFocused(true)
+    setHomeAutoFocus(false)
+    followTranscript.current = true
+    setChatQuery('')
     setDraft({ history: thread.data?.messages ?? [], question: question.trim(), text: '' })
     try {
       let key = threadKey
@@ -240,7 +261,7 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
                 defaultMessage: 'Copilot could not finish. Try again.',
               })
             )
-            setQuery(question)
+            setChatQuery((previous) => previous || question)
           },
         },
       })
@@ -248,7 +269,7 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
       if (requestEpoch.current !== requestedAt) return
       if (failure instanceof Error && failure.name === 'AbortError') {
         setDraft(null)
-        setQuery(question)
+        setChatQuery((previous) => previous || question)
         return
       }
       setError(
@@ -257,7 +278,7 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
           defaultMessage: 'Copilot could not finish. Try again.',
         })
       )
-      setQuery(question)
+      setChatQuery((previous) => previous || question)
     } finally {
       if (requestEpoch.current === requestedAt) {
         busyRef.current = false
@@ -271,7 +292,16 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
     setThreadKey(null)
     setDraft(null)
     setError(null)
+    setChatQuery('')
+    setFocused(false)
+    setHomeAutoFocus(true)
     clear()
+  }
+  const stopTurn = () => {
+    requestEpoch.current++
+    busyRef.current = false
+    setBusy(false)
+    stop()
   }
   const renderPayload = (payload?: WorkspaceCopilotFinalPayload) =>
     payload ? (
@@ -323,7 +353,7 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
               })}
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
+          <DropdownMenuContent align="start" className="w-72 max-w-[calc(100vw-2rem)]">
             {(threads.data ?? []).map((item) => (
               <DropdownMenuItem
                 key={item.key}
@@ -332,14 +362,19 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
                   setThreadKey(item.key)
                   setDraft(null)
                   setError(null)
+                  setFocused(true)
+                  setPanelOpen(true)
+                  followTranscript.current = true
                   clear()
                 }}
               >
-                {item.title ||
-                  intl.formatMessage({
-                    id: 'ask.settings.title',
-                    defaultMessage: 'Proposed changes',
-                  })}
+                <span className="min-w-0 truncate">
+                  {item.title ||
+                    intl.formatMessage({
+                      id: 'ask.settings.title',
+                      defaultMessage: 'Proposed changes',
+                    })}
+                </span>
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
@@ -365,7 +400,7 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
   )
   const conversation =
     threadKey || draft ? (
-      <section aria-label={copilotLabel} className="space-y-4">
+      <section aria-label={copilotLabel} className="space-y-8">
         {thread.isError && (
           <p role="alert" className="text-sm text-destructive">
             {intl.formatMessage({
@@ -377,29 +412,46 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
         {messages.map((message) => (
           <div
             key={message.id}
-            className={message.sender === 'customer' ? 'rounded-lg bg-muted p-3' : 'space-y-2'}
+            className={
+              message.sender === 'customer'
+                ? 'ms-auto w-fit max-w-[90%] rounded-2xl bg-muted px-4 py-3 sm:max-w-[80%]'
+                : 'space-y-3 leading-7'
+            }
           >
             {message.sender === 'assistant' && (
               <span className="text-xs font-medium">{copilotLabel}</span>
             )}
-            <Suspense fallback={message.text}>
-              <MessageMarkdown text={message.text} />
-            </Suspense>
+            {message.sender === 'assistant' ? (
+              <Suspense fallback={message.text}>
+                <WorkspaceAssistantMessage
+                  text={message.text}
+                  citations={message.payload?.citations ?? []}
+                />
+              </Suspense>
+            ) : (
+              <Suspense fallback={message.text}>
+                <MessageMarkdown text={message.text} />
+              </Suspense>
+            )}
             {renderPayload(message.payload)}
           </div>
         ))}
         {draft && (
           <>
-            <div className="rounded-lg bg-muted p-3">
+            <div className="ms-auto w-fit max-w-[90%] rounded-2xl bg-muted px-4 py-3 sm:max-w-[80%]">
               <Suspense fallback={draft.question}>
                 <MessageMarkdown text={draft.question} />
               </Suspense>
             </div>
-            <div className="space-y-2" aria-live="polite" aria-busy={busy}>
+            <div className="space-y-3 leading-7" aria-live="polite" aria-busy={busy}>
               <span className="text-xs font-medium">{copilotLabel}</span>
               {draft.text ? (
                 <Suspense fallback={draft.text}>
-                  <MessageMarkdown text={draft.text} />
+                  <WorkspaceAssistantMessage
+                    text={draft.text}
+                    citations={draft.final?.citations ?? []}
+                    streaming={busy}
+                  />
                 </Suspense>
               ) : (
                 busy && (
@@ -417,39 +469,74 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
             {error}
           </p>
         )}
-        {busy && (
+      </section>
+    ) : null
+  const composer = canAsk ? (
+    <Suspense fallback={null}>
+      <ChatComposer
+        query={chatQuery}
+        onQueryChange={setChatQuery}
+        canAsk={canAsk}
+        busy={busy}
+        onAsk={(question) => void ask(question)}
+        onStop={stopTurn}
+        autoFocus={homeAutoFocus}
+        footerActions={conversationControls}
+      />
+    </Suspense>
+  ) : null
+  useEffect(() => {
+    const viewport = transcriptViewport.current
+    if (viewport && followTranscript.current) viewport.scrollTop = viewport.scrollHeight
+  }, [draft?.text, draft?.question, thread.data?.messages.length, focused])
+  const focusedConversation = (
+    <div className="flex h-full min-h-0 flex-col bg-background" data-copilot-focused="">
+      <header className="flex h-16 shrink-0 items-center justify-between gap-3 border-b px-4 sm:px-6">
+        <div className="flex min-w-0 items-center gap-3">
           <Button
             type="button"
             variant="ghost"
             size="sm"
+            className="gap-2 text-muted-foreground focus-visible:ring-foreground/25"
             onClick={() => {
-              requestEpoch.current++
-              busyRef.current = false
-              setBusy(false)
-              stop()
+              setFocused(false)
+              setHomeAutoFocus(true)
             }}
-            className="focus-visible:ring-foreground/25"
           >
-            <StopIcon className="size-4" />
-            {intl.formatMessage({ id: 'ask.chat.stop', defaultMessage: 'Stop' })}
+            <ArrowLeftIcon className="size-4" aria-hidden="true" />
+            {intl.formatMessage({ id: 'ask.destination.home', defaultMessage: 'Home' })}
           </Button>
-        )}
-      </section>
-    ) : null
-  const composer = (
-    <Suspense fallback={null}>
-      <AskComposer
-        query={query}
-        onQueryChange={setQuery}
-        canAsk={canAsk && !busy}
-        onAsk={(question) => void ask(question)}
-        onNavigate={navigate}
-        results={results}
-        loading={entitySearch.isFetching}
-        variant="home"
-        footerActions={conversationControls}
-      />
-    </Suspense>
+          <span className="h-4 w-px bg-border" aria-hidden="true" />
+          <h1 className="truncate text-sm font-medium">{copilotLabel}</h1>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">{conversationControls}</div>
+      </header>
+      <ScrollArea
+        className="min-h-0 flex-1"
+        viewportRef={transcriptViewport}
+        onScrollCapture={(event) => {
+          const viewport = event.target as HTMLElement
+          followTranscript.current =
+            viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 96
+        }}
+      >
+        <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-10">{conversation}</div>
+      </ScrollArea>
+      <div className="shrink-0 bg-background px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:pb-6">
+        <div className="mx-auto w-full max-w-3xl">
+          <Suspense fallback={null}>
+            <ChatComposer
+              query={chatQuery}
+              onQueryChange={setChatQuery}
+              canAsk={canAsk}
+              busy={busy}
+              onAsk={(question) => void ask(question)}
+              onStop={stopTurn}
+            />
+          </Suspense>
+        </div>
+      </div>
+    </div>
   )
   const completed = launch.data
     ? buildLaunchTasks(
@@ -489,6 +576,7 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
         composer,
         conversation,
         starters,
+        focusedConversation,
         openPalette: () => {
           paletteReturnFocus.current = document.activeElement as HTMLElement
           setPaletteOpen(true)
@@ -496,7 +584,9 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
       }}
     >
       <WorkspaceCopilotAvailabilityContext.Provider value={canAsk}>
-        {children}
+        <WorkspaceCopilotFocusedContext.Provider value={isHome && focused}>
+          {children}
+        </WorkspaceCopilotFocusedContext.Provider>
       </WorkspaceCopilotAvailabilityContext.Provider>
       {transport}
       {(paletteOpen || paletteMounted) && (
@@ -515,8 +605,6 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
               <AskComposer
                 query={query}
                 onQueryChange={setQuery}
-                canAsk={canAsk && !busy}
-                onAsk={(question) => void ask(question)}
                 onNavigate={navigate}
                 results={results}
                 loading={entitySearch.isFetching}
@@ -532,7 +620,18 @@ export function WorkspaceCopilotProvider({ children }: { children: ReactNode }) 
               <SheetTitle>{copilotLabel}</SheetTitle>
             </SheetHeader>
             <ScrollArea className="min-h-0 flex-1 px-4">{conversation}</ScrollArea>
-            <div className="p-4">{composer}</div>
+            <div className="p-4">
+              <Suspense fallback={null}>
+                <ChatComposer
+                  query={chatQuery}
+                  onQueryChange={setChatQuery}
+                  canAsk={canAsk}
+                  busy={busy}
+                  onAsk={(question) => void ask(question)}
+                  onStop={stopTurn}
+                />
+              </Suspense>
+            </div>
           </SheetContent>
         </Sheet>
       )}

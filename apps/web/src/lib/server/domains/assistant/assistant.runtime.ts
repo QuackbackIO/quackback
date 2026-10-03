@@ -833,6 +833,7 @@ function deriveAnswerKind(
 export async function runAssistantTurn(input: AssistantTurnInput): Promise<AssistantTurnResult> {
   const surface = input.surface
   const role = input.role
+  const agentKind = roleToAgent(role, surface)
   const rolePolicy = resolveAssistantRolePolicy(role)
   const messages = input.messages
 
@@ -874,9 +875,10 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   // registers iff ≥1 source is enabled, get_status iff `status` is on, and the
   // enabled set both scopes retrieval and drives the tool's source enumeration.
   const knowledgeSnapshot = resolveAssistantKnowledgeSnapshot(
-    roleToAgent(role),
+    agentKind,
     runtimeConfig.config,
-    audience
+    audience,
+    role === 'workspace_assistant'
   )
 
   // Customer voice always resolves from the Agent's sub-config: the
@@ -970,7 +972,6 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
 
   // Shared construction point (simulate derives from the null conversation =
   // sandbox; actor defaults to Quinn's bounded set).
-  const agentKind = roleToAgent(role)
   let skillCount = 0
   try {
     skillCount = await countAssignedSkills(agentKind, execDb)
@@ -1001,7 +1002,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   const guidanceChannel = surface
   let guidanceCandidates: AssistantGuidanceRule[] = []
   try {
-    guidanceCandidates = await listEnabledGuidanceCandidates({ agent: roleToAgent(role) })
+    guidanceCandidates = await listEnabledGuidanceCandidates({ agent: agentKind })
   } catch (error) {
     log.warn({ err: error }, 'guidance candidate loading failed; continuing without guidance')
   }

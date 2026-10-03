@@ -6,11 +6,13 @@ export interface WorkspaceCopilotContextValue {
   composer: ReactNode
   conversation: ReactNode
   starters: ReactNode
+  focusedConversation: ReactNode
   openPalette: () => void
 }
 
 export const WorkspaceCopilotContext = createContext<WorkspaceCopilotContextValue | null>(null)
 export const WorkspaceCopilotAvailabilityContext = createContext(false)
+export const WorkspaceCopilotFocusedContext = createContext(false)
 
 function useWorkspaceCopilot() {
   const value = useContext(WorkspaceCopilotContext)
@@ -22,13 +24,20 @@ export function useWorkspaceCopilotEnabled() {
   return useContext(WorkspaceCopilotAvailabilityContext)
 }
 
+export function useWorkspaceCopilotFocused() {
+  return useContext(WorkspaceCopilotFocusedContext)
+}
+
+export function WorkspaceCopilotFocused() {
+  return useWorkspaceCopilot().focusedConversation
+}
+
 export function AskQuackbackInline() {
-  const { composer, starters, conversation } = useWorkspaceCopilot()
+  const { composer, starters } = useWorkspaceCopilot()
   return (
     <div className="space-y-4">
       {composer}
       {starters}
-      {conversation}
     </div>
   )
 }

@@ -39,6 +39,7 @@ import {
   type SegmentId,
 } from '@quackback/ids'
 import { type ContentAudience } from './audience'
+import { WORKSPACE_THREAD_PREFIX } from './workspace-safety'
 import type { AssistantAttributeCatalogueEntry } from './prompt-catalogues'
 import {
   retrieveKnowledge,
@@ -1301,7 +1302,14 @@ async function executeUseSkill(
   }
   const { getSkillBody } = await import('./skills.service')
   const { roleToAgent } = await import('@/lib/shared/assistant/config')
-  const body = await getSkillBody(args.name, roleToAgent(ctx.role), ctx.db)
+  const body = await getSkillBody(
+    args.name,
+    roleToAgent(
+      ctx.role,
+      ctx.workspaceThreadKey?.startsWith(WORKSPACE_THREAD_PREFIX) ? 'workspace' : undefined
+    ),
+    ctx.db
+  )
   skills.loads += 1
   ctx.skills = skills
   if (!body) {
@@ -1316,9 +1324,9 @@ async function executeUseSkill(
 const SPECS: readonly AssistantToolSpec[] = [
   defineToolSpec({
     label: 'Search knowledge',
-    description: 'Search the published help center for articles the current viewer can see.',
+    description: 'Search the enabled workspace knowledge sources the current viewer can see.',
     promptGuidance:
-      'Call before answering anything factual or product-related; refine the query once more if the first search misses, then answer with what you have. Cite only the article ids it returns.',
+      'Call before answering anything factual or product-related; refine the query once more if the first search misses, then answer with what you have. Cite only the source types and ids it returns.',
     risk: 'read',
     // Knowledge base reads are already scoped by viewer audience; there is no
     // separate conversation- or ticket-shaped permission to check here.

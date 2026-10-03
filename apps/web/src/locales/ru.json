@@ -1460,5 +1460,13 @@
   "ask.settings.field.shadowLg": "Тень L",
   "ask.settings.field.shadowXl": "Тень XL",
   "ask.settings.field.shadow2xl": "Тень 2XL",
-  "ask.settings.nameManaged": "Откройте общие настройки, чтобы изменить название этого рабочего пространства."
+  "ask.settings.nameManaged": "Откройте общие настройки, чтобы изменить название этого рабочего пространства.",
+  "ask.chat.keyboardHint": "Enter для отправки · Shift+Enter для новой строки",
+  "assistant.citation.sourceLabel": "Источник {number}: {title}",
+  "assistant.citation.internalSourceLabel": "Внутренний источник {number}: {title}",
+  "assistant.citation.internal": "Внутренний",
+  "widget.messenger.assistant.thinking": "Думаю…",
+  "widget.messenger.assistant.searching": "Поиск в базе знаний…",
+  "widget.messenger.assistant.reviewing": "Изучение разговора…",
+  "widget.messenger.assistant.searched": "База знаний проверена · {count, plural, one {# источник} few {# источника} many {# источников} other {# источника}}"
 }

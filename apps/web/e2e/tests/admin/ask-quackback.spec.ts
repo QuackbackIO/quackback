@@ -1,17 +1,35 @@
 import { test, expect } from '@playwright/test'
 import { waitForHydration } from '../../utils/helpers'
 
-test('Home typing finds settings without asking a model', async ({ page }) => {
+test('Home chat keeps its draft separate from global search', async ({ page }) => {
   const modelRequests: string[] = []
   page.on('request', (request) => {
     if (request.url().includes('/api/admin/assistant/workspace')) modelRequests.push(request.url())
   })
   await page.goto('/admin')
-  const input = page.getByRole('combobox').first()
-  await waitForHydration(input)
+  const trigger = page.getByRole('button', { name: 'Search Quackback', exact: true }).first()
+  await waitForHydration(trigger)
+  await expect(page.getByRole('combobox')).toHaveCount(0)
+  const chat = page.getByRole('textbox', { name: 'Ask or tell Quackback anything', exact: true })
+  const chatAvailable = await chat.isVisible()
+  if (chatAvailable) {
+    await chat.fill('Help me write an article')
+    await expect(page.getByRole('option')).toHaveCount(0)
+  }
+  expect(modelRequests).toEqual([])
+  await page.keyboard.press('Control+k')
+  const dialog = page.getByRole('dialog')
+  const input = dialog.getByRole('combobox')
+  await expect(input).toBeFocused()
+  await expect(input).toHaveValue('')
   await input.fill('logo')
-  const portal = page.getByRole('option', { name: 'Portal', exact: true })
+  const portal = dialog.getByRole('option', { name: 'Portal', exact: true })
   await expect(portal).toBeVisible()
+  await expect(dialog.getByRole('option', { name: /Ask Copilot/ })).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  if (chatAvailable) await expect(chat).toHaveValue('Help me write an article')
+  await trigger.click()
+  await expect(input).toHaveValue('logo')
   expect(modelRequests).toEqual([])
   await portal.click()
   await expect(page).toHaveURL(/\/admin\/settings\/portal/)

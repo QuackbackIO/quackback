@@ -147,8 +147,8 @@ export const kbKnowledgeSource: KnowledgeSource = {
  * from the resolved agent's per-agent `knowledge` map (config v3). `sources`
  * drives both `search`'s registration (registered iff ≥1 source is
  * enabled) and its dynamic source enumeration; `status` drives `get_status`.
- * Internal-notes grounding is NOT a retrieval source (it rides the copilot
- * grounding block), so it lives on the runtime, not here.
+ * Internal notes ground the current item on Copilot and the permission-scoped
+ * conversation source on workspace turns.
  */
 export interface AssistantKnowledgeSnapshot {
   /** Enabled retrieval source types for this turn (subset of the citation vocabulary). */
@@ -183,7 +183,8 @@ export function resolveAssistantKnowledgeSnapshot(
   // predicate takes it at retrieve time — so the snapshot no longer reads it;
   // the parameter stays because every call site already passes the resolved
   // ceiling and a future ceiling-scoped source registration would use it.
-  _audience: ContentAudience
+  _audience: ContentAudience,
+  workspaceSearch = false
 ): AssistantKnowledgeSnapshot {
   const sources = new Set<AssistantCitationType>()
   // Snippets: no per-agent toggle. Registered at every ceiling — the snippets
@@ -209,7 +210,8 @@ export function resolveAssistantKnowledgeSnapshot(
       const k = config.agents[agent].knowledge
       if (k.helpCenter) sources.add('article')
       if (k.posts) sources.add('post')
-      if (k.pastConversations || (agent === 'workspace' && k.internalNotes)) sources.add('summary')
+      if (k.pastConversations || ((agent === 'workspace' || workspaceSearch) && k.internalNotes))
+        sources.add('summary')
       if (k.tickets) sources.add('ticket')
       if (k.changelog) sources.add('changelog')
       if (k.documents) sources.add('document')
@@ -248,11 +250,16 @@ const SOURCE_TYPE_PROMPT_LABELS: Record<AssistantCitationType, string> = {
  * source is enabled (the tool is not assembled at all in that case).
  */
 export function describeEnabledKnowledgeSources(
-  sources: ReadonlySet<AssistantCitationType>
+  sources: ReadonlySet<AssistantCitationType>,
+  workspaceSearch = false
 ): string {
   const ordered = ASSISTANT_CITATION_TYPES.filter((type) => sources.has(type))
   if (ordered.length === 0) return ''
-  const labels = ordered.map((type) => SOURCE_TYPE_PROMPT_LABELS[type])
+  const labels = ordered.map((type) =>
+    workspaceSearch && type === 'summary'
+      ? 'workspace conversations'
+      : SOURCE_TYPE_PROMPT_LABELS[type]
+  )
   const caveat = sources.has('post')
     ? ' Feedback posts are customer-submitted; cite them as customer feedback, not as verified fact.'
     : ''

@@ -1,6 +1,5 @@
 // @vitest-environment happy-dom
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'react-intl'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AskComposer, type AskComposerProps } from '../ask-composer'
@@ -11,8 +10,6 @@ function mount(overrides: Partial<AskComposerProps> = {}) {
   const props: AskComposerProps = {
     query: 'messenger',
     onQueryChange: vi.fn(),
-    canAsk: true,
-    onAsk: vi.fn(),
     onNavigate: vi.fn(),
     results: [{ id: 'messenger', title: 'Messenger', href: '/admin/settings/widget' }],
     ...overrides,
@@ -25,100 +22,48 @@ function mount(overrides: Partial<AskComposerProps> = {}) {
   return props
 }
 
-describe('the shared Ask composer', () => {
-  it('focuses the palette input when its deferred composer mounts', () => {
-    mount({ variant: 'palette' })
-    expect(document.activeElement).toBe(screen.getByRole('combobox'))
+describe('the separate search palette', () => {
+  it('focuses the accessible search input when mounted', () => {
+    mount()
+    expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Search Quackback' }))
   })
 
-  it('keeps focus unchanged when the inline Home composer mounts', () => {
-    mount({ variant: 'home' })
-    expect(document.activeElement).not.toBe(screen.getByRole('combobox'))
-  })
-
-  it('keeps conversation controls accessible in the Home composer footer', () => {
-    const reset = vi.fn()
-    mount({
-      variant: 'home',
-      query: '',
-      footerActions: (
-        <button aria-label="New conversation" onClick={reset}>
-          +
-        </button>
-      ),
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'New conversation' }))
-    expect(reset).toHaveBeenCalledOnce()
-  })
-
-  it.each([true, false])(
-    'lets a footer button handle Enter without submitting or navigating with AI enabled=%s',
-    async (canAsk) => {
-      const user = userEvent.setup()
-      const reset = vi.fn()
-      const props = mount({
-        variant: 'home',
-        canAsk,
-        footerActions: <button onClick={reset}>New conversation</button>,
-      })
-      screen.getByRole('button', { name: 'New conversation' }).focus()
-      await user.keyboard('{Enter}')
-      expect(reset).toHaveBeenCalledOnce()
-      expect(props.onAsk).not.toHaveBeenCalled()
-      expect(props.onNavigate).not.toHaveBeenCalled()
-    }
-  )
-
-  it('lets the send button submit its question exactly once with the keyboard', async () => {
-    const user = userEvent.setup()
-    const props = mount({ variant: 'home' })
-    screen.getByRole('button', { name: 'Ask Copilot' }).focus()
-    await user.keyboard('{Enter}')
-    expect(props.onAsk).toHaveBeenCalledExactlyOnceWith('messenger')
-    expect(props.onNavigate).not.toHaveBeenCalled()
-  })
-
-  it('shows local Jump to results while entity search is still loading', () => {
+  it('shows local Jump to results while entity search is loading', () => {
     mount({ loading: true })
     expect(screen.getByRole('option', { name: 'Messenger' })).toBeTruthy()
-    expect(screen.getByRole('option', { name: 'Ask Copilot messenger' })).toBeTruthy()
+    expect(screen.queryByRole('option', { name: /Ask Copilot/ })).toBeNull()
   })
 
-  it('asks free text on Enter and never navigates without choosing a destination', () => {
+  it('navigates to a chosen destination with the keyboard', () => {
     const props = mount()
     fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Enter' })
-    expect(props.onAsk).toHaveBeenCalledWith('messenger')
-    expect(props.onNavigate).not.toHaveBeenCalled()
+    expect(props.onNavigate).toHaveBeenCalledExactlyOnceWith('/admin/settings/widget')
   })
 
-  it('chooses a destination with the keyboard', () => {
-    const props = mount()
+  it('navigates to the selected result rather than always the first', () => {
+    const props = mount({
+      results: [
+        { id: 'messenger', title: 'Messenger', href: '/admin/settings/widget' },
+        { id: 'branding', title: 'Branding', href: '/admin/settings/theme' },
+      ],
+    })
     const input = screen.getByRole('combobox')
     fireEvent.keyDown(input, { key: 'ArrowDown' })
     fireEvent.keyDown(input, { key: 'Enter' })
-    expect(props.onNavigate).toHaveBeenCalledWith('/admin/settings/widget')
-    expect(props.onAsk).not.toHaveBeenCalled()
+    expect(props.onNavigate).toHaveBeenCalledExactlyOnceWith('/admin/settings/theme')
   })
 
-  it('keeps navigation available with AI off and omits the Ask row', () => {
-    const props = mount({ canAsk: false })
-    expect(screen.queryByRole('option', { name: /Ask Copilot/ })).toBeNull()
-    fireEvent.click(screen.getByRole('option', { name: 'Messenger' }))
-    expect(props.onNavigate).toHaveBeenCalledWith('/admin/settings/widget')
-    expect(props.onAsk).not.toHaveBeenCalled()
-  })
-
-  it('never asks an empty query', () => {
-    const props = mount({ query: '  ', results: [] })
+  it('does nothing with free text without a matching destination', () => {
+    const props = mount({ query: 'Write an article for me', results: [] })
     fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Enter' })
-    expect(props.onAsk).not.toHaveBeenCalled()
-    expect(screen.queryByRole('option', { name: /Ask Copilot/ })).toBeNull()
+    expect(props.onNavigate).not.toHaveBeenCalled()
+    expect(screen.queryByText(/Ask Copilot/)).toBeNull()
+    expect(screen.getByText('No results')).toBeTruthy()
   })
 
-  it('hands changed text to instant search without asking a model', () => {
+  it('hands changed text to entity search', () => {
     const props = mount()
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'office hours' } })
-    expect(props.onQueryChange).toHaveBeenCalledWith('office hours')
-    expect(props.onAsk).not.toHaveBeenCalled()
+    expect(props.onQueryChange).toHaveBeenCalledExactlyOnceWith('office hours')
   })
 })

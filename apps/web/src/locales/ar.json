@@ -1460,5 +1460,13 @@
   "ask.settings.field.shadowLg": "الظل L",
   "ask.settings.field.shadowXl": "الظل XL",
   "ask.settings.field.shadow2xl": "الظل 2XL",
-  "ask.settings.nameManaged": "افتح الإعدادات العامة لتغيير اسم مساحة العمل هذه."
+  "ask.settings.nameManaged": "افتح الإعدادات العامة لتغيير اسم مساحة العمل هذه.",
+  "ask.chat.keyboardHint": "Enter للإرسال · Shift+Enter لسطر جديد",
+  "assistant.citation.sourceLabel": "المصدر {number}: {title}",
+  "assistant.citation.internalSourceLabel": "مصدر داخلي {number}: {title}",
+  "assistant.citation.internal": "داخلي",
+  "widget.messenger.assistant.thinking": "جارٍ التفكير…",
+  "widget.messenger.assistant.searching": "جارٍ البحث في قاعدة المعرفة…",
+  "widget.messenger.assistant.reviewing": "جارٍ مراجعة المحادثة…",
+  "widget.messenger.assistant.searched": "تم البحث في قاعدة المعرفة · {count, plural, zero {# مصادر} one {# مصدر} two {# مصدران} few {# مصادر} many {# مصدرًا} other {# مصدر}}"
 }

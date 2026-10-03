@@ -4,8 +4,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { WorkspaceCopilotProvider } from '../workspace-copilot'
-import { AskQuackbackInline } from '../workspace-copilot-context'
-import type { AskComposerProps } from '../ask-composer'
+import {
+  AskQuackbackInline,
+  WorkspaceCopilotFocused,
+  useWorkspaceCopilotFocused,
+} from '../workspace-copilot-context'
+import type { ChatComposerProps } from '../chat-composer'
 import type { StartAguiTurnOptions } from '@/lib/client/hooks/use-agui-turn'
 import messages from '@/locales/en.json'
 
@@ -58,14 +62,23 @@ vi.mock('@/lib/client/hooks/use-agui-turn', () => ({
     return { start: state.start, stop: state.stop, clear: state.clear }
   },
 }))
-vi.mock('../ask-composer', () => ({
-  AskComposer: ({ query, onQueryChange, canAsk, onAsk, footerActions }: AskComposerProps) => (
+vi.mock('../chat-composer', () => ({
+  ChatComposer: ({
+    query,
+    onQueryChange,
+    canAsk,
+    busy,
+    onAsk,
+    footerActions,
+    onStop,
+  }: ChatComposerProps) => (
     <>
       <input aria-label="Question" value={query} onChange={(e) => onQueryChange(e.target.value)} />
-      <button disabled={!canAsk} onClick={() => onAsk(query)}>
+      <button disabled={!canAsk || busy} onClick={() => onAsk(query)}>
         Ask
       </button>
       {footerActions}
+      {busy && <button onClick={onStop}>Stop</button>}
     </>
   ),
 }))
@@ -88,13 +101,17 @@ function mount() {
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en" messages={messages}>
         <WorkspaceCopilotProvider>
-          <AskQuackbackInline />
+          <Home />
         </WorkspaceCopilotProvider>
       </IntlProvider>
     </QueryClientProvider>
   )
   const rendered = render(tree())
   return { ...rendered, rerenderCurrent: () => rendered.rerender(tree()) }
+}
+
+function Home() {
+  return useWorkspaceCopilotFocused() ? <WorkspaceCopilotFocused /> : <AskQuackbackInline />
 }
 
 beforeEach(() => {
@@ -278,4 +295,34 @@ it('ignores late stream updates, final answers, and errors from a stopped reques
   expect(screen.queryByText('Late final answer')).toBeNull()
   expect(screen.queryByRole('alert')).toBeNull()
   expect((screen.getByRole('textbox', { name: 'Question' }) as HTMLInputElement).value).toBe('')
+})
+
+it('preserves a follow-up typed while a failed response is streaming', async () => {
+  let handlers!: StartAguiTurnOptions['handlers']
+  let finishStream!: () => void
+  const stream = new Promise<void>((resolve) => {
+    finishStream = resolve
+  })
+  state.create.mockImplementation(async (input: unknown) => {
+    expect(input).toEqual({ data: { title: question } })
+    return { key: threadKey }
+  })
+  state.start.mockImplementation((options: StartAguiTurnOptions) => {
+    expect(options.question).toBe(question)
+    expect(options.forwardedProps).toEqual({ threadKey })
+    handlers = options.handlers
+    return stream
+  })
+  mount()
+  await ask()
+  await vi.waitFor(() => expect(state.start).toHaveBeenCalledOnce())
+  fireEvent.change(screen.getByRole('textbox', { name: 'Question' }), {
+    target: { value: 'Keep my next question' },
+  })
+  await act(async () => {
+    handlers.onError('Provider unavailable')
+    finishStream()
+  })
+  expect(screen.getByRole('textbox', { name: 'Question' })).toHaveValue('Keep my next question')
+  expect(screen.getByRole('alert')).toHaveTextContent('Copilot could not finish. Try again.')
 })

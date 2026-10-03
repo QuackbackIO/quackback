@@ -921,6 +921,110 @@ describe('executeApprovedPendingAction', () => {
 // this file only asserts how assembly treats what the registry returns.
 
 describe('private workspace proposal enforcement', () => {
+  it('assembles shared knowledge search beside the entity catalogue and records cited sources', async () => {
+    const query = 'Acme setup guide'
+    mockRetrieve.mockImplementation(async (actualQuery, options) => {
+      expect(actualQuery).toBe(query)
+      expect(options).toEqual({ audience: 'team' })
+      return [makeKbArticle('article_setup', { content: 'Configure the workspace.' })]
+    })
+    mockDocumentsRetrieve.mockImplementation(async (actualQuery, audience) => {
+      expect(actualQuery).toBe(query)
+      expect(audience).toBe('team')
+      return [
+        {
+          id: 'document_setup',
+          sourceType: 'document',
+          title: 'Acme handbook',
+          excerpt: 'Team setup instructions.',
+          score: 0.8,
+          citation: { type: 'document', id: 'document_setup', title: 'Acme handbook' },
+        },
+      ]
+    })
+    mockSnippetsRetrieve.mockImplementation(async (actualQuery, audience) => {
+      expect(actualQuery).toBe(query)
+      expect(audience).toBe('team')
+      return [
+        {
+          id: 'snippet_setup',
+          sourceType: 'snippet',
+          title: 'Setup answer',
+          excerpt: 'Saved setup answer.',
+          score: 0.7,
+          citation: { type: 'snippet', id: 'snippet_setup', title: 'Setup answer' },
+        },
+      ]
+    })
+    const entitySearch = makeFakeReadSpec({
+      name: 'search',
+      definition: toolDefinition({
+        name: 'search',
+        description: 'Search workspace entities.',
+        inputSchema: z.object({ entity: z.string() }),
+        outputSchema: z.unknown(),
+      }),
+    })
+    const workspace = ctx({
+      role: 'workspace_assistant',
+      audience: 'team',
+      workspaceThreadKey: 'workspace:owned',
+      conversationId: null,
+      simulate: false,
+      knowledge: { sources: new Set(['article', 'document', 'snippet']), status: false },
+    })
+    const assembled = await assembleAssistantToolset(workspace, undefined, [entitySearch])
+    expect(assembled.tools.map((tool) => tool.name)).toEqual(
+      expect.arrayContaining(['search', 'search_knowledge'])
+    )
+    expect(new Set(assembled.tools.map((tool) => tool.name)).size).toBe(assembled.tools.length)
+    const knowledgeSearch = assembled.tools.find((tool) => tool.name === 'search_knowledge')!
+    const result = (await knowledgeSearch.execute!({ query })) as { results: { id: string }[] }
+    expect(result.results.map((item) => item.id)).toEqual(
+      expect.arrayContaining(['article_setup', 'document_setup', 'snippet_setup'])
+    )
+    expect(workspace.ledger.sources.size).toBe(3)
+    expect(workspace.ledger.toolCalls).toEqual(['search_knowledge'])
+    expect(workspace.ledger.searchCalls).toBe(1)
+    expect(
+      assembled.activeSpecs.find((spec) => spec.name === 'search_knowledge')?.promptGuidance
+    ).toContain('uploaded knowledge documents')
+    expect(
+      assembled.activeSpecs.find((spec) => spec.name === 'search')?.promptGuidance
+    ).not.toContain('uploaded knowledge documents')
+  })
+  it('never re-enables a disabled knowledge source through model arguments', async () => {
+    mockRetrieve.mockImplementation(async (query, options) => {
+      expect(query).toBe('Acme privacy policy')
+      expect(options).toEqual({ audience: 'team' })
+      return []
+    })
+    const workspace = ctx({
+      role: 'workspace_assistant',
+      audience: 'team',
+      workspaceThreadKey: 'workspace:owned',
+      conversationId: null,
+      simulate: false,
+      knowledge: { sources: new Set(['article']), status: false },
+    })
+    const assembled = await assembleAssistantToolset(workspace)
+    const knowledgeSearch = assembled.tools.find((tool) => tool.name === 'search_knowledge')!
+    expect(knowledgeSearch).toBeDefined()
+    await knowledgeSearch.execute!({ query: 'Acme privacy policy', sources: ['document'] })
+    expect(mockRetrieve).toHaveBeenCalledOnce()
+    expect(mockDocumentsRetrieve).not.toHaveBeenCalled()
+    expect(mockSnippetsRetrieve).not.toHaveBeenCalled()
+    expect(
+      (
+        await assembleAssistantToolset(
+          ctx({
+            ...workspace,
+            knowledge: { sources: new Set(), status: false },
+          })
+        )
+      ).tools.map((tool) => tool.name)
+    ).not.toContain('search_knowledge')
+  })
   it('overrides an always-approved write and omits it from the launch catalogue', async () => {
     const execute = vi.fn(async (args: unknown) => ({ args }))
     const spec: AssistantToolSpec = {

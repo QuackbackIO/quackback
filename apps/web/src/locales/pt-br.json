@@ -1460,5 +1460,13 @@
   "ask.settings.field.shadowLg": "Sombra L",
   "ask.settings.field.shadowXl": "Sombra XL",
   "ask.settings.field.shadow2xl": "Sombra 2XL",
-  "ask.settings.nameManaged": "Abra as configurações gerais para alterar o nome deste espaço de trabalho."
+  "ask.settings.nameManaged": "Abra as configurações gerais para alterar o nome deste espaço de trabalho.",
+  "ask.chat.keyboardHint": "Enter para enviar · Shift+Enter para uma nova linha",
+  "assistant.citation.sourceLabel": "Fonte {number}: {title}",
+  "assistant.citation.internalSourceLabel": "Fonte interna {number}: {title}",
+  "assistant.citation.internal": "Interna",
+  "widget.messenger.assistant.thinking": "Pensando…",
+  "widget.messenger.assistant.searching": "Pesquisando a base de conhecimento…",
+  "widget.messenger.assistant.reviewing": "Analisando a conversa…",
+  "widget.messenger.assistant.searched": "Base de conhecimento consultada · {count, plural, one {# fonte} other {# fontes}}"
 }

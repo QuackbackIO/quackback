@@ -1460,5 +1460,13 @@
   "ask.settings.field.shadowLg": "Schatten L",
   "ask.settings.field.shadowXl": "Schatten XL",
   "ask.settings.field.shadow2xl": "Schatten 2XL",
-  "ask.settings.nameManaged": "Öffne die allgemeinen Einstellungen, um den Namen dieses Arbeitsbereichs zu ändern."
+  "ask.settings.nameManaged": "Öffne die allgemeinen Einstellungen, um den Namen dieses Arbeitsbereichs zu ändern.",
+  "ask.chat.keyboardHint": "Enter zum Senden · Umschalt+Enter für eine neue Zeile",
+  "assistant.citation.sourceLabel": "Quelle {number}: {title}",
+  "assistant.citation.internalSourceLabel": "Interne Quelle {number}: {title}",
+  "assistant.citation.internal": "Intern",
+  "widget.messenger.assistant.thinking": "Denkt nach…",
+  "widget.messenger.assistant.searching": "Wissensdatenbank wird durchsucht…",
+  "widget.messenger.assistant.reviewing": "Unterhaltung wird geprüft…",
+  "widget.messenger.assistant.searched": "Wissensdatenbank durchsucht · {count, plural, one {# Quelle} other {# Quellen}}"
 }

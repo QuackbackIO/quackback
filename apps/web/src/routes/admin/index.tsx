@@ -6,7 +6,9 @@ import { OverviewDashboard } from '@/components/admin/admin-overview'
 import { HomeActions } from '@/components/admin/home-actions'
 import {
   AskQuackbackInline,
+  WorkspaceCopilotFocused,
   useWorkspaceCopilotEnabled,
+  useWorkspaceCopilotFocused,
 } from '@/components/admin/ask/workspace-copilot-context'
 import { HomeGettingStarted } from '@/components/onboarding/home-launch-plan'
 import { HomeTryItYourself } from '@/components/onboarding/home-try-it'
@@ -49,8 +51,11 @@ function AdminOverviewPage() {
   const userRole = useUserRole()
   const settings = useWorkspaceSettings()
   const copilotEnabled = useWorkspaceCopilotEnabled()
+  const focused = useWorkspaceCopilotFocused()
   const admin = isAdmin(userRole)
   const flags = settings?.featureFlags as FeatureFlags | undefined
+
+  if (focused) return <WorkspaceCopilotFocused />
 
   return (
     <ScrollArea className="h-full">

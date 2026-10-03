@@ -81,6 +81,8 @@ import {
   KNOWLEDGE_SNIPPET_CHARS,
 } from '../retrieval-sources'
 import { DEFAULT_ASSISTANT_CONFIG } from '@/lib/shared/assistant/config'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import type { Actor } from '@/lib/server/policy/types'
 
 /** Every retrieval source enabled — the config-v3 snapshot standing in for the
  *  old flag-on bundle. */
@@ -95,6 +97,31 @@ beforeEach(() => {
   mockChangelogRetrieve.mockResolvedValue([])
   mockDocumentsRetrieve.mockResolvedValue([])
   mockWebSourcesRetrieve.mockResolvedValue([])
+})
+
+it('requires actor permissions before registering private workspace post and ticket retrieval', async () => {
+  const actor: Actor = {
+    principalId: null,
+    principalType: 'user',
+    role: 'member',
+    segmentIds: new Set(),
+    permissions: new Set(),
+  }
+  const enabled = new Set<AssistantCitationType>(['article', 'post', 'ticket'])
+  expect(
+    (await resolveKnowledgeSources(enabled, true, false, false, actor)).map(
+      (source) => source.sourceType
+    )
+  ).toEqual(['article'])
+  expect((await resolveKnowledgeSources(enabled, true)).map((source) => source.sourceType)).toEqual(
+    ['article']
+  )
+  actor.permissions = new Set([PERMISSIONS.POST_VIEW_PRIVATE, PERMISSIONS.TICKET_VIEW_ALL])
+  expect(
+    (await resolveKnowledgeSources(enabled, true, false, false, actor)).map(
+      (source) => source.sourceType
+    )
+  ).toEqual(['article', 'post', 'ticket'])
 })
 
 describe('kbKnowledgeSource', () => {
@@ -198,6 +225,39 @@ describe('resolveAssistantKnowledgeSnapshot', () => {
     expect(snap.status).toBe(true)
   })
 
+  it('compiles every configured workspace source without reading the customer-facing map', () => {
+    const config = structuredClone(DEFAULT_ASSISTANT_CONFIG)
+    config.agents.agent.knowledge.helpCenter = false
+    const snapshot = resolveAssistantKnowledgeSnapshot('workspace', config, 'team')
+    expect([...snapshot.sources].sort()).toEqual([...ASSISTANT_CITATION_TYPES].sort())
+    expect(snapshot.internalNotes).toBe(true)
+    expect(snapshot.pastConversations).toBe(true)
+    config.agents.workspace.knowledge.documents = false
+    config.agents.workspace.knowledge.pastConversations = false
+    config.agents.workspace.knowledge.internalNotes = false
+    const narrowed = resolveAssistantKnowledgeSnapshot('workspace', config, 'team')
+    expect(narrowed.sources.has('document')).toBe(false)
+    expect(narrowed.sources.has('summary')).toBe(false)
+    expect(narrowed.sources.has('article')).toBe(true)
+  })
+
+  it('keeps enabled Copilot internal-note retrieval when workspace chat disables conversation history', () => {
+    const config = structuredClone(DEFAULT_ASSISTANT_CONFIG)
+    config.agents.copilot.knowledge.pastConversations = false
+    config.agents.copilot.knowledge.internalNotes = true
+    const workspace = resolveAssistantKnowledgeSnapshot('copilot', config, 'team', true)
+    expect(workspace.sources.has('summary')).toBe(true)
+    expect(workspace.internalNotes).toBe(true)
+    expect(workspace.pastConversations).toBe(false)
+    expect(
+      resolveAssistantKnowledgeSnapshot('copilot', config, 'team').sources.has('summary')
+    ).toBe(false)
+    config.agents.copilot.knowledge.internalNotes = false
+    expect(
+      resolveAssistantKnowledgeSnapshot('copilot', config, 'team', true).sources.has('summary')
+    ).toBe(false)
+  })
+
   it('a Copilot with every source off still gets snippets at the team ceiling (and web sources everywhere)', () => {
     const config = structuredClone(DEFAULT_ASSISTANT_CONFIG)
     config.agents.copilot.knowledge = {
@@ -217,6 +277,12 @@ describe('resolveAssistantKnowledgeSnapshot', () => {
 })
 
 describe('describeEnabledKnowledgeSources', () => {
+  it('describes workspace-wide conversation grounding without inventing a current customer', () => {
+    const text = describeEnabledKnowledgeSources(new Set(['article', 'summary']), true)
+    expect(text).toContain('help center articles')
+    expect(text).toContain('workspace conversations')
+    expect(text).not.toContain("this customer's")
+  })
   it('enumerates enabled sources in citation-vocabulary order', () => {
     const text = describeEnabledKnowledgeSources(new Set(['article', 'changelog']))
     expect(text).toContain('help center articles')

@@ -1460,5 +1460,13 @@
   "ask.settings.field.shadowLg": "Cień L",
   "ask.settings.field.shadowXl": "Cień XL",
   "ask.settings.field.shadow2xl": "Cień 2XL",
-  "ask.settings.nameManaged": "Otwórz ustawienia ogólne, aby zmienić nazwę tego obszaru roboczego."
+  "ask.settings.nameManaged": "Otwórz ustawienia ogólne, aby zmienić nazwę tego obszaru roboczego.",
+  "ask.chat.keyboardHint": "Enter, aby wysłać · Shift+Enter, aby dodać nowy wiersz",
+  "assistant.citation.sourceLabel": "Źródło {number}: {title}",
+  "assistant.citation.internalSourceLabel": "Źródło wewnętrzne {number}: {title}",
+  "assistant.citation.internal": "Wewnętrzne",
+  "widget.messenger.assistant.thinking": "Myślę…",
+  "widget.messenger.assistant.searching": "Przeszukiwanie bazy wiedzy…",
+  "widget.messenger.assistant.reviewing": "Przeglądanie rozmowy…",
+  "widget.messenger.assistant.searched": "Przeszukano bazę wiedzy · {count, plural, one {# źródło} few {# źródła} many {# źródeł} other {# źródła}}"
 }

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { AssistantSurface } from './surfaces'
 
 export const ASSISTANT_CONFIG_VERSION = 4 as const
 export const ASSISTANT_NAME_MAX_LENGTH = 80
@@ -392,15 +393,17 @@ export const ASSISTANT_ROLE_CATALOGUE = {
  * teammate-facing Q&A role resolves to `copilot`. Runtime
  * voice/knowledge/guidance resolution all funnel through this rather than
  * re-deriving the split from a role literal.
+ * Workspace chat shares Copilot configuration; integration turns keep the
+ * internally managed workspace configuration.
  */
-export function roleToAgent(role: AssistantRole): AssistantAgentKind {
+export function roleToAgent(role: AssistantRole, surface?: AssistantSurface): AssistantAgentKind {
   switch (role) {
     case 'customer_support':
       return 'agent'
     case 'copilot_qa':
       return 'copilot'
     case 'workspace_assistant':
-      return 'workspace'
+      return surface === 'workspace' ? 'copilot' : 'workspace'
     default: {
       const exhaustive: never = role
       throw new Error(`roleToAgent: unhandled assistant role "${exhaustive}"`)

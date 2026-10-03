@@ -1460,5 +1460,13 @@
   "ask.settings.field.shadowLg": "Ombre L",
   "ask.settings.field.shadowXl": "Ombre XL",
   "ask.settings.field.shadow2xl": "Ombre 2XL",
-  "ask.settings.nameManaged": "Ouvrez les paramètres généraux pour modifier le nom de cet espace de travail."
+  "ask.settings.nameManaged": "Ouvrez les paramètres généraux pour modifier le nom de cet espace de travail.",
+  "ask.chat.keyboardHint": "Entrée pour envoyer · Maj+Entrée pour une nouvelle ligne",
+  "assistant.citation.sourceLabel": "Source {number} : {title}",
+  "assistant.citation.internalSourceLabel": "Source interne {number} : {title}",
+  "assistant.citation.internal": "Interne",
+  "widget.messenger.assistant.thinking": "Réflexion en cours…",
+  "widget.messenger.assistant.searching": "Recherche dans la base de connaissances…",
+  "widget.messenger.assistant.reviewing": "Examen de la conversation…",
+  "widget.messenger.assistant.searched": "Base de connaissances consultée · {count, plural, one {# source} other {# sources}}"
 }

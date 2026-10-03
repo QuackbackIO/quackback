@@ -23,6 +23,7 @@ import { toolPermissions } from './tool-permissions'
  * instead.
  */
 import { createHash } from 'node:crypto'
+import { toolDefinition } from '@tanstack/ai'
 import { DomainException } from '@/lib/shared/errors'
 import { can } from '@/lib/server/policy/authorize'
 import { logger } from '@/lib/server/logger'
@@ -54,22 +55,23 @@ function withDynamicPromptGuidance(
   specs: AssistantToolSpec[],
   ctx: AssistantToolContext
 ): AssistantToolSpec[] {
-  const enumeration = describeEnabledKnowledgeSources(ctx.knowledge.sources)
-  if (ctx.workspaceThreadKey?.startsWith(WORKSPACE_THREAD_PREFIX))
-    return specs.map((spec) =>
-      spec.risk === 'write'
-        ? {
-            ...spec,
-            promptGuidance: `${spec.description} Calling this tool files a proposal. Nothing changes until the teammate clicks Apply.`,
-          }
-        : spec
-    )
-  if (!enumeration) return specs
-  return specs.map((spec) =>
-    spec.name === 'search'
+  const workspace = ctx.workspaceThreadKey?.startsWith(WORKSPACE_THREAD_PREFIX)
+  const enumeration = describeEnabledKnowledgeSources(
+    ctx.knowledge.sources,
+    ctx.role === 'workspace_assistant'
+  )
+  return specs.map((spec) => {
+    if (workspace && spec.risk === 'write')
+      return {
+        ...spec,
+        promptGuidance: `${spec.description} Calling this tool files a proposal. Nothing changes until the teammate clicks Apply.`,
+      }
+    const knowledgeSearch =
+      spec.name === (ctx.role === 'workspace_assistant' ? 'search_knowledge' : 'search')
+    return knowledgeSearch && enumeration
       ? { ...spec, promptGuidance: `${spec.promptGuidance} ${enumeration}` }
       : spec
-  )
+  })
 }
 
 const PENDING_APPROVAL_NOTE =
@@ -484,7 +486,7 @@ export async function assembleAssistantToolset(
   // must not reach mode resolution, proposal, or the model at all on a
   // ticket-scoped turn. See `parents`'s own doc on AssistantToolSpec.
   const parentKind = turnParentKind(ctx)
-  const workspaceKeepBuiltins = new Set(['get_status', 'report_inability', 'use_skill'])
+  const workspaceKeepBuiltins = new Set(['search', 'get_status', 'report_inability', 'use_skill'])
   const fitsParent = (spec: AssistantToolSpec) =>
     spec.parents.includes(parentKind) &&
     (spec.availableWhen?.(ctx) ?? true) &&
@@ -504,7 +506,21 @@ export async function assembleAssistantToolset(
   )
   const connectorActiveSpecs = connectorActive.map((entry) => entry.spec)
 
-  const resolvedSpecs = (specs ?? resolveToolSpecs()).filter(availableBuiltin)
+  const resolvedSpecs = (specs ?? resolveToolSpecs()).filter(availableBuiltin).map((spec) => {
+    if (ctx.role !== 'workspace_assistant' || spec.name !== 'search') return spec
+    // Entity search and grounded knowledge retrieval share a legacy name.
+    // Alias the existing retrieval tool while retaining its schema and pipeline.
+    return {
+      ...spec,
+      name: 'search_knowledge',
+      definition: toolDefinition({
+        name: 'search_knowledge',
+        description: spec.definition.description,
+        inputSchema: spec.definition.inputSchema,
+        outputSchema: spec.definition.outputSchema,
+      }),
+    }
+  })
   const builtInTools = resolvedSpecs.map((spec) => {
     const mode = resolveEffectiveToolMode(spec, ctx)
     return spec.definition.server<AssistantToolContext>((args) =>

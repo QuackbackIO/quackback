@@ -1460,5 +1460,13 @@
   "ask.settings.field.shadowLg": "Schaduw L",
   "ask.settings.field.shadowXl": "Schaduw XL",
   "ask.settings.field.shadow2xl": "Schaduw 2XL",
-  "ask.settings.nameManaged": "Open de algemene instellingen om de naam van deze werkruimte te wijzigen."
+  "ask.settings.nameManaged": "Open de algemene instellingen om de naam van deze werkruimte te wijzigen.",
+  "ask.chat.keyboardHint": "Enter om te versturen · Shift+Enter voor een nieuwe regel",
+  "assistant.citation.sourceLabel": "Bron {number}: {title}",
+  "assistant.citation.internalSourceLabel": "Interne bron {number}: {title}",
+  "assistant.citation.internal": "Intern",
+  "widget.messenger.assistant.thinking": "Aan het nadenken…",
+  "widget.messenger.assistant.searching": "Kennisbank wordt doorzocht…",
+  "widget.messenger.assistant.reviewing": "Gesprek wordt bekeken…",
+  "widget.messenger.assistant.searched": "Kennisbank doorzocht · {count, plural, one {# bron} other {# bronnen}}"
 }

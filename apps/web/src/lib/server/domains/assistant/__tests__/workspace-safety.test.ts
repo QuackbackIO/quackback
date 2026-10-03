@@ -6,6 +6,11 @@ import {
 } from '../workspace-safety'
 
 describe('workspace proposal boundary', () => {
+  it('permits reading Messenger installation status while refusing installation writes', () => {
+    expect(isWorkspaceToolAllowed('widget_install_status', 'read')).toBe(true)
+    expect(isWorkspaceToolAllowed('widget_install_status', 'write')).toBe(false)
+    expect(isWorkspaceToolAllowed('install_snippet', 'write')).toBe(false)
+  })
   it('overrides every saved write policy for the web surface', () => {
     for (const approvalPolicy of ['always', 'approval', 'never', undefined] as const) {
       expect(

@@ -17,3 +17,12 @@ it('explains proposal and page boundaries without changing integration role sema
   expect(WORKSPACE_WEB_PROMPT).not.toContain('do not wait for a second approval')
   expect(WORKSPACE_ROLE_PROMPT).toContain('do not wait for a second approval')
 })
+it('separates cited knowledge answers from live entity lookup and supported settings proposals', () => {
+  expect(WORKSPACE_WEB_PROMPT).toContain('search_knowledge')
+  expect(WORKSPACE_WEB_PROMPT).toContain('uploaded documents')
+  expect(WORKSPACE_WEB_PROMPT).toContain('configured knowledge sources')
+  expect(WORKSPACE_WEB_PROMPT).toContain('source types and ids')
+  expect(WORKSPACE_WEB_PROMPT).toContain('entity search')
+  expect(WORKSPACE_WEB_PROMPT).toContain('propose_settings_change')
+  expect(WORKSPACE_WEB_PROMPT).toContain('navigate_workspace')
+})
