@@ -2,7 +2,7 @@ import type { Actor } from '@/lib/server/policy/types'
 import { NotFoundError } from '@/lib/shared/errors'
 import { assertWorkspaceThreadOwned } from './workspace-threads.service'
 import type { AssistantPendingAction } from './pending-actions.service'
-import { WORKSPACE_THREAD_PREFIX } from './workspace-safety'
+import { isHomeThreadKey } from './workspace-safety'
 
 /** A verified server integration may authorize only its already-bound thread. */
 export async function assertPendingWorkspaceParent(
@@ -12,7 +12,7 @@ export async function assertPendingWorkspaceParent(
 ): Promise<void> {
   const key = pending.workspaceThreadKey
   if (!key) return
-  if (key.startsWith(WORKSPACE_THREAD_PREFIX)) {
+  if (isHomeThreadKey(key)) {
     await assertWorkspaceThreadOwned(key, actor)
     return
   }

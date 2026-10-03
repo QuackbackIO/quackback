@@ -789,7 +789,8 @@ describe('runAssistantTurn', () => {
       principalId: 'principal_member' as never,
       principalType: 'user' as const,
       role: 'member' as const,
-      permissions: new Set<never>(),
+      // Team-only articles are read only by a teammate who can manage them.
+      permissions: new Set(['help_center.manage']) as never,
       segmentIds: new Set<never>(),
     }
     mockChat.mockImplementation(

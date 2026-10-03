@@ -1,3 +1,4 @@
+import { agentKindForTurn } from '../workspace-safety'
 /**
  * Shared fixtures for the assistant tool pipeline tests: one tool-context
  * builder and one pending-action row, so a context or schema field change
@@ -17,7 +18,13 @@ export function makeToolTestContext(
     conversationId: null,
     simulate: false,
   })
-  return { ...base, ...overrides }
+  return {
+    ...base,
+    ...overrides,
+    agentKind:
+      overrides.agentKind ??
+      agentKindForTurn(overrides.role ?? base.role, overrides.workspaceThreadKey),
+  }
 }
 
 /** A pending-action row in its `proposed` state; override `status` etc. as needed. */

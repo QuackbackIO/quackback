@@ -1,9 +1,5 @@
 import { assertPendingWorkspaceParent } from './pending-action-parent'
-import {
-  isWorkspaceToolAllowed,
-  isWorkspaceMutationAllowed,
-  WORKSPACE_THREAD_PREFIX,
-} from './workspace-safety'
+import { agentKindForTurn, isConnectorTool, isHomeThreadKey } from './workspace-safety'
 import { toolPermissions } from './tool-permissions'
 import { db } from '@/lib/server/db'
 import type { AssistantPendingActionId, PrincipalId } from '@quackback/ids'
@@ -27,7 +23,6 @@ import {
 import { resolveContentAudience } from './audience'
 import { getConnectorSpecByToolName } from './connectors/connector-tools'
 import { getWorkspaceMcpSpecByName } from './mcp-workspace-tools'
-import { roleToAgent } from '@/lib/shared/assistant/config'
 import { executeApprovedPendingAction } from './assistant.tools'
 import { ensureAssistantPrincipal } from './assistant.principal'
 
@@ -106,7 +101,8 @@ export async function decideAssistantAction(
     return rejected
   }
 
-  if (pending.workspaceThreadKey?.startsWith(WORKSPACE_THREAD_PREFIX)) {
+  const agentKind = agentKindForTurn(pending.originRole, pending.workspaceThreadKey)
+  if (isHomeThreadKey(pending.workspaceThreadKey)) {
     if (pending.toolName === 'propose_settings_change') {
       const { settingsProposalSchema } = await import('@/lib/shared/assistant/settings-proposals')
       const { applyWorkspaceSettingsProposal } =
@@ -118,14 +114,14 @@ export async function decideAssistantAction(
         proposal.changes.map((change) => change.id)
       )
     }
-    if (
-      !isWorkspaceToolAllowed(pending.toolName, 'write') ||
-      !isWorkspaceMutationAllowed(pending.toolName, pending.args)
-    )
+    // Home allows exactly one other decision: a connector read the teammate
+    // lets run. A connector write is never executed from Home.
+    if (!isConnectorTool(pending.toolName))
       throw new ConflictError(
         'ASSISTANT_ACTION_POLICY_CHANGED',
         'Open the settings page to make this change'
       )
+    return allowHomeConnectorRead(pending, approverPrincipalId, actor, agentKind)
   }
 
   // Built-in specs resolve from the static registry; a custom action
@@ -137,7 +133,7 @@ export async function decideAssistantAction(
   // exactly like a gone built-in.
   const spec =
     (await getToolSpecByName(pending.toolName)) ??
-    (await getConnectorSpecByToolName(pending.toolName, roleToAgent(pending.originRole))) ??
+    (await getConnectorSpecByToolName(pending.toolName, agentKind)) ??
     (pending.originRole === 'workspace_assistant'
       ? await getWorkspaceMcpSpecByName(pending.toolName, actor, 'Quinn')
       : null)
@@ -188,5 +184,50 @@ export async function decideAssistantAction(
     return (await markPendingActionFailed(pendingActionId, outcome.error)) ?? decided
   }
   // skipped_duplicate: a racing call already executed this proposal.
+  return decided
+}
+
+/**
+ * Run a connector read the teammate allowed from Home. The spec is resolved
+ * again so a tool the connector now marks as a write, or one since removed,
+ * never runs.
+ */
+async function allowHomeConnectorRead(
+  pending: AssistantPendingAction,
+  approverPrincipalId: PrincipalId,
+  actor: Actor,
+  agentKind: ReturnType<typeof agentKindForTurn>
+): Promise<AssistantPendingAction> {
+  const spec = await getConnectorSpecByToolName(pending.toolName, agentKind)
+  if (!spec) throw new ToolSpecGoneError(pending.toolName)
+  if (spec.risk !== 'read')
+    throw new ConflictError(
+      'ASSISTANT_ACTION_POLICY_CHANGED',
+      'Connector changes are never made from Home'
+    )
+  const parsedArgs = spec.definition.inputSchema.safeParse(pending.args)
+  if (!parsedArgs.success)
+    throw new ConflictError(
+      'ASSISTANT_ACTION_INPUT_CHANGED',
+      'This action no longer matches the current input contract'
+    )
+  const decided = await decidePendingAction(pending.id, 'approved', approverPrincipalId)
+  if (!decided)
+    throw new ConflictError(
+      'PENDING_ACTION_NOT_DECIDABLE',
+      'This request was already decided or has expired'
+    )
+  const validated = { ...decided, args: parsedArgs.data as Record<string, unknown> }
+  const ctx = await buildExecutionContext(validated, actor)
+  const outcome = await executeApprovedPendingAction(spec, validated, ctx)
+  if (outcome.status === 'executed')
+    return (
+      (await markPendingActionExecuted(
+        pending.id,
+        (outcome.result as Record<string, unknown> | null) ?? null
+      )) ?? decided
+    )
+  if (outcome.status === 'failed')
+    return (await markPendingActionFailed(pending.id, outcome.error)) ?? decided
   return decided
 }

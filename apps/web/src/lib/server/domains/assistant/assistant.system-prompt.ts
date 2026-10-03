@@ -84,6 +84,8 @@ export interface BuildAssistantPromptInput {
   channel?: string | null
   /** Deploy surface. Slack formatting rules are composed into the platform policy. */
   surface?: AssistantSurface | null
+  /** The agent whose configuration this turn runs with (see `agentKindForTurn`). */
+  agentKind?: AssistantAgentKind
   /** Already selected guidance. Role and channel eligibility are checked again here. */
   guidance?: readonly (AssistantPromptGuidance | string)[]
   workflowInstructions?: string | null
@@ -185,7 +187,10 @@ function normalizeSystemValue(value: string, fallback: string, maxLength: number
 
 export function buildAssistantRoleProfile(
   role: AssistantPromptRole,
-  input: Pick<BuildAssistantPromptInput, 'config' | 'workspaceName' | 'tools' | 'surface'>
+  input: Pick<
+    BuildAssistantPromptInput,
+    'config' | 'workspaceName' | 'tools' | 'surface' | 'agentKind'
+  >
 ): string {
   const toolNames = new Set(input.tools.map((tool) => tool.name))
 
@@ -223,7 +228,9 @@ human performed an action or made a commitment. Never pretend to be a human.
 ${humanSupport}`
     }
     case 'workspace_assistant':
-      return input.surface === 'workspace' ? WORKSPACE_WEB_PROMPT : WORKSPACE_ROLE_PROMPT
+      return (input.agentKind ?? roleToAgent(role, input.surface ?? undefined)) === 'copilot'
+        ? WORKSPACE_WEB_PROMPT
+        : WORKSPACE_ROLE_PROMPT
     case 'copilot_qa': {
       // The propose affordance exists only when the turn actually assembled a
       // write tool; a read-only turn keeps the plain honesty rule so the model
@@ -257,7 +264,8 @@ exactly as written; otherwise use "analysis".`
 
 function buildToolGuidanceMessage(
   role: AssistantPromptRole,
-  tools: readonly AssistantPromptTool[]
+  tools: readonly AssistantPromptTool[],
+  agentKind: AssistantAgentKind
 ): string {
   if (tools.length === 0) {
     return `# Actual available tools and operating guidance
@@ -272,9 +280,12 @@ and be explicit about anything you cannot verify or do.`
     ...tools.map((tool) => `- ${tool.name}: ${tool.promptGuidance}`),
   ]
 
-  if (names.has('search')) {
+  // On Home, `search` is the entity search and knowledge has its own tool.
+  const knowledgeTool =
+    role === 'workspace_assistant' && agentKind === 'copilot' ? 'search_knowledge' : 'search'
+  if (names.has(knowledgeTool)) {
     lines.push(
-      '- search: Search for product, pricing, policy, capability, or procedure questions not already answered by trusted runtime context. Allow one focused refinement when the first search is insufficient.'
+      `- ${knowledgeTool}: Search for product, pricing, policy, capability, or procedure questions not already answered by trusted runtime context. Allow one focused refinement when the first search is insufficient.`
     )
   }
   if (names.has('get_status')) {
@@ -327,6 +338,7 @@ function composeAssistantSystemMessages(
   input: BuildAssistantPromptInput,
   rolePolicy: AssistantRolePolicy
 ): string[] {
+  const agentKind = input.agentKind ?? roleToAgent(input.role, input.surface ?? undefined)
   const messages = [
     buildPlatformPolicyMessage(
       rolePolicy.responseContract,
@@ -334,7 +346,7 @@ function composeAssistantSystemMessages(
       input.surface
     ),
     buildAssistantRoleProfile(input.role, input),
-    buildToolGuidanceMessage(input.role, input.tools),
+    buildToolGuidanceMessage(input.role, input.tools, agentKind),
   ]
 
   const trustedContext = input.trustedRuntimeContext
@@ -352,7 +364,7 @@ function composeAssistantSystemMessages(
     if (workspaceInstructions) messages.push(workspaceInstructions)
   }
 
-  const guidance = buildGuidanceMessage(input.guidance ?? [], roleToAgent(input.role))
+  const guidance = buildGuidanceMessage(input.guidance ?? [], agentKind)
   if (guidance) messages.push(guidance)
 
   const workflowInstructions = buildAdminInstructionMessage(

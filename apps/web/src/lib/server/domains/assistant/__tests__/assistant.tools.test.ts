@@ -972,6 +972,13 @@ describe('private workspace proposal enforcement', () => {
       conversationId: null,
       simulate: false,
       knowledge: { sources: new Set(['article', 'document', 'snippet']), status: false },
+      actor: {
+        principalId: 'principal_member' as never,
+        principalType: 'user',
+        role: 'member',
+        segmentIds: new Set(),
+        permissions: new Set([PERMISSIONS.HELP_CENTER_MANAGE]),
+      },
     })
     const assembled = await assembleAssistantToolset(workspace, undefined, [entitySearch])
     expect(assembled.tools.map((tool) => tool.name)).toEqual(
@@ -1122,5 +1129,105 @@ describe('private workspace proposal enforcement', () => {
     expect(assembled.tools).toHaveLength(0)
     expect(execute).not.toHaveBeenCalled()
     expect(mockProposePendingAction).not.toHaveBeenCalled()
+  })
+})
+
+describe('Home-only knowledge search and connector approval', () => {
+  function connectorSpec(risk: 'read' | 'write', execute = vi.fn()): AssistantToolSpec {
+    const name = `connector_acme__${risk === 'read' ? 'find_order' : 'refund_order'}`
+    return {
+      name,
+      label: risk === 'read' ? 'Find order' : 'Refund order',
+      description: 'Acme orders',
+      promptGuidance: 'Acme: orders.',
+      risk,
+      approvalPolicy: 'always',
+      permissions: [],
+      parents: ['conversation', 'ticket'],
+      connector: { name: 'Acme', initials: 'AC' },
+      definition: toolDefinition({
+        name,
+        description: 'Acme orders',
+        inputSchema: z.object({ order: z.string() }),
+        outputSchema: z.unknown(),
+      }),
+      execute,
+      summarize: (args) => `Order ${(args as { order: string }).order}`,
+    }
+  }
+  const home = () =>
+    ctx({
+      role: 'workspace_assistant',
+      audience: 'team',
+      workspaceThreadKey: 'workspace:owned',
+      conversationId: null,
+      simulate: false,
+      knowledge: ALL_KNOWLEDGE,
+    })
+  const slack = () =>
+    ctx({
+      role: 'workspace_assistant',
+      audience: 'team',
+      workspaceThreadKey: JSON.stringify(['T', 'C', '1']),
+      conversationId: null,
+      simulate: false,
+      knowledge: ALL_KNOWLEDGE,
+    })
+
+  it('keeps Slack on its own tools: no knowledge search of any name', async () => {
+    const slackTurn = slack()
+    expect(slackTurn.agentKind).toBe('workspace')
+    const names = (await assembleAssistantToolset(slackTurn)).tools.map((tool) => tool.name)
+    expect(names).not.toContain('search')
+    expect(names).not.toContain('search_knowledge')
+    const homeNames = (await assembleAssistantToolset(home())).tools.map((tool) => tool.name)
+    expect(homeNames).toContain('search_knowledge')
+  })
+
+  it('describes Home knowledge search without changing the customer-facing search', async () => {
+    const homeSpec = (await assembleAssistantToolset(home())).activeSpecs.find(
+      (spec) => spec.name === 'search_knowledge'
+    )!
+    expect(homeSpec.description).toContain('workspace knowledge sources')
+    const quinn = (
+      await assembleAssistantToolset(ctx({ conversationId: 'conversation_1' as never }))
+    ).activeSpecs.find((spec) => spec.name === 'search')!
+    expect(quinn.description).toBe(
+      'Search the published help center for articles the current viewer can see.'
+    )
+  })
+
+  it('makes a Home connector read wait for Allow and never runs it in the turn', async () => {
+    const execute = vi.fn(async () => ({ ok: true }))
+    const read = connectorSpec('read', execute)
+    const turn = home()
+    expect(resolveEffectiveToolMode(read, turn)).toBe('propose')
+    mockProposePendingAction.mockImplementation(async (input: Record<string, unknown>) => {
+      expect(input).toMatchObject({
+        workspaceThreadKey: 'workspace:owned',
+        toolName: 'connector_acme__find_order',
+        args: { order: 'A-1' },
+        originRole: 'workspace_assistant',
+      })
+      return { id: 'assistant_action_home' }
+    })
+    const assembled = await assembleAssistantToolset(turn, [], [read])
+    const result = (await assembled.tools[0]!.execute!({ order: 'A-1' })) as { status: string }
+    expect(result.status).toBe('pending_approval')
+    expect(execute).not.toHaveBeenCalled()
+    expect(turn.ledger.proposedActions).toEqual([
+      expect.objectContaining({ id: 'assistant_action_home', connector: expect.any(Object) }),
+    ])
+  })
+
+  it('never offers a connector write to the Home model', async () => {
+    const execute = vi.fn()
+    const assembled = await assembleAssistantToolset(home(), [], [connectorSpec('write', execute)])
+    expect(assembled.tools).toHaveLength(0)
+    expect(execute).not.toHaveBeenCalled()
+  })
+
+  it('leaves a Slack connector read on its saved policy', () => {
+    expect(resolveEffectiveToolMode(connectorSpec('read'), slack())).toBe('autonomous')
   })
 })

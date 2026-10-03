@@ -39,7 +39,7 @@ import {
   type SegmentId,
 } from '@quackback/ids'
 import { type ContentAudience } from './audience'
-import { WORKSPACE_THREAD_PREFIX } from './workspace-safety'
+import { agentKindForTurn, isHomeTurn } from './workspace-safety'
 import type { AssistantAttributeCatalogueEntry } from './prompt-catalogues'
 import {
   retrieveKnowledge,
@@ -52,6 +52,7 @@ import { TICKET_TYPES, CONVERSATION_PRIORITIES } from '@/lib/shared/db-types'
 import type { Actor } from '@/lib/server/policy/types'
 import {
   DEFAULT_ASSISTANT_CONFIG,
+  type AssistantAgentKind,
   type AssistantRole,
   type AssistantToolRules,
 } from '@/lib/shared/assistant/config'
@@ -220,6 +221,11 @@ export interface AssistantToolContext {
   /** Trust profile that originated this tool call and any pending action. */
   role: AssistantRole
   /**
+   * The agent whose configuration this turn runs with. Home turns are the
+   * workspace assistant running as Copilot (see `isHomeTurn`).
+   */
+  agentKind: AssistantAgentKind
+  /**
    * The turn's retrieval ceiling, minted exclusively by `resolveContentAudience`
    * (see `./audience`). Never construct this from a raw string literal.
    */
@@ -331,6 +337,7 @@ export function makeAssistantToolContext(init: {
   assistantName?: string
   workspaceThreadKey?: string
   role?: AssistantRole
+  agentKind?: AssistantAgentKind
   audience: ContentAudience
   conversationId: ConversationId | null
   ticketId?: TicketId | null
@@ -353,6 +360,8 @@ export function makeAssistantToolContext(init: {
     assistantName: init.assistantName ?? DEFAULT_ASSISTANT_CONFIG.identity.name,
     workspaceThreadKey: init.workspaceThreadKey,
     role: init.role ?? 'customer_support',
+    agentKind:
+      init.agentKind ?? agentKindForTurn(init.role ?? 'customer_support', init.workspaceThreadKey),
     audience: init.audience,
     conversationId: init.conversationId,
     ticketId: init.ticketId ?? null,
@@ -568,7 +577,7 @@ async function executeSearchKnowledge(
     sourceTypes: narrowing,
     enabledSources: ctx.knowledge.sources,
     actor: ctx.actor,
-    workspaceSearch: ctx.role === 'workspace_assistant',
+    workspaceSearch: isHomeTurn(ctx),
     includeInternalNotes: ctx.knowledge.internalNotes,
     notesOnly: ctx.knowledge.pastConversations === false,
   })
@@ -1301,15 +1310,7 @@ async function executeUseSkill(
     }
   }
   const { getSkillBody } = await import('./skills.service')
-  const { roleToAgent } = await import('@/lib/shared/assistant/config')
-  const body = await getSkillBody(
-    args.name,
-    roleToAgent(
-      ctx.role,
-      ctx.workspaceThreadKey?.startsWith(WORKSPACE_THREAD_PREFIX) ? 'workspace' : undefined
-    ),
-    ctx.db
-  )
+  const body = await getSkillBody(args.name, ctx.agentKind, ctx.db)
   skills.loads += 1
   ctx.skills = skills
   if (!body) {
@@ -1324,9 +1325,9 @@ async function executeUseSkill(
 const SPECS: readonly AssistantToolSpec[] = [
   defineToolSpec({
     label: 'Search knowledge',
-    description: 'Search the enabled workspace knowledge sources the current viewer can see.',
+    description: 'Search the published help center for articles the current viewer can see.',
     promptGuidance:
-      'Call before answering anything factual or product-related; refine the query once more if the first search misses, then answer with what you have. Cite only the source types and ids it returns.',
+      'Call before answering anything factual or product-related; refine the query once more if the first search misses, then answer with what you have. Cite only the article ids it returns.',
     risk: 'read',
     // Knowledge base reads are already scoped by viewer audience; there is no
     // separate conversation- or ticket-shaped permission to check here.

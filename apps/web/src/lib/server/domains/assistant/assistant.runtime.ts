@@ -26,9 +26,9 @@ import { logger } from '@/lib/server/logger'
 import type { AssistantHandoffReason } from '@/lib/server/db'
 import type { PrincipalId, ConversationId, TicketId, AssistantInvolvementId } from '@quackback/ids'
 import type { AssistantSurface } from '@/lib/shared/assistant/surfaces'
+import { agentKindForTurn, isHomeThreadKey, isHomeTurn } from './workspace-safety'
 import {
   DEFAULT_ASSISTANT_CONFIG,
-  roleToAgent,
   type AssistantConfig,
   type AssistantIdentity,
   type AssistantRole,
@@ -833,7 +833,15 @@ function deriveAnswerKind(
 export async function runAssistantTurn(input: AssistantTurnInput): Promise<AssistantTurnResult> {
   const surface = input.surface
   const role = input.role
-  const agentKind = roleToAgent(role, surface)
+  // One Home-turn detector: a Home turn is the web surface on a Home thread,
+  // and a Home thread never runs on another surface.
+  if (
+    role === 'workspace_assistant' &&
+    (surface === 'workspace') !== isHomeThreadKey(input.workspaceThreadKey)
+  )
+    throw new Error('Workspace assistant surface and thread disagree')
+  const agentKind = agentKindForTurn(role, input.workspaceThreadKey)
+  const homeTurn = isHomeTurn({ role, agentKind })
   const rolePolicy = resolveAssistantRolePolicy(role)
   const messages = input.messages
 
@@ -878,7 +886,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     agentKind,
     runtimeConfig.config,
     audience,
-    role === 'workspace_assistant'
+    homeTurn
   )
 
   // Customer voice always resolves from the Agent's sub-config: the
@@ -984,6 +992,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     assistantPrincipalId: input.assistantPrincipalId,
     assistantName: runtimeConfig.config.identity.name,
     role,
+    agentKind,
     audience,
     conversationId,
     ticketId,
@@ -1051,7 +1060,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   if (role === 'workspace_assistant') {
     try {
       const auth = await mcpAuthFromActor(input.actor, runtimeConfig.config.identity.name)
-      if (auth && surface === 'workspace') auth.workspaceThreadKey = input.workspaceThreadKey
+      if (auth && homeTurn) auth.workspaceThreadKey = input.workspaceThreadKey
       if (auth) {
         const opened = await openWorkspaceMcp(auth)
         closeWorkspaceMcp = opened.close
@@ -1234,6 +1243,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
       trustedRuntimeContext: trustedContextParts.join('\n') || null,
       channel: promptChannel,
       surface,
+      agentKind,
       guidance: selectedGuidance.map((rule) => rule.instruction),
       workflowInstructions: input.stepInstructions,
       attributeCatalogue: attributeDefinitions,
@@ -1439,9 +1449,7 @@ ${runtimeConfig.config.agents.workspace.instructions}`)
         contextInternallySourced ||
         [...toolContext.ledger.sources.values()].some((source) => source.internal === true),
       proposedActions: [...toolContext.ledger.proposedActions],
-      ...(surface === 'workspace'
-        ? { navigation: [...(toolContext.ledger.navigation ?? [])] }
-        : {}),
+      ...(homeTurn ? { navigation: [...(toolContext.ledger.navigation ?? [])] } : {}),
       identity: runtimeConfig.config.identity,
       trace,
       ...(escalation && { escalation }),
