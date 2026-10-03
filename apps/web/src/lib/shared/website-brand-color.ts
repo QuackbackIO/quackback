@@ -1,4 +1,5 @@
-import { DEFAULT_LIGHT_BASE } from './theme/expand'
+import { hexToOklch } from './theme/colors'
+import { parseOklch } from './theme/expand'
 
 /** Website metadata supports opaque three-digit and six-digit hex colors. */
 export function normalizeHexColor(value: string): string | null {
@@ -25,7 +26,14 @@ export function hexContrastRatio(first: string, second: string): number {
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
 }
 
+/** The primary fill carries white text, so the color needs at least 3:1 against white. */
+const MIN_CONTRAST_WITH_WHITE = 3
+/** Below this OKLCH chroma a color reads as black, grey or slate rather than a brand. */
+const MIN_CHROMA = 0.05
+
 export function safeWebsiteBrandColor(value: string | null): string | null {
   const color = value ? normalizeHexColor(value) : null
-  return color && hexContrastRatio(color, DEFAULT_LIGHT_BASE.foreground) >= 4.5 ? color : null
+  if (!color || hexContrastRatio(color, '#FFFFFF') < MIN_CONTRAST_WITH_WHITE) return null
+  const chroma = parseOklch(hexToOklch(color))?.c ?? 0
+  return chroma >= MIN_CHROMA ? color : null
 }

@@ -113,7 +113,7 @@ describe('website branding with real model, MCP catalogue and local storage', ()
           proposal.changes
             .filter((change) => change.id.endsWith('.primary'))
             .map((change) => change.after)
-        ).toEqual(['#8FBC8F', '#8FBC8F'])
+        ).toEqual(['#0F766E', '#0F766E'])
         const logo = proposal.changes.find((change) => change.id === 'branding.logoKey')!
         expect(logo.before).toBeNull()
         expect(logo.after).toMatch(/^logos\/[a-f\d]{64}\.png$/)
@@ -132,8 +132,8 @@ describe('website branding with real model, MCP catalogue and local storage', ()
         expect(applied.status).toBe('executed')
         const after = (await database.select().from(settings))[0]
         expect(after.logoKey).toBe(ownedLogo)
-        expect(JSON.parse(after.brandingConfig!).light.primary).toBe('#8FBC8F')
-        expect(JSON.parse(after.brandingConfig!).dark.primary).toBe('#8FBC8F')
+        expect(JSON.parse(after.brandingConfig!).light.primary).toBe('#0F766E')
+        expect(JSON.parse(after.brandingConfig!).dark.primary).toBe('#0F766E')
         expect(JSON.parse(after.widgetConfig!).messenger.enabled).toBe(true)
         expect(
           await database.select().from(auditLog).where(eq(auditLog.targetId, pending[0].id))

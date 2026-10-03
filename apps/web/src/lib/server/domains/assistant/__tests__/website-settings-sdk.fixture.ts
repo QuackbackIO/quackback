@@ -56,7 +56,7 @@ export function brandingRequest(
   const body =
     route === 'example.com/'
       ? Buffer.from(
-          '<head><link rel="apple-touch-icon" href="/touch.png"><meta name="theme-color" content="#8FBC8F"></head>'
+          '<head><link rel="apple-touch-icon" href="/touch.png"><meta name="theme-color" content="#0F766E"></head>'
         )
       : BRANDING_PNG
   if (!['example.com/', 'example.com/touch.png', 'assets.example.com/logo.png'].includes(route))

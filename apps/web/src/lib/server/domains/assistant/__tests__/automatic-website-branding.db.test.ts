@@ -90,7 +90,7 @@ const expected: WebsiteBranding = {
   domain: 'example.com',
   logoKey: 'logos/acme.ico',
   logoUrl: '/api/storage/logos/acme.ico',
-  color: '#F4AA00',
+  color: '#0F766E',
 }
 const read = async () =>
   (await testDb.select().from(settings).where(eq(settings.id, settingsId)))[0]

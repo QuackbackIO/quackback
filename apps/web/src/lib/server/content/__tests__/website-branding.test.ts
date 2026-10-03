@@ -126,7 +126,7 @@ afterEach(() => vi.restoreAllMocks())
 describe('website branding through real safe-fetch and magic-byte seams', () => {
   it('fetches the homepage, prefers a touch icon and rehosts without requiring a title', async () => {
     page(
-      '<link rel="apple-touch-icon" href="/brand.png"><meta property="og:image" content="/banner.png"><meta name="theme-color" content="#8fbc8f">'
+      '<link rel="apple-touch-icon" href="/brand.png"><meta property="og:image" content="/banner.png"><meta name="theme-color" content="#0f766e">'
     )
     image('/brand.png')
     image('/banner.png')
@@ -135,7 +135,7 @@ describe('website branding through real safe-fetch and magic-byte seams', () => 
       domain: 'example.com',
       logoKey: 'logos/' + createHash('sha256').update(PNG).digest('hex') + '.png',
       logoUrl: '/api/storage/logos/' + createHash('sha256').update(PNG).digest('hex') + '.png',
-      color: '#8FBC8F',
+      color: '#0F766E',
     })
     expect(fixture.uploads).toHaveLength(1)
     expect(fixture.uploads[0].buffer).toEqual(PNG)
@@ -257,8 +257,8 @@ describe('website branding through real safe-fetch and magic-byte seams', () => 
     expect(fixture.requests).toHaveLength(1)
     expect(fixture.uploads).toHaveLength(0)
   })
-  it('keeps a logo but skips a color that fails contrast against default ink', async () => {
-    page('<meta name="theme-color" content="#0F766E">')
+  it('keeps a logo but skips a white theme color', async () => {
+    page('<meta name="theme-color" content="#FAFAFA">')
     image('/favicon.ico', ICO, 'image/x-icon')
     expect(await fetchWebsiteBranding('example.com')).toMatchObject({ color: null })
   })

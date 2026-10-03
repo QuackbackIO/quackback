@@ -230,7 +230,7 @@ describe('website settings through real MCP SDK, Postgres and scoped storage', (
         })
         expect(
           pending.args.changes.filter(({ id }) => id.endsWith('.primary')).map(({ after }) => after)
-        ).toEqual(['#8FBC8F', '#8FBC8F'])
+        ).toEqual(['#0F766E', '#0F766E'])
         expect(await read()).toEqual(before)
         expect(await database.select().from(assistantPendingActions)).toHaveLength(1)
         expect(await database.select().from(auditLog)).toHaveLength(0)
@@ -288,8 +288,8 @@ describe('website settings through real MCP SDK, Postgres and scoped storage', (
           .from(settings)
           .where(eq(settings.id, seeded.workspace.id))
         expect(JSON.parse(after.brandingConfig!)).toEqual({
-          light: { primary: '#8FBC8F' },
-          dark: { primary: '#8FBC8F' },
+          light: { primary: '#0F766E' },
+          dark: { primary: '#0F766E' },
         })
         await database
           .update(settings)

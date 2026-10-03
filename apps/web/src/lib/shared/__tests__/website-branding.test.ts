@@ -5,7 +5,6 @@ import {
   companyEmailDomain,
 } from '../personal-email-domains'
 import { normalizeHexColor, hexContrastRatio, safeWebsiteBrandColor } from '../website-brand-color'
-import { DEFAULT_LIGHT_BASE } from '../theme/expand'
 
 describe('email domains for website branding', () => {
   it('normalizes a company domain from a valid email', () => {
@@ -69,13 +68,21 @@ describe('safe website color', () => {
     ])
       expect(normalizeHexColor(value)).toBeNull()
   })
-  it('computes real contrast and checks the actual default light ink', () => {
+  it('computes real contrast', () => {
     expect(hexContrastRatio('#000000', '#FFFFFF')).toBeCloseTo(21, 6)
     expect(hexContrastRatio('#000000', '#000000')).toBe(1)
-    expect(safeWebsiteBrandColor('#FFFFFF')).toBe('#FFFFFF')
-    expect(safeWebsiteBrandColor('#0A0A0A')).toBeNull()
-    expect(safeWebsiteBrandColor('#0F766E')).toBeNull()
-    expect(hexContrastRatio('#8FBC8F', DEFAULT_LIGHT_BASE.foreground)).toBeGreaterThanOrEqual(4.5)
-    expect(safeWebsiteBrandColor('#8fbc8f')).toBe('#8FBC8F')
+    expect(hexContrastRatio('#0F766E', '#FFFFFF')).toBeCloseTo(5.47, 2)
+  })
+  it('keeps real brand fills that carry white text', () => {
+    for (const color of ['#0F766E', '#1D4ED8', '#7C3AED', '#B45309', '#059669'])
+      expect(safeWebsiteBrandColor(color.toLowerCase())).toBe(color)
+  })
+  it('skips white and near-white theme colors that the fill under white text cannot carry', () => {
+    for (const color of ['#FFFFFF', '#FAFAFA', '#fff', '#8FBC8F', '#F4AA00'])
+      expect(safeWebsiteBrandColor(color)).toBeNull()
+  })
+  it('skips black, grey and slate theme colors with too little chroma to be a brand color', () => {
+    for (const color of ['#000000', '#0A0A0A', '#18181B', '#6B7280', '#1E293B', '#475569'])
+      expect(safeWebsiteBrandColor(color)).toBeNull()
   })
 })
