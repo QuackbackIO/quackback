@@ -32,7 +32,7 @@ export function GettingStartedCard({
   const intl = useIntl()
   const summary = launchChecklistSummary(status)
   const rows = compact && !full
-  if (summary.resolved && !full && !brandingNotice) return null
+  if (summary.resolved && !full) return null
   const tasks = full
     ? summary.tasks
     : summary.tasks

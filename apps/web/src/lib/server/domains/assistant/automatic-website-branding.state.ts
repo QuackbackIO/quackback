@@ -1,52 +1,106 @@
 import { z } from 'zod'
-import {
-  db,
-  eq,
-  principal,
-  user,
-  assistantPendingActions,
-  type Database,
-  type Transaction,
-} from '@/lib/server/db'
+import { db, eq, principal, user, type Database, type Transaction } from '@/lib/server/db'
 import type { Actor } from '@/lib/server/policy/types'
 import { permissionsForPrincipal } from '@/lib/server/policy/permissions'
+import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { ForbiddenError, ConflictError } from '@/lib/shared/errors'
 import type { AutomaticBrandingStatus } from '@/lib/shared/website-branding'
 import { settingsProposalSchema } from '@/lib/shared/assistant/settings-proposals'
 import {
+  at,
+  columnValue,
   equal,
   type SettingsApplyReceipt,
 } from '@/lib/server/domains/assistant/settings-proposals.storage'
 import {
   parseJsonOrNull,
+  writeMetadataKey,
   type SettingsRecord,
 } from '@/lib/server/domains/settings/settings.helpers'
 
-export const AUTOMATIC_BRANDING_TOOL = 'automatic_website_branding'
 export const AUTOMATIC_BRANDING_SOURCE = 'website_branding'
-export const brandingLookupSchema = z
+/** A lookup still pending after this long died with its process; it reads as failed. */
+export const STALE_CLAIM_MS = 5 * 60_000
+/** Home shows an applied or offered logo for this long after the lookup. */
+export const NOTICE_WINDOW_MS = 3 * 24 * 60 * 60_000
+
+const AUTOMATIC_CHANGE_IDS = ['branding.logoKey', 'branding.light.primary', 'branding.dark.primary']
+
+const offerSchema = z
   .object({
-    version: z.literal(1),
-    status: z.enum(['pending', 'applied', 'undone', 'skipped', 'failed']),
-    domain: z.string().min(1).max(253),
-    claimId: z.uuid(),
-    ownerPrincipalId: z.string().min(1),
-    startedAt: z.iso.datetime(),
-    completedAt: z.iso.datetime().nullable(),
-    pendingActionId: z.string().nullable(),
+    logoKey: z
+      .string()
+      .regex(/^logos\/[a-zA-Z0-9_./-]+$/)
+      .max(512),
+    color: z
+      .string()
+      .regex(/^#[0-9A-F]{6}$/)
+      .nullable(),
   })
   .strict()
-export type BrandingLookup = z.infer<typeof brandingLookupSchema>
-export interface AutomaticBrandingReceipt extends SettingsApplyReceipt {
-  source: typeof AUTOMATIC_BRANDING_SOURCE
-  settingsId: string
-  claimId: string
-  domain: string
-  undoneAt?: string
+export type BrandingOffer = z.infer<typeof offerSchema>
+
+const storageEffectSchema = z
+  .object({
+    column: z.enum(['logoKey', 'brandingConfig']),
+    path: z.array(z.enum(['light', 'dark', 'primary'])).max(2),
+    before: z.unknown(),
+    after: z.unknown(),
+    beforePresent: z.boolean(),
+    afterPresent: z.boolean(),
+  })
+  .strict()
+  .refine((effect) =>
+    effect.column === 'logoKey'
+      ? effect.path.length === 0
+      : effect.path.length === 0 ||
+        ((effect.path[0] === 'light' || effect.path[0] === 'dark') &&
+          (effect.path.length === 1 || effect.path[1] === 'primary'))
+  )
+
+/** The settings receipt Undo restores from, stored with the lookup. */
+const receiptSchema = z
+  .object({
+    kind: z.literal('settings'),
+    version: z.literal(1),
+    changes: z.array(z.unknown()).min(1).max(3),
+    storageEffects: z.array(storageEffectSchema).min(1),
+    appliedAt: z.iso.datetime(),
+  })
+  .strict()
+
+const core = {
+  version: z.literal(1),
+  domain: z.string().min(1).max(253),
+  claimId: z.uuid(),
+  ownerPrincipalId: z.string().min(1),
+  startedAt: z.iso.datetime(),
+  completedAt: z.iso.datetime().nullable(),
 }
-export type AutomaticPendingAction = typeof assistantPendingActions.$inferSelect
+
+/**
+ * `settings.metadata.brandingLookup`. Any value under that key, including the
+ * `{ status: 'skipped', reason: 'existing' }` marker migration 0293 writes for
+ * workspaces that predate the lookup, means the lookup never runs again.
+ */
+export const brandingLookupSchema = z.discriminatedUnion('status', [
+  z.object({ ...core, status: z.literal('pending') }).strict(),
+  z.object({ ...core, status: z.literal('failed') }).strict(),
+  z.object({ ...core, status: z.literal('skipped') }).strict(),
+  z.object({ ...core, status: z.literal('offered'), offer: offerSchema }).strict(),
+  z.object({ ...core, status: z.literal('declined'), offer: offerSchema }).strict(),
+  z
+    .object({ ...core, status: z.literal('applied'), offer: offerSchema, receipt: receiptSchema })
+    .strict(),
+  z
+    .object({ ...core, status: z.literal('undone'), offer: offerSchema, receipt: receiptSchema })
+    .strict(),
+])
+export type BrandingLookup = z.infer<typeof brandingLookupSchema>
+
 type Executor = Database | Transaction
+
 export function automaticBrandingPermissionError(): ForbiddenError {
   return new ForbiddenError(
     'WEBSITE_BRANDING_PERMISSION_REQUIRED',
@@ -55,15 +109,28 @@ export function automaticBrandingPermissionError(): ForbiddenError {
 }
 export function automaticBrandingUnavailable(): ConflictError {
   return new ConflictError(
-    'WEBSITE_BRANDING_UNDO_UNAVAILABLE',
-    'This logo change cannot be undone.'
+    'WEBSITE_BRANDING_UNAVAILABLE',
+    'This branding change is no longer available.'
   )
 }
+export function automaticBrandingConflict(): ConflictError {
+  return new ConflictError(
+    'WEBSITE_BRANDING_UNDO_CONFLICT',
+    'The branding changed since then. Undo is unavailable.'
+  )
+}
+
 export function lookupFromRow(row: SettingsRecord): BrandingLookup | null {
   const parsed = brandingLookupSchema.safeParse(
     parseJsonOrNull<Record<string, unknown>>(row.metadata)?.brandingLookup
   )
   return parsed.success ? parsed.data : null
+}
+/** Write the lookup only in a shape it can be read back in; anything else aborts the write. */
+export async function storeLookup(tx: Transaction, lookup: unknown): Promise<BrandingLookup> {
+  const parsed = brandingLookupSchema.parse(lookup)
+  await writeMetadataKey('brandingLookup', parsed, { executor: tx })
+  return parsed
 }
 export function hasLookupAttempt(row: SettingsRecord): boolean {
   return Object.hasOwn(
@@ -71,6 +138,7 @@ export function hasLookupAttempt(row: SettingsRecord): boolean {
     'brandingLookup'
   )
 }
+
 export async function resolveAutomaticBrandingActor(actor: Actor, executor: Executor = db) {
   if (!actor.principalId || actor.principalType !== 'user') throw automaticBrandingPermissionError()
   const [person] = await executor
@@ -90,88 +158,49 @@ export async function resolveAutomaticBrandingActor(actor: Actor, executor: Exec
   if (!permissions.has(PERMISSIONS.SETTINGS_MANAGE)) throw automaticBrandingPermissionError()
   return { ...person, actor: { ...actor, role: person.role, permissions } as Actor, permissions }
 }
-const storageEffectSchema = z
-  .object({
-    column: z.enum(['logoKey', 'brandingConfig']),
-    path: z.array(z.enum(['light', 'dark', 'primary'])).max(2),
-    before: z.unknown(),
-    after: z.unknown(),
-    beforePresent: z.boolean(),
-    afterPresent: z.boolean(),
-  })
-  .strict()
-  .refine((effect) =>
-    effect.column === 'logoKey'
-      ? effect.path.length === 0
-      : effect.path.length === 0 ||
-        ((effect.path[0] === 'light' || effect.path[0] === 'dark') &&
-          (effect.path.length === 1 || effect.path[1] === 'primary'))
-  )
-const receiptSchema = z
-  .object({
-    kind: z.literal('settings'),
-    version: z.literal(1),
-    source: z.literal(AUTOMATIC_BRANDING_SOURCE),
-    settingsId: z.string(),
-    claimId: z.uuid(),
-    domain: z.string(),
-    changes: z.array(z.unknown()).min(1).max(3),
-    storageEffects: z.array(storageEffectSchema).min(1),
-    appliedAt: z.iso.datetime(),
-    undoneAt: z.iso.datetime().optional(),
-  })
-  .strict()
+export type AutomaticBrandingPerson = Awaited<ReturnType<typeof resolveAutomaticBrandingActor>>
 
-/** The metadata pointer authorizes only this workspace's automatic branding receipt. */
-export function automaticReceiptFor(
-  row: SettingsRecord,
-  lookup: BrandingLookup,
-  action: AutomaticPendingAction | undefined
-): AutomaticBrandingReceipt | null {
-  if (
-    !action ||
-    action.id !== lookup.pendingActionId ||
-    action.workspaceThreadKey !== `website-branding:${row.id}` ||
-    action.toolName !== AUTOMATIC_BRANDING_TOOL ||
-    action.status !== 'executed' ||
-    action.conversationId !== null ||
-    action.ticketId !== null
-  )
-    return null
-  const parsed = receiptSchema.safeParse(action.result)
-  if (
-    !parsed.success ||
-    parsed.data.settingsId !== row.id ||
-    parsed.data.claimId !== lookup.claimId ||
-    parsed.data.domain !== lookup.domain
-  )
-    return null
-  const receiptProposal = settingsProposalSchema.safeParse({
+/** The applied receipt, only when it holds nothing but this lookup's own branding changes. */
+export function receiptFromLookup(lookup: BrandingLookup): SettingsApplyReceipt | null {
+  if (lookup.status !== 'applied' && lookup.status !== 'undone') return null
+  const proposal = settingsProposalSchema.safeParse({
     kind: 'settings',
     version: 1,
-    changes: parsed.data.changes,
+    changes: lookup.receipt.changes,
   })
-  const storedProposal = settingsProposalSchema.safeParse(action.args)
   if (
-    !receiptProposal.success ||
-    !storedProposal.success ||
-    !equal(receiptProposal.data.changes, storedProposal.data.changes)
-  )
-    return null
-  if (
-    !receiptProposal.data.changes.some((change) => change.id === 'branding.logoKey') ||
-    receiptProposal.data.changes.some(
-      (change) =>
-        change.area !== 'branding' ||
-        !['branding.logoKey', 'branding.light.primary', 'branding.dark.primary'].includes(change.id)
+    !proposal.success ||
+    !proposal.data.changes.some(
+      (change) => change.id === 'branding.logoKey' && change.after === lookup.offer.logoKey
+    ) ||
+    proposal.data.changes.some(
+      (change) => change.area !== 'branding' || !AUTOMATIC_CHANGE_IDS.includes(change.id)
     )
   )
     return null
-  return { ...parsed.data, changes: receiptProposal.data.changes } as AutomaticBrandingReceipt
+  return { ...lookup.receipt, changes: proposal.data.changes } as SettingsApplyReceipt
 }
-export function receiptPermissions(
+
+/** Undo needs every stored field it touched to still hold the applied value. */
+export function receiptStillApplies(row: SettingsRecord, receipt: SettingsApplyReceipt): boolean {
+  return receipt.storageEffects.every((effect) => {
+    let current: unknown
+    try {
+      current = columnValue(row, effect.column)
+    } catch {
+      return false
+    }
+    const value = effect.path.length === 0 ? current : at(current, effect.path)
+    return (
+      equal(value ?? null, effect.after) &&
+      (effect.path.length === 0 || (value !== undefined) === effect.afterPresent)
+    )
+  })
+}
+
+export function receiptPermitted(
   permissions: ReadonlySet<PermissionKey>,
-  receipt: AutomaticBrandingReceipt
+  receipt: SettingsApplyReceipt
 ): boolean {
   return receipt.changes.every((change) =>
     permissions.has(
@@ -179,30 +208,49 @@ export function receiptPermissions(
     )
   )
 }
-export function statusFromLookup(lookup: BrandingLookup, canUndo = false): AutomaticBrandingStatus {
-  return {
-    domain: lookup.domain,
-    pendingActionId: lookup.pendingActionId,
-    status: lookup.status,
-    canUndo,
-  }
+
+export function quietStatus(
+  domain: string,
+  status: AutomaticBrandingStatus['status']
+): AutomaticBrandingStatus {
+  return { domain, status, logoUrl: null, colorApplied: false, canUndo: false, canUse: false }
 }
-export async function automaticStatusForRow(
+
+/**
+ * What Home shows for a recorded lookup, or null once there is nothing to show:
+ * an offer answered by a logo set by hand, an applied change edited since, or
+ * either one older than the notice window.
+ */
+export function presentLookup(
   row: SettingsRecord,
+  lookup: BrandingLookup,
   permissions: ReadonlySet<PermissionKey>,
-  executor: Executor = db
-): Promise<AutomaticBrandingStatus | null> {
-  const lookup = lookupFromRow(row)
-  if (!lookup) return null
-  if (lookup.status !== 'applied') return statusFromLookup(lookup)
-  if (!lookup.pendingActionId) return null
-  const [action] = await executor
-    .select()
-    .from(assistantPendingActions)
-    .where(eq(assistantPendingActions.id, lookup.pendingActionId as AutomaticPendingAction['id']))
-    .limit(1)
-  const receipt = automaticReceiptFor(row, lookup, action)
-  const logo = receipt?.changes.find((change) => change.id === 'branding.logoKey')
-  if (!receipt || row.logoKey !== logo?.after) return null
-  return statusFromLookup(lookup, !receipt.undoneAt && receiptPermissions(permissions, receipt))
+  now = Date.now()
+): AutomaticBrandingStatus | null {
+  if (lookup.status === 'pending')
+    return quietStatus(
+      lookup.domain,
+      now - Date.parse(lookup.startedAt) > STALE_CLAIM_MS ? 'failed' : 'pending'
+    )
+  const recent =
+    lookup.completedAt !== null && now - Date.parse(lookup.completedAt) < NOTICE_WINDOW_MS
+  if (lookup.status === 'offered') {
+    if (!recent || row.logoKey) return null
+    return {
+      ...quietStatus(lookup.domain, 'offered'),
+      logoUrl: getPublicUrlOrNull(lookup.offer.logoKey),
+      canUse: true,
+    }
+  }
+  if (lookup.status === 'applied') {
+    const receipt = receiptFromLookup(lookup)
+    if (!recent || !receipt || !receiptStillApplies(row, receipt)) return null
+    return {
+      ...quietStatus(lookup.domain, 'applied'),
+      logoUrl: getPublicUrlOrNull(lookup.offer.logoKey),
+      colorApplied: receipt.changes.some((change) => change.id !== 'branding.logoKey'),
+      canUndo: receiptPermitted(permissions, receipt),
+    }
+  }
+  return quietStatus(lookup.domain, lookup.status)
 }

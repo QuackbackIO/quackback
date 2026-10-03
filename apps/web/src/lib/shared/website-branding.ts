@@ -1,8 +1,24 @@
+/**
+ * Automatic website branding as Home sees it.
+ *
+ * - `eligible`: no lookup has run and this teammate may start one.
+ * - `pending`: a lookup is fetching the website.
+ * - `offered`: a weak logo waits for "Use it" or "Not now".
+ * - `applied`: the logo (and maybe the color) changed, with Undo.
+ * - the rest are quiet end states.
+ */
 export type AutomaticBrandingStatus = {
   domain: string
-  pendingActionId: string | null
-  status: 'pending' | 'applied' | 'undone' | 'skipped' | 'failed'
+  status:
+    'eligible' | 'pending' | 'offered' | 'applied' | 'declined' | 'undone' | 'skipped' | 'failed'
+  /** The stored logo for a thumbnail, while offered or applied. */
+  logoUrl: string | null
+  /** Whether the applied change also set the brand color. */
+  colorApplied: boolean
+  /** Undo for an applied change. */
   canUndo: boolean
+  /** "Use it" and "Not now" for an offered logo. */
+  canUse: boolean
 }
 
 /** Website branding fetches use only the standard web ports and never carry credentials. */

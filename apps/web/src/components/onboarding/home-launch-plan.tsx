@@ -34,16 +34,6 @@ export function HomeGettingStarted({
 }) {
   const intl = useIntl()
   const tour = useProductTour()
-  const branding = useAutomaticWebsiteBranding({ enabled: !full })
-  const brandingNotice =
-    !full && branding.status?.status === 'applied' ? (
-      <AutomaticBrandingNotice
-        status={branding.status}
-        pending={branding.pending}
-        error={branding.error}
-        onUndo={branding.undo}
-      />
-    ) : undefined
   const progress = useQuery({
     queryKey: ['onboarding', 'progress'],
     queryFn: () => getOnboardingProgressFn(),
@@ -59,6 +49,23 @@ export function HomeGettingStarted({
       return !data.hasFirstWin ? 15_000 : false
     },
   })
+  const planActive = isLaunchPlanActive(launchChecklistSummary(statusQuery.data))
+  // The lookup starts only while its notice has a live launch plan to sit in.
+  const branding = useAutomaticWebsiteBranding({ enabled: !full && planActive })
+  const brandingShown =
+    branding.status?.status === 'applied' ||
+    (branding.status?.status === 'offered' && branding.status.canUse)
+  const brandingNotice = !full && brandingShown && (
+    <AutomaticBrandingNotice
+      status={branding.status}
+      pending={branding.pending}
+      error={branding.error}
+      compact={compact}
+      onUndo={branding.undo}
+      onAccept={branding.accept}
+      onDismiss={branding.dismiss}
+    />
+  )
   const resolutionMutation = useMutation({
     mutationFn: (data: { taskId: string; resolution: 'dismissed' | null }) =>
       setLaunchTaskResolutionFn({
@@ -107,7 +114,7 @@ export function HomeGettingStarted({
           </Button>
         </section>
       )}
-      {full || brandingNotice || isLaunchPlanActive(launchChecklistSummary(statusQuery.data)) ? (
+      {full || planActive ? (
         <GettingStartedCard
           full={full}
           portalUrl={portalUrl}

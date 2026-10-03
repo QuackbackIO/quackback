@@ -1,7 +1,8 @@
 import { EventEmitter } from 'node:events'
 
+/** A real 180px PNG, so the fetcher grades it a good logo and stops at the first candidate. */
 export const BRANDING_PNG = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==',
+  'iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAAAAAAYplnuAAAANklEQVR42u3BMQEAAADCoPVPbQlPoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADgY39EAAEijVlTAAAAAElFTkSuQmCC',
   'base64'
 )
 export interface BrandingTransportState {

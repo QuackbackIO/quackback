@@ -1462,5 +1462,14 @@
   "ask.settings.field.shadow2xl": "Shadow 2XL",
   "ask.settings.nameManaged": "Open General settings to change this workspace name.",
   "onboarding.branding.fromWebsite": "Logo from {domain}",
+  "onboarding.branding.logoAndColorFromWebsite": "Logo and color from {domain}",
+  "onboarding.branding.offer": "Use the logo from {domain}?",
+  "onboarding.branding.use": "Use it",
+  "onboarding.branding.notNow": "Not now",
+  "onboarding.branding.undo": "Undo",
+  "onboarding.branding.undoConflict": "The branding changed since then. Undo is unavailable.",
+  "onboarding.branding.permissionRequired": "Ask a workspace Owner to change the branding.",
+  "onboarding.branding.unavailable": "This branding change is no longer available.",
+  "onboarding.branding.failed": "The branding could not be saved. Try again.",
   "ask.settings.websiteUnavailable": "Choose another website or upload a logo in Portal settings."
 }

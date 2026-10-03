@@ -236,6 +236,9 @@ const configSchema = z
 
     // Telemetry (optional)
     disableTelemetry: envBoolean,
+
+    // Automatic website branding for new workspaces (optional)
+    disableAutomaticBranding: envBoolean,
   })
   .superRefine((cfg, ctx) => {
     // A wildcard is a routing pattern, never an origin. Refused in every mode:
@@ -376,6 +379,9 @@ function buildConfigFromEnv(): unknown {
 
     // Telemetry
     disableTelemetry: env('DISABLE_TELEMETRY'),
+
+    // Automatic website branding
+    disableAutomaticBranding: env('DISABLE_AUTOMATIC_BRANDING'),
   }
 }
 
@@ -666,6 +672,12 @@ export const config = {
   // Telemetry
   get disableTelemetry() {
     return loadConfig().disableTelemetry
+  },
+
+  // Automatic website branding: true stops the first-run lookup of the
+  // administrator's company website.
+  get disableAutomaticBranding() {
+    return loadConfig().disableAutomaticBranding
   },
 
   // Help center

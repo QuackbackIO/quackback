@@ -111,7 +111,7 @@ describe('workspace Copilot session route', () => {
 })
 
 describe('automatic website branding authorization', () => {
-  it('requires current settings management before lookup, private status or Undo', () => {
+  it('requires current settings management before lookup, private status, an offer answer or Undo', () => {
     const brandingOnly = {
       ...byId('admin'),
       permissions: new Set<PermissionKey>(['settings.branding']),
@@ -120,6 +120,8 @@ describe('automatic website branding authorization', () => {
       'startAutomaticWebsiteBrandingFn',
       'getAutomaticWebsiteBrandingStatusFn',
       'undoAutomaticWebsiteBrandingFn',
+      'acceptWebsiteBrandingOfferFn',
+      'declineWebsiteBrandingOfferFn',
     ]) {
       const surface = surfaces.find(
         (item) => item.file === 'lib/server/functions/website-branding.ts' && item.surface === name

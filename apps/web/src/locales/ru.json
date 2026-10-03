@@ -1462,5 +1462,14 @@
   "ask.settings.field.shadow2xl": "Тень 2XL",
   "ask.settings.nameManaged": "Откройте общие настройки, чтобы изменить название этого рабочего пространства.",
   "onboarding.branding.fromWebsite": "Логотип с {domain}",
+  "onboarding.branding.logoAndColorFromWebsite": "Логотип и цвет с {domain}",
+  "onboarding.branding.offer": "Использовать логотип с {domain}?",
+  "onboarding.branding.use": "Использовать",
+  "onboarding.branding.notNow": "Не сейчас",
+  "onboarding.branding.undo": "Отменить",
+  "onboarding.branding.undoConflict": "С тех пор оформление изменилось. Отмена недоступна.",
+  "onboarding.branding.permissionRequired": "Попросите владельца рабочего пространства изменить оформление.",
+  "onboarding.branding.unavailable": "Это изменение оформления больше недоступно.",
+  "onboarding.branding.failed": "Не удалось сохранить оформление. Попробуйте ещё раз.",
   "ask.settings.websiteUnavailable": "Выберите другой сайт или загрузите логотип в настройках портала."
 }

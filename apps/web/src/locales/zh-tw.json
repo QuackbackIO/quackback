@@ -1462,5 +1462,14 @@
   "ask.settings.field.shadow2xl": "陰影 2XL",
   "ask.settings.nameManaged": "開啟一般設定以變更此工作區的名稱。",
   "onboarding.branding.fromWebsite": "標誌來自 {domain}",
+  "onboarding.branding.logoAndColorFromWebsite": "標誌和顏色來自 {domain}",
+  "onboarding.branding.offer": "使用來自 {domain} 的標誌？",
+  "onboarding.branding.use": "使用",
+  "onboarding.branding.notNow": "暫不",
+  "onboarding.branding.undo": "復原",
+  "onboarding.branding.undoConflict": "品牌設定已變更，無法復原。",
+  "onboarding.branding.permissionRequired": "請工作區擁有者變更品牌設定。",
+  "onboarding.branding.unavailable": "此品牌設定變更已無法使用。",
+  "onboarding.branding.failed": "無法儲存品牌設定。請重試。",
   "ask.settings.websiteUnavailable": "選擇其他網站，或在入口網站設定中上傳標誌。"
 }

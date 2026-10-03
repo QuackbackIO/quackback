@@ -70,6 +70,10 @@ export default defineConfig({
       '@quackback/db/migrate': path.resolve(__dirname, './packages/db/src/migrate-runtime.ts'),
       '@quackback/db/schema': path.resolve(__dirname, './packages/db/src/schema/index.ts'),
       '@quackback/db/types': path.resolve(__dirname, './packages/db/src/types.ts'),
+      '@quackback/db/email/personal-email-domains': path.resolve(
+        __dirname,
+        './packages/db/src/email/personal-email-domains.ts'
+      ),
       '@quackback/db': path.resolve(__dirname, './packages/db/index.ts'),
       // Path alias for apps/web (matches tsconfig.json baseUrl: "./src" + "@/*": ["./*"])
       '@': path.resolve(__dirname, './apps/web/src'),

@@ -1462,5 +1462,14 @@
   "ask.settings.field.shadow2xl": "الظل 2XL",
   "ask.settings.nameManaged": "افتح الإعدادات العامة لتغيير اسم مساحة العمل هذه.",
   "onboarding.branding.fromWebsite": "شعار من {domain}",
+  "onboarding.branding.logoAndColorFromWebsite": "الشعار واللون من {domain}",
+  "onboarding.branding.offer": "هل تريد استخدام الشعار من {domain}؟",
+  "onboarding.branding.use": "استخدمه",
+  "onboarding.branding.notNow": "ليس الآن",
+  "onboarding.branding.undo": "تراجع",
+  "onboarding.branding.undoConflict": "تغيّرت العلامة التجارية منذ ذلك الحين. التراجع غير متاح.",
+  "onboarding.branding.permissionRequired": "اطلب من مالك مساحة العمل تغيير العلامة التجارية.",
+  "onboarding.branding.unavailable": "لم يعد تغيير العلامة التجارية هذا متاحًا.",
+  "onboarding.branding.failed": "تعذر حفظ العلامة التجارية. حاول مجددًا.",
   "ask.settings.websiteUnavailable": "اختر موقعًا آخر أو حمّل شعارًا في إعدادات البوابة."
 }

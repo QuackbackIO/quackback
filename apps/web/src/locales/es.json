@@ -1462,5 +1462,14 @@
   "ask.settings.field.shadow2xl": "Sombra 2XL",
   "ask.settings.nameManaged": "Abre la configuración general para cambiar el nombre de este espacio de trabajo.",
   "onboarding.branding.fromWebsite": "Logotipo de {domain}",
+  "onboarding.branding.logoAndColorFromWebsite": "Logotipo y color de {domain}",
+  "onboarding.branding.offer": "¿Usar el logotipo de {domain}?",
+  "onboarding.branding.use": "Usarlo",
+  "onboarding.branding.notNow": "Ahora no",
+  "onboarding.branding.undo": "Deshacer",
+  "onboarding.branding.undoConflict": "La marca cambió desde entonces. No se puede deshacer.",
+  "onboarding.branding.permissionRequired": "Pide a un propietario del espacio de trabajo que cambie la marca.",
+  "onboarding.branding.unavailable": "Este cambio de marca ya no está disponible.",
+  "onboarding.branding.failed": "No se pudo guardar la marca. Inténtalo de nuevo.",
   "ask.settings.websiteUnavailable": "Elige otro sitio web o sube un logotipo en los ajustes del Portal."
 }

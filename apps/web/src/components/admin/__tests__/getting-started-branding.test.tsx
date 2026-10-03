@@ -39,14 +39,21 @@ const completed: LaunchStatus = {
   goals: ['product_feedback'],
 }
 
-function mount(notice?: ReactNode) {
-  render(
+const open: LaunchStatus = {
+  ...completed,
+  hasBoards: false,
+  hasPublicBoard: false,
+  publicBoardLinkCopiedAt: null,
+}
+
+function mount(status: LaunchStatus, notice?: ReactNode) {
+  return render(
     <IntlProvider locale="en">
       <GettingStartedCard
-        status={completed}
+        status={status}
         pending={false}
         onSkip={() => {
-          throw new Error('A completed task cannot be skipped')
+          throw new Error('Skipping is not part of this test')
         }}
         onCreateBoard={() => {
           throw new Error('A completed board cannot be created')
@@ -57,23 +64,27 @@ function mount(notice?: ReactNode) {
   )
 }
 
-it('keeps the automatic logo notice and Undo in the live portal tile after the plan is complete', () => {
+it('shows the automatic logo notice and Undo in the live portal tile of an active plan', () => {
   const undo = vi.fn()
   mount(
+    open,
     <span>
       Logo from example.com · <button onClick={undo}>Undo</button>
     </span>
   )
-  expect(screen.getByRole('heading', { name: 'Portal is live' })).toBeVisible()
-  expect(screen.getByText('Logo from example.com ·')).toBeVisible()
   const tile = screen.getByRole('heading', { name: 'Portal is live' }).closest('li')!
   expect(tile).toContainElement(screen.getByRole('button', { name: 'Undo' }))
   fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
   expect(undo).toHaveBeenCalledTimes(1)
 })
 
-it('keeps a completed launch plan quiet when it has no automatic change to review', () => {
-  mount()
-  expect(screen.queryByRole('heading', { name: 'Your launch plan' })).toBeNull()
-  expect(screen.queryByRole('heading', { name: 'Portal is live' })).toBeNull()
+it('never brings a resolved launch plan back for a branding notice', () => {
+  const view = mount(
+    completed,
+    <span>
+      Logo from example.com · <button>Undo</button>
+    </span>
+  )
+  expect(view.container).toBeEmptyDOMElement()
+  expect(screen.queryByText(/Logo from example.com/)).toBeNull()
 })

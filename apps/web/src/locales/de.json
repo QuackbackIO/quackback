@@ -1462,5 +1462,14 @@
   "ask.settings.field.shadow2xl": "Schatten 2XL",
   "ask.settings.nameManaged": "Öffne die allgemeinen Einstellungen, um den Namen dieses Arbeitsbereichs zu ändern.",
   "onboarding.branding.fromWebsite": "Logo von {domain}",
+  "onboarding.branding.logoAndColorFromWebsite": "Logo und Farbe von {domain}",
+  "onboarding.branding.offer": "Das Logo von {domain} verwenden?",
+  "onboarding.branding.use": "Verwenden",
+  "onboarding.branding.notNow": "Nicht jetzt",
+  "onboarding.branding.undo": "Rückgängig",
+  "onboarding.branding.undoConflict": "Das Branding wurde seitdem geändert. Rückgängig ist nicht verfügbar.",
+  "onboarding.branding.permissionRequired": "Bitte einen Workspace-Eigentümer, das Branding zu ändern.",
+  "onboarding.branding.unavailable": "Diese Branding-Änderung ist nicht mehr verfügbar.",
+  "onboarding.branding.failed": "Das Branding konnte nicht gespeichert werden. Versuche es erneut.",
   "ask.settings.websiteUnavailable": "Wähle eine andere Website oder lade ein Logo in den Portal-Einstellungen hoch."
 }

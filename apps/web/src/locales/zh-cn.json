@@ -1462,5 +1462,14 @@
   "ask.settings.field.shadow2xl": "阴影 2XL",
   "ask.settings.nameManaged": "打开常规设置以更改此工作区的名称。",
   "onboarding.branding.fromWebsite": "标志来自 {domain}",
+  "onboarding.branding.logoAndColorFromWebsite": "标志和颜色来自 {domain}",
+  "onboarding.branding.offer": "使用来自 {domain} 的标志？",
+  "onboarding.branding.use": "使用",
+  "onboarding.branding.notNow": "暂不",
+  "onboarding.branding.undo": "撤销",
+  "onboarding.branding.undoConflict": "品牌设置已更改，无法撤销。",
+  "onboarding.branding.permissionRequired": "请工作区所有者更改品牌设置。",
+  "onboarding.branding.unavailable": "此品牌设置更改已不可用。",
+  "onboarding.branding.failed": "无法保存品牌设置。请重试。",
   "ask.settings.websiteUnavailable": "选择另一个网站，或在门户设置中上传标志。"
 }

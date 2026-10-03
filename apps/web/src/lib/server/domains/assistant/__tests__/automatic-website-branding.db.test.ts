@@ -17,8 +17,10 @@ import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import type { Actor } from '@/lib/server/policy/types'
 import { ALL_PERMISSIONS, PERMISSIONS } from '@/lib/shared/permissions'
 import type { WebsiteBranding } from '@/lib/server/content/website-branding'
-import { assertPendingWorkspaceParent } from '@/lib/server/domains/assistant/pending-action-parent'
+import { invalidateTierLimitsCache } from '@/lib/server/domains/settings/tier-limits.service'
 import {
+  acceptWebsiteBrandingOffer,
+  declineWebsiteBrandingOffer,
   ensureAutomaticWebsiteBranding,
   getAutomaticWebsiteBrandingStatus,
   undoAutomaticWebsiteBranding,
@@ -28,8 +30,12 @@ const seams = vi.hoisted(() => ({
   fetch: vi.fn(),
   objects: new Map<string, string>(),
   failAudit: false,
+  available: true,
 }))
 vi.mock('@/lib/server/content/website-branding', () => ({ fetchWebsiteBranding: seams.fetch }))
+vi.mock('../automatic-website-branding.availability', () => ({
+  automaticBrandingAvailable: () => seams.available,
+}))
 vi.mock('@/lib/server/db', async (original) => ({
   ...(await original<typeof import('@/lib/server/db')>()),
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
@@ -75,32 +81,49 @@ const fixture = await createDbTestFixture({
     const current = getExecuteRows<{ name: string }>(
       await db.execute(sql`select current_database() as name`)
     )[0]
-    if (current?.name !== 'quackback_test')
-      throw new Error('Automatic branding requires quackback_test')
-    await db
-      .select({ key: assistantPendingActions.workspaceThreadKey })
-      .from(assistantPendingActions)
-      .limit(0)
+    if (!current?.name.startsWith('quackback_test'))
+      throw new Error('Automatic branding requires a quackback_test database')
+    await db.select({ metadata: settings.metadata }).from(settings).limit(0)
   },
 })
 if (!fixture.available)
-  throw new Error('Migrate quackback_test before running automatic branding tests')
+  throw new Error('Migrate a quackback_test database before running automatic branding tests')
 let actor: Actor, other: Actor, settingsId: WorkspaceId
-const expected: WebsiteBranding = {
+const good: WebsiteBranding = {
   domain: 'example.com',
-  logoKey: 'logos/acme.ico',
-  logoUrl: '/api/storage/logos/acme.ico',
+  logoKey: 'logos/acme.png',
+  logoUrl: '/api/storage/logos/acme.png',
   quality: 'good',
   color: '#0F766E',
+}
+const weak: WebsiteBranding = {
+  ...good,
+  logoKey: 'logos/acme.ico',
+  logoUrl: '/api/storage/logos/acme.ico',
+  quality: 'weak',
 }
 const read = async () =>
   (await testDb.select().from(settings).where(eq(settings.id, settingsId)))[0]
 const metadata = async () => JSON.parse((await read()).metadata!)
-const actions = () =>
+const setRow = (values: Partial<typeof settings.$inferInsert>) =>
+  testDb.update(settings).set(values).where(eq(settings.id, settingsId))
+const setLookup = async (patch: Record<string, unknown>) => {
+  const bag = await metadata()
+  await setRow({
+    metadata: JSON.stringify({ ...bag, brandingLookup: { ...bag.brandingLookup, ...patch } }),
+  })
+}
+const audits = (event: string) =>
   testDb
     .select()
-    .from(assistantPendingActions)
-    .where(eq(assistantPendingActions.workspaceThreadKey, `website-branding:${settingsId}`))
+    .from(auditLog)
+    .where(and(eq(auditLog.eventType, event), eq(auditLog.targetId, settingsId)))
+const daysAgo = (days: number) => new Date(Date.now() - days * 24 * 60 * 60_000).toISOString()
+const fetchReturns = (result: WebsiteBranding | null) =>
+  seams.fetch.mockImplementation(async (site: string) => {
+    expect(site).toBe('example.com')
+    return result
+  })
 async function person(email: string): Promise<Actor> {
   const userId = createId('user') as UserId,
     principalId = createId('principal') as PrincipalId
@@ -118,10 +141,21 @@ async function person(email: string): Promise<Actor> {
     ),
   }
 }
+async function revokeAll(target: Actor) {
+  const [empty] = await testDb
+    .insert(roles)
+    .values({ key: `none-${createId('role')}`, name: 'No settings', isSystem: false })
+    .returning()
+  await testDb
+    .insert(principalRoleAssignments)
+    .values({ principalId: target.principalId!, roleId: empty.id })
+}
 beforeEach(async () => {
   await fixture.begin()
+  invalidateTierLimitsCache()
   seams.objects.clear()
   seams.failAudit = false
+  seams.available = true
   actor = await person(`you+${createId('user')}@example.com`)
   other = await person(`other+${createId('user')}@example.com`)
   const [existing] = await testDb.select().from(settings).limit(1)
@@ -134,83 +168,91 @@ beforeEach(async () => {
         .returning()
     )[0]
   settingsId = row.id
-  await testDb
-    .update(settings)
-    .set({
-      logoKey: null,
-      brandingConfig: null,
-      customCss: null,
-      metadata: JSON.stringify({ sibling: 'keep' }),
-      featureFlags: '{}',
-      cloudIdentity: null,
-    })
-    .where(eq(settings.id, settingsId))
-  seams.objects.set(expected.logoKey, 'image/x-icon')
-  seams.fetch.mockImplementation(async (site: string) => {
-    expect(site).toBe('example.com')
-    return expected
+  await setRow({
+    logoKey: null,
+    brandingConfig: null,
+    customCss: null,
+    tierLimits: null,
+    metadata: JSON.stringify({ sibling: 'keep' }),
+    featureFlags: '{}',
+    cloudIdentity: null,
   })
+  seams.objects.set(good.logoKey, 'image/png')
+  seams.objects.set(weak.logoKey, 'image/x-icon')
+  fetchReturns(good)
 })
 afterEach(async () => {
   await fixture.rollback()
+  invalidateTierLimitsCache()
   vi.clearAllMocks()
 })
 afterAll(() => fixture.close())
 
 describe('automatic website branding (real Postgres)', () => {
-  it('applies logo and both default appearances with one stored receipt and atomic audit', async () => {
-    const status = await ensureAutomaticWebsiteBranding(actor)
-    expect(status).toMatchObject({ domain: 'example.com', status: 'applied', canUndo: true })
+  it('applies a good logo and both default appearances with the receipt in the lookup and an atomic audit', async () => {
+    expect(await getAutomaticWebsiteBrandingStatus(actor)).toMatchObject({
+      domain: 'example.com',
+      status: 'eligible',
+    })
+    expect(await ensureAutomaticWebsiteBranding(actor)).toEqual({
+      domain: 'example.com',
+      status: 'applied',
+      logoUrl: '/api/storage/logos/acme.png',
+      colorApplied: true,
+      canUndo: true,
+      canUse: false,
+    })
     const row = await read()
-    expect(row.logoKey).toBe(expected.logoKey)
+    expect(row.logoKey).toBe(good.logoKey)
     expect(JSON.parse(row.brandingConfig!)).toEqual({
-      light: { primary: expected.color },
-      dark: { primary: expected.color },
+      light: { primary: good.color },
+      dark: { primary: good.color },
     })
-    const [action] = await actions()
-    expect(action).toMatchObject({
-      toolName: 'automatic_website_branding',
-      status: 'executed',
-      result: { source: 'website_branding', settingsId, changes: expect.any(Array) },
+    const bag = await metadata()
+    expect(bag.sibling).toBe('keep')
+    expect(bag.brandingLookup).toMatchObject({
+      status: 'applied',
+      offer: { logoKey: good.logoKey, color: good.color },
+      receipt: { kind: 'settings', storageEffects: expect.any(Array) },
     })
-    expect((await metadata()).sibling).toBe('keep')
+    expect(await audits('branding.website.applied')).toHaveLength(1)
     expect(
       await testDb
         .select()
-        .from(auditLog)
-        .where(
-          and(eq(auditLog.eventType, 'branding.website.applied'), eq(auditLog.targetId, action.id))
-        )
-    ).toHaveLength(1)
+        .from(assistantPendingActions)
+        .where(eq(assistantPendingActions.toolName, 'automatic_website_branding'))
+    ).toHaveLength(0)
   })
-  it('lets another permitted admin Undo without Copilot or AI', async () => {
+
+  it('lets another permitted admin Undo without Copilot or AI, once', async () => {
     await ensureAutomaticWebsiteBranding(actor)
     expect(await getAutomaticWebsiteBrandingStatus(other)).toMatchObject({
       status: 'applied',
       canUndo: true,
     })
-    expect(await undoAutomaticWebsiteBranding(other)).toMatchObject({
-      status: 'undone',
-      canUndo: false,
-    })
+    expect(await undoAutomaticWebsiteBranding(other)).toMatchObject({ status: 'undone' })
     expect((await read()).logoKey).toBeNull()
     expect((await read()).brandingConfig).toBeNull()
-    expect(seams.objects.has(expected.logoKey)).toBe(true)
+    expect(seams.objects.has(good.logoKey)).toBe(true)
     expect((await metadata()).sibling).toBe('keep')
-    expect((await actions())[0].result).toMatchObject({ undoneAt: expect.any(String) })
+    expect(await audits('branding.website.undone')).toHaveLength(1)
     await expect(undoAutomaticWebsiteBranding(other)).rejects.toMatchObject({
-      code: 'WEBSITE_BRANDING_UNDO_UNAVAILABLE',
+      code: 'WEBSITE_BRANDING_UNAVAILABLE',
     })
+    await ensureAutomaticWebsiteBranding(actor)
+    expect(seams.fetch).toHaveBeenCalledOnce()
   })
+
   it('applies only the logo without color authority and checks every affected Undo permission', async () => {
     const logoOnly = { ...actor, permissions: new Set([PERMISSIONS.SETTINGS_MANAGE]) }
     expect(await ensureAutomaticWebsiteBranding(logoOnly)).toMatchObject({
       status: 'applied',
+      colorApplied: false,
       canUndo: true,
     })
     expect((await read()).brandingConfig).toBeNull()
     await undoAutomaticWebsiteBranding(logoOnly)
-    await testDb.update(settings).set({ metadata: '{}' }).where(eq(settings.id, settingsId))
+    await setRow({ metadata: '{}' })
     await ensureAutomaticWebsiteBranding(actor)
     expect(await getAutomaticWebsiteBrandingStatus(logoOnly)).toMatchObject({
       status: 'applied',
@@ -219,291 +261,304 @@ describe('automatic website branding (real Postgres)', () => {
     await expect(undoAutomaticWebsiteBranding(logoOnly)).rejects.toMatchObject({
       code: 'WEBSITE_BRANDING_PERMISSION_REQUIRED',
     })
-    expect((await read()).logoKey).toBe(expected.logoKey)
+    expect((await read()).logoKey).toBe(good.logoKey)
   })
-  it('does not claim a lookup for an administrator without a stored email', async () => {
-    const [person] = await testDb
+
+  it('keeps the logo and skips the color when the plan has no custom colors', async () => {
+    await setRow({ tierLimits: JSON.stringify({ features: { customColors: false } }) })
+    expect(await ensureAutomaticWebsiteBranding(actor)).toMatchObject({
+      status: 'applied',
+      colorApplied: false,
+    })
+    expect((await read()).logoKey).toBe(good.logoKey)
+    expect((await read()).brandingConfig).toBeNull()
+  })
+
+  it('offers a weak logo without changing settings, then applies it with Use it', async () => {
+    fetchReturns(weak)
+    expect(await ensureAutomaticWebsiteBranding(actor)).toEqual({
+      domain: 'example.com',
+      status: 'offered',
+      logoUrl: '/api/storage/logos/acme.ico',
+      colorApplied: false,
+      canUndo: false,
+      canUse: true,
+    })
+    expect((await read()).logoKey).toBeNull()
+    expect((await read()).brandingConfig).toBeNull()
+    expect(await audits('branding.website.applied')).toHaveLength(0)
+    expect(await acceptWebsiteBrandingOffer(other)).toMatchObject({
+      status: 'applied',
+      colorApplied: true,
+      canUndo: true,
+    })
+    expect((await read()).logoKey).toBe(weak.logoKey)
+    expect(JSON.parse((await read()).brandingConfig!).light.primary).toBe(good.color)
+    expect(await audits('branding.website.applied')).toHaveLength(1)
+    await undoAutomaticWebsiteBranding(actor)
+    expect((await read()).logoKey).toBeNull()
+  })
+
+  it('closes an offer with Not now and never offers it again', async () => {
+    fetchReturns(weak)
+    await ensureAutomaticWebsiteBranding(actor)
+    expect(await declineWebsiteBrandingOffer(actor)).toMatchObject({ status: 'declined' })
+    expect((await read()).logoKey).toBeNull()
+    expect(await getAutomaticWebsiteBrandingStatus(actor)).toMatchObject({ status: 'declined' })
+    await expect(acceptWebsiteBrandingOffer(actor)).rejects.toMatchObject({
+      code: 'WEBSITE_BRANDING_UNAVAILABLE',
+    })
+    await ensureAutomaticWebsiteBranding(actor)
+    expect(seams.fetch).toHaveBeenCalledOnce()
+  })
+
+  it('treats a logo set by hand as the answer to an offer', async () => {
+    fetchReturns(weak)
+    await ensureAutomaticWebsiteBranding(actor)
+    await setRow({ logoKey: 'logos/manual.png' })
+    expect(await getAutomaticWebsiteBrandingStatus(actor)).toBeNull()
+    await expect(acceptWebsiteBrandingOffer(actor)).rejects.toMatchObject({
+      code: 'WEBSITE_BRANDING_UNAVAILABLE',
+    })
+    expect((await read()).logoKey).toBe('logos/manual.png')
+  })
+
+  it('never looks up a workspace marked as existing by migration 0293', async () => {
+    await setRow({
+      metadata: JSON.stringify({
+        brandingLookup: {
+          version: 1,
+          status: 'skipped',
+          reason: 'existing',
+          completedAt: daysAgo(0),
+        },
+      }),
+    })
+    expect(await getAutomaticWebsiteBrandingStatus(actor)).toBeNull()
+    expect(await ensureAutomaticWebsiteBranding(actor)).toBeNull()
+    expect(seams.fetch).not.toHaveBeenCalled()
+    expect((await read()).logoKey).toBeNull()
+  })
+
+  it('reads ineligible teammates as null, so Home never asks to start', async () => {
+    const [actorPrincipal] = await testDb
       .select()
       .from(principal)
       .where(eq(principal.id, actor.principalId!))
-    await testDb.update(user).set({ email: null }).where(eq(user.id, person.userId!))
+    await testDb
+      .update(user)
+      .set({ email: `you+${createId('user')}@gmail.com` })
+      .where(eq(user.id, actorPrincipal.userId!))
+    expect(await getAutomaticWebsiteBrandingStatus(actor)).toBeNull()
+    expect(await getAutomaticWebsiteBrandingStatus({ ...actor, permissions: new Set() })).toBeNull()
+    await testDb.update(user).set({ email: null }).where(eq(user.id, actorPrincipal.userId!))
+    expect(await getAutomaticWebsiteBrandingStatus(actor)).toBeNull()
+    expect(await ensureAutomaticWebsiteBranding(actor)).toBeNull()
+    expect(seams.fetch).not.toHaveBeenCalled()
+    expect((await metadata()).brandingLookup).toBeUndefined()
+    expect(await getAutomaticWebsiteBrandingStatus(other)).toMatchObject({ status: 'eligible' })
+  })
+
+  it('records a workspace that already has a logo as skipped, so a later removal never triggers a lookup', async () => {
+    await setRow({ logoKey: 'logos/manual.png' })
+    expect(await getAutomaticWebsiteBrandingStatus(actor)).toMatchObject({ status: 'eligible' })
+    expect(await ensureAutomaticWebsiteBranding(actor)).toMatchObject({ status: 'skipped' })
+    expect(seams.fetch).not.toHaveBeenCalled()
+    await setRow({ logoKey: null })
+    expect(await getAutomaticWebsiteBrandingStatus(actor)).toMatchObject({ status: 'skipped' })
+    await ensureAutomaticWebsiteBranding(actor)
+    expect(seams.fetch).not.toHaveBeenCalled()
+  })
+
+  it('does nothing and records nothing while the operator switch or storage stops the lookup', async () => {
+    seams.available = false
+    expect(await getAutomaticWebsiteBrandingStatus(actor)).toBeNull()
     expect(await ensureAutomaticWebsiteBranding(actor)).toBeNull()
     expect(seams.fetch).not.toHaveBeenCalled()
     expect((await metadata()).brandingLookup).toBeUndefined()
   })
-  it.each(['logo', 'personal', 'attempt'] as const)(
-    'does not fetch when the %s eligibility condition fails',
-    async (condition) => {
-      if (condition === 'logo')
-        await testDb
-          .update(settings)
-          .set({ logoKey: 'logos/manual.png' })
-          .where(eq(settings.id, settingsId))
-      if (condition === 'personal')
-        await testDb
-          .update(user)
-          .set({ email: `you+${createId('user')}@gmail.com` })
-          .where(
-            eq(
-              user.id,
-              (await testDb.select().from(principal).where(eq(principal.id, actor.principalId!)))[0]
-                .userId!
-            )
-          )
-      if (condition === 'attempt')
-        await testDb
-          .update(settings)
-          .set({ metadata: JSON.stringify({ brandingLookup: { status: 'failed' } }) })
-          .where(eq(settings.id, settingsId))
-      await ensureAutomaticWebsiteBranding(actor)
-      expect(seams.fetch).not.toHaveBeenCalled()
-      expect(await actions()).toHaveLength(0)
-    }
-  )
-  it('claims only once while another Home request overlaps the fetch', async () => {
-    let resolve!: (value: WebsiteBranding) => void
-    const pending = new Promise<WebsiteBranding>((done) => {
-      resolve = done
+
+  it('reads a claim older than five minutes as failed instead of pending forever', async () => {
+    await setRow({
+      metadata: JSON.stringify({
+        brandingLookup: {
+          version: 1,
+          status: 'pending',
+          domain: 'example.com',
+          claimId: '00000000-0000-4000-8000-000000000000',
+          ownerPrincipalId: actor.principalId,
+          startedAt: new Date(Date.now() - 60_000).toISOString(),
+          completedAt: null,
+        },
+      }),
     })
-    seams.fetch.mockImplementation(async (site: string) => {
-      expect(site).toBe('example.com')
-      return seams.fetch.mock.calls.length === 1 ? pending : expected
-    })
-    const first = ensureAutomaticWebsiteBranding(actor)
-    await vi.waitFor(() => expect(seams.fetch).toHaveBeenCalledOnce())
-    expect(await ensureAutomaticWebsiteBranding(other)).toMatchObject({ status: 'pending' })
-    expect(seams.fetch).toHaveBeenCalledOnce()
-    resolve(expected)
-    await first
+    expect(await getAutomaticWebsiteBrandingStatus(actor)).toMatchObject({ status: 'pending' })
+    await setLookup({ startedAt: new Date(Date.now() - 6 * 60_000).toISOString() })
+    expect(await getAutomaticWebsiteBrandingStatus(actor)).toMatchObject({ status: 'failed' })
     await ensureAutomaticWebsiteBranding(actor)
-    expect(seams.fetch).toHaveBeenCalledOnce()
-    expect(await actions()).toHaveLength(1)
+    expect(seams.fetch).not.toHaveBeenCalled()
   })
-  it('records a failed fetch once and keeps Home usable', async () => {
-    seams.fetch.mockImplementation(async (site: string) => {
-      expect(site).toBe('example.com')
-      return null
+
+  it('hides the applied notice and the offer after the notice window', async () => {
+    await ensureAutomaticWebsiteBranding(actor)
+    await setLookup({ completedAt: daysAgo(2) })
+    expect(await getAutomaticWebsiteBrandingStatus(actor)).toMatchObject({ status: 'applied' })
+    await setLookup({ completedAt: daysAgo(4) })
+    expect(await getAutomaticWebsiteBrandingStatus(actor)).toBeNull()
+    await undoAutomaticWebsiteBranding(actor)
+    await setRow({ metadata: '{}' })
+    fetchReturns(weak)
+    await ensureAutomaticWebsiteBranding(actor)
+    await setLookup({ completedAt: daysAgo(4) })
+    expect(await getAutomaticWebsiteBrandingStatus(actor)).toBeNull()
+  })
+
+  it('hides the notice once any stored field changes, and refuses a stale Undo without overwriting it', async () => {
+    await ensureAutomaticWebsiteBranding(actor)
+    await setRow({
+      brandingConfig: JSON.stringify({
+        light: { primary: '#123456' },
+        dark: { primary: good.color },
+      }),
     })
+    expect((await read()).logoKey).toBe(good.logoKey)
+    expect(await getAutomaticWebsiteBrandingStatus(actor)).toBeNull()
+    await expect(undoAutomaticWebsiteBranding(other)).rejects.toMatchObject({
+      code: 'WEBSITE_BRANDING_UNDO_CONFLICT',
+    })
+    expect(JSON.parse((await read()).brandingConfig!).light.primary).toBe('#123456')
+    expect((await read()).logoKey).toBe(good.logoKey)
+    expect((await metadata()).brandingLookup.status).toBe('applied')
+  })
+
+  it('records a failed fetch once and keeps Home usable', async () => {
+    fetchReturns(null)
     expect(await ensureAutomaticWebsiteBranding(actor)).toMatchObject({ status: 'failed' })
     await ensureAutomaticWebsiteBranding(actor)
     expect(seams.fetch).toHaveBeenCalledOnce()
     expect((await metadata()).brandingLookup.status).toBe('failed')
     expect((await read()).logoKey).toBeNull()
   })
-  it('keeps a manual logo chosen during the lookup and hides stale attribution', async () => {
+
+  it('keeps a manual logo chosen during the lookup', async () => {
     seams.fetch.mockImplementation(async (site: string) => {
       expect(site).toBe('example.com')
-      await testDb
-        .update(settings)
-        .set({ logoKey: 'logos/manual.png' })
-        .where(eq(settings.id, settingsId))
-      return expected
+      await setRow({ logoKey: 'logos/manual.png' })
+      return good
     })
     expect(await ensureAutomaticWebsiteBranding(actor)).toMatchObject({ status: 'skipped' })
     expect((await read()).logoKey).toBe('logos/manual.png')
-    expect(await actions()).toHaveLength(0)
   })
+
   it.each(['before', 'during'] as const)(
     'preserves a manual theme chosen %s the lookup',
     async (moment) => {
       const manual = { light: { primary: '#123456' } }
-      const change = () =>
-        testDb
-          .update(settings)
-          .set({ brandingConfig: JSON.stringify(manual) })
-          .where(eq(settings.id, settingsId))
+      const change = () => setRow({ brandingConfig: JSON.stringify(manual) })
       if (moment === 'before') await change()
       else
         seams.fetch.mockImplementation(async (site: string) => {
           expect(site).toBe('example.com')
           await change()
-          return expected
+          return good
         })
-      await ensureAutomaticWebsiteBranding(actor)
-      expect((await read()).logoKey).toBe(expected.logoKey)
+      expect(await ensureAutomaticWebsiteBranding(actor)).toMatchObject({ colorApplied: false })
+      expect((await read()).logoKey).toBe(good.logoKey)
       expect(JSON.parse((await read()).brandingConfig!)).toEqual(manual)
     }
   )
+
   it('preserves an explicit default theme saved during fetch', async () => {
-    const defaults = {}
     seams.fetch.mockImplementation(async (site: string) => {
       expect(site).toBe('example.com')
-      await testDb
-        .update(settings)
-        .set({ brandingConfig: JSON.stringify(defaults) })
-        .where(eq(settings.id, settingsId))
-      return expected
+      await setRow({ brandingConfig: '{}' })
+      return good
     })
     await ensureAutomaticWebsiteBranding(actor)
-    expect(JSON.parse((await read()).brandingConfig!)).toEqual(defaults)
+    expect(JSON.parse((await read()).brandingConfig!)).toEqual({})
   })
+
   it.each([
     { stored: '{invalid', status: 'failed', logo: null },
-    { stored: JSON.stringify({ futureChoice: true }), status: 'applied', logo: expected.logoKey },
+    { stored: JSON.stringify({ futureChoice: true }), status: 'applied', logo: good.logoKey },
   ])(
-    'preserves an unrecognized stored branding configuration',
+    'preserves an unrecognized stored branding configuration ($status)',
     async ({ stored, status, logo }) => {
-      await testDb
-        .update(settings)
-        .set({ brandingConfig: stored })
-        .where(eq(settings.id, settingsId))
+      await setRow({ brandingConfig: stored })
       expect(await ensureAutomaticWebsiteBranding(actor)).toMatchObject({ status })
       expect((await read()).brandingConfig).toBe(stored)
       expect((await read()).logoKey).toBe(logo)
     }
   )
-  it('does not fetch or mutate without actual settings permission', async () => {
-    await ensureAutomaticWebsiteBranding({ ...actor, permissions: new Set() })
-    expect(seams.fetch).not.toHaveBeenCalled()
-    expect((await metadata()).brandingLookup).toBeUndefined()
-  })
+
   it('does not trust a stale permission snapshot before the website fetch', async () => {
-    const [empty] = await testDb
-      .insert(roles)
-      .values({ key: `none-${createId('role')}`, name: 'No settings', isSystem: false })
-      .returning()
-    await testDb
-      .insert(principalRoleAssignments)
-      .values({ principalId: actor.principalId!, roleId: empty.id })
+    await revokeAll(actor)
+    expect(await getAutomaticWebsiteBrandingStatus(actor)).toBeNull()
     await ensureAutomaticWebsiteBranding(actor)
     expect(seams.fetch).not.toHaveBeenCalled()
     expect((await metadata()).brandingLookup).toBeUndefined()
   })
-  it('keeps custom CSS and a color that fails contrast out of the automatic color write', async () => {
-    await testDb
-      .update(settings)
-      .set({ customCss: ':root { --primary: #123456; }' })
-      .where(eq(settings.id, settingsId))
+
+  it('keeps custom CSS and a color that fails the gate out of the automatic color write', async () => {
+    await setRow({ customCss: ':root { --primary: #123456; }' })
     await ensureAutomaticWebsiteBranding(actor)
-    expect((await read()).logoKey).toBe(expected.logoKey)
+    expect((await read()).logoKey).toBe(good.logoKey)
     expect((await read()).brandingConfig).toBeNull()
     await undoAutomaticWebsiteBranding(actor)
-    await testDb
-      .update(settings)
-      .set({ customCss: null, metadata: '{}' })
-      .where(eq(settings.id, settingsId))
-    seams.fetch.mockImplementation(async (site: string) => {
-      expect(site).toBe('example.com')
-      return { ...expected, color: '#000000' }
-    })
-    await ensureAutomaticWebsiteBranding(actor)
-    expect((await read()).logoKey).toBe(expected.logoKey)
+    await setRow({ customCss: null, metadata: '{}' })
+    fetchReturns({ ...good, color: null })
+    expect(await ensureAutomaticWebsiteBranding(actor)).toMatchObject({ colorApplied: false })
     expect((await read()).brandingConfig).toBeNull()
   })
-  it('rechecks permission after fetching and refuses revoked Undo', async () => {
-    const [empty] = await testDb
-      .insert(roles)
-      .values({ key: `none-${createId('role')}`, name: 'No settings', isSystem: false })
-      .returning()
+
+  it('rechecks permission after fetching and refuses a revoked Undo', async () => {
     seams.fetch.mockImplementation(async (site: string) => {
       expect(site).toBe('example.com')
-      await testDb
-        .insert(principalRoleAssignments)
-        .values({ principalId: actor.principalId!, roleId: empty.id })
-      return expected
+      await revokeAll(actor)
+      return good
     })
     await ensureAutomaticWebsiteBranding(actor)
     expect((await read()).logoKey).toBeNull()
-    expect(await actions()).toHaveLength(0)
+    expect((await metadata()).brandingLookup.status).toBe('failed')
     await testDb
       .delete(principalRoleAssignments)
       .where(eq(principalRoleAssignments.principalId, actor.principalId!))
-    await testDb.update(settings).set({ metadata: '{}' }).where(eq(settings.id, settingsId))
-    seams.fetch.mockImplementation(async (site: string) => {
-      expect(site).toBe('example.com')
-      return expected
-    })
+    await setRow({ metadata: '{}' })
+    fetchReturns(good)
     await ensureAutomaticWebsiteBranding(actor)
-    await testDb
-      .insert(principalRoleAssignments)
-      .values({ principalId: other.principalId!, roleId: empty.id })
+    await revokeAll(other)
     await expect(undoAutomaticWebsiteBranding(other)).rejects.toMatchObject({
       code: 'WEBSITE_BRANDING_PERMISSION_REQUIRED',
     })
-    expect((await read()).logoKey).toBe(expected.logoKey)
+    expect((await read()).logoKey).toBe(good.logoKey)
   })
-  it('refuses stale Undo without overwriting a later color and hides a replaced logo notice', async () => {
-    await ensureAutomaticWebsiteBranding(actor)
-    await testDb
-      .update(settings)
-      .set({
-        brandingConfig: JSON.stringify({
-          light: { primary: '#123456' },
-          dark: { primary: expected.color },
-        }),
-      })
-      .where(eq(settings.id, settingsId))
-    await expect(undoAutomaticWebsiteBranding(other)).rejects.toMatchObject({
-      code: 'WEBSITE_BRANDING_UNDO_CONFLICT',
-    })
-    expect(JSON.parse((await read()).brandingConfig!).light.primary).toBe('#123456')
-    await testDb
-      .update(settings)
-      .set({ logoKey: 'logos/manual.png' })
-      .where(eq(settings.id, settingsId))
-    expect(await getAutomaticWebsiteBrandingStatus(actor)).toBeNull()
-    expect((await metadata()).brandingLookup.status).toBe('applied')
-  })
-  it('rejects generic pending access to the automatic row', async () => {
-    await ensureAutomaticWebsiteBranding(actor)
-    const [action] = await actions()
-    await expect(
-      assertPendingWorkspaceParent(action, { ...actor, permissions: new Set(ALL_PERMISSIONS) })
-    ).rejects.toMatchObject({ code: 'PENDING_ACTION_NOT_FOUND' })
-  })
+
   it.each([
-    'source',
-    'toolName',
-    'settingsId',
-    'claimId',
-    'domain',
-    'threadKey',
-    'pointer',
-  ] as const)('rejects an automatic receipt with a mismatched %s', async (field) => {
+    [
+      'a change outside branding',
+      { id: 'portal.displayName', area: 'portal', path: ['displayName'] },
+    ],
+    ['a logo other than the offered one', { after: 'logos/other.png' }],
+  ])('refuses Undo and hides the notice for a receipt holding %s', async (_, tamper) => {
     await ensureAutomaticWebsiteBranding(actor)
-    const [action] = await actions()
-    if (field === 'source' || field === 'settingsId' || field === 'claimId' || field === 'domain') {
-      const replacement = field === 'claimId' ? '00000000-0000-4000-8000-000000000000' : 'other'
-      await testDb
-        .update(assistantPendingActions)
-        .set({ result: { ...action.result, [field]: replacement } })
-        .where(eq(assistantPendingActions.id, action.id))
-    } else if (field === 'toolName') {
-      await testDb
-        .update(assistantPendingActions)
-        .set({ toolName: 'propose_settings_change' })
-        .where(eq(assistantPendingActions.id, action.id))
-    } else if (field === 'threadKey') {
-      await testDb
-        .update(assistantPendingActions)
-        .set({ workspaceThreadKey: 'workspace:other' })
-        .where(eq(assistantPendingActions.id, action.id))
-    } else {
-      const existing = await metadata()
-      await testDb
-        .update(settings)
-        .set({
-          metadata: JSON.stringify({
-            ...existing,
-            brandingLookup: {
-              ...existing.brandingLookup,
-              pendingActionId: createId('assistant_action'),
-            },
-          }),
-        })
-        .where(eq(settings.id, settingsId))
-    }
-    await expect(undoAutomaticWebsiteBranding(actor)).rejects.toMatchObject({
-      code: 'WEBSITE_BRANDING_UNDO_UNAVAILABLE',
+    const bag = await metadata()
+    const [first, ...rest] = bag.brandingLookup.receipt.changes
+    await setLookup({
+      receipt: { ...bag.brandingLookup.receipt, changes: [{ ...first, ...tamper }, ...rest] },
     })
-    expect((await read()).logoKey).toBe(expected.logoKey)
+    expect(await getAutomaticWebsiteBrandingStatus(actor)).toBeNull()
+    await expect(undoAutomaticWebsiteBranding(actor)).rejects.toMatchObject({
+      code: 'WEBSITE_BRANDING_UNAVAILABLE',
+    })
+    expect((await read()).logoKey).toBe(good.logoKey)
   })
-  it('rolls back applied settings and receipt when the atomic audit fails', async () => {
+
+  it('rolls back applied settings and the receipt when the atomic audit fails', async () => {
     seams.failAudit = true
     await ensureAutomaticWebsiteBranding(actor)
     expect((await read()).logoKey).toBeNull()
     expect((await read()).brandingConfig).toBeNull()
-    expect(await actions()).toHaveLength(0)
     expect((await metadata()).brandingLookup.status).toBe('failed')
+    expect((await metadata()).brandingLookup.receipt).toBeUndefined()
   })
 })

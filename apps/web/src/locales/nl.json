@@ -1462,5 +1462,14 @@
   "ask.settings.field.shadow2xl": "Schaduw 2XL",
   "ask.settings.nameManaged": "Open de algemene instellingen om de naam van deze werkruimte te wijzigen.",
   "onboarding.branding.fromWebsite": "Logo van {domain}",
+  "onboarding.branding.logoAndColorFromWebsite": "Logo en kleur van {domain}",
+  "onboarding.branding.offer": "Het logo van {domain} gebruiken?",
+  "onboarding.branding.use": "Gebruiken",
+  "onboarding.branding.notNow": "Niet nu",
+  "onboarding.branding.undo": "Ongedaan maken",
+  "onboarding.branding.undoConflict": "De huisstijl is sindsdien gewijzigd. Ongedaan maken is niet beschikbaar.",
+  "onboarding.branding.permissionRequired": "Vraag een eigenaar van de werkruimte om de huisstijl te wijzigen.",
+  "onboarding.branding.unavailable": "Deze huisstijlwijziging is niet meer beschikbaar.",
+  "onboarding.branding.failed": "De huisstijl kon niet worden opgeslagen. Probeer het opnieuw.",
   "ask.settings.websiteUnavailable": "Kies een andere website of upload een logo in de portalinstellingen."
 }

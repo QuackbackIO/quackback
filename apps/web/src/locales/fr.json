@@ -1462,5 +1462,14 @@
   "ask.settings.field.shadow2xl": "Ombre 2XL",
   "ask.settings.nameManaged": "Ouvrez les paramètres généraux pour modifier le nom de cet espace de travail.",
   "onboarding.branding.fromWebsite": "Logo de {domain}",
+  "onboarding.branding.logoAndColorFromWebsite": "Logo et couleur de {domain}",
+  "onboarding.branding.offer": "Utiliser le logo de {domain} ?",
+  "onboarding.branding.use": "L’utiliser",
+  "onboarding.branding.notNow": "Pas maintenant",
+  "onboarding.branding.undo": "Annuler",
+  "onboarding.branding.undoConflict": "L’image de marque a changé depuis. L’annulation n’est pas disponible.",
+  "onboarding.branding.permissionRequired": "Demandez à un propriétaire de l’espace de travail de modifier l’image de marque.",
+  "onboarding.branding.unavailable": "Cette modification de l’image de marque n’est plus disponible.",
+  "onboarding.branding.failed": "L’image de marque n’a pas pu être enregistrée. Réessayez.",
   "ask.settings.websiteUnavailable": "Choisissez un autre site ou ajoutez un logo dans les paramètres du portail."
 }

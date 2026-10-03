@@ -85,6 +85,14 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
     [PERMISSIONS.SETTINGS_MANAGE],
     'Undo requires current settings management and every permission required by the stored receipt'
   ),
+  'lib/server/functions/website-branding.ts::acceptWebsiteBrandingOfferFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.SETTINGS_MANAGE],
+    'Use it applies the offered logo with current settings management; its color additionally requires branding permission'
+  ),
+  'lib/server/functions/website-branding.ts::declineWebsiteBrandingOfferFn': DYNAMIC_PERMISSION(
+    [PERMISSIONS.SETTINGS_MANAGE],
+    'Not now closes the offer and requires current settings management'
+  ),
   'lib/server/functions/ask-search.ts::searchAskEntitiesFn': DYNAMIC_PERMISSION(
     [
       PERMISSIONS.POST_VIEW_PRIVATE,

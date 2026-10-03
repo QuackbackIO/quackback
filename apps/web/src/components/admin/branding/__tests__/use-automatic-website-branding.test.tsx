@@ -3,19 +3,26 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 import { afterEach, expect, it, vi } from 'vitest'
-import { useAutomaticWebsiteBranding } from '../use-automatic-website-branding'
+import {
+  brandingPollInterval,
+  useAutomaticWebsiteBranding,
+} from '../use-automatic-website-branding'
 import { AutomaticBrandingNotice } from '../automatic-branding-notice'
 import type { AutomaticBrandingStatus } from '@/lib/shared/website-branding'
 
 const server = vi.hoisted(() => ({
   get: vi.fn(),
   start: vi.fn(),
+  accept: vi.fn(),
+  decline: vi.fn(),
   undo: vi.fn(),
   invalidate: vi.fn(),
 }))
 vi.mock('@/lib/server/functions/website-branding', () => ({
   getAutomaticWebsiteBrandingStatusFn: server.get,
   startAutomaticWebsiteBrandingFn: server.start,
+  acceptWebsiteBrandingOfferFn: server.accept,
+  declineWebsiteBrandingOfferFn: server.decline,
   undoAutomaticWebsiteBrandingFn: server.undo,
 }))
 vi.mock('@/lib/client/hooks/use-root-context', () => ({
@@ -28,12 +35,28 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-const applied: AutomaticBrandingStatus = {
+const status = (
+  value: AutomaticBrandingStatus['status'],
+  extra: Partial<AutomaticBrandingStatus> = {}
+): AutomaticBrandingStatus => ({
   domain: 'example.com',
-  pendingActionId: 'automatic-logo',
-  status: 'applied',
-  canUndo: true,
-}
+  status: value,
+  logoUrl: null,
+  colorApplied: false,
+  canUndo: false,
+  canUse: false,
+  ...extra,
+})
+const applied = status('applied', { logoUrl: '/api/storage/logos/acme.png', canUndo: true })
+const offered = status('offered', { logoUrl: '/api/storage/logos/acme.ico', canUse: true })
+/** Every server function here takes no input; a call with arguments is a contract break. */
+const noArgs =
+  <T,>(result: () => T) =>
+  (...args: unknown[]) => {
+    expect(args).toHaveLength(0)
+    return result()
+  }
+
 function Probe({ enabled = true }: { enabled?: boolean }) {
   const branding = useAutomaticWebsiteBranding({ enabled })
   return (
@@ -42,6 +65,8 @@ function Probe({ enabled = true }: { enabled?: boolean }) {
       pending={branding.pending}
       error={branding.error}
       onUndo={branding.undo}
+      onAccept={branding.accept}
+      onDismiss={branding.dismiss}
     />
   )
 }
@@ -81,18 +106,17 @@ async function mount(enabled = true) {
   }
 }
 
-it('starts asynchronously with no client identity and refreshes a warm form before route context after Apply and Undo', async () => {
-  let finish!: (status: AutomaticBrandingStatus) => void
-  server.get.mockImplementation(async (...args: unknown[]) => {
-    expect(args).toHaveLength(0)
-    return null
-  })
-  server.start.mockImplementation((...args: unknown[]) => {
-    expect(args).toHaveLength(0)
-    return new Promise<AutomaticBrandingStatus>((resolve) => {
-      finish = resolve
-    })
-  })
+it('starts an eligible lookup once and refreshes a warm form before route context after it applies and after Undo', async () => {
+  let finish!: (value: AutomaticBrandingStatus) => void
+  server.get.mockImplementation(noArgs(async () => status('eligible')))
+  server.start.mockImplementation(
+    noArgs(
+      () =>
+        new Promise<AutomaticBrandingStatus>((resolve) => {
+          finish = resolve
+        })
+    )
+  )
   const { client, snapshots, setVersion } = await mount()
   await waitFor(() => expect(server.start).toHaveBeenCalledTimes(1))
   expect(screen.queryByText('Logo from example.com')).toBeNull()
@@ -100,11 +124,12 @@ it('starts asynchronously with no client identity and refreshes a warm form befo
   finish(applied)
   await screen.findByText('Logo from example.com')
   await waitFor(() => expect(snapshots).toEqual(['website']))
-  server.undo.mockImplementation(async (...args: unknown[]) => {
-    expect(args).toHaveLength(0)
-    setVersion('original')
-    return { ...applied, status: 'undone', canUndo: false }
-  })
+  server.undo.mockImplementation(
+    noArgs(async () => {
+      setVersion('original')
+      return status('undone')
+    })
+  )
   fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
   await waitFor(() => expect(snapshots).toEqual(['website', 'original']))
   expect(screen.queryByText('Logo from example.com')).toBeNull()
@@ -112,49 +137,92 @@ it('starts asynchronously with no client identity and refreshes a warm form befo
   client.clear()
 })
 
-it('reads an existing receipt without rerunning the lookup and keeps a stale Undo refusal visible', async () => {
-  server.get.mockImplementation(async (...args: unknown[]) => {
-    expect(args).toHaveLength(0)
-    return applied
-  })
+it.each([
+  ['no status at all', null],
+  ['a declined offer', status('declined')],
+  ['a skipped lookup', status('skipped')],
+  ['a failed lookup', status('failed')],
+])('never asks to start, or takes the row lock, for %s', async (_, current) => {
+  server.get.mockImplementation(noArgs(async () => current))
   server.start.mockImplementation(() => {
-    throw new Error('An existing receipt cannot start another lookup')
+    throw new Error('An ineligible teammate cannot start a lookup')
   })
-  server.undo.mockImplementation(async (...args: unknown[]) => {
-    expect(args).toHaveLength(0)
-    throw { code: 'WEBSITE_BRANDING_UNDO_CONFLICT' }
+  const { client } = await mount()
+  await waitFor(() => expect(server.get).toHaveBeenCalledTimes(1))
+  expect(server.start).not.toHaveBeenCalled()
+  expect(server.invalidate).not.toHaveBeenCalled()
+  client.clear()
+})
+
+it('reads an applied change without restarting or refreshing, and shows the automatic Undo refusal', async () => {
+  server.get.mockImplementation(noArgs(async () => applied))
+  server.start.mockImplementation(() => {
+    throw new Error('An existing lookup cannot start another')
   })
+  server.undo.mockImplementation(
+    noArgs(async () => {
+      throw { code: 'WEBSITE_BRANDING_UNDO_CONFLICT' }
+    })
+  )
   const { client } = await mount()
   fireEvent.click(await screen.findByRole('button', { name: 'Undo' }))
   expect(await screen.findByRole('alert')).toHaveTextContent(
-    'These settings changed since Apply. Undo is unavailable.'
+    'The branding changed since then. Undo is unavailable.'
   )
   expect(screen.getByText('Logo from example.com')).toBeVisible()
   expect(server.start).not.toHaveBeenCalled()
+  expect(server.invalidate).not.toHaveBeenCalled()
   client.clear()
 })
 
-it('does not start automatic branding from the full checklist page', async () => {
+it('applies an offered logo with Use it and then offers Undo', async () => {
+  server.get.mockImplementation(noArgs(async () => offered))
+  server.accept.mockImplementation(noArgs(async () => applied))
+  const { client, snapshots } = await mount()
+  fireEvent.click(await screen.findByRole('button', { name: 'Use it' }))
+  await screen.findByText('Logo from example.com')
+  expect(screen.getByRole('button', { name: 'Undo' })).toBeVisible()
+  await waitFor(() => expect(snapshots).toHaveLength(1))
+  expect(server.decline).not.toHaveBeenCalled()
+  client.clear()
+})
+
+it('closes an offer with Not now without touching settings', async () => {
+  server.get.mockImplementation(noArgs(async () => offered))
+  server.decline.mockImplementation(noArgs(async () => status('declined')))
+  const { client, view } = await mount()
+  fireEvent.click(await screen.findByRole('button', { name: 'Not now' }))
+  await waitFor(() => expect(view.container).toBeEmptyDOMElement())
+  expect(server.accept).not.toHaveBeenCalled()
+  expect(server.invalidate).not.toHaveBeenCalled()
+  client.clear()
+})
+
+it('does not read or start anything while disabled', async () => {
   const { client } = await mount(false)
   expect(server.get).not.toHaveBeenCalled()
   expect(server.start).not.toHaveBeenCalled()
-  expect(server.undo).not.toHaveBeenCalled()
   client.clear()
 })
 
-it('observes a lookup claimed on another device without starting a second lookup', async () => {
+it('observes a lookup claimed on another device without starting a second one', async () => {
   let reads = 0
-  server.get.mockImplementation(async (...args: unknown[]) => {
-    expect(args).toHaveLength(0)
-    return ++reads === 1 ? { ...applied, status: 'pending', canUndo: false } : applied
-  })
-  server.start.mockImplementation((...args: unknown[]) => {
-    expect(args).toHaveLength(0)
+  server.get.mockImplementation(noArgs(async () => (++reads === 1 ? status('pending') : applied)))
+  server.start.mockImplementation(() => {
     throw new Error('Another device owns the lookup claim')
   })
   const { client } = await mount()
-  await screen.findByText('Logo from example.com', {}, { timeout: 2500 })
+  await screen.findByText('Logo from example.com', {}, { timeout: 4500 })
   expect(server.get).toHaveBeenCalledTimes(2)
   expect(server.start).not.toHaveBeenCalled()
   client.clear()
+})
+
+it('polls only a pending lookup, and only a bounded number of times', () => {
+  expect(brandingPollInterval(status('pending'), 0)).toBeGreaterThan(0)
+  expect(brandingPollInterval(status('pending'), 29)).toBeGreaterThan(0)
+  expect(brandingPollInterval(status('pending'), 30)).toBe(false)
+  expect(brandingPollInterval(applied, 0)).toBe(false)
+  expect(brandingPollInterval(null, 0)).toBe(false)
+  expect(brandingPollInterval(undefined, 0)).toBe(false)
 })
