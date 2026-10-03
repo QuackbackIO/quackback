@@ -1,26 +1,16 @@
-import { db, eq, and, settings, workspaceExperiments } from '@/lib/server/db'
 import type { Actor } from '@/lib/server/policy/types'
 import { can } from '@/lib/server/policy/authorize'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { NotFoundError } from '@/lib/shared/errors'
 import { isAssistantConfigured } from './assistant.runtime'
-import { isCopilotCapabilityEnabled } from '@/lib/server/domains/settings/settings.service'
+import {
+  isCopilotCapabilityEnabled,
+  isFeatureEnabled,
+} from '@/lib/server/domains/settings/settings.service'
 
-export const WORKSPACE_COPILOT_EXPERIMENT = 'workspace-copilot'
+/** Copilot on Home is a normal feature flag: on for new workspaces, a Labs switch. */
 export async function isWorkspaceCopilotEnabled(): Promise<boolean> {
-  const [workspace] = await db.select({ id: settings.id }).from(settings).limit(1)
-  if (!workspace) return false
-  const [row] = await db
-    .select({ enabled: workspaceExperiments.enabled })
-    .from(workspaceExperiments)
-    .where(
-      and(
-        eq(workspaceExperiments.settingsId, workspace.id),
-        eq(workspaceExperiments.experimentId, WORKSPACE_COPILOT_EXPERIMENT)
-      )
-    )
-    .limit(1)
-  return row?.enabled === true
+  return isFeatureEnabled('copilotHome')
 }
 export async function workspaceCopilotAvailable(actor: Actor): Promise<boolean> {
   if (

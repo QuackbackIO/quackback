@@ -27,7 +27,7 @@ import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.
 import { DEFAULT_ASSISTANT_CONFIG } from '@/lib/shared/assistant/config'
 import {
   DEFAULT_AUTH_CONFIG,
-  DEFAULT_FEATURE_FLAGS,
+  NEW_WORKSPACE_FEATURE_FLAGS,
   DEFAULT_PORTAL_CONFIG,
   DEFAULT_WIDGET_CONFIG,
   flagsForGoal,
@@ -271,7 +271,7 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
           },
           useCase
         )
-        const { flags, enabledModules } = flagsForGoals(DEFAULT_FEATURE_FLAGS, goals)
+        const { flags, enabledModules } = flagsForGoals(NEW_WORKSPACE_FEATURE_FLAGS, goals)
         const created = await db.transaction(async (tx) => {
           const [row] = await tx
             .insert(settings)

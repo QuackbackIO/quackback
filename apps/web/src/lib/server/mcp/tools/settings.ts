@@ -21,6 +21,7 @@ export function registerSettingsTools(server: McpServer, auth: McpAuthContext) {
     annotations: READ_ONLY,
     scope: 'read:settings',
     teamOnly: true,
+    feature: 'copilotHome',
     handler: async ({ area }) =>
       jsonResult({
         ...(await getSettingsForActor(await resolveMcpActor(auth, 'read:settings'), area)),
@@ -38,6 +39,7 @@ Examples:
     annotations: WRITE,
     scope: 'write:settings',
     teamOnly: true,
+    feature: 'copilotHome',
     handler: async ({ changes }) => {
       const action = await enqueueWorkspaceSettingsProposal(
         await resolveMcpActor(auth, 'write:settings'),

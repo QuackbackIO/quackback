@@ -78,6 +78,7 @@ describe('wizard goals read and write', () => {
       supportInbox: true,
       supportTickets: true,
       helpCenter: true,
+      copilotHome: true,
     })
     expect(await testDb.query.boards.findMany()).toHaveLength(0)
   })
