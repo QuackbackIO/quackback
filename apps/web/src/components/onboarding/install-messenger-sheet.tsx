@@ -142,7 +142,7 @@ function InstallMessengerBody({ onDone }: { onDone: () => void }) {
           {tabs.map((tab) => (
             <TabsContent key={tab.value} value={tab.value} className="space-y-3">
               <p className="text-sm text-muted-foreground">{tab.how}</p>
-              <pre className="max-h-64 overflow-auto rounded-lg border bg-muted/50 p-3 font-mono text-xs leading-relaxed">
+              <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap break-all rounded-lg border bg-muted/50 p-3 font-mono text-xs leading-relaxed">
                 {snippet}
               </pre>
               <Button size="sm" onClick={onCopy} data-testid="install-copy">

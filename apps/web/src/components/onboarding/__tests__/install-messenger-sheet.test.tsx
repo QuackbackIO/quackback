@@ -112,3 +112,10 @@ it('sends instructions to the developer address', async () => {
     expect(fns.send).toHaveBeenCalledWith({ data: { email: 'dev@acme.example' } })
   )
 })
+
+it('wraps the snippet inside its box so no line runs off the sheet', async () => {
+  renderSheet()
+  const snippet = (await screen.findAllByText(/Quackback\("init"\)/))[0].closest('pre')!
+  expect(snippet.className).toContain('whitespace-pre-wrap')
+  expect(snippet.className).toContain('break-all')
+})
