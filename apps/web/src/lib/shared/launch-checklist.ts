@@ -98,6 +98,8 @@ export interface LaunchTask {
   classification: LaunchTaskClassification
   isCompleted: boolean
   isSkipped: boolean
+  /** Setup did it, not the person: shown as Ready and left out of progress. */
+  isReady: boolean
   blocked?: LaunchTaskBlocked
   blockedReason?: string
   href?: LaunchTaskHref
@@ -107,7 +109,7 @@ export interface LaunchTask {
 
 interface LaunchTaskInput extends Omit<
   LaunchTask,
-  'availability' | 'isCompleted' | 'isSkipped' | 'blocked' | 'blockedReason'
+  'availability' | 'isCompleted' | 'isSkipped' | 'isReady' | 'blocked' | 'blockedReason'
 > {
   completed: boolean
   canAct?: boolean
@@ -238,6 +240,9 @@ export function withLaunchTaskResolution(
   return Object.keys(all).length > 0 ? all : undefined
 }
 
+/** Steps setup completes on its own: the seeded board and Quinn, on by default. */
+const READY_TASK_IDS = new Set(['create-board', 'set-up-quinn'])
+
 function materializeTask(task: LaunchTaskInput, resolutions: TaskResolutionMap): LaunchTask {
   const stored = resolutions[task.id]
   const isSkipped =
@@ -256,6 +261,7 @@ function materializeTask(task: LaunchTaskInput, resolutions: TaskResolutionMap):
     availability: task.completed ? 'complete' : blockedReason ? 'blocked' : 'available',
     isCompleted: task.completed,
     isSkipped,
+    isReady: task.completed && READY_TASK_IDS.has(task.id),
     ...(blocked ? { blocked } : {}),
     ...(blockedReason ? { blockedReason } : {}),
     ...(task.href && task.canAct !== false ? { href: task.href } : {}),
@@ -559,11 +565,47 @@ export function launchPlanProgress(status: LaunchStatus): {
   resolved: boolean
 } {
   const summary = launchChecklistSummary(status)
+  // The live portal is the one step that starts done; steps setup did itself
+  // are not the person's progress.
+  const counted = summary.tasks.filter((task) => !task.isReady)
   return {
-    done: summary.tasks.filter((task) => task.isCompleted || task.isSkipped).length,
-    total: summary.tasks.length,
+    done: 1 + counted.filter((task) => task.isCompleted || task.isSkipped).length,
+    total: 1 + counted.length,
     resolved: summary.resolved,
   }
+}
+
+const isOpen = (task: LaunchTask) => !task.isCompleted && !task.isSkipped
+
+/**
+ * Home's short path to a first result: after the live portal, the primary
+ * goal's step still to do (or its last done one), then the first win. `next`
+ * is the single step Home leads with; once the path is done it is the next
+ * open step of another goal. `later` is the open polish, at most three.
+ */
+export function launchGoalPath(status: LaunchStatus): {
+  steps: LaunchTask[]
+  next: LaunchTask | null
+  later: LaunchTask[]
+} {
+  const groups = launchPlanGroups(status)
+  const primary = groups[0]?.id === 'polish' ? undefined : groups[0]
+  const work = (primary?.tasks ?? []).filter(
+    (task) => !task.isReady && task.classification !== 'first_win'
+  )
+  const win = primary?.tasks.find((task) => task.classification === 'first_win')
+  const step = work.find(isOpen) ?? work.at(-1)
+  const steps = [step, win].filter((task): task is LaunchTask => Boolean(task))
+  const others = groups
+    .filter((group) => group !== primary && group.id !== 'polish')
+    .flatMap((group) => group.tasks)
+    .filter((task) => !task.isReady && isOpen(task) && task.availability !== 'blocked')
+  const next =
+    steps.find((task) => isOpen(task) && task.availability !== 'blocked') ?? others[0] ?? null
+  const later = (groups.find((group) => group.id === 'polish')?.tasks ?? [])
+    .filter((task) => !task.isReady && isOpen(task) && task.classification === 'polish')
+    .slice(0, 3)
+  return { steps, next, later }
 }
 
 export type LaunchPlanGroupId =
