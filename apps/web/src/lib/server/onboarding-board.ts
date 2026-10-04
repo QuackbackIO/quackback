@@ -14,6 +14,7 @@ import {
   type FeatureFlags,
 } from '@/lib/server/domains/settings/settings.types'
 import { featureFlagsWrite } from '@/lib/server/domains/settings/settings.service'
+import { parseWidgetConfig } from '@/lib/server/domains/settings/settings.helpers'
 import { ensureDefaultHelpCategory } from '@/lib/server/domains/help-center/help-center.default-category'
 import { LAUNCH_WINDOW_DAYS } from '@/lib/shared/launch-window'
 import { accessForPreset } from '@/lib/shared/schemas/boards'
@@ -92,8 +93,19 @@ export async function applyOnboardingGoals(
   if (goals.includes('status_page') && flags.statusPage && !hasStoredStatusSettings(row.metadata)) {
     input.statusPage = true
   }
-  if (modulesChanged || Object.keys(input).length > 0) {
-    const { patch } = featureFlagsWrite({ ...row, featureFlags: JSON.stringify(from) }, input)
+  if (modulesChanged || Object.keys(input).length > 0 || isNew) {
+    const patch: Record<string, string> = featureFlagsWrite(
+      { ...row, featureFlags: JSON.stringify(from) },
+      input
+    ).patch
+    // A new workspace without the Feedback goal has no board to send
+    // Messenger visitors to, so it starts without the idea tab.
+    if (isNew && !goals.includes('product_feedback')) {
+      const widget = parseWidgetConfig(patch.widgetConfig ?? row.widgetConfig)
+      if (widget.tabs?.feedback !== false) {
+        patch.widgetConfig = JSON.stringify({ ...widget, tabs: { ...widget.tabs, feedback: false } })
+      }
+    }
     await tx.update(settings).set(patch).where(eq(settings.id, row.id))
   }
   await prepareOnboardingBoard(tx, { ...state, goals })
