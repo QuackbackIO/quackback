@@ -3,7 +3,9 @@ import { PlanNoticeQuiet } from '@/components/admin/plan-notice-banner'
 import type { PlanNotice } from '@/lib/server/domains/settings/tier-limits.types'
 import { SearchTrigger } from '@/components/admin/ask/search-palette'
 import { useProductTour } from '@/components/onboarding/product-tour'
-import { FormattedMessage } from 'react-intl'
+import { FormattedMessage, useIntl } from 'react-intl'
+import { htmlLangDir } from '@/lib/shared/document-locale'
+import type { SupportedLocale } from '@/lib/shared/i18n'
 import { railControlClass } from '@/components/admin/rail-item'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
@@ -97,6 +99,8 @@ interface RailItem {
   icon: typeof ChatBubbleLeftIcon
   /** Active on this path only, not on the pages under it. */
   exact?: boolean
+  /** The catalogue id of the label, so the rail reads in the workspace language. */
+  labelId: string
   /** The workspace product this item belongs to; hidden while it is off. */
   product?: ProductId
   /** The guided tour's `data-tour` name for this item. */
@@ -106,9 +110,10 @@ interface RailItem {
 // One product reads as one run: Feedback, Roadmap and Changelog sit together,
 // then Support, Help Center and Status.
 const RAIL_ITEMS: RailItem[] = [
-  { label: 'Home', href: '/admin', icon: HomeIcon, exact: true },
+  { label: 'Home', labelId: 'admin.nav.home', href: '/admin', icon: HomeIcon, exact: true },
   {
     label: 'Feedback',
+    labelId: 'admin.nav.feedback',
     href: '/admin/feedback',
     icon: ENTITY_ICONS.post,
     product: 'feedback',
@@ -116,6 +121,7 @@ const RAIL_ITEMS: RailItem[] = [
   },
   {
     label: 'Roadmap',
+    labelId: 'admin.nav.roadmap',
     href: '/admin/roadmap',
     icon: MapIcon,
     product: 'feedback',
@@ -123,6 +129,7 @@ const RAIL_ITEMS: RailItem[] = [
   },
   {
     label: 'Changelog',
+    labelId: 'admin.nav.changelog',
     href: '/admin/changelog',
     icon: ENTITY_ICONS.changelog,
     product: 'changelog',
@@ -132,6 +139,7 @@ const RAIL_ITEMS: RailItem[] = [
   // shell serves both (gated on either flag being on).
   {
     label: 'Support',
+    labelId: 'admin.nav.support',
     href: '/admin/inbox',
     icon: ENTITY_ICONS.conversation,
     product: 'support',
@@ -139,6 +147,7 @@ const RAIL_ITEMS: RailItem[] = [
   },
   {
     label: 'Help Center',
+    labelId: 'admin.nav.helpCenter',
     href: '/admin/help-center',
     icon: ENTITY_ICONS.article,
     product: 'helpCenter',
@@ -146,13 +155,19 @@ const RAIL_ITEMS: RailItem[] = [
   },
   {
     label: 'Status',
+    labelId: 'admin.nav.status',
     href: '/admin/status',
     icon: SignalIcon,
     product: 'status',
     tour: 'nav-status',
   },
-  { label: 'Analytics', href: '/admin/analytics', icon: ChartBarIcon },
-  { label: 'Users', href: '/admin/users', icon: UsersIcon },
+  {
+    label: 'Analytics',
+    labelId: 'admin.nav.analytics',
+    href: '/admin/analytics',
+    icon: ChartBarIcon,
+  },
+  { label: 'Users', labelId: 'admin.nav.users', href: '/admin/users', icon: UsersIcon },
 ]
 
 /** The rail items a viewer sees: the products that are on. */
@@ -266,6 +281,7 @@ function MobileNavLink({
 }
 
 export function AdminSidebar({ initialUserData, latestVersion, planNotice }: AdminSidebarProps) {
+  const intl = useIntl()
   const router = useRouter()
   const onNotificationsPage = useRouterState({
     select: (s) => s.location.pathname.startsWith('/admin/notifications'),
@@ -355,6 +371,9 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
       <aside
         data-admin-rail=""
         data-labeled=""
+        // The rail speaks the workspace language while the page around it may
+        // not, so it says which language it is in for screen readers.
+        lang={htmlLangDir(intl.locale as SupportedLocale).lang}
         className="hidden w-56 shrink-0 flex-col border-chrome-hairline bg-chrome [--card:var(--chrome-background)] sm:flex"
       >
         <ScrollArea className="h-full" scrollBarClassName="w-2" type="auto">
@@ -384,7 +403,7 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
                   key={item.href}
                   href={item.href}
                   icon={item.icon}
-                  label={item.label}
+                  label={intl.formatMessage({ id: item.labelId, defaultMessage: item.label })}
                   exact={item.exact}
                   badge={itemBadge(item)}
                   badgeLabel={itemBadgeLabel(item)}
@@ -402,7 +421,14 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
               <LaunchPlanDock />
               {/* Settings (admin-only) */}
               {showSettings && (
-                <NavItem href="/admin/settings" icon={Cog6ToothIcon} label="Settings" />
+                <NavItem
+                  href="/admin/settings"
+                  icon={Cog6ToothIcon}
+                  label={intl.formatMessage({
+                    id: 'admin.nav.settings',
+                    defaultMessage: 'Settings',
+                  })}
+                />
               )}
 
               {billingEnabled && siblings.length > 0 ? (
@@ -420,7 +446,9 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
                 className={railControlClass()}
               >
                 <GlobeAltIcon className="size-5 shrink-0" />
-                <span className="min-w-0 flex-1 truncate">View portal</span>
+                <span className="min-w-0 flex-1 truncate">
+                  <FormattedMessage id="admin.nav.viewPortal" defaultMessage="View portal" />
+                </span>
               </Link>
 
               {/* Help Menu */}
@@ -533,7 +561,11 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
               <Bars3Icon className="h-5 w-5" />
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="w-72 p-0">
+          <SheetContent
+            side="left"
+            className="w-72 p-0"
+            lang={htmlLangDir(intl.locale as SupportedLocale).lang}
+          >
             <SheetHeader className="px-5 pt-6 pb-4">
               <SheetTitle className="flex items-center gap-3">
                 <Link to="/admin" onClick={() => setMobileMenuOpen(false)}>
@@ -554,7 +586,7 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
                   key={item.href}
                   href={item.href}
                   icon={item.icon}
-                  label={item.label}
+                  label={intl.formatMessage({ id: item.labelId, defaultMessage: item.label })}
                   exact={item.exact}
                   badge={itemBadge(item)}
                   badgeLabel={itemBadgeLabel(item)}
@@ -566,7 +598,10 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
                 <MobileNavLink
                   href="/admin/settings"
                   icon={Cog6ToothIcon}
-                  label="Settings"
+                  label={intl.formatMessage({
+                    id: 'admin.nav.settings',
+                    defaultMessage: 'Settings',
+                  })}
                   onClick={() => setMobileMenuOpen(false)}
                 />
               )}
@@ -594,7 +629,7 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
                 className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-muted-foreground/80 hover:text-foreground hover:bg-muted/50 transition-colors"
               >
                 <GlobeAltIcon className="h-5 w-5" />
-                View portal
+                <FormattedMessage id="admin.nav.viewPortal" defaultMessage="View portal" />
               </Link>
               <button
                 type="button"

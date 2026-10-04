@@ -203,7 +203,7 @@ export function RoadmapAdmin() {
         onCreateOpenChange={setCreateOpen}
       />
 
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {selectedRoadmap ? (
           <>
             <div className="border-b border-border/50">
@@ -307,7 +307,7 @@ export function RoadmapAdmin() {
             )}
           </div>
         )}
-      </main>
+      </div>
     </div>
   )
 }

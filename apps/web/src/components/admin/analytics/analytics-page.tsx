@@ -190,7 +190,7 @@ export function AnalyticsPage() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 min-w-0 overflow-hidden">
+      <div className="flex-1 min-w-0 overflow-hidden">
         <ScrollArea className="h-full">
           <div className="w-full px-4 sm:px-6 pt-4 pb-6 flex flex-col gap-4">
             {/* Header: mobile title + section switcher (left) · updated + period (right) */}
@@ -522,7 +522,7 @@ export function AnalyticsPage() {
             )}
           </div>
         </ScrollArea>
-      </main>
+      </div>
     </div>
   )
 }

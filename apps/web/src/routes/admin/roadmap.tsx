@@ -87,9 +87,9 @@ function RoadmapPage() {
   const search = Route.useSearch()
 
   return (
-    <main className="h-full">
+    <div className="h-full">
       <RoadmapAdmin />
       <RoadmapModal postId={search.post} currentUser={currentUser} />
-    </main>
+    </div>
   )
 }

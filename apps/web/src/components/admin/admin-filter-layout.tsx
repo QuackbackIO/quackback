@@ -82,7 +82,7 @@ export function AdminFilterLayout({
       </div>
 
       {/* Main Content */}
-      <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         {scrollContent ? (
           <ScrollArea className="h-full">
             <div className={PAGE_INSET}>{children}</div>
@@ -90,7 +90,7 @@ export function AdminFilterLayout({
         ) : (
           <div className={cn('flex min-h-0 flex-1 flex-col', PAGE_INSET)}>{children}</div>
         )}
-      </main>
+      </div>
     </div>
   )
 }
