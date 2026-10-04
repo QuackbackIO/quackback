@@ -138,3 +138,11 @@ it('puts every prerequisite first, ahead of polish a goal brought in earlier', (
   expect(tasks.find((task) => task.id === 'set-up-quinn')?.classification).toBe('polish')
   expect(order.at(-1)).toBe('first-win')
 })
+
+it('leaves out a step the plan does not include', () => {
+  const ids = (input: LaunchStatus) => buildLaunchTasks(input).map((task) => task.id)
+  expect(ids(status)).toContain('connect-integration')
+  expect(ids({ ...status, features: { ...status.features!, integrations: false } })).not.toContain(
+    'connect-integration'
+  )
+})

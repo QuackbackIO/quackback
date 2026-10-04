@@ -84,7 +84,7 @@ export function GettingStartedCard({
                   {new URL(copy.payload.path, portalUrl).href.replace(/^https?:\/\//, '')}
                 </code>
               )}
-              {task.availability === 'blocked' && (
+              {task.availability === 'blocked' && task.blocked?.kind === 'permission' && (
                 <p className="text-xs text-muted-foreground">
                   <FormattedMessage
                     id="onboarding.launch.adminNeeded"
