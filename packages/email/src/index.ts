@@ -37,12 +37,11 @@ import type { SendingIdentity } from './sender'
 export type { SendingIdentity } from './sender'
 import { MagicLinkEmail } from './templates/magic-link'
 import { SignupNotAllowedEmail } from './templates/signup-not-allowed'
-import { InvitationEmail } from './templates/invitation'
+import { InvitationEmail, type InvitationEmailCopy } from './templates/invitation'
 import { PortalInviteEmail } from './templates/portal-invite'
 import { WelcomeEmail } from './templates/welcome'
 import { MessengerInstallEmail } from './templates/messenger-install'
-import { OnboardingWelcomeEmail, type OnboardingEmailStep } from './templates/onboarding-welcome'
-import { OnboardingNudgeEmail } from './templates/onboarding-nudge'
+import { OnboardingEmail, type OnboardingEmailContent } from './templates/onboarding-email'
 import { StatusChangeEmail } from './templates/status-change'
 import { NewCommentEmail } from './templates/new-comment'
 import { ConversationMessageEmail } from './templates/conversation-message'
@@ -609,6 +608,8 @@ export async function sendRawEmail(options: RawEmailOptions): Promise<EmailResul
 // Invitation Email
 // ============================================================================
 
+export type { InvitationEmailCopy }
+
 interface SendInvitationParams {
   to: SecureRecipient
   invitedByName: string
@@ -616,20 +617,23 @@ interface SendInvitationParams {
   workspaceName: string
   inviteLink: string
   logoUrl?: string
+  /** The invitation in the team's language, subject included. English without it. */
+  copy?: InvitationEmailCopy & { subject: string }
 }
 
 export async function sendInvitationEmail(params: SendInvitationParams): Promise<EmailResult> {
-  const { to, invitedByName, inviteeName, workspaceName, inviteLink, logoUrl } = params
+  const { to, invitedByName, inviteeName, workspaceName, inviteLink, logoUrl, copy } = params
 
   return sendEmail({
     to,
-    subject: `You've been invited to join ${workspaceName} on Quackback`,
+    subject: copy?.subject ?? `${invitedByName} invited you to ${workspaceName}`,
     react: InvitationEmail({
       invitedByName,
       inviteeName,
       organizationName: workspaceName,
       inviteLink,
       logoUrl,
+      copy,
     }),
     emailType: 'InvitationEmail',
     preview: { inviteLink },
@@ -705,44 +709,43 @@ export async function sendMessengerInstallEmail(params: {
   })
 }
 
-export type { OnboardingEmailStep }
+export type { OnboardingEmailContent }
 
-export async function sendOnboardingWelcomeEmail(params: {
+interface SendOnboardingEmailParams extends OnboardingEmailContent {
   to: string
-  name: string
+  subject: string
   workspaceName: string
-  steps: OnboardingEmailStep[]
-  homeUrl: string
   unsubscribeUrl: string
   logoUrl?: string
-}): Promise<EmailResult> {
+}
+
+function sendOnboardingEmail(
+  params: SendOnboardingEmailParams,
+  emailType: 'OnboardingWelcomeEmail' | 'OnboardingNudgeEmail'
+): Promise<EmailResult> {
+  const { to, subject, ...content } = params
   return sendEmail({
-    to: params.to,
-    subject: `${params.workspaceName} is ready: your next steps`,
-    react: OnboardingWelcomeEmail(params),
+    to,
+    subject,
+    react: OnboardingEmail(content),
     unsubscribeUrl: params.unsubscribeUrl,
-    emailType: 'OnboardingWelcomeEmail',
-    preview: { homeUrl: params.homeUrl },
+    emailType,
+    preview: { cta: params.cta.url, lang: params.lang },
   })
 }
 
-export async function sendOnboardingNudgeEmail(params: {
-  to: string
-  name: string
-  workspaceName: string
-  nextStep: { title: string; url: string }
-  test: { label: string; url: string } | null
-  unsubscribeUrl: string
-  logoUrl?: string
-}): Promise<EmailResult> {
-  return sendEmail({
-    to: params.to,
-    subject: `Your next step in ${params.workspaceName}`,
-    react: OnboardingNudgeEmail(params),
-    unsubscribeUrl: params.unsubscribeUrl,
-    emailType: 'OnboardingNudgeEmail',
-    preview: { nextStep: params.nextStep.url },
-  })
+/** The one "workspace is ready" email, sent when a new workspace's owner first lands. */
+export async function sendOnboardingWelcomeEmail(
+  params: SendOnboardingEmailParams
+): Promise<EmailResult> {
+  return sendOnboardingEmail(params, 'OnboardingWelcomeEmail')
+}
+
+/** The day-two nudge, sent at most once while no customer has acted yet. */
+export async function sendOnboardingNudgeEmail(
+  params: SendOnboardingEmailParams
+): Promise<EmailResult> {
+  return sendOnboardingEmail(params, 'OnboardingNudgeEmail')
 }
 
 // ============================================================================
@@ -1795,8 +1798,7 @@ export { InvitationEmail } from './templates/invitation'
 export { PortalInviteEmail } from './templates/portal-invite'
 export { WelcomeEmail } from './templates/welcome'
 export { MessengerInstallEmail } from './templates/messenger-install'
-export { OnboardingWelcomeEmail } from './templates/onboarding-welcome'
-export { OnboardingNudgeEmail } from './templates/onboarding-nudge'
+export { OnboardingEmail } from './templates/onboarding-email'
 export { MagicLinkEmail } from './templates/magic-link'
 export { SignupNotAllowedEmail } from './templates/signup-not-allowed'
 export { StatusChangeEmail } from './templates/status-change'

@@ -246,13 +246,14 @@ const WIZARD_ONLY_MESSAGE_PREFIXES = [
 
 /**
  * The catalog an admin page seeds: everything but the strings that load with
- * a lazy surface (the file viewer, the product tour, Copilot and search) and
- * the wizard's own.
+ * a lazy surface (the file viewer, the product tour, Copilot and search), the
+ * wizard's own, and email copy (formatted on the server, never rendered).
  */
 export function adminSeedMessages(all: Record<string, string>): Record<string, string> {
   const subset: Record<string, string> = {}
   for (const [key, value] of Object.entries(all)) {
     if (isViewerMessage(key) || isTourMessage(key) || isAskMessage(key)) continue
+    if (key.startsWith('email.')) continue
     if (WIZARD_ONLY_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))) continue
     subset[key] = value
   }

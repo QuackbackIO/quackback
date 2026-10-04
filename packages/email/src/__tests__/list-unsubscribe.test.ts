@@ -75,10 +75,15 @@ describe('token emails carry the headers', () => {
   it('the setup nudge', async () => {
     await sendOnboardingNudgeEmail({
       to: 'sam@acme.test',
-      name: 'Sam',
+      subject: 'Your next step in Acme',
       workspaceName: 'Acme',
-      nextStep: { title: 'Share your board', url: 'https://acme.test/admin' },
-      test: null,
+      lang: 'en',
+      dir: 'ltr',
+      preview: 'Your next step in Acme',
+      heading: 'Your next step',
+      paragraphs: ['This takes about a minute.'],
+      cta: { label: 'Share your board', url: 'https://acme.test/admin' },
+      footer: { reason: 'You set up Acme this week.', unsubscribeLabel: 'Stop setup tips' },
       unsubscribeUrl: PAGE,
     })
     expect(sentHeaders()).toMatchObject({

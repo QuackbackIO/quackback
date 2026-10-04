@@ -383,6 +383,17 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
     }
   )
 
+/** The language this request's browser asked for, or undefined outside a request. */
+async function requestLocale() {
+  try {
+    const { getRequestHeaders } = await import('@tanstack/react-start/server')
+    const { resolveLocale } = await import('@/lib/shared/i18n')
+    return resolveLocale(getRequestHeaders().get('accept-language'))
+  } catch {
+    return undefined
+  }
+}
+
 /** Stamp default outcome, friendly-host details, and handoff so Home can open. */
 export const ensureOnboardingHomeReadyFn = createServerFn({ method: 'POST' }).handler(async () => {
   const session = await getSession()
@@ -417,11 +428,13 @@ export const ensureOnboardingHomeReadyFn = createServerFn({ method: 'POST' }).ha
     }
     return { state: next, value: { modulesChanged, firstLanding } }
   })
-  // The owner's first landing queues the welcome and the day-two nudge.
+  // The owner's first landing queues the welcome and the day-two nudge, in
+  // the language their browser asked for unless they choose one later.
   if (value.firstLanding) {
     const { scheduleOnboardingEmails } =
       await import('@/lib/server/domains/onboarding/onboarding-emails')
-    await scheduleOnboardingEmails(caller.id as PrincipalId).catch((error) =>
+    const locale = await requestLocale()
+    await scheduleOnboardingEmails(caller.id as PrincipalId, new Date(), locale).catch((error) =>
       log.warn({ err: error }, 'onboarding emails not scheduled')
     )
   }
