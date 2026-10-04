@@ -1,4 +1,6 @@
 import { LaunchPlanDock } from '@/components/onboarding/launch-plan-dock'
+import { PlanNoticeQuiet } from '@/components/admin/plan-notice-banner'
+import type { PlanNotice } from '@/lib/server/domains/settings/tier-limits.types'
 import { SearchTrigger } from '@/components/admin/ask/search-palette'
 import { useProductTour } from '@/components/onboarding/product-tour'
 import { FormattedMessage } from 'react-intl'
@@ -85,6 +87,8 @@ interface AdminSidebarProps {
     chatAvailability?: 'online' | 'away'
   }
   latestVersion?: LatestVersionResult | null
+  /** A running trial shows here quietly until its last days. */
+  planNotice?: PlanNotice | null
 }
 
 interface RailItem {
@@ -261,7 +265,7 @@ function MobileNavLink({
   )
 }
 
-export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarProps) {
+export function AdminSidebar({ initialUserData, latestVersion, planNotice }: AdminSidebarProps) {
   const router = useRouter()
   const onNotificationsPage = useRouterState({
     select: (s) => s.location.pathname.startsWith('/admin/notifications'),
@@ -394,6 +398,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
 
             {/* Bottom Section */}
             <div className="flex flex-col gap-0.5 px-2">
+              <PlanNoticeQuiet notice={planNotice ?? null} />
               <LaunchPlanDock />
               {/* Settings (admin-only) */}
               {showSettings && (

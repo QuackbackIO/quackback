@@ -1523,5 +1523,6 @@
   "onboarding.task.first-win.helpCenter.outcome": "第一篇解答上線",
   "onboarding.task.first-win.status.outcome": "客戶可查看你的狀態",
   "onboarding.launch.later": "稍後",
-  "onboarding.launch.ready": "已就緒"
+  "onboarding.launch.ready": "已就緒",
+  "onboarding.trial.quiet": "{label} · {days} 天"
 }

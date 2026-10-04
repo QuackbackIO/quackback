@@ -1523,5 +1523,6 @@
   "onboarding.task.first-win.helpCenter.outcome": "Первый ответ опубликован",
   "onboarding.task.first-win.status.outcome": "Клиенты видят ваш статус",
   "onboarding.launch.later": "Позже",
-  "onboarding.launch.ready": "Готово"
+  "onboarding.launch.ready": "Готово",
+  "onboarding.trial.quiet": "{label} · {days, plural, one {# день} few {# дня} many {# дней} other {# дня}}"
 }

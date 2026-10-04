@@ -37,4 +37,19 @@ describe('PlanNoticeBanner', () => {
     render(<PlanNoticeBanner notice={OPERATOR} />)
     expect(screen.getByText('Scheduled maintenance')).toBeInTheDocument()
   })
+
+  it('waits for the last three days of a trial before it shows', () => {
+    const days = (n: number) => ({
+      label: 'Pro trial',
+      message: 'When this ends, pick a plan.',
+      expiresAt: new Date(Date.now() + n * 86_400_000 - 60_000).toISOString(),
+      actionLabel: 'See plans',
+      actionUrl: '/admin/settings/billing',
+    })
+    render(<PlanNoticeBanner notice={days(14)} />)
+    expect(screen.queryByText('Pro trial')).not.toBeInTheDocument()
+    cleanup()
+    render(<PlanNoticeBanner notice={days(3)} />)
+    expect(screen.getByText('Pro trial')).toBeInTheDocument()
+  })
 })

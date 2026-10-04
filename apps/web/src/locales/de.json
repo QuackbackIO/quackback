@@ -1523,5 +1523,6 @@
   "onboarding.task.first-win.helpCenter.outcome": "Deine erste Antwort ist online",
   "onboarding.task.first-win.status.outcome": "Kunden sehen deinen Status",
   "onboarding.launch.later": "Später",
-  "onboarding.launch.ready": "Bereit"
+  "onboarding.launch.ready": "Bereit",
+  "onboarding.trial.quiet": "{label} · {days, plural, one {# Tag} other {# Tage}}"
 }

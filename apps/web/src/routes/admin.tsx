@@ -299,7 +299,11 @@ function AdminContent({
       <AdminWorkspaceFrame
         sidebar={
           initialUserData && (
-            <AdminSidebar initialUserData={initialUserData} latestVersion={latestVersion} />
+            <AdminSidebar
+              initialUserData={initialUserData}
+              latestVersion={latestVersion}
+              planNotice={planNotice}
+            />
           )
         }
         notices={

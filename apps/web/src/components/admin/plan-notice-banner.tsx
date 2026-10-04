@@ -1,6 +1,7 @@
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
+import { FormattedMessage } from 'react-intl'
 import type { PlanNotice } from '@/lib/server/domains/settings/tier-limits.types'
-import { presentPlanNotice } from '@/lib/shared/plan-notice'
+import { isQuietTrial, presentPlanNotice } from '@/lib/shared/plan-notice'
 
 interface PlanNoticeBannerProps {
   notice: PlanNotice | null
@@ -13,7 +14,8 @@ interface PlanNoticeBannerProps {
  */
 export function PlanNoticeBanner({ notice }: PlanNoticeBannerProps) {
   const view = presentPlanNotice(notice)
-  if (!view) return null
+  // A trial with days to spare is a quiet line in the sidebar, not a banner.
+  if (!view || isQuietTrial(view)) return null
 
   const ended = view.ended
   const tone = ended
@@ -65,5 +67,28 @@ export function PlanNoticeBanner({ notice }: PlanNoticeBannerProps) {
         </a>
       )}
     </div>
+  )
+}
+
+/** A running trial's days, quietly, in the sidebar footer until its last three. */
+export function PlanNoticeQuiet({ notice }: PlanNoticeBannerProps) {
+  const view = presentPlanNotice(notice)
+  if (!view || !isQuietTrial(view)) return null
+  const text = (
+    <FormattedMessage
+      id="onboarding.trial.quiet"
+      defaultMessage="{label} · {days, plural, one {# day} other {# days}}"
+      values={{ label: view.label, days: view.daysLeft }}
+    />
+  )
+  return view.actionUrl?.startsWith('/') ? (
+    <a
+      href={view.actionUrl}
+      className="mb-1 block truncate rounded px-3 py-1 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground"
+    >
+      {text}
+    </a>
+  ) : (
+    <p className="mb-1 truncate px-3 py-1 text-xs text-muted-foreground">{text}</p>
   )
 }

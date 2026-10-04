@@ -1523,5 +1523,6 @@
   "onboarding.task.first-win.helpCenter.outcome": "تُنشر أول إجابة",
   "onboarding.task.first-win.status.outcome": "يمكن للعملاء متابعة حالتك",
   "onboarding.launch.later": "لاحقًا",
-  "onboarding.launch.ready": "جاهز"
+  "onboarding.launch.ready": "جاهز",
+  "onboarding.trial.quiet": "{label} · {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}"
 }
