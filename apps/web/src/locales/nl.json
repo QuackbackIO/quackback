@@ -1534,5 +1534,7 @@
   "onboarding.live.invite.member": "Lid",
   "onboarding.live.invite.admin": "Beheerder",
   "onboarding.live.invite.sentTo": "{email} uitgenodigd",
-  "onboarding.live.invite.send": "Uitnodigingen versturen"
+  "onboarding.live.invite.send": "Uitnodigingen versturen",
+  "admin.empty.roadmap.none": "Nog geen roadmaps",
+  "admin.empty.roadmap.create": "Maak een roadmap"
 }

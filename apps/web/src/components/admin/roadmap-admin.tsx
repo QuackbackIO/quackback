@@ -30,8 +30,9 @@ import { roadmapPostsKeys } from '@/lib/client/hooks/use-roadmap-posts-query'
 import { Route } from '@/routes/admin/roadmap'
 import type { RoadmapViewPost, RoadmapPostsListResult } from '@/lib/shared/types'
 import { Link } from '@tanstack/react-router'
-import { FormattedMessage } from 'react-intl'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { Button } from '@/components/ui/button'
+import { NewButton } from '@/components/shared/new-button'
 import type { PostStatusId, PostId, RoadmapId } from '@quackback/ids'
 
 /**
@@ -179,6 +180,8 @@ export function RoadmapAdmin() {
     }
   }
 
+  const intl = useIntl()
+  const [createOpen, setCreateOpen] = useState(false)
   // Ideas reach the roadmap from Feedback, by their status or ETA.
   const moveIdeaAction = (
     <Button asChild size="sm" variant="outline">
@@ -193,7 +196,12 @@ export function RoadmapAdmin() {
 
   return (
     <div className="flex h-full bg-background">
-      <RoadmapSidebar selectedRoadmapId={selectedRoadmapId} onSelectRoadmap={setSelectedRoadmap} />
+      <RoadmapSidebar
+        selectedRoadmapId={selectedRoadmapId}
+        onSelectRoadmap={setSelectedRoadmap}
+        createOpen={createOpen}
+        onCreateOpenChange={setCreateOpen}
+      />
 
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {selectedRoadmap ? (
@@ -278,11 +286,25 @@ export function RoadmapAdmin() {
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center">
-            <EmptyState
-              icon={MapIcon}
-              title="No roadmap selected"
-              description="Create or select a roadmap from the sidebar"
-            />
+            {roadmaps?.length === 0 ? (
+              <EmptyState
+                icon={MapIcon}
+                title={intl.formatMessage({
+                  id: 'admin.empty.roadmap.none',
+                  defaultMessage: 'No roadmaps yet',
+                })}
+                action={
+                  <NewButton noun="roadmap" onClick={() => setCreateOpen(true)}>
+                    <FormattedMessage
+                      id="admin.empty.roadmap.create"
+                      defaultMessage="Create a roadmap"
+                    />
+                  </NewButton>
+                }
+              />
+            ) : (
+              <EmptyState icon={MapIcon} title="No roadmap selected" />
+            )}
           </div>
         )}
       </main>

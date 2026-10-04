@@ -1534,5 +1534,7 @@
   "onboarding.live.invite.member": "Mitglied",
   "onboarding.live.invite.admin": "Admin",
   "onboarding.live.invite.sentTo": "{email} eingeladen",
-  "onboarding.live.invite.send": "Einladungen senden"
+  "onboarding.live.invite.send": "Einladungen senden",
+  "admin.empty.roadmap.none": "Noch keine Roadmaps",
+  "admin.empty.roadmap.create": "Roadmap erstellen"
 }

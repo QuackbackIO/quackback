@@ -1534,5 +1534,7 @@
   "onboarding.live.invite.member": "成员",
   "onboarding.live.invite.admin": "管理员",
   "onboarding.live.invite.sentTo": "已邀请 {email}",
-  "onboarding.live.invite.send": "发送邀请"
+  "onboarding.live.invite.send": "发送邀请",
+  "admin.empty.roadmap.none": "还没有路线图",
+  "admin.empty.roadmap.create": "创建路线图"
 }

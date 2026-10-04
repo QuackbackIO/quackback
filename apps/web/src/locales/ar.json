@@ -1534,5 +1534,7 @@
   "onboarding.live.invite.member": "عضو",
   "onboarding.live.invite.admin": "مسؤول",
   "onboarding.live.invite.sentTo": "تمت دعوة {email}",
-  "onboarding.live.invite.send": "إرسال الدعوات"
+  "onboarding.live.invite.send": "إرسال الدعوات",
+  "admin.empty.roadmap.none": "لا توجد خرائط طريق بعد",
+  "admin.empty.roadmap.create": "أنشئ خارطة طريق"
 }

@@ -1534,5 +1534,7 @@
   "onboarding.live.invite.member": "Miembro",
   "onboarding.live.invite.admin": "Administrador",
   "onboarding.live.invite.sentTo": "{email} invitado",
-  "onboarding.live.invite.send": "Enviar invitaciones"
+  "onboarding.live.invite.send": "Enviar invitaciones",
+  "admin.empty.roadmap.none": "Aún no hay hojas de ruta",
+  "admin.empty.roadmap.create": "Crear una hoja de ruta"
 }

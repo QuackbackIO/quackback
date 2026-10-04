@@ -6,6 +6,7 @@
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderToString } from 'react-dom/server'
+import { IntlProvider } from 'react-intl'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@tanstack/react-router', () => ({
@@ -29,6 +30,16 @@ const { RoadmapAdmin } = await import('@/components/admin/roadmap-admin')
 const { roadmapsKeys } = await import('@/lib/client/hooks/use-roadmaps-query')
 const { adminQueries } = await import('@/lib/client/queries/admin')
 
+function render(client: QueryClient) {
+  return renderToString(
+    <IntlProvider locale="en" defaultLocale="en" onError={() => {}}>
+      <QueryClientProvider client={client}>
+        <RoadmapAdmin />
+      </QueryClientProvider>
+    </IntlProvider>
+  )
+}
+
 describe('RoadmapAdmin on the server', () => {
   it('renders the selected board without a document', () => {
     const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } })
@@ -45,13 +56,23 @@ describe('RoadmapAdmin on the server', () => {
       },
     ])
 
-    const html = renderToString(
-      <QueryClientProvider client={client}>
-        <RoadmapAdmin />
-      </QueryClientProvider>
-    )
+    const html = render(client)
 
     expect(html).toContain('Product roadmap')
     expect(html).toContain('Planned')
+  })
+
+  it('offers to create the first roadmap when there is none, without a paragraph', () => {
+    const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } })
+    client.setQueryData(adminQueries.boards().queryKey, [])
+    client.setQueryData(adminQueries.tags().queryKey, [])
+    client.setQueryData(adminQueries.segments().queryKey, [])
+    client.setQueryData(roadmapsKeys.list(), [])
+
+    const html = render(client)
+
+    expect(html).toContain('No roadmaps yet')
+    expect(html).toContain('Create a roadmap')
+    expect(html).not.toMatch(/<p[\s>]/)
   })
 })

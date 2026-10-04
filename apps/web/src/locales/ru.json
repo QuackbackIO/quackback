@@ -1534,5 +1534,7 @@
   "onboarding.live.invite.member": "Участник",
   "onboarding.live.invite.admin": "Администратор",
   "onboarding.live.invite.sentTo": "{email} приглашён",
-  "onboarding.live.invite.send": "Отправить приглашения"
+  "onboarding.live.invite.send": "Отправить приглашения",
+  "admin.empty.roadmap.none": "Роадмапов пока нет",
+  "admin.empty.roadmap.create": "Создать роадмап"
 }

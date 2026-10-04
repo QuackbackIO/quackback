@@ -1534,5 +1534,7 @@
   "onboarding.live.invite.member": "成員",
   "onboarding.live.invite.admin": "管理員",
   "onboarding.live.invite.sentTo": "已邀請 {email}",
-  "onboarding.live.invite.send": "寄送邀請"
+  "onboarding.live.invite.send": "寄送邀請",
+  "admin.empty.roadmap.none": "還沒有路線圖",
+  "admin.empty.roadmap.create": "建立路線圖"
 }
