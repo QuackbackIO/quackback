@@ -198,7 +198,8 @@ export function buildAskStarterPrompts(
     if (unique.length >= 3) break
     if (!unique.some((item) => item.id === fallback.id)) unique.push(fallback)
   }
-  return unique.slice(0, 4)
+  // Three fit on one line beside the composer.
+  return unique.slice(0, 3)
 }
 
 /** Exported copy lets every locale share one complete catalogue. */
