@@ -19,7 +19,7 @@ it('loads Copilot strings that the page seed leaves out', async () => {
               <FormattedMessage id="ask.chat.newChat" defaultMessage="New chat" />
             </p>
             <p>
-              <FormattedMessage id="onboarding.launch.title" defaultMessage="Your launch plan" />
+              <FormattedMessage id="onboarding.launch.name" defaultMessage="Launch plan" />
             </p>
           </AskMessages>
         </Suspense>
@@ -27,5 +27,5 @@ it('loads Copilot strings that the page seed leaves out', async () => {
     )
   })
   expect(await screen.findByText('Nouvelle discussion')).toBeTruthy()
-  expect(screen.getByText(seeded['onboarding.launch.title']!)).toBeTruthy()
+  expect(screen.getByText(seeded['onboarding.launch.name']!)).toBeTruthy()
 })

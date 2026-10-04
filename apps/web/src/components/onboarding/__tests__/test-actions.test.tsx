@@ -223,10 +223,10 @@ describe('choosing the test action', () => {
 })
 
 describe('the admin tour', () => {
-  it('opens on the Copilot chat when Home is the chat, and on the products otherwise', async () => {
+  it('opens on the Copilot chat when Home is the chat, and on the first module otherwise', async () => {
     for (const [copilotOnHome, lead] of [
       [true, 'Copilot.'],
-      [false, 'Your products.'],
+      [false, 'Feedback.'],
     ] as const) {
       hoisted.copilotOnHome = copilotOnHome
       render(

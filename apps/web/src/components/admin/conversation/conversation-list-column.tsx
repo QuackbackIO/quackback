@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { hasConversationsFn } from '@/lib/server/functions/onboarding-progress'
 import { conversationInboxQueries } from '@/lib/client/queries/conversation-inbox'
 import { inboxQueries } from '@/lib/client/queries/inbox'
 import type {
@@ -407,13 +408,23 @@ function EmptyList({
     priorityFilter !== 'all' ||
     !!channelFilter ||
     (facet !== 'all' && facet !== 'open')
-  const isAllClear = isMainConversationQueue && facet === 'open' && !isFiltered && !activationAction
+  // A workspace that has never had a conversation gets the first-run state in
+  // every main queue, whatever its launch plan says.
+  const { data: history } = useQuery({
+    queryKey: ['inbox', 'has-conversations'],
+    queryFn: () => hasConversationsFn(),
+    enabled: isMainConversationQueue && !isFiltered,
+    staleTime: 60_000,
+  })
+  const firstRun = isMainConversationQueue && !isFiltered && history?.hasConversations === false
+  const isAllClear =
+    isMainConversationQueue && facet === 'open' && !isFiltered && !activationAction && !firstRun
   const emptyMsg = isFiltered
     ? intl.formatMessage({
         id: 'inbox.empty.filtered.title',
         defaultMessage: 'No conversations match these filters',
       })
-    : activationAction && isMainConversationQueue
+    : (activationAction || firstRun) && isMainConversationQueue
       ? intl.formatMessage({
           id: 'inbox.empty.firstRun.title',
           defaultMessage: 'No conversations yet',

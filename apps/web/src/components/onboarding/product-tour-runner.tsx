@@ -5,6 +5,7 @@ import { FormattedMessage, IntlProvider, useIntl } from 'react-intl'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { getTourContextFn, markTourSeenFn } from '@/lib/server/functions/onboarding-progress'
+import { adminQueries } from '@/lib/client/queries/admin'
 import { useFeatureFlags } from '@/lib/client/hooks/use-root-context'
 import { usePermissions } from '@/lib/client/use-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -18,6 +19,7 @@ import {
   type TourContext,
   type TourRoute,
   type TourStop,
+  type TourTryIt,
 } from './tour-stops'
 
 /** Below the `sm` breakpoint the sidebar is behind the menu drawer. */
@@ -52,11 +54,6 @@ function waitForTarget(target: string): Promise<HTMLElement | null> {
   })
 }
 
-/** An empty state that has not rendered falls back to its product's sidebar item. */
-function fallbackTarget(target: string): string | null {
-  return target.endsWith('-empty') ? `nav-${target.replace(/-empty$/, '')}` : null
-}
-
 type Phase = 'idle' | 'tour' | 'end'
 
 /**
@@ -76,11 +73,14 @@ export function ProductTourRunner({
   runId,
   copilotOnHome = false,
   endAction,
+  openTest,
 }: {
   runId: number
   /** Home leads with the Copilot chat, so the tour opens on it. */
   copilotOnHome?: boolean
   endAction?: TourEndAction
+  /** Opens a test on the Try Messenger sheet; without it, no stop offers one. */
+  openTest?: (start: 'idea' | 'message') => void
 }) {
   const intl = useIntl()
   const router = useRouter()
@@ -128,9 +128,15 @@ export function ProductTourRunner({
     starting.current = true
     priorFocus.current = document.activeElement as HTMLElement | null
     try {
-      const [fetched, loadedMessages] = await Promise.all([
+      const canTest = Boolean(openTest) && permissions.has(PERMISSIONS.CONVERSATION_VIEW)
+      const [fetched, loadedMessages, status] = await Promise.all([
         getTourContextFn().catch(() => null),
         tourMessagesFor(intl.messages, intl.locale),
+        canTest && isProductEnabled(flags, 'feedback')
+          ? queryClient
+              .fetchQuery({ ...adminQueries.onboardingStatus(), staleTime: 60_000 })
+              .catch(() => null)
+          : null,
       ])
       const tourContext: TourContext = {
         copilotOnHome,
@@ -138,6 +144,7 @@ export function ProductTourRunner({
         feedbackPrivate: fetched?.feedbackPrivate ?? false,
         modules: {
           feedback: isProductEnabled(flags, 'feedback'),
+          changelog: isProductEnabled(flags, 'changelog'),
           support: isProductEnabled(flags, 'support'),
           helpCenter: isProductEnabled(flags, 'helpCenter'),
           status: isProductEnabled(flags, 'status'),
@@ -149,6 +156,10 @@ export function ProductTourRunner({
           support: false,
           helpCenter: false,
           status: false,
+        },
+        tests: {
+          idea: canTest && status?.canPostTestIdea === true,
+          message: canTest && isProductEnabled(flags, 'support'),
         },
       }
       const resolved = resolveTourStops(tourContext)
@@ -168,7 +179,7 @@ export function ProductTourRunner({
     } finally {
       starting.current = false
     }
-  }, [copilotOnHome, flags, permissions, queryClient, intl.messages, intl.locale])
+  }, [copilotOnHome, flags, permissions, queryClient, intl.messages, intl.locale, openTest])
 
   const finish = useCallback(async () => {
     setTargetElement(null)
@@ -196,15 +207,23 @@ export function ProductTourRunner({
 
   const stop = phase === 'tour' ? stops[index] : undefined
 
+  // A Try it leaves the tour and runs the real thing.
+  const runTryIt = useCallback(
+    (tryIt: TourTryIt) => {
+      close()
+      if (tryIt.kind === 'test') openTest?.(tryIt.start)
+      else void goTo(tryIt.to)
+    },
+    [close, openTest, goTo]
+  )
+
   // Open the stop's page, then point at its element once it is there.
   useEffect(() => {
     if (!stop) return
     let disposed = false
     void (async () => {
       if (stop.route) await goTo(stop.route)
-      let element = await waitForTarget(stop.target)
-      const fallback = element ? null : fallbackTarget(stop.target)
-      if (!element && fallback) element = visibleTarget(fallback)
+      const element = await waitForTarget(stop.target)
       if (disposed) return
       if (element) {
         element.scrollIntoView({ block: 'nearest' })
@@ -373,6 +392,16 @@ export function ProductTourRunner({
                     <FormattedMessage {...stop.line} values={{ shortcut }} />
                   </span>
                 </p>
+                {stop.tryIt && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="relative mt-3"
+                    onClick={() => runTryIt(stop.tryIt!)}
+                  >
+                    <FormattedMessage {...stop.tryIt.label} />
+                  </Button>
+                )}
                 <div className="relative mt-3.5 flex items-center gap-1.5">
                   <span id="tour-stop-count" className="me-auto text-xs text-muted-foreground">
                     <FormattedMessage

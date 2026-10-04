@@ -82,3 +82,13 @@ export const getTourContextFn = createServerFn({ method: 'GET' }).handler(async 
     },
   }
 })
+
+/**
+ * Whether the workspace has ever had a conversation, so an empty inbox can
+ * tell a first run from a quiet day.
+ */
+export const hasConversationsFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+  const conversation = await db.query.conversations.findFirst({ columns: { id: true } })
+  return { hasConversations: Boolean(conversation) }
+})

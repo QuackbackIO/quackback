@@ -1,11 +1,11 @@
 import { lazy, Suspense, useEffect, type ReactNode } from 'react'
-import { FormattedMessage } from 'react-intl'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { OverviewDashboard } from '@/components/admin/admin-overview'
 import { HomeActions } from '@/components/admin/home-actions'
 import { copilotAvailabilityQuery, useCopilotOnHome } from '@/components/admin/ask/copilot-on-home'
 import { HomeLaunchArea } from '@/components/onboarding/home-try-it'
+import { HomeGreeting } from '@/components/onboarding/home-greeting'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { adminOverviewQueries } from '@/lib/client/queries/admin-overview'
 import { useHasPermission } from '@/lib/client/use-permissions'
@@ -73,13 +73,7 @@ function AdminOverviewPage() {
 
   const header = (
     <header className="space-y-2">
-      <h1 className="text-2xl font-semibold">
-        <FormattedMessage
-          id="onboarding.home.greeting"
-          defaultMessage="Welcome, {name}"
-          values={{ name: session?.user.name || settings?.name || 'Quackback' }}
-        />
-      </h1>
+      <HomeGreeting name={session?.user.name} email={session?.user.email} />
       <a href={baseUrl} className="text-sm text-muted-foreground hover:underline">
         {baseUrl ? new URL(baseUrl).host : settings?.name}
       </a>
@@ -88,7 +82,7 @@ function AdminOverviewPage() {
   // The launch plan, then the tour and try-it cards, in the launch window only.
   const plan = admin ? (
     <Suspense fallback={null}>
-      <HomeLaunchArea portalUrl={baseUrl} flags={flags} />
+      <HomeLaunchArea portalUrl={baseUrl} />
     </Suspense>
   ) : null
 

@@ -4,33 +4,33 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 
 /**
  * The guided tour's stops, as data. Each stop names the `data-tour` element it
- * points at, the page it needs, and the one line it says. Which stops a tour
- * has is decided by {@link resolveTourStops} before the overlay opens, from the
- * workspace's goals, modules, the viewer's permissions and the viewport, so
- * the count is right from the first stop and nothing waits on the page.
+ * points at, the page it needs, the one line it says and, where it helps, one
+ * Try it action that runs the real thing. Which stops a tour has is decided by
+ * {@link resolveTourStops} before the overlay opens, from the modules that are
+ * on, the workspace's goals, the viewer's permissions and the viewport, so the
+ * count is right from the first stop and nothing waits on the page.
  */
 
-export const MAX_TOUR_STOPS = 5
+export const MAX_TOUR_STOPS = 6
 
 export type TourStopId =
   | 'copilot'
-  | 'products'
   | 'feedback'
   | 'feedback-private'
   | 'roadmap'
+  | 'changelog'
   | 'support'
   | 'help-center'
   | 'status'
   | 'view-portal'
   | 'search'
 
-export type TourRoute =
-  | '/admin'
-  | '/admin/feedback'
-  | '/admin/inbox'
-  | '/admin/help-center'
-  | '/admin/status'
-  | '/admin/users'
+export type TourRoute = '/admin' | '/admin/help-center' | '/admin/status'
+
+/** A stop's Try it: open a test on the Try Messenger sheet, or the page that does the job. */
+export type TourTryIt =
+  | { kind: 'test'; start: 'idea' | 'message'; label: MessageDescriptor }
+  | { kind: 'link'; to: TourRoute; label: MessageDescriptor }
 
 export interface TourStop {
   id: TourStopId
@@ -40,20 +40,30 @@ export interface TourStop {
   route?: TourRoute
   lead: MessageDescriptor
   line: MessageDescriptor
+  tryIt?: TourTryIt
 }
 
 /** What the stops are chosen from. Gathered once, when the tour starts. */
 export interface TourContext {
-  /** Home leads with the Copilot chat. Nothing sets it yet; a later Home will. */
+  /** Home leads with the Copilot chat. */
   copilotOnHome?: boolean
   goals: readonly OnboardingOutcome[]
   feedbackPrivate: boolean
-  modules: { feedback: boolean; support: boolean; helpCenter: boolean; status: boolean }
+  /** The modules that are on now, so one switched on after setup is in the tour. */
+  modules: {
+    feedback: boolean
+    changelog: boolean
+    support: boolean
+    helpCenter: boolean
+    status: boolean
+  }
   permissions: ReadonlySet<string>
   /** Phone width: the sidebar is behind the menu drawer. */
   narrow: boolean
-  /** Products with nothing in them yet, whose empty state a stop can point at. */
+  /** Products with nothing in them yet, where a first-item Try it helps. */
   empty: { feedback: boolean; support: boolean; helpCenter: boolean; status: boolean }
+  /** Which tests on the Try Messenger sheet work for this person. */
+  tests: { idea: boolean; message: boolean }
 }
 
 const COPY = {
@@ -62,13 +72,6 @@ const COPY = {
     line: {
       id: 'onboarding.tour.stop.copilot.line',
       defaultMessage: 'Ask anything, or tell it what to change. Nothing changes until you apply.',
-    },
-  },
-  products: {
-    lead: { id: 'onboarding.tour.stop.products.lead', defaultMessage: 'Your products.' },
-    line: {
-      id: 'onboarding.tour.stop.products.line',
-      defaultMessage: 'Everything you turned on lives here.',
     },
   },
   feedback: {
@@ -90,6 +93,13 @@ const COPY = {
     line: {
       id: 'onboarding.tour.stop.roadmap.line',
       defaultMessage: 'Move ideas along to show what is coming next.',
+    },
+  },
+  changelog: {
+    lead: { id: 'onboarding.tour.stop.changelog.lead', defaultMessage: 'Changelog.' },
+    line: {
+      id: 'onboarding.tour.stop.changelog.line',
+      defaultMessage: 'Tell customers what shipped, and close the loop on their ideas.',
     },
   },
   support: {
@@ -126,79 +136,106 @@ const COPY = {
   },
 } satisfies Record<TourStopId, { lead: MessageDescriptor; line: MessageDescriptor }>
 
-function stop(id: TourStopId, target: string, route?: TourRoute): TourStop {
-  return { id, target, ...(route ? { route } : {}), ...COPY[id] }
+const TRY = {
+  idea: { id: 'onboarding.tour.stop.try.idea', defaultMessage: 'Post a test idea' },
+  message: { id: 'onboarding.tour.stop.try.message', defaultMessage: 'Send a test message' },
+  article: { id: 'onboarding.tour.stop.try.article', defaultMessage: 'Write your first article' },
+  service: { id: 'onboarding.tour.stop.try.service', defaultMessage: 'Add a service' },
+} satisfies Record<string, MessageDescriptor>
+
+function stop(id: TourStopId, target: string, route?: TourRoute, tryIt?: TourTryIt): TourStop {
+  return { id, target, ...(route ? { route } : {}), ...COPY[id], ...(tryIt ? { tryIt } : {}) }
 }
 
-type ProductKey = keyof TourContext['empty']
+type ModuleKey = 'feedback' | 'roadmap' | 'changelog' | 'support' | 'helpCenter' | 'status'
 
-const PRODUCT_PAGE: Record<ProductKey, { route: TourRoute; nav: string; empty: string }> = {
-  feedback: { route: '/admin/feedback', nav: 'nav-feedback', empty: 'feedback-empty' },
-  support: { route: '/admin/inbox', nav: 'nav-support', empty: 'support-empty' },
-  helpCenter: { route: '/admin/help-center', nav: 'nav-help-center', empty: 'help-center-empty' },
-  status: { route: '/admin/status', nav: 'nav-status', empty: 'status-empty' },
+/** The order other modules are kept in when there is no room for them all. */
+const MODULE_IMPORTANCE: ModuleKey[] = [
+  'feedback',
+  'support',
+  'helpCenter',
+  'roadmap',
+  'changelog',
+  'status',
+]
+
+const GOAL_MODULE: Partial<Record<OnboardingOutcome, ModuleKey>> = {
+  product_feedback: 'feedback',
+  internal: 'feedback',
+  customer_support: 'support',
+  help_center: 'helpCenter',
+  status_page: 'status',
 }
 
-/**
- * A product's stop points at its empty state, on its page, while it has
- * nothing in it, and at its sidebar item once it does. On a phone the sidebar
- * is out of view, so a product that is not empty has no stop.
- */
-function productStop(id: TourStopId, product: ProductKey, ctx: TourContext): TourStop | null {
-  const page = PRODUCT_PAGE[product]
-  if (ctx.empty[product]) return stop(id, page.empty, page.route)
-  return ctx.narrow ? null : stop(id, page.nav)
+function moduleOn(key: ModuleKey, ctx: TourContext): boolean {
+  return key === 'roadmap' ? ctx.modules.feedback : ctx.modules[key]
 }
 
-function goalStop(goal: OnboardingOutcome, ctx: TourContext): TourStop | null {
-  switch (goal) {
-    case 'product_feedback':
-    case 'internal':
-      if (!ctx.modules.feedback) return null
-      return productStop(
-        ctx.feedbackPrivate || goal === 'internal' ? 'feedback-private' : 'feedback',
-        'feedback',
-        ctx
+/** A module's stop, on its own sidebar item, with its Try it where that will work. */
+function moduleStop(key: ModuleKey, ctx: TourContext): TourStop {
+  switch (key) {
+    case 'feedback':
+      return stop(
+        ctx.feedbackPrivate ? 'feedback-private' : 'feedback',
+        'nav-feedback',
+        undefined,
+        ctx.tests.idea ? { kind: 'test', start: 'idea', label: TRY.idea } : undefined
       )
-    case 'customer_support':
-      if (!ctx.modules.support || !ctx.permissions.has(PERMISSIONS.CONVERSATION_VIEW)) return null
-      return productStop('support', 'support', ctx)
-    case 'help_center':
-      return ctx.modules.helpCenter ? productStop('help-center', 'helpCenter', ctx) : null
-    case 'status_page':
-      return ctx.modules.status ? productStop('status', 'status', ctx) : null
+    case 'roadmap':
+      return stop('roadmap', 'nav-roadmap')
+    case 'changelog':
+      return stop('changelog', 'nav-changelog')
+    case 'support':
+      return stop(
+        'support',
+        'nav-support',
+        undefined,
+        ctx.tests.message ? { kind: 'test', start: 'message', label: TRY.message } : undefined
+      )
+    case 'helpCenter':
+      return stop(
+        'help-center',
+        'nav-help-center',
+        undefined,
+        ctx.empty.helpCenter && ctx.permissions.has(PERMISSIONS.HELP_CENTER_MANAGE)
+          ? { kind: 'link', to: '/admin/help-center', label: TRY.article }
+          : undefined
+      )
+    case 'status':
+      return stop(
+        'status',
+        'nav-status',
+        undefined,
+        ctx.empty.status && ctx.permissions.has(PERMISSIONS.STATUS_PAGE_MANAGE)
+          ? { kind: 'link', to: '/admin/status', label: TRY.service }
+          : undefined
+      )
   }
 }
 
-/** The search stop: the sidebar Search row, on every page, so the tour stays put. */
-function searchStop(): TourStop {
-  return stop('search', 'search')
-}
-
 /**
- * The tour for this workspace and viewer: Copilot (or Your products), up to
- * two goal stops in goal order, Your portal back on Home, then Search. At most
- * five; sidebar stops, Search among them, are left out on a phone.
+ * The tour for this workspace and viewer: Copilot when Home is the chat, one
+ * stop per module that is on (the goals' modules first, then the most useful
+ * others), Your portal, then Search. At most six; on a phone the sidebar is
+ * out of view, so only Copilot remains.
  */
 export function resolveTourStops(ctx: TourContext): TourStop[] {
   const stops: TourStop[] = []
   if (ctx.copilotOnHome === true) stops.push(stop('copilot', 'copilot', '/admin'))
-  else if (!ctx.narrow) stops.push(stop('products', 'products', '/admin'))
+  if (ctx.narrow) return stops
 
-  const goalStops: TourStop[] = []
-  for (const goal of ctx.goals) {
-    const next = goalStop(goal, ctx)
-    if (next && !goalStops.some((existing) => existing.id === next.id)) goalStops.push(next)
+  const modules: ModuleKey[] = []
+  for (const key of [
+    ...ctx.goals.map((goal) => GOAL_MODULE[goal]).filter((key): key is ModuleKey => !!key),
+    ...MODULE_IMPORTANCE,
+  ]) {
+    if (moduleOn(key, ctx) && !modules.includes(key)) modules.push(key)
   }
-  const feedbackOnly = ctx.goals.length === 1 && ctx.goals[0] === 'product_feedback'
-  if (feedbackOnly && ctx.modules.feedback && !ctx.narrow) {
-    goalStops.push(stop('roadmap', 'nav-roadmap'))
-  }
-  stops.push(...goalStops.slice(0, 2))
-
-  if (!ctx.narrow) stops.push(stop('view-portal', 'view-portal', '/admin'))
-  if (!ctx.narrow) stops.push(searchStop())
-  return stops.slice(0, MAX_TOUR_STOPS)
+  const room = MAX_TOUR_STOPS - stops.length - 2
+  stops.push(...modules.slice(0, Math.max(0, room)).map((key) => moduleStop(key, ctx)))
+  stops.push(stop('view-portal', 'view-portal', '/admin'))
+  stops.push(stop('search', 'search'))
+  return stops
 }
 
 export type CoachmarkSide = 'right' | 'left' | 'bottom' | 'top'

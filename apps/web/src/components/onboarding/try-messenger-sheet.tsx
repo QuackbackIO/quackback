@@ -268,24 +268,24 @@ function TryMessengerBody({
           </div>
         ) : (
           <ol className="space-y-3">
-            <Step done={steps.sent} index={1}>
+            <RoundTripStep done={steps.sent} index={1}>
               <FormattedMessage
                 id="onboarding.test.step.send"
                 defaultMessage="Send a message as your customer."
               />
-            </Step>
-            <Step done={steps.replied} index={2}>
+            </RoundTripStep>
+            <RoundTripStep done={steps.replied} index={2}>
               <FormattedMessage
                 id="onboarding.test.step.reply"
                 defaultMessage="Reply from your inbox."
               />
-            </Step>
-            <Step done={steps.seen} index={3}>
+            </RoundTripStep>
+            <RoundTripStep done={steps.seen} index={3}>
               <FormattedMessage
                 id="onboarding.test.step.seen"
                 defaultMessage="Watch your reply arrive and get read."
               />
-            </Step>
+            </RoundTripStep>
           </ol>
         )}
 
@@ -315,7 +315,8 @@ export function roundTripSteps(
   }
 }
 
-function Step({
+/** One step of the round trip: a check and muted text once done. */
+export function RoundTripStep({
   done,
   index,
   children,

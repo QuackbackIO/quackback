@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
@@ -26,6 +26,12 @@ vi.mock('@/components/admin/branding/use-automatic-website-branding', () => ({
     dismiss: vi.fn(),
   }),
 }))
+vi.mock('@/lib/client/hooks/use-root-context', () => ({
+  useWorkspaceSettings: () => ({ name: 'Acme' }),
+}))
+vi.mock('@/lib/client/hooks/use-permission', () => ({ usePermission: () => true }))
+vi.mock('@/lib/server/functions/activation', () => ({ markPublicBoardLinkCopiedFn: vi.fn() }))
+vi.mock('@/lib/client/plg-events', () => ({ recordPlgEvent: vi.fn() }))
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ to, children }: { to: string; children: ReactNode }) => <a href={to}>{children}</a>,
 }))
@@ -82,7 +88,7 @@ function mount() {
   const view = render(
     <IntlProvider locale="en" messages={en}>
       <QueryClientProvider client={client}>
-        <HomeGettingStarted tryIt={<section>Try it yourself</section>} />
+        <HomeGettingStarted />
       </QueryClientProvider>
     </IntlProvider>
   )
@@ -108,9 +114,8 @@ describe('Home first-run cards', () => {
     hoisted.claim.mockResolvedValue({ show: true })
     const { client } = mount()
     await waitFor(() => expect(client.getQueryData(['onboarding', 'progress'])).toBeDefined())
-    expect(screen.queryByText('Take the 60-second tour')).toBeNull()
-    expect(screen.queryByText('Try it yourself')).toBeNull()
-    expect(screen.queryByRole('region', { name: 'Your launch plan' })).toBeNull()
+    expect(screen.queryByText('New here? Take the 60-second tour')).toBeNull()
+    expect(screen.queryByText(/Next step/)).toBeNull()
     expect(screen.queryByText('Your first real result is here.')).toBeNull()
     expect(hoisted.claim).not.toHaveBeenCalled()
   })
@@ -118,39 +123,33 @@ describe('Home first-run cards', () => {
   it('offers the tour in the launch window and remembers Not now', async () => {
     hoisted.status = status()
     const { client } = mount()
-    expect(await screen.findByText('Take the 60-second tour')).toBeVisible()
-    expect(screen.getByText('Try it yourself')).toBeVisible()
-    expect(screen.getByRole('region', { name: 'Your launch plan' })).toBeVisible()
+    expect(await screen.findByText('New here? Take the 60-second tour')).toBeVisible()
+    expect(screen.getByText('Next step · 2 of 3')).toBeVisible()
+    expect(screen.queryByText('Try it yourself')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Not now' }))
     await waitFor(() => expect(hoisted.dismiss).toHaveBeenCalledTimes(1))
-    await waitFor(() => expect(screen.queryByText('Take the 60-second tour')).toBeNull())
+    await waitFor(() => expect(screen.queryByText('New here? Take the 60-second tour')).toBeNull())
     expect(hoisted.start).not.toHaveBeenCalled()
-    expect(screen.getByText('Try it yourself')).toBeVisible()
+    expect(screen.getByText('Next step · 2 of 3')).toBeVisible()
 
     await client.invalidateQueries({ queryKey: ['onboarding', 'progress'] })
-    expect(screen.queryByText('Take the 60-second tour')).toBeNull()
+    expect(screen.queryByText('New here? Take the 60-second tour')).toBeNull()
   })
 
   it('starts the tour from the offer and hides the offer once it was seen', async () => {
     hoisted.status = status()
     mount()
-    // The tour offer's own Start, not a launch step's.
-    await screen.findByText('Take the 60-second tour')
-    const starts = screen.getAllByRole('button', { name: 'Start' })
-    const tourStart = starts.find((button) =>
-      button
-        .closest('section, [data-slot="card"]')
-        ?.textContent?.includes('Take the 60-second tour')
-    )
-    fireEvent.click(tourStart ?? starts[0])
+    // The offer's own Start: a launch step done in place is a Start button too.
+    const offer = await screen.findByRole('region', { name: 'New here? Take the 60-second tour' })
+    fireEvent.click(within(offer).getByRole('button', { name: 'Start' }))
     expect(hoisted.start).toHaveBeenCalledTimes(1)
     cleanup()
 
     hoisted.progress = { tourSeenAt: new Date().toISOString() }
     const { client } = mount()
     await waitFor(() => expect(client.getQueryData(['onboarding', 'progress'])).toBeDefined())
-    expect(screen.queryByText('Take the 60-second tour')).toBeNull()
+    expect(screen.queryByText('New here? Take the 60-second tour')).toBeNull()
   })
 
   it('claims the celebration once and never replays a cached claim', async () => {

@@ -56,7 +56,7 @@ export function AdminProductTourProvider({ children }: { children: ReactNode }) 
     [open]
   )
   return (
-    <ProductTourProvider endAction={endAction} copilotOnHome={copilotOnHome}>
+    <ProductTourProvider endAction={endAction} copilotOnHome={copilotOnHome} openTest={open}>
       {children}
       {sheet && (
         <Suspense fallback={null}>

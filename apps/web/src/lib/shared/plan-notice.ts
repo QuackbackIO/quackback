@@ -44,3 +44,11 @@ export function presentPlanNotice(
     ended: Boolean(notice.ended),
   }
 }
+
+/**
+ * A running trial with more than three days left. It stays out of the banner
+ * and shows quietly in the sidebar until its last days.
+ */
+export function isQuietTrial(view: PlanNoticeView | null): boolean {
+  return Boolean(view && !view.ended && view.daysLeft !== null && view.daysLeft > 3)
+}
