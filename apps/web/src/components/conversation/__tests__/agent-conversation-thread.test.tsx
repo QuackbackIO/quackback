@@ -508,7 +508,7 @@ function makeConversation(overrides: Partial<ConversationDTO> = {}): Conversatio
 
 function renderThread(
   item: { kind: 'conversation' | 'ticket'; id: string },
-  extra: { detailPanelShown?: boolean } = {}
+  extra: { detailPanelShown?: boolean; replyFirst?: boolean } = {}
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -629,6 +629,25 @@ describe('AgentConversationThread — conversation kind unaffected', () => {
     expect(await screen.findByRole('menuitemradio', { name: 'Note' })).toBeInTheDocument()
     expect(screen.getByTestId('inbox-detail-panel')).toBeInTheDocument()
     expect(screen.getByTestId('composer-ai-actions')).toHaveAttribute('data-active-mode', 'reply')
+  })
+})
+
+describe('AgentConversationThread: reply first (the Try Messenger sheet)', () => {
+  it('keeps Close filled and the send button an icon in the inbox', async () => {
+    renderThread({ kind: 'conversation', id: 'conversation_1' })
+    expect((await screen.findByRole('button', { name: 'Close' })).className).toContain(
+      'bg-primary'
+    )
+    expect(screen.getByRole('button', { name: 'Send reply' }).textContent).toBe('')
+  })
+
+  it('makes the reply the primary action and quiets Close', async () => {
+    renderThread({ kind: 'conversation', id: 'conversation_1' }, { replyFirst: true })
+    const close = await screen.findByRole('button', { name: 'Close' })
+    expect(close.className).not.toContain('bg-primary')
+    const send = screen.getByRole('button', { name: 'Send reply' })
+    expect(send.textContent).toBe('Send')
+    expect(send.className).toContain('bg-primary')
   })
 })
 
