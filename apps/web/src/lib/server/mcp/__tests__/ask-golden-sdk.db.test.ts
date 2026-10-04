@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import { createId } from '@quackback/ids'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
@@ -304,7 +303,7 @@ describe('Ask golden contracts through the actual in-memory MCP SDK', () => {
         principalId: serviceId,
         createdById: seeded.auth.principalId,
         name: 'Acme key',
-        keyHash: createHash('sha256').update(keyId).digest('hex'),
+        keyHash: `fixture-key-hash-${keyId}`,
         keyPrefix: 'qb_acme_test',
         scopes: JSON.stringify(['read:settings', 'write:settings']),
       })
