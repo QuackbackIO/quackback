@@ -38,6 +38,8 @@ import { loadLaunchStatus } from './launch-status'
 import { permissionsForLegacyRole } from '@/lib/server/policy/permissions'
 import type { Role } from '@/lib/shared/roles'
 import { detectFirstWin } from '@/lib/server/activation-wins'
+import { getCloudConfig } from '@/lib/server/domains/settings/cloud/cloud.service'
+import { PLAN_CATALOGUE } from '@/lib/server/domains/settings/cloud/cloud.types'
 import { sendOnboardingNudgeEmail, sendOnboardingWelcomeEmail } from '@quackback/email'
 import type { SupportedLocale } from '@/lib/shared/i18n'
 import type { OnboardingOutcome } from '@/lib/shared/db-types'
@@ -234,8 +236,6 @@ function primaryGoal(status: LaunchStatus): OnboardingOutcome | null {
 
 /** The running trial as the ready email states it, or null without one. */
 async function runningTrial(): Promise<{ days: number; planName: string } | null> {
-  const { getCloudConfig } = await import('@/lib/server/domains/settings/cloud/cloud.service')
-  const { PLAN_CATALOGUE } = await import('@/lib/server/domains/settings/cloud/cloud.types')
   const config = await getCloudConfig()
   if (!config.enabled || !config.trialActive || !config.plan) return null
   if (!config.trialStartedAt || !config.trialExpiresAt) return null

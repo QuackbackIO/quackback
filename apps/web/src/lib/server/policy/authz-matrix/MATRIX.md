@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 740 surfaces
+### Server functions (`requireAuth`) — 741 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -718,6 +718,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/teams.ts`::assignConversationTeamFn | conversation.assign |
 | `lib/server/functions/test-customer.ts`::mintTestCustomerTokenFn | conversation.view |
 | `lib/server/functions/test-customer.ts`::mintTestCustomerPhoneLinkFn | conversation.view |
+| `lib/server/functions/test-customer.ts`::getTestCustomerPhoneLinkStatusFn | conversation.view |
 | `lib/server/functions/test-customer.ts`::getTestCustomerOverviewFn | conversation.view |
 | `lib/server/functions/test-customer.ts`::deleteTestConversationsFn | conversation.manage |
 | `lib/server/functions/ticket-types.ts`::listTicketTypesFn | ticket.manage_types |
@@ -1057,7 +1058,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-224 of 1075 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+226 of 1078 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1156,6 +1157,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/status.ts`::getStatusPageFn | server-fn |
 | `lib/server/functions/status.ts`::getStatusUptimeFn | server-fn |
 | `lib/server/functions/status.ts`::listStatusHistoryFn | server-fn |
+| `lib/server/functions/subscriptions.ts`::peekUnsubscribeTokenFn | server-fn |
 | `lib/server/functions/subscriptions.ts`::processUnsubscribeTokenFn | server-fn |
 | `lib/server/functions/uploads.ts`::checkS3ConfiguredFn | server-fn |
 | `lib/server/functions/uploads.ts`::getWidgetImageUploadUrlFn | server-fn |
@@ -1232,6 +1234,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/api/storage/$.ts`::PUT | route |
 | `routes/api/track.ts`::OPTIONS | route |
 | `routes/api/track.ts`::POST | route |
+| `routes/api/unsubscribe.ts`::POST | route |
 | `routes/api/upload/file.ts`::POST | route |
 | `routes/api/upload/image.ts`::POST | route |
 | `routes/api/user/avatar.$userId.ts`::GET | route |
