@@ -10,7 +10,8 @@ import type { LaunchStatus } from '@/lib/shared/launch-checklist'
 const hoisted = vi.hoisted(() => ({
   status: null as unknown,
   progress: {} as Record<string, string>,
-  claim: vi.fn(),
+  card: vi.fn(),
+  dismissWin: vi.fn(),
   dismiss: vi.fn(),
   start: vi.fn(),
 }))
@@ -35,14 +36,18 @@ const tourView = vi.hoisted(() => ({ narrow: false, copilot: false }))
 vi.mock('@/components/admin/ask/copilot-on-home', () => ({
   useCopilotOnHome: () => tourView.copilot,
 }))
-vi.mock('@/lib/server/functions/activation', () => ({ markPublicBoardLinkCopiedFn: vi.fn() }))
+vi.mock('@/lib/server/functions/activation', () => ({
+  markPublicBoardLinkCopiedFn: vi.fn(),
+  markStatusLinkCopiedFn: vi.fn(),
+}))
 vi.mock('@/lib/client/plg-events', () => ({ recordPlgEvent: vi.fn() }))
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ to, children }: { to: string; children: ReactNode }) => <a href={to}>{children}</a>,
 }))
 vi.mock('@/lib/server/functions/onboarding-progress', () => ({
   getOnboardingProgressFn: async () => ({ ...hoisted.progress }),
-  claimFirstWinMomentFn: hoisted.claim,
+  getFirstWinCardFn: hoisted.card,
+  dismissFirstWinFn: hoisted.dismissWin,
   dismissTourOfferFn: hoisted.dismiss,
 }))
 vi.mock('@/lib/client/queries/admin', () => ({
@@ -110,7 +115,10 @@ beforeEach(() => {
     removeEventListener: () => {},
   })) as unknown as typeof window.matchMedia
   hoisted.progress = {}
-  hoisted.claim.mockReset()
+  hoisted.card.mockReset()
+  hoisted.card.mockResolvedValue(null)
+  hoisted.dismissWin.mockReset()
+  hoisted.dismissWin.mockResolvedValue({ ok: true })
   hoisted.dismiss.mockReset()
   // The server records Not now on the person, so the next read carries it.
   hoisted.dismiss.mockImplementation(async () => {
@@ -124,13 +132,12 @@ afterEach(cleanup)
 describe('Home first-run cards', () => {
   it('shows an established workspace none of them after an upgrade', async () => {
     hoisted.status = status({ launchWindow: null, inLaunchWindow: false, hasFirstWin: true })
-    hoisted.claim.mockResolvedValue({ show: true })
     const { client } = mount()
     await waitFor(() => expect(client.getQueryData(['onboarding', 'progress'])).toBeDefined())
     expect(screen.queryByText('New here? Take the 60-second tour')).toBeNull()
-    expect(screen.queryByText(/Next step/)).toBeNull()
-    expect(screen.queryByText('Your first real result is here.')).toBeNull()
-    expect(hoisted.claim).not.toHaveBeenCalled()
+    expect(screen.queryByText(/Launch plan ·/)).toBeNull()
+    expect(screen.queryByRole('region', { name: 'First win' })).toBeNull()
+    expect(hoisted.card).not.toHaveBeenCalled()
   })
 
   it('offers the tour in the launch window and remembers Not now', async () => {
@@ -155,7 +162,7 @@ describe('Home first-run cards', () => {
     mount()
     // The offer's own Start: a launch step done in place is a Start button too.
     const offer = await screen.findByRole('region', { name: 'New here? Take the 60-second tour' })
-    fireEvent.click(within(offer).getByRole('button', { name: 'Start' }))
+    fireEvent.click(within(offer).getByRole('button', { name: 'Take tour' }))
     expect(hoisted.start).toHaveBeenCalledTimes(1)
     cleanup()
 
@@ -165,36 +172,57 @@ describe('Home first-run cards', () => {
     expect(screen.queryByText('New here? Take the 60-second tour')).toBeNull()
   })
 
-  it('claims the celebration once and never replays a cached claim', async () => {
-    hoisted.status = status({ hasFirstWin: true, firstWinAt: new Date(NOW).toISOString() })
-    hoisted.claim.mockResolvedValueOnce({ show: true }).mockResolvedValueOnce({ show: false })
-    const first = mount()
-    expect(await screen.findByText('Your first real result is here.')).toBeVisible()
-    first.unmount()
-
+  it('names the first win: who, on what, a link to it, and the next step', async () => {
+    hoisted.status = status({ goals: ['product_feedback'], hasFirstWin: true })
+    hoisted.card.mockResolvedValue({
+      summary: {
+        kind: 'idea',
+        name: 'Ana',
+        domain: 'northwind.com',
+        subject: 'Export to CSV',
+        votes: 1,
+        at: new Date(NOW).toISOString(),
+        href: '/admin/feedback?post=post_1',
+      },
+    })
     mount()
-    await waitFor(() => expect(hoisted.claim).toHaveBeenCalledTimes(2))
-    expect(screen.queryByText('Your first real result is here.')).toBeNull()
+    const card = await screen.findByRole('region', { name: 'First win' })
+    expect(card).toHaveTextContent('Ana from northwind.com posted an idea')
+    expect(card).toHaveTextContent('Export to CSV · 1 vote')
+    expect(within(card).getByRole('link', { name: 'View idea' })).toHaveAttribute(
+      'href',
+      '/admin/feedback?post=post_1'
+    )
+    expect(within(card).getByText(/^Next:/)).toBeVisible()
+    // The plan is done: Home no longer leads with a launch step.
+    expect(screen.queryByText(/Launch plan ·/)).toBeNull()
   })
 
-  it('does not ask for the celebration once this person has seen it', async () => {
+  it('keeps the card until it is dismissed', async () => {
     hoisted.status = status({ hasFirstWin: true })
-    hoisted.progress = { firstWinShownAt: new Date().toISOString() }
+    hoisted.card.mockResolvedValue({ summary: null })
+    mount()
+    const card = await screen.findByRole('region', { name: 'First win' })
+    expect(card).toHaveTextContent('Your first customer is here')
+    fireEvent.click(within(card).getByRole('button', { name: 'Dismiss' }))
+    await waitFor(() => expect(hoisted.dismissWin).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'First win' })).toBeNull())
+  })
+
+  it('does not ask for the card before a first win', async () => {
+    hoisted.status = status()
     const { client } = mount()
     await waitFor(() => expect(client.getQueryData(['onboarding', 'progress'])).toBeDefined())
-    expect(hoisted.claim).not.toHaveBeenCalled()
+    expect(hoisted.card).not.toHaveBeenCalled()
   })
 
-  it('offers no tour on a phone when no stop could show', async () => {
+  it('offers no tour on a phone, where the sidebar it points at is hidden', async () => {
     hoisted.status = status()
     tourView.narrow = true
+    tourView.copilot = true
     const { client } = mount()
     await waitFor(() => expect(client.getQueryData(['onboarding', 'progress'])).toBeDefined())
     await screen.findByText('Launch plan · Step 2 of 3')
     expect(screen.queryByText('New here? Take the 60-second tour')).toBeNull()
-    cleanup()
-    tourView.copilot = true
-    mount()
-    expect(await screen.findByText('New here? Take the 60-second tour')).toBeVisible()
   })
 })

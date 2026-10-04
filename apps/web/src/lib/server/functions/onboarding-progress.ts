@@ -36,16 +36,31 @@ export const dismissTourOfferFn = createServerFn({ method: 'POST' }).handler(asy
   return { ok: true }
 })
 
-/** Show the first-win card once, and only for a win inside the launch window. */
-export const claimFirstWinMomentFn = createServerFn({ method: 'POST' }).handler(async () => {
+/**
+ * The first win, named, for Home's card: only a win inside the launch window,
+ * and only until this person dismisses it. Null otherwise.
+ */
+export const getFirstWinCardFn = createServerFn({ method: 'GET' }).handler(async () => {
   const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
-  const settings = await getSettings()
+  const [settings, row] = await Promise.all([
+    getSettings(),
+    db.query.user.findFirst({ where: eq(user.id, auth.user.id), columns: { metadata: true } }),
+  ])
+  if (readOnboardingProgress(row?.metadata ?? null).firstWinShownAt) return null
   const setupState = getSetupState(settings?.setupState ?? null)
   const window = launchWindowFor({ setupState, workspaceCreatedAt: settings?.createdAt })
-  if (!isLaunchWindowOpen(window)) return { show: false }
+  if (!isLaunchWindowOpen(window)) return null
   const win = await detectFirstWin(setupState)
-  if (!win.reached || !isFirstWinInLaunchWindow(win.reachedAt, window)) return { show: false }
-  return { show: await markOnboardingProgress(auth.user.id, 'firstWinShownAt') }
+  if (!win.reached || !isFirstWinInLaunchWindow(win.reachedAt, window)) return null
+  const { firstWinSummary } = await import('@/lib/server/domains/onboarding/first-win-summary')
+  return { summary: await firstWinSummary(setupState) }
+})
+
+/** Dismiss on the first-win card: it stays away for this person. */
+export const dismissFirstWinFn = createServerFn({ method: 'POST' }).handler(async () => {
+  const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
+  await markOnboardingProgress(auth.user.id, 'firstWinShownAt')
+  return { ok: true }
 })
 
 /**

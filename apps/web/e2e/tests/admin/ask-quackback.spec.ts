@@ -45,7 +45,7 @@ const FIRST_OPEN = { timeout: 15_000 }
 
 const searchRow = (page: Page) => page.getByRole('button', { name: 'Search', exact: true }).first()
 const homeComposer = (page: Page) =>
-  page.getByRole('textbox', { name: 'Ask or tell Quackback anything', exact: true })
+  page.getByRole('textbox', { name: 'Ask Copilot anything', exact: true })
 
 test.describe('search with Copilot off', () => {
   test.beforeAll(() => setCopilotHome(false))

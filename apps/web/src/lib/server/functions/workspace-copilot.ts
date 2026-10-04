@@ -16,7 +16,10 @@ export const getWorkspaceCopilotAvailabilityFn = createServerFn({ method: 'GET' 
   async (): Promise<WorkspaceCopilotAvailability> => {
     const auth = await requireAuth(),
       actor = await policyActorFromAuth(auth)
-    return { enabled: await workspaceCopilotAvailable(actor) }
+    const enabled = await workspaceCopilotAvailable(actor)
+    if (!enabled) return { enabled }
+    const { aiCreditsNow } = await import('@/lib/server/domains/settings/tier-enforce')
+    return { enabled, credits: await aiCreditsNow() }
   }
 )
 export const listWorkspaceCopilotThreadsFn = createServerFn({ method: 'GET' }).handler(async () => {

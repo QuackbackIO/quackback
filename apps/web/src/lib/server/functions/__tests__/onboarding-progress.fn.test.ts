@@ -18,6 +18,7 @@ const hoisted = vi.hoisted(() => ({
   marks: [] as { userId: string; key: string }[],
   settings: null as { setupState: string; createdAt: Date } | null,
   win: { reached: false, reachedAt: null as string | null },
+  progress: {} as Record<string, string>,
 }))
 
 vi.mock('../auth-helpers', () => ({
@@ -28,8 +29,15 @@ vi.mock('../auth-helpers', () => ({
     return { user: { id: 'user_caller' } }
   },
 }))
+vi.mock('@/lib/server/db', async (original) => ({
+  ...(await original<typeof import('@/lib/server/db')>()),
+  db: { query: { user: { findFirst: async () => ({ metadata: null }) } } },
+}))
+vi.mock('@/lib/server/domains/onboarding/first-win-summary', () => ({
+  firstWinSummary: async () => ({ kind: 'idea', name: 'Ana', href: '/admin/feedback?post=p' }),
+}))
 vi.mock('@/lib/server/onboarding-progress', () => ({
-  readOnboardingProgress: () => ({}),
+  readOnboardingProgress: () => hoisted.progress,
   markOnboardingProgress: async (userId: string, key: string) => {
     hoisted.marks.push({ userId, key })
     return true
@@ -44,7 +52,7 @@ vi.mock('@/lib/server/activation-wins', () => ({
   },
 }))
 
-const { markTourSeenFn, dismissTourOfferFn, claimFirstWinMomentFn } =
+const { markTourSeenFn, dismissTourOfferFn, getFirstWinCardFn, dismissFirstWinFn } =
   await import('../onboarding-progress')
 
 function workspace(createdAt: number, completedAt: number) {
@@ -74,6 +82,7 @@ beforeEach(() => {
   hoisted.marks = []
   hoisted.settings = null
   hoisted.win = { reached: false, reachedAt: null }
+  hoisted.progress = {}
 })
 
 describe('tour markers', () => {
@@ -94,39 +103,44 @@ describe('tour markers', () => {
   })
 })
 
-describe('first-win celebration claim', () => {
-  it('celebrates a win inside a new workspace launch window', async () => {
+describe('the first-win card', () => {
+  it('names a win inside a new workspace launch window, until it is dismissed', async () => {
     const now = Date.now()
     workspace(now - 2 * DAY, now - 2 * DAY + 60_000)
     hoisted.win = { reached: true, reachedAt: new Date(now - DAY).toISOString() }
-    expect(await claimFirstWinMomentFn()).toEqual({ show: true })
+    expect(await getFirstWinCardFn()).toEqual({
+      summary: { kind: 'idea', name: 'Ana', href: '/admin/feedback?post=p' },
+    })
+    // Reading it twice is fine: the card stays until Dismiss.
+    expect(await getFirstWinCardFn()).not.toBeNull()
+    expect(hoisted.marks).toEqual([])
+    await dismissFirstWinFn()
     expect(hoisted.marks).toEqual([{ userId: 'user_caller', key: 'firstWinShownAt' }])
+    hoisted.progress = { firstWinShownAt: new Date(now).toISOString() }
+    expect(await getFirstWinCardFn()).toBeNull()
   })
 
   it('never celebrates for an established workspace after an upgrade', async () => {
     const now = Date.now()
     workspace(now - 400 * DAY, now - 60_000)
     hoisted.win = { reached: true, reachedAt: new Date(now - 300 * DAY).toISOString() }
-    expect(await claimFirstWinMomentFn()).toEqual({ show: false })
-    expect(hoisted.marks).toEqual([])
+    expect(await getFirstWinCardFn()).toBeNull()
   })
 
   it('ignores a win that predates setup and a workspace whose window closed', async () => {
     const now = Date.now()
     workspace(now - 2 * DAY, now - DAY)
     hoisted.win = { reached: true, reachedAt: new Date(now - 2 * DAY).toISOString() }
-    expect(await claimFirstWinMomentFn()).toEqual({ show: false })
+    expect(await getFirstWinCardFn()).toBeNull()
 
     workspace(now - 30 * DAY, now - 30 * DAY)
     hoisted.win = { reached: true, reachedAt: new Date(now - 29 * DAY).toISOString() }
-    expect(await claimFirstWinMomentFn()).toEqual({ show: false })
-    expect(hoisted.marks).toEqual([])
+    expect(await getFirstWinCardFn()).toBeNull()
   })
 
   it('needs a reached win', async () => {
     const now = Date.now()
     workspace(now - DAY, now - DAY)
-    expect(await claimFirstWinMomentFn()).toEqual({ show: false })
-    expect(hoisted.marks).toEqual([])
+    expect(await getFirstWinCardFn()).toBeNull()
   })
 })

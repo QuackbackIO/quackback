@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useFeatureFlags, usePrincipalId } from '@/lib/client/hooks/use-root-context'
 import { useHasPermission } from '@/lib/client/use-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import type { AiCreditsState } from '@/lib/shared/billing/ai-credits'
 
 /** Whether this teammate gets the Copilot chat on Home (flag, model and permission). */
 export function copilotAvailabilityQuery(principalId: string | null | undefined) {
@@ -22,10 +23,22 @@ export function copilotAvailabilityQuery(principalId: string | null | undefined)
  * loader warms the answer; the tour reads it to offer the Copilot stop.
  */
 export function useCopilotOnHome(): boolean {
+  return useCopilotHome().onHome
+}
+
+/**
+ * Home's Copilot: whether it is there for this teammate, and whether this
+ * month's AI credits let it answer. Without credits it stays on Home, greyed
+ * out, with the way to get more.
+ */
+export function useCopilotHome(): { onHome: boolean; credits: AiCreditsState } {
   const flags = useFeatureFlags()
   const principalId = usePrincipalId()
   const canUse = useHasPermission(PERMISSIONS.COPILOT_USE)
   const enabled = flags?.copilotHome === true && canUse
   const availability = useQuery({ ...copilotAvailabilityQuery(principalId), enabled })
-  return enabled && availability.data?.enabled === true
+  return {
+    onHome: enabled && availability.data?.enabled === true,
+    credits: availability.data?.credits ?? 'available',
+  }
 }

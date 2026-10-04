@@ -1,36 +1,46 @@
 import { useEffect, useState } from 'react'
-import { FormattedMessage } from 'react-intl'
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
-import { Button } from '@/components/ui/button'
-import { useCopilotOnHome } from '@/components/admin/ask/copilot-on-home'
+import { HomeFirstWin } from './home-first-win'
 import { HomeNextStep } from './home-next-step'
 import { HomeTourPrompt } from './home-tour-prompt'
 import { useProductTour } from '@/components/onboarding/product-tour'
 import {
   getOnboardingProgressFn,
-  claimFirstWinMomentFn,
+  getFirstWinCardFn,
+  dismissFirstWinFn,
   dismissTourOfferFn,
 } from '@/lib/server/functions/onboarding-progress'
 import { CreateBoardDialog } from '@/components/admin/settings/boards/create-board-dialog'
 import { AutomaticBrandingNotice } from '@/components/admin/branding/automatic-branding-notice'
 import { useAutomaticWebsiteBranding } from '@/components/admin/branding/use-automatic-website-branding'
-import { isLaunchPlanActive } from '@/lib/shared/launch-checklist'
+import { isLaunchPlanActive, launchPath } from '@/lib/shared/launch-checklist'
+import { adminQueries } from '@/lib/client/queries/admin'
 import { launchStatusQuery, useLaunchTaskResolution } from './use-launch-plan'
 
 const PROGRESS_KEY = ['onboarding', 'progress'] as const
+const FIRST_WIN_KEY = ['onboarding', 'first-win'] as const
 type Progress = Awaited<ReturnType<typeof getOnboardingProgressFn>>
 
 /** Home's first-run area: the celebration, the next step and its path, and the tour prompt. */
-export function HomeGettingStarted({ portalUrl }: { portalUrl?: string }) {
+export function HomeGettingStarted({
+  portalUrl,
+  member = false,
+}: {
+  portalUrl?: string
+  /** A teammate's first run: the tour offer only, never the owner's plan or win. */
+  member?: boolean
+}) {
   const tour = useProductTour()
   const progress = useQuery({
     queryKey: PROGRESS_KEY,
     queryFn: () => getOnboardingProgressFn(),
   })
-  const [winDismissed, setWinDismissed] = useState(false)
   const queryClient = useQueryClient()
   const [createBoardOpen, setCreateBoardOpen] = useState(false)
-  const statusQuery = useSuspenseQuery(launchStatusQuery())
+  const statusQuery = useSuspenseQuery(
+    // A teammate only needs the launch window, so nothing polls for them.
+    member ? adminQueries.onboardingStatus() : launchStatusQuery()
+  )
   const resolutionMutation = useLaunchTaskResolution()
 
   const dismissTour = useMutation({
@@ -47,32 +57,33 @@ export function HomeGettingStarted({ portalUrl }: { portalUrl?: string }) {
   // First-run behaviour belongs to the launch window: an established
   // workspace never sees it after an upgrade.
   const inWindow = statusQuery.data.inLaunchWindow === true
-  const moment = useQuery({
-    queryKey: ['onboarding', 'first-win-moment'],
-    queryFn: () => claimFirstWinMomentFn(),
-    enabled:
-      inWindow &&
-      statusQuery.data.hasFirstWin === true &&
-      Boolean(progress.data) &&
-      !progress.data?.firstWinShownAt,
-    staleTime: Infinity,
-    gcTime: 0,
+  // The named win stays on Home until this person dismisses it.
+  const firstWin = useQuery({
+    queryKey: FIRST_WIN_KEY,
+    queryFn: () => getFirstWinCardFn(),
+    enabled: !member && inWindow && statusQuery.data.hasFirstWin === true,
+    staleTime: 60_000,
   })
-  const showWin = moment.data?.show && !winDismissed
-  // On a phone the module stops are behind the menu drawer; with no Copilot
-  // stop either, the tour would have nothing to show.
-  const copilotOnHome = useCopilotOnHome()
+  const dismissWin = useMutation({
+    mutationFn: () => dismissFirstWinFn(),
+    onMutate: () => queryClient.setQueryData(FIRST_WIN_KEY, null),
+  })
+  // On a phone the tour's stops are behind the menu drawer, so it is not offered.
   const [narrow, setNarrow] = useState(false)
   useEffect(() => {
     setNarrow(window.matchMedia?.('(max-width: 639px)').matches ?? false)
   }, [])
   const showTourOffer =
-    (!narrow || copilotOnHome) &&
+    !narrow &&
     inWindow &&
     Boolean(progress.data) &&
     !progress.data?.tourSeenAt &&
     !progress.data?.tourDismissedAt
-  const planShown = inWindow && isLaunchPlanActive(statusQuery.data)
+  const planShown = !member && inWindow && isLaunchPlanActive(statusQuery.data)
+  const handOver =
+    launchPath(statusQuery.data).later.find(
+      (task) => !task.isCompleted && !task.isSkipped && task.availability !== 'blocked'
+    ) ?? null
   // The lookup starts only while its notice has a live launch plan to sit in.
   const branding = useAutomaticWebsiteBranding({ enabled: planShown })
   const brandingShown =
@@ -91,19 +102,14 @@ export function HomeGettingStarted({ portalUrl }: { portalUrl?: string }) {
 
   return (
     <>
-      {showWin && (
-        <section className="rounded-xl border bg-card p-4 shadow-raise flex items-center justify-between gap-4">
-          <p className="text-sm font-medium">
-            <FormattedMessage
-              id="onboarding.home.firstWin"
-              defaultMessage="Your first real result is here."
-            />
-          </p>
-          <Button variant="ghost" size="sm" onClick={() => setWinDismissed(true)}>
-            <FormattedMessage id="onboarding.home.dismiss" defaultMessage="Dismiss" />
-          </Button>
-        </section>
-      )}
+      {firstWin.data ? (
+        <HomeFirstWin
+          summary={firstWin.data.summary}
+          next={handOver}
+          pending={dismissWin.isPending}
+          onDismiss={() => dismissWin.mutate()}
+        />
+      ) : null}
       {planShown ? (
         <HomeNextStep
           status={statusQuery.data}

@@ -103,7 +103,15 @@ vi.mock('@/components/shared/conversation/message-markdown', () => ({
 
 import { CopilotHome } from '../copilot-home'
 
-function Harness({ initial, canAsk }: { initial?: string; canAsk: boolean }) {
+function Harness({
+  initial,
+  canAsk,
+  locked,
+}: {
+  initial?: string
+  canAsk: boolean
+  locked?: boolean
+}) {
   const [threadKey, setThreadKey] = useState(initial)
   state.setThread = setThreadKey
   return (
@@ -111,16 +119,22 @@ function Harness({ initial, canAsk }: { initial?: string; canAsk: boolean }) {
       threadKey={threadKey}
       canAsk={canAsk}
       header={<h1>Welcome, Acme</h1>}
+      chips={<a href="/admin?open=invite-team">Invite your team</a>}
+      locked={locked ? <a href="/admin/settings/billing">Upgrade</a> : undefined}
       below={<p>Launch plan</p>}
     />
   )
 }
-function mount({ thread, canAsk = true }: { thread?: string; canAsk?: boolean } = {}) {
+function mount({
+  thread,
+  canAsk = true,
+  locked = false,
+}: { thread?: string; canAsk?: boolean; locked?: boolean } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en" messages={messages}>
-        <Harness initial={thread} canAsk={canAsk} />
+        <Harness initial={thread} canAsk={canAsk} locked={locked} />
       </IntlProvider>
     </QueryClientProvider>
   )
@@ -184,11 +198,29 @@ describe('Home idle', () => {
     await waitFor(() => expect(document.activeElement).toBe(composer))
   })
 
-  it('shows the starter chips and blocked-area prompts', async () => {
+  it('shows the chips it is given, which never start a Copilot turn', async () => {
     mount()
-    expect(await screen.findByRole('button', { name: 'Set up my feedback board' })).toBeTruthy()
-    expect(await screen.findByRole('button', { name: 'Invite my team' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Set my brand color' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Invite your team' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Set up my feedback board' })).toBeNull()
+  })
+
+  it('opens at the top of Home, with the composer in view', async () => {
+    const scrollHeight = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(900)
+    const view = mount()
+    await screen.findByText('Launch plan')
+    const viewport = view.container.querySelector('[data-slot="copilot-viewport"]') as HTMLElement
+    expect(viewport.scrollTop).toBe(0)
+    scrollHeight.mockRestore()
+  })
+
+  it('greys out the composer without credits and offers the way to get them', async () => {
+    mount({ canAsk: false, locked: true })
+    const composer = screen.getByRole('textbox', { name: 'Ask Copilot' })
+    expect(composer.closest('[inert]')).not.toBeNull()
+    expect(screen.getByRole('link', { name: 'Upgrade' })).toHaveAttribute(
+      'href',
+      '/admin/settings/billing'
+    )
   })
 })
 
@@ -324,6 +356,40 @@ describe('inline chat', () => {
     const stops = state.stop.mock.calls.length
     view.unmount()
     expect(state.stop.mock.calls.length).toBeGreaterThan(stops)
+  })
+})
+
+describe('announcing answers', () => {
+  it('keeps the finished answer in a live region after the draft gives way to the thread', async () => {
+    state.threads = [savedThread('workspace:brand', 'Brand', 'Use green')]
+    let handlers!: StartAguiTurnOptions['handlers']
+    state.start.mockImplementation(
+      (options: StartAguiTurnOptions) =>
+        new Promise<void>((resolve) => {
+          handlers = options.handlers
+          setTimeout(resolve, 0)
+        })
+    )
+    mount({ thread: 'workspace:brand' })
+    await screen.findByText('Use green')
+    fireEvent.change(screen.getByRole('textbox', { name: 'Ask Copilot' }), {
+      target: { value: 'And the logo?' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(state.start).toHaveBeenCalledOnce())
+    act(() =>
+      handlers.onFinal?.({
+        threadKey: 'workspace:brand',
+        messageId: 'answer-1',
+        text: 'Upload it in Settings, General.',
+        citations: [],
+        navigation: [],
+        proposedActions: [],
+      })
+    )
+    const live = document.querySelector('[data-slot="copilot-announcer"]') as HTMLElement
+    expect(live).toHaveAttribute('aria-live', 'polite')
+    expect(live).toHaveTextContent('Upload it in Settings, General.')
   })
 })
 

@@ -31,4 +31,6 @@ export interface WorkspaceCopilotThread extends WorkspaceCopilotThreadSummary {
 }
 export interface WorkspaceCopilotAvailability {
   enabled: boolean
+  /** Whether this month's AI credits let Copilot answer; absent means available. */
+  credits?: import('@/lib/shared/billing/ai-credits').AiCreditsState
 }

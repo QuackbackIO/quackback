@@ -29,7 +29,7 @@ export function HomeTourPrompt({
         <FormattedMessage id="onboarding.tour.notNow" defaultMessage="Not now" />
       </Button>
       <Button size="sm" onClick={onStart}>
-        <FormattedMessage id="onboarding.launch.start" defaultMessage="Start" />
+        <FormattedMessage id="onboarding.tour.take" defaultMessage="Take tour" />
       </Button>
     </section>
   )

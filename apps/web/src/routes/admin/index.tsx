@@ -1,10 +1,12 @@
 import { lazy, Suspense, useEffect, type ReactNode } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { OverviewDashboard } from '@/components/admin/admin-overview'
 import { HomeActions } from '@/components/admin/home-actions'
-import { copilotAvailabilityQuery, useCopilotOnHome } from '@/components/admin/ask/copilot-on-home'
+import { copilotAvailabilityQuery, useCopilotHome } from '@/components/admin/ask/copilot-on-home'
+import { CopilotCreditsLock } from '@/components/admin/ask/copilot-credits-lock'
+import { OverviewCounts, OverviewDashboard } from '@/components/admin/admin-overview'
 import { HomeLaunchArea } from '@/components/onboarding/home-try-it'
+import { HomeLaunchChips } from '@/components/onboarding/home-launch-chips'
 import { HomeGreeting } from '@/components/onboarding/home-greeting'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { adminOverviewQueries } from '@/lib/client/queries/admin-overview'
@@ -66,8 +68,12 @@ function AdminOverviewPage() {
   const baseUrl = useBaseUrl()
   const userRole = useUserRole()
   const settings = useWorkspaceSettings()
-  const copilotOnHome = useCopilotOnHome()
+  const copilot = useCopilotHome()
+  const copilotOnHome = copilot.onHome
+  // Out of AI credits, Copilot stays on Home greyed out, with the way to get more.
+  const locked = copilotOnHome && copilot.credits !== 'available' ? copilot.credits : null
   const canUseCopilot = useHasPermission(PERMISSIONS.COPILOT_USE)
+  const canSeeTeam = useHasPermission(PERMISSIONS.MEMBER_VIEW)
   const admin = isAdmin(userRole)
   const flags = settings?.featureFlags as FeatureFlags | undefined
 
@@ -79,12 +85,14 @@ function AdminOverviewPage() {
       </a>
     </header>
   )
-  // The launch plan, then the tour and try-it cards, in the launch window only.
-  const plan = admin ? (
-    <Suspense fallback={null}>
-      <HomeLaunchArea portalUrl={baseUrl} />
-    </Suspense>
-  ) : null
+  // The owner's launch plan and the tour offer, in the launch window only. A
+  // teammate gets their own first run: the tour offer, without the plan.
+  const plan =
+    admin || canSeeTeam ? (
+      <Suspense fallback={null}>
+        <HomeLaunchArea portalUrl={baseUrl} member={!admin} />
+      </Suspense>
+    ) : null
 
   // A review link opens its thread even when new chats are unavailable.
   if (canUseCopilot && (copilotOnHome || copilotThread))
@@ -92,9 +100,20 @@ function AdminOverviewPage() {
       <Suspense fallback={copilotThread ? null : <HomeFrame>{header}</HomeFrame>}>
         <CopilotHome
           threadKey={copilotThread}
-          canAsk={copilotOnHome}
+          canAsk={copilotOnHome && !locked}
           header={header}
-          below={plan}
+          chips={admin ? <HomeLaunchChips /> : undefined}
+          locked={locked ? <CopilotCreditsLock credits={locked} /> : undefined}
+          below={
+            admin ? (
+              plan
+            ) : (
+              <>
+                {plan}
+                <OverviewCounts />
+              </>
+            )
+          }
         />
       </Suspense>
     )

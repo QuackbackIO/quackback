@@ -20,9 +20,6 @@ import { getTimeAgo } from '@/components/ui/time-ago'
 import { MessageMarkdown } from '@/components/shared/conversation/message-markdown'
 import { useAguiTurn } from '@/lib/client/hooks/use-agui-turn'
 import { usePrincipalId } from '@/lib/client/hooks/use-root-context'
-import { adminQueries } from '@/lib/client/queries/admin'
-import { buildAskStarterPrompts } from '@/lib/shared/ask-destinations'
-import { buildLaunchTasks } from '@/lib/shared/launch-checklist'
 import type {
   WorkspaceCopilotFinalPayload,
   WorkspaceCopilotMessage,
@@ -67,6 +64,13 @@ export interface CopilotHomeProps {
   threadKey?: string
   canAsk: boolean
   header: ReactNode
+  /** Shortcuts under the composer, such as the launch plan's open steps. */
+  chips?: ReactNode
+  /**
+   * Copilot is out of AI credits: the composer shows greyed out, with this
+   * offer of a way to get more over it.
+   */
+  locked?: ReactNode
   below?: ReactNode
 }
 
@@ -78,7 +82,7 @@ export function CopilotHome(props: CopilotHomeProps) {
   )
 }
 
-function CopilotHomeView({ threadKey, canAsk, header, below }: CopilotHomeProps) {
+function CopilotHomeView({ threadKey, canAsk, header, chips, locked, below }: CopilotHomeProps) {
   const intl = useIntl()
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -90,6 +94,9 @@ function CopilotHomeView({ threadKey, canAsk, header, below }: CopilotHomeProps)
   const [pending, setPending] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // The draft unmounts once the saved thread has the answer, so a finished
+  // answer is announced from a region that stays mounted.
+  const [announcement, setAnnouncement] = useState('')
   const busyRef = useRef(false)
   const epoch = useRef(0)
   const enteredFromHome = useRef(false)
@@ -106,7 +113,6 @@ function CopilotHomeView({ threadKey, canAsk, header, below }: CopilotHomeProps)
     queryFn: () => getWorkspaceCopilotThreadFn({ data: { threadKey: threadKey! } }),
     enabled: threadKey !== undefined,
   })
-  const launch = useQuery({ ...adminQueries.onboardingStatus(), enabled: canAsk && !threadKey })
   const inChat = threadKey !== undefined || pending !== null
 
   useEffect(
@@ -150,10 +156,11 @@ function CopilotHomeView({ threadKey, canAsk, header, below }: CopilotHomeProps)
 
   const messages: WorkspaceCopilotMessage[] = threadKey ? (thread.data?.messages ?? []) : []
   const liveDraft = draft && draft.threadKey === threadKey ? draft : null
+  // Only a chat follows its latest message; Home itself opens at the top.
   useLayoutEffect(() => {
     const element = viewport.current
-    if (element && following.current) element.scrollTop = element.scrollHeight
-  }, [threadKey, messages.length, liveDraft?.text, liveDraft?.final, thread.isSuccess])
+    if (element && inChat && following.current) element.scrollTop = element.scrollHeight
+  }, [inChat, threadKey, messages.length, liveDraft?.text, liveDraft?.final, thread.isSuccess])
 
   const failed = () =>
     intl.formatMessage({
@@ -196,6 +203,7 @@ function CopilotHomeView({ threadKey, canAsk, header, below }: CopilotHomeProps)
             if (epoch.current !== requestedAt) return
             const final = payload as WorkspaceCopilotFinalPayload
             setDraft((previous) => (previous ? { ...previous, text: final.text, final } : previous))
+            setAnnouncement(final.text)
           },
           onError: () => {
             if (epoch.current !== requestedAt) return
@@ -236,17 +244,6 @@ function CopilotHomeView({ threadKey, canAsk, header, below }: CopilotHomeProps)
   }, [inChat])
 
   const latest = threads.data?.[0]
-  const completed = launch.data
-    ? buildLaunchTasks(
-        launch.data,
-        launch.data.goals ?? [launch.data.useCase ?? 'product_feedback']
-      )
-        .filter((task) => task.isCompleted)
-        .map((task) => task.id)
-    : []
-  const starters = canAsk
-    ? buildAskStarterPrompts(launch.data?.goals ?? ['product_feedback'], completed)
-    : []
   const title =
     threads.data?.find((item) => item.key === threadKey)?.title ||
     pending ||
@@ -259,6 +256,9 @@ function CopilotHomeView({ threadKey, canAsk, header, below }: CopilotHomeProps)
       data-chat={inChat || undefined}
       className="flex h-full min-h-0 flex-col"
     >
+      <div data-slot="copilot-announcer" aria-live="polite" className="sr-only">
+        {announcement}
+      </div>
       <div
         ref={viewport}
         onScroll={(event) => {
@@ -303,6 +303,22 @@ function CopilotHomeView({ threadKey, canAsk, header, below }: CopilotHomeProps)
               />
             )}
           </div>
+          {!canAsk && locked && !inChat && (
+            <div className="relative">
+              <div inert className="opacity-50 grayscale">
+                <ChatComposer
+                  query=""
+                  onQueryChange={() => {}}
+                  canAsk={false}
+                  busy={false}
+                  onAsk={() => {}}
+                  onStop={() => {}}
+                  autoFocus={false}
+                />
+              </div>
+              <div className="absolute inset-0 flex items-center justify-center p-3">{locked}</div>
+            </div>
+          )}
           {canAsk && (
             <div
               ref={composer}
@@ -331,29 +347,7 @@ function CopilotHomeView({ threadKey, canAsk, header, below }: CopilotHomeProps)
                   {error}
                 </p>
               )}
-              {starters.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {starters.map((prompt) => {
-                    const text = intl.formatMessage({
-                      id: prompt.id,
-                      defaultMessage: prompt.defaultMessage,
-                    })
-                    return (
-                      <Button
-                        key={prompt.id}
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={busy}
-                        className="max-w-full rounded-full bg-card text-[13px] font-normal shadow-raise transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-px hover:shadow-raise-hover focus-visible:ring-foreground/25"
-                        onClick={() => void ask(text)}
-                      >
-                        {text}
-                      </Button>
-                    )
-                  })}
-                </div>
-              )}
+              {chips}
               {latest && (
                 <button
                   type="button"
@@ -568,7 +562,7 @@ function CopilotThread({
             <div className={userBubble}>
               <MessageMarkdown text={draft.question} />
             </div>
-            <div className="space-y-3 leading-7" aria-live="polite" aria-busy={busy}>
+            <div className="space-y-3 leading-7" aria-busy={busy}>
               <span className="text-xs font-medium">{copilot}</span>
               {draft.text ? (
                 <WorkspaceAssistantMessage
