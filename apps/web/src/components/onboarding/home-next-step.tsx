@@ -32,11 +32,18 @@ function TestLabel({ start }: { start: TryMessengerStart }) {
   )
 }
 
-const GOAL_NOUN: Record<string, string> = {
-  feedback: 'feedback',
-  support: 'support',
-  helpCenter: 'helpCenter',
-  status: 'status',
+const PATH_HEADING: Record<string, { id: string; defaultMessage: string }> = {
+  feedback: { id: 'onboarding.home.path.feedback', defaultMessage: 'Your path to a first idea' },
+  support: {
+    id: 'onboarding.home.path.support',
+    defaultMessage: 'Your path to a first conversation',
+  },
+  helpCenter: {
+    id: 'onboarding.home.path.helpCenter',
+    defaultMessage: 'Your path to a first article',
+  },
+  status: { id: 'onboarding.home.path.status', defaultMessage: 'Your path to a first service' },
+  other: { id: 'onboarding.home.path.other', defaultMessage: 'Your path to a first result' },
 }
 
 /**
@@ -61,7 +68,7 @@ export function HomeNextStep({
   const path = launchGoalPath(status)
   const next = path.next
   const win = path.steps.find((task) => task.classification === 'first_win')
-  const goal = GOAL_NOUN[win?.variant ?? ''] ?? 'other'
+  const goal = win?.variant && win.variant in PATH_HEADING ? win.variant : 'other'
   const nextIndex = next ? path.steps.findIndex((task) => task.id === next.id) : -1
   const test = next ? stepTest(next) : null
   const firstWin = next?.classification === 'first_win'
@@ -121,11 +128,7 @@ export function HomeNextStep({
       <section aria-labelledby="home-path" className="rounded-2xl border bg-card px-5 py-4">
         <div className="mb-1 flex items-center justify-between gap-3">
           <h2 id="home-path" className="text-sm font-semibold">
-            <FormattedMessage
-              id="onboarding.home.path"
-              defaultMessage="Your path to a first {goal, select, feedback {idea} support {conversation} helpCenter {article} status {service} other {result}}"
-              values={{ goal }}
-            />
+            <FormattedMessage {...PATH_HEADING[goal]} />
           </h2>
           <Link
             to="/admin/getting-started"

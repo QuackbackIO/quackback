@@ -1506,7 +1506,6 @@
   "onboarding.home.nextStepOf": "Volgende stap · {step} van {total}",
   "onboarding.home.next": "Volgende",
   "onboarding.home.later": "Later: {items}",
-  "onboarding.home.path": "Je weg naar {goal, select, feedback {een eerste idee} support {een eerste gesprek} helpCenter {een eerste artikel} status {een eerste dienst} other {een eerste resultaat}}",
   "onboarding.task.create-board.outcome": "Waar klanten ideeën delen",
   "onboarding.task.create-board.private.outcome": "Waar je team ideeën deelt",
   "onboarding.task.distribute-feedback.outcome": "Klanten vinden je bord",
@@ -1524,5 +1523,10 @@
   "onboarding.task.first-win.status.outcome": "Klanten zien je status",
   "onboarding.launch.later": "Later",
   "onboarding.launch.ready": "Klaar voor gebruik",
-  "onboarding.trial.quiet": "{label} · {days, plural, one {# dag} other {# dagen}}"
+  "onboarding.trial.quiet": "{label} · {days, plural, one {# dag} other {# dagen}}",
+  "onboarding.home.path.feedback": "Je weg naar een eerste idee",
+  "onboarding.home.path.support": "Je weg naar een eerste gesprek",
+  "onboarding.home.path.helpCenter": "Je weg naar een eerste artikel",
+  "onboarding.home.path.status": "Je weg naar een eerste dienst",
+  "onboarding.home.path.other": "Je weg naar een eerste resultaat"
 }

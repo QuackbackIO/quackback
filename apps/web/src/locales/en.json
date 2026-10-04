@@ -1506,7 +1506,6 @@
   "onboarding.home.nextStepOf": "Next step · {step} of {total}",
   "onboarding.home.next": "Next",
   "onboarding.home.later": "Later: {items}",
-  "onboarding.home.path": "Your path to a first {goal, select, feedback {idea} support {conversation} helpCenter {article} status {service} other {result}}",
   "onboarding.task.create-board.outcome": "Where customers share ideas",
   "onboarding.task.create-board.private.outcome": "Where your team shares ideas",
   "onboarding.task.distribute-feedback.outcome": "Customers find your board",
@@ -1524,5 +1523,10 @@
   "onboarding.task.first-win.status.outcome": "Customers can check your status",
   "onboarding.launch.later": "Later",
   "onboarding.launch.ready": "Ready",
-  "onboarding.trial.quiet": "{label} · {days, plural, one {# day} other {# days}}"
+  "onboarding.trial.quiet": "{label} · {days, plural, one {# day} other {# days}}",
+  "onboarding.home.path.feedback": "Your path to a first idea",
+  "onboarding.home.path.support": "Your path to a first conversation",
+  "onboarding.home.path.helpCenter": "Your path to a first article",
+  "onboarding.home.path.status": "Your path to a first service",
+  "onboarding.home.path.other": "Your path to a first result"
 }

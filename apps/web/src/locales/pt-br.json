@@ -1506,7 +1506,6 @@
   "onboarding.home.nextStepOf": "Próximo passo · {step} de {total}",
   "onboarding.home.next": "Próximo",
   "onboarding.home.later": "Depois: {items}",
-  "onboarding.home.path": "Seu caminho até {goal, select, feedback {a primeira ideia} support {a primeira conversa} helpCenter {o primeiro artigo} status {o primeiro serviço} other {o primeiro resultado}}",
   "onboarding.task.create-board.outcome": "Onde os clientes compartilham ideias",
   "onboarding.task.create-board.private.outcome": "Onde sua equipe compartilha ideias",
   "onboarding.task.distribute-feedback.outcome": "Os clientes encontram seu quadro",
@@ -1524,5 +1523,10 @@
   "onboarding.task.first-win.status.outcome": "Os clientes podem ver seu status",
   "onboarding.launch.later": "Depois",
   "onboarding.launch.ready": "Pronto",
-  "onboarding.trial.quiet": "{label} · {days, plural, one {# dia} other {# dias}}"
+  "onboarding.trial.quiet": "{label} · {days, plural, one {# dia} other {# dias}}",
+  "onboarding.home.path.feedback": "Seu caminho até a primeira ideia",
+  "onboarding.home.path.support": "Seu caminho até a primeira conversa",
+  "onboarding.home.path.helpCenter": "Seu caminho até o primeiro artigo",
+  "onboarding.home.path.status": "Seu caminho até o primeiro serviço",
+  "onboarding.home.path.other": "Seu caminho até o primeiro resultado"
 }

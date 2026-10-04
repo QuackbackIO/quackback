@@ -1506,7 +1506,6 @@
   "onboarding.home.nextStepOf": "Следующий шаг · {step} из {total}",
   "onboarding.home.next": "Далее",
   "onboarding.home.later": "Позже: {items}",
-  "onboarding.home.path": "Ваш путь к {goal, select, feedback {первой идее} support {первому разговору} helpCenter {первой статье} status {первому сервису} other {первому результату}}",
   "onboarding.task.create-board.outcome": "Здесь клиенты делятся идеями",
   "onboarding.task.create-board.private.outcome": "Здесь команда делится идеями",
   "onboarding.task.distribute-feedback.outcome": "Клиенты находят вашу доску",
@@ -1524,5 +1523,10 @@
   "onboarding.task.first-win.status.outcome": "Клиенты видят ваш статус",
   "onboarding.launch.later": "Позже",
   "onboarding.launch.ready": "Готово",
-  "onboarding.trial.quiet": "{label} · {days, plural, one {# день} few {# дня} many {# дней} other {# дня}}"
+  "onboarding.trial.quiet": "{label} · {days, plural, one {# день} few {# дня} many {# дней} other {# дня}}",
+  "onboarding.home.path.feedback": "Ваш путь к первой идее",
+  "onboarding.home.path.support": "Ваш путь к первому разговору",
+  "onboarding.home.path.helpCenter": "Ваш путь к первой статье",
+  "onboarding.home.path.status": "Ваш путь к первому сервису",
+  "onboarding.home.path.other": "Ваш путь к первому результату"
 }

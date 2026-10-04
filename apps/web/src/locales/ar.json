@@ -1506,7 +1506,6 @@
   "onboarding.home.nextStepOf": "الخطوة التالية · {step} من {total}",
   "onboarding.home.next": "التالي",
   "onboarding.home.later": "لاحقًا: {items}",
-  "onboarding.home.path": "طريقك إلى {goal, select, feedback {أول فكرة} support {أول محادثة} helpCenter {أول مقال} status {أول خدمة} other {أول نتيجة}}",
   "onboarding.task.create-board.outcome": "حيث يشارك العملاء أفكارهم",
   "onboarding.task.create-board.private.outcome": "حيث يشارك فريقك أفكاره",
   "onboarding.task.distribute-feedback.outcome": "يجد العملاء لوحتك",
@@ -1524,5 +1523,10 @@
   "onboarding.task.first-win.status.outcome": "يمكن للعملاء متابعة حالتك",
   "onboarding.launch.later": "لاحقًا",
   "onboarding.launch.ready": "جاهز",
-  "onboarding.trial.quiet": "{label} · {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}"
+  "onboarding.trial.quiet": "{label} · {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}",
+  "onboarding.home.path.feedback": "طريقك إلى أول فكرة",
+  "onboarding.home.path.support": "طريقك إلى أول محادثة",
+  "onboarding.home.path.helpCenter": "طريقك إلى أول مقال",
+  "onboarding.home.path.status": "طريقك إلى أول خدمة",
+  "onboarding.home.path.other": "طريقك إلى أول نتيجة"
 }

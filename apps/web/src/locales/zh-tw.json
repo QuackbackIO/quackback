@@ -1506,7 +1506,6 @@
   "onboarding.home.nextStepOf": "下一步 · {step}/{total}",
   "onboarding.home.next": "下一步",
   "onboarding.home.later": "稍後：{items}",
-  "onboarding.home.path": "通往{goal, select, feedback {第一則想法} support {第一則對話} helpCenter {第一篇文章} status {第一個服務} other {第一個成果}}的路徑",
   "onboarding.task.create-board.outcome": "客戶分享想法的地方",
   "onboarding.task.create-board.private.outcome": "團隊分享想法的地方",
   "onboarding.task.distribute-feedback.outcome": "客戶能找到你的看板",
@@ -1524,5 +1523,10 @@
   "onboarding.task.first-win.status.outcome": "客戶可查看你的狀態",
   "onboarding.launch.later": "稍後",
   "onboarding.launch.ready": "已就緒",
-  "onboarding.trial.quiet": "{label} · {days} 天"
+  "onboarding.trial.quiet": "{label} · {days} 天",
+  "onboarding.home.path.feedback": "通往第一則想法的路徑",
+  "onboarding.home.path.support": "通往第一則對話的路徑",
+  "onboarding.home.path.helpCenter": "通往第一篇文章的路徑",
+  "onboarding.home.path.status": "通往第一個服務的路徑",
+  "onboarding.home.path.other": "通往第一個成果的路徑"
 }
