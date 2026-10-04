@@ -13,7 +13,7 @@ export function buildWidgetInstallPrompt(instanceUrl: string, pairingCode: strin
 
   return `# Install the Quackback widget
 
-Redeem the pairing code over HTTP — do not ask the user for the HMAC signing secret. Never invent a secret. Never print the signing secret after redeem.
+Redeem the pairing code over HTTP; do not ask the user for the HMAC signing secret. Never invent a secret. Never print the signing secret after redeem.
 
 The launcher must appear for anonymous visitors after init. If this app already has signed-in users, also identify them with a backend-signed ssoToken. If it does not, leave the signing secret in server-only env and stop after init. Do not invent auth or a placeholder user id.
 
@@ -45,6 +45,36 @@ function widgetLoader(instanceUrl: string): string {
     d.head.appendChild(s)})(window,document);`
 }
 
+/**
+ * The shortest working install: load and start Messenger, nothing else. No
+ * comments, so it survives being pasted or emailed as a single line; how to
+ * identify signed-in users lives on the Install settings page.
+ */
+export function buildWidgetLoaderSnippet(instanceUrl: string): string {
+  return `<script>
+  ${widgetLoader(instanceUrl)}
+  Quackback("init");
+</script>`
+}
+
+const TEST_SITE_LABEL = /^(staging|stage|stg|dev|preview|test|qa|uat|sandbox)$/
+const TEST_SITE_SUFFIX = /(^|\.)(localhost|local|test|internal)$/
+
+/**
+ * A host that is someone's own machine or a pre-release copy of their site:
+ * Messenger seen there proves the snippet works, not that customers see it.
+ */
+export function isTestSiteHost(host: string): boolean {
+  const name = host
+    .toLowerCase()
+    .replace(/:\d+$/, '')
+    .replace(/^\[|\]$/g, '')
+  if (name === '::1' || TEST_SITE_SUFFIX.test(name)) return true
+  if (/^(127|10)\.\d+\.\d+\.\d+$/.test(name) || /^192\.168\.\d+\.\d+$/.test(name)) return true
+  if (/^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/.test(name)) return true
+  return name.split('.').some((label) => label.split('-').some((part) => TEST_SITE_LABEL.test(part)))
+}
+
 /** Script-tag snippet for hand install. Always documents identify. */
 export function buildWidgetInstallSnippet(instanceUrl: string): string {
   const loader = widgetLoader(instanceUrl)
@@ -54,14 +84,14 @@ export function buildWidgetInstallSnippet(instanceUrl: string): string {
   Quackback("init");
 
   // Identify signed-in users once per session so threads attach to a person.
-  // Call when you first know who they are — app load if already signed in,
+  // Call when you first know who they are: app load if already signed in,
   // and right after login/signup. Not on every navigation.
   //
   // Server: sign a ~5m HS256 JWT with the signing secret from
   // Admin → Settings → Widget → Install.
-  //   sub   — stable unique user id (never email)
-  //   email — required
-  //   name  — optional
+  //   sub:   stable unique user id (never email)
+  //   email: required
+  //   name:  optional
   // Hand { ssoToken } to the page however you already expose session data.
   // Never put the secret in the browser. Never send raw id or email.
   //

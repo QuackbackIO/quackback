@@ -31,7 +31,7 @@ export const sendMessengerInstallInstructionsFn = createServerFn({ method: 'POST
       await import('@/lib/server/domains/onboarding/messenger-install')
     await assertInstallInstructionsAllowed(auth.principal.id, auth.principal.role)
     await readyMessengerForInstall()
-    const [{ sendMessengerInstallEmail }, { buildWidgetInstallSnippet }, { getBaseUrl }] =
+    const [{ sendMessengerInstallEmail }, { buildWidgetLoaderSnippet }, { getBaseUrl }] =
       await Promise.all([
         import('@quackback/email'),
         import('@/lib/shared/widget/install-prompt'),
@@ -41,7 +41,8 @@ export const sendMessengerInstallInstructionsFn = createServerFn({ method: 'POST
       to: data.email,
       senderName: auth.user.name || auth.user.email,
       workspaceName: auth.settings.name,
-      snippet: buildWidgetInstallSnippet(getBaseUrl()),
+      // The short snippet: no comments for a one-line mail client to break.
+      snippet: buildWidgetLoaderSnippet(getBaseUrl()),
     })
     return { sent: result.sent }
   })
