@@ -53,10 +53,31 @@ import { requestEmailSignin } from '../email-signin'
 describe('requestEmailSignin — failed-verify redirect', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('routes admin callbacks to the unified login on failed verify', async () => {
-    await requestEmailSignin({ email: 'jess@example.com', callbackURL: '/admin/feedback' })
+  it('routes admin callbacks to the unified login on failed verify, keeping the deep link', async () => {
+    await requestEmailSignin({
+      email: 'jess@example.com',
+      callbackURL: '/admin/status?view=components',
+    })
     expect(hoisted.mockMintMagicLinkUrl).toHaveBeenCalledWith(
-      expect.objectContaining({ errorCallbackPath: '/auth/login?callbackUrl=/admin' })
+      expect.objectContaining({
+        callbackPath: '/admin/status?view=components',
+        errorCallbackPath: '/auth/login?callbackUrl=%2Fadmin%2Fstatus%3Fview%3Dcomponents',
+      })
+    )
+  })
+
+  // The link lands on `${origin}${callbackPath}`: "@evil.example" would make
+  // the origin a userinfo prefix and ".evil.example" a subdomain of another host.
+  it.each([
+    ['userinfo', '@evil.example/x'],
+    ['host suffix', '.evil.example/x'],
+    ['absolute URL', 'https://evil.example/x'],
+    ['protocol-relative', '//evil.example/x'],
+    ['tab smuggled', '/\t/evil.example/x'],
+  ])('signs in to the portal root when the callback is a %s', async (_label, callbackURL) => {
+    await requestEmailSignin({ email: 'jess@example.com', callbackURL })
+    expect(hoisted.mockMintMagicLinkUrl).toHaveBeenCalledWith(
+      expect.objectContaining({ callbackPath: '/', errorCallbackPath: '/auth/login' })
     )
   })
 

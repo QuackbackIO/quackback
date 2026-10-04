@@ -9,8 +9,10 @@ export interface FormContext {
 /** Where the auth form is mounted. Drives the base-step copy:
  *  - `dialog`         — the public portal sign-in modal ("vote and comment").
  *  - `private-portal` — the private-portal gate, where the page IS the login
- *    screen, so the copy frames the portal as private instead. */
-export type AuthSurface = 'dialog' | 'private-portal'
+ *    screen, so the copy frames the portal as private instead.
+ *  - `team`           — the sign-in a teammate meets on the way to an admin
+ *    page, so the copy names the team rather than customers. */
+export type AuthSurface = 'dialog' | 'private-portal' | 'team'
 
 interface HeaderOptions {
   surface?: AuthSurface
@@ -68,6 +70,34 @@ export function headerForStep(
         <FormattedMessage
           id="portal.auth.dialog.resetDescription"
           defaultMessage="We sent you a password reset link."
+        />
+      ),
+    }
+  }
+
+  // Base step. On the way to an admin page the copy is for the team.
+  if (opts?.surface === 'team' && mode === 'login') {
+    const workspace = opts.workspaceName?.trim()
+    return {
+      title: workspace ? (
+        <FormattedMessage
+          id="portal.auth.team.title"
+          defaultMessage="Sign in to {workspace} admin"
+          values={{ workspace }}
+        />
+      ) : (
+        <FormattedMessage id="portal.auth.team.titleGeneric" defaultMessage="Team sign-in" />
+      ),
+      description: workspace ? (
+        <FormattedMessage
+          id="portal.auth.team.description"
+          defaultMessage="For the {workspace} team. You will go straight back to the page you opened."
+          values={{ workspace }}
+        />
+      ) : (
+        <FormattedMessage
+          id="portal.auth.team.descriptionGeneric"
+          defaultMessage="For the team. You will go straight back to the page you opened."
         />
       ),
     }

@@ -1,4 +1,4 @@
-import { isSafeCallbackUrl } from './routing'
+import { isSafeCallbackUrl, isTeamCallback } from './routing'
 
 export interface AuthPromptParams {
   mode?: 'login' | 'signup'
@@ -52,4 +52,10 @@ export function buildSigninRedirect(
   }
   if (opts.error) search.error = opts.error
   return { to: '/', search }
+}
+
+/** The sign-in destination for a team page: the deep link (path, query, hash)
+ *  when it is a same-origin team path, else `/admin`. */
+export function teamSigninCallback(callbackUrl: string | undefined): string {
+  return isSafeCallbackUrl(callbackUrl) && isTeamCallback(callbackUrl) ? callbackUrl : '/admin'
 }
