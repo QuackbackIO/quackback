@@ -4,9 +4,10 @@ import { FormattedMessage } from 'react-intl'
 import { useQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { usePermission } from '@/lib/client/hooks/use-permission'
-import { useSessionContext } from '@/lib/client/hooks/use-root-context'
+import { useSessionContext, useUserRole } from '@/lib/client/hooks/use-root-context'
 import { launchPlanProgress } from '@/lib/shared/launch-checklist'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { isAdmin } from '@/lib/shared/roles'
 
 type DockProgress = ReturnType<typeof launchPlanProgress>
 
@@ -15,7 +16,7 @@ const STORAGE_PREFIX = 'quackback:launch-plan-dock:'
 function readStored(key: string): DockProgress | null {
   try {
     const value = JSON.parse(localStorage.getItem(key) ?? 'null') as DockProgress | null
-    return value && typeof value.done === 'number' && typeof value.total === 'number' ? value : null
+    return value && typeof value.step === 'number' && typeof value.total === 'number' ? value : null
   } catch {
     return null
   }
@@ -36,7 +37,9 @@ function writeStored(key: string, value: DockProgress) {
  * and remembers the last progress it saw so a reload elsewhere keeps it.
  */
 export function LaunchPlanDock() {
-  const canView = usePermission(PERMISSIONS.MEMBER_VIEW)
+  // The plan is the owner's: a teammate who joins later has their own first run.
+  const role = useUserRole()
+  const canView = usePermission(PERMISSIONS.MEMBER_VIEW) && isAdmin(role)
   const userId = useSessionContext()?.user?.id
   const { data } = useQuery({ ...adminQueries.onboardingStatus(), enabled: false })
   const [progress, setProgress] = useState<DockProgress | null>(null)
@@ -45,7 +48,11 @@ export function LaunchPlanDock() {
   useEffect(() => {
     if (!canView || !storageKey) return
     if (data) {
-      const next = launchPlanProgress(data)
+      // Outside the launch window the plan is over, whatever its state.
+      const next =
+        data.inLaunchWindow === false
+          ? { ...launchPlanProgress(data), resolved: true }
+          : launchPlanProgress(data)
       writeStored(storageKey, next)
       setProgress(next)
     } else {
@@ -54,7 +61,8 @@ export function LaunchPlanDock() {
   }, [canView, data, storageKey])
 
   if (!canView || !progress || progress.resolved) return null
-  const percent = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0
+  // The live page is step 1 and starts done; the bar shows the steps behind you.
+  const percent = progress.total > 0 ? Math.round(((progress.step - 1) / progress.total) * 100) : 0
   return (
     <Link
       to="/admin/getting-started"
@@ -66,9 +74,9 @@ export function LaunchPlanDock() {
         </span>
         <span className="shrink-0 tabular-nums text-muted-foreground">
           <FormattedMessage
-            id="onboarding.launch.progress"
-            defaultMessage="{done} of {total}"
-            values={{ done: progress.done, total: progress.total }}
+            id="onboarding.launch.stepOf"
+            defaultMessage="Step {step} of {total}"
+            values={{ step: progress.step, total: progress.total }}
           />
         </span>
       </span>

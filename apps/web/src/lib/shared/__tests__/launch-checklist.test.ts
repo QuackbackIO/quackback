@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  buildLaunchTasks,
-  isLaunchPlanActive,
-  launchChecklistSummary,
-  normalizeOutcome,
-} from '../launch-checklist'
+import { buildLaunchTasks, normalizeOutcome } from '../launch-checklist'
 import type { LaunchStatus } from '../launch-checklist'
 
 const base: LaunchStatus = {
@@ -161,15 +156,6 @@ describe('buildLaunchTasks', () => {
       expect(quinn({ ...base, features: { ...noExtraModules, assistant: true } })).toBeUndefined()
     })
 
-    it('does not count toward progress when left out', () => {
-      const without = launchChecklistSummary({
-        ...withSupport,
-        features: { ...withSupport.features, assistant: false },
-      })
-      const withQuinn = launchChecklistSummary(withSupport)
-      expect(without.denominator).toBe(withQuinn.denominator - 1)
-    })
-
     it('is done when the Agent is on and answering, and open otherwise', () => {
       expect(quinn({ ...withSupport, hasAgentAnswering: true })?.isCompleted).toBe(true)
       expect(quinn({ ...withSupport, hasAgentAnswering: false })?.isCompleted).toBe(false)
@@ -202,14 +188,11 @@ describe('buildLaunchTasks', () => {
     })
   })
 
-  it('counts a blocked board step in the readiness denominator', () => {
+  it('blocks the board step at the plan limit', () => {
     const status = { ...base, boardCount: 1, maxBoards: 1, features: noExtraModules }
     const board = buildLaunchTasks(status).find((task) => task.id === 'create-board')
     expect(board?.availability).toBe('blocked')
     expect(board?.blocked?.kind).toBe('plan-limit')
-    const summary = launchChecklistSummary(status)
-    expect(summary.denominator).toBe(1)
-    expect(summary.doneCount).toBe(0)
   })
 
   it('hides Help Center and Support rows when those modules are off', () => {
@@ -255,63 +238,6 @@ describe('buildLaunchTasks', () => {
       },
     })
     expect(tasks.find((task) => task.id === 'create-board')!.isSkipped).toBe(true)
-  })
-
-  it('excludes skipped essentials from numerator and denominator', () => {
-    const summary = launchChecklistSummary({
-      ...base,
-      features: noExtraModules,
-      taskResolutions: {
-        product_feedback: {
-          'create-board': {
-            resolution: 'dismissed',
-            resolvedAt: '2026-07-13T10:00:00.000Z',
-          },
-        },
-      },
-    })
-    expect(summary.denominator).toBe(0)
-    expect(summary.resolved).toBe(true)
-  })
-
-  it('treats polish dismissal as skipped without changing the essentials count', () => {
-    const summary = launchChecklistSummary({
-      ...base,
-      hasBoards: true,
-      hasPublicBoard: true,
-      publicBoardLinkCopiedAt: '2026-07-13T10:00:00.000Z',
-      features: noExtraModules,
-      taskResolutions: {
-        product_feedback: {
-          'customize-branding': {
-            resolution: 'dismissed',
-            resolvedAt: '2026-07-13T10:00:00.000Z',
-          },
-        },
-      },
-    })
-    expect(summary.denominator).toBe(2)
-    expect(summary.doneCount).toBe(2)
-    expect(summary.resolved).toBe(true)
-  })
-
-  it('resolves once every prerequisite is done or skipped, without waiting for the first win', () => {
-    const summary = launchChecklistSummary({
-      ...base,
-      hasBoards: true,
-      hasPublishedChangelog: true,
-    })
-    expect(summary.allComplete).toBe(true)
-    expect(summary.firstWinComplete).toBe(false)
-    expect(summary.resolved).toBe(true)
-    expect(summary.percent).toBe(100)
-  })
-
-  it('hides the home card once essentials resolve, even if the first win has not landed', () => {
-    expect(isLaunchPlanActive({ resolved: false, firstWinComplete: true })).toBe(true)
-    expect(isLaunchPlanActive({ resolved: true, firstWinComplete: false })).toBe(false)
-    expect(isLaunchPlanActive({ resolved: false, firstWinComplete: false })).toBe(true)
-    expect(isLaunchPlanActive({ resolved: true, firstWinComplete: true })).toBe(false)
   })
 
   it('opens Connect Messenger and Invite in place, and completes Invite on the first invite sent', () => {

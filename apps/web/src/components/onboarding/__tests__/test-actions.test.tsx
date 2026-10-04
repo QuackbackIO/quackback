@@ -55,7 +55,10 @@ vi.mock('@/lib/client/queries/admin', () => ({
     }),
   },
 }))
-vi.mock('@/lib/client/hooks/use-root-context', () => ({ useFeatureFlags: () => hoisted.flags }))
+vi.mock('@/lib/client/hooks/use-root-context', () => ({
+  useFeatureFlags: () => hoisted.flags,
+  useBaseUrl: () => 'https://acme.example.com',
+}))
 vi.mock('@/components/admin/ask/copilot-on-home', () => ({
   useCopilotOnHome: () => hoisted.copilotOnHome,
 }))
@@ -299,7 +302,7 @@ describe("the Launch plan's first-win step", () => {
     </AdminProductTourProvider>
   )
 
-  it('offers a test idea for "Get your first idea"', async () => {
+  it('offers a test idea for "A customer posts an idea"', async () => {
     render(providers(<Page />))
     fireEvent.click(await screen.findByRole('button', { name: 'Post a test idea' }))
     expect(await screen.findByRole('region', { name: 'Test sheet' })).toHaveTextContent(

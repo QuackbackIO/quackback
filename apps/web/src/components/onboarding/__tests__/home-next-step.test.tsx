@@ -25,12 +25,16 @@ vi.mock('@/lib/client/hooks/use-permission', () => ({
   usePermission: (key: string) => key === 'conversation.view' && hoisted.canConverse,
 }))
 vi.mock('@/lib/client/hooks/use-root-context', () => ({
+  useBaseUrl: () => 'https://acme.example.com',
   useWorkspaceSettings: () => ({
     name: 'Acme',
     brandingData: { name: 'Acme', logoUrl: null, faviconUrl: null, headerLogoUrl: null },
   }),
 }))
-vi.mock('@/lib/server/functions/activation', () => ({ markPublicBoardLinkCopiedFn: vi.fn() }))
+vi.mock('@/lib/server/functions/activation', () => ({
+  markPublicBoardLinkCopiedFn: vi.fn(),
+  markStatusLinkCopiedFn: vi.fn(),
+}))
 vi.mock('@/lib/client/plg-events', () => ({ recordPlgEvent: vi.fn() }))
 
 import { HomeNextStep } from '../home-next-step'
@@ -82,41 +86,82 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe("Home's next step", () => {
-  it('leads with one step: its outcome, one primary action and a test', () => {
+  it('leads with the goal step, counted on the one launch plan', () => {
     mount()
-    const card = screen.getByRole('region', { name: 'Share your board' })
-    expect(card).toHaveTextContent('Next step · 2 of 3')
-    expect(card).toHaveTextContent('Customers find your board')
+    const card = screen.getByRole('region', { name: 'Share your board link' })
+    expect(card).toHaveTextContent('Launch plan · Step 2 of 3')
+    expect(card).toHaveTextContent('Paste it wherever they already talk to you.')
     expect(within(card).getByRole('button', { name: 'Copy board link' })).toBeVisible()
     fireEvent.click(within(card).getByRole('button', { name: 'Post a test idea' }))
     expect(hoisted.opened).toContain('idea')
-    expect(within(card).getByRole('link', { name: 'acme.example.com' })).toHaveAttribute(
+    expect(within(card).getByRole('link', { name: /View board/ })).toHaveAttribute(
       'href',
-      'https://acme.example.com'
+      'https://acme.example.com/?board=feedback'
     )
   })
 
-  it('shows the path to a first idea and what comes later', () => {
+  it('shows the three-step path to a first idea and what comes later', () => {
     mount()
     const path = screen.getByRole('region', { name: 'Your path to a first idea' })
     const rows = within(path)
       .getAllByRole('listitem')
       .map((row) => row.textContent)
-    expect(rows).toEqual(['Portal is liveDone', 'Share your boardNext', 'Get your first idea'])
-    expect(path).toHaveTextContent(
-      'Later: Publish your first update, invite a teammate, and add your logo'
+    expect(rows).toEqual([
+      'Your board is liveDone',
+      'Share your board linkNext',
+      'A customer posts an idea',
+    ])
+    expect(within(path).getByRole('link', { name: 'Launch plan' })).toHaveAttribute(
+      'href',
+      '/admin/getting-started'
+    )
+    const later = within(path).getByText(/^Later:/)
+    expect(within(later).getByRole('link', { name: 'add your logo' })).toHaveAttribute(
+      'href',
+      '/admin/settings/general'
     )
   })
 
-  it('makes the test the action once only the first result is left', () => {
+  it('makes the test the action once only the first win is left', () => {
     mount({ ...status, publicBoardLinkCopiedAt: '2026-10-04T10:00:00.000Z' })
-    const card = screen.getByRole('region', { name: 'Get your first idea' })
-    expect(card).toHaveTextContent('Next step · 3 of 3')
+    const card = screen.getByRole('region', { name: 'A customer posts an idea' })
+    expect(card).toHaveTextContent('Launch plan · Step 3 of 3')
+    expect(card).toHaveTextContent('Your own tests never count.')
     expect(
       within(card)
         .getAllByRole('button')
         .map((button) => button.textContent)
     ).toEqual(['Post a test idea'])
+  })
+
+  it('stays on Home when every chore is done but no customer has acted', () => {
+    mount({
+      ...status,
+      publicBoardLinkCopiedAt: '2026-10-04T10:00:00.000Z',
+      hasBranding: true,
+      memberCount: 2,
+      hasPublishedChangelog: true,
+      hasWidgetInstalled: true,
+      hasWidgetEnabled: true,
+    })
+    expect(screen.getByRole('region', { name: 'A customer posts an idea' })).toBeVisible()
+  })
+
+  it('leads a status page with sharing it, and offers adding a service beside it', () => {
+    mount({
+      ...status,
+      goals: ['status_page'],
+      features: { ...status.features!, statusPage: true },
+    })
+    const card = screen.getByRole('region', { name: 'Share your status page' })
+    expect(within(card).getByRole('link', { name: 'Add a service' })).toHaveAttribute(
+      'href',
+      '/admin/status'
+    )
+    expect(within(card).getByRole('link', { name: /View status page/ })).toHaveAttribute(
+      'href',
+      'https://acme.example.com/status'
+    )
   })
 
   it('offers no test the person cannot run', () => {
@@ -127,7 +172,7 @@ describe("Home's next step", () => {
 
   it('keeps the automatic logo notice beside the portal snapshot', () => {
     mount(status, <button type="button">Undo</button>)
-    const card = screen.getByRole('region', { name: 'Share your board' })
+    const card = screen.getByRole('region', { name: 'Share your board link' })
     expect(within(card).getByRole('button', { name: 'Undo' })).toBeVisible()
   })
 
@@ -143,8 +188,6 @@ describe("Home's next step", () => {
       </IntlProvider>
     )
     // German keeps its capitals and joins with "und".
-    expect(screen.getByText(/^Später:/).textContent).toMatch(
-      /, Teammitglied einladen und Logo hinzufügen$/
-    )
+    expect(screen.getByText(/^Später:/).textContent).toMatch(/ und Logo hinzufügen$/)
   })
 })

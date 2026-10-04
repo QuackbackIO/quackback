@@ -141,6 +141,18 @@ describe('SetupState V2 normalization', () => {
     )
   })
 
+  it('keeps the status page link milestone beside the board one', () => {
+    const normalized = normalizeSetupStateV2({
+      version: 2,
+      steps: { core: true, workspace: true, startingPoint: null },
+      activationMilestones: { statusLinkCopiedAt: '2026-10-04T10:00:00.000Z' },
+    })
+
+    expect(normalized?.activationMilestones).toEqual({
+      statusLinkCopiedAt: '2026-10-04T10:00:00.000Z',
+    })
+  })
+
   it('preserves the cloud workspace-details handoff marker', () => {
     const normalized = normalizeSetupStateV2({
       version: 2,

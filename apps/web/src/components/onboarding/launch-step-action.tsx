@@ -1,20 +1,72 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
-import { FormattedMessage } from 'react-intl'
+import { FormattedMessage, useIntl } from 'react-intl'
+import { useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { ActivationActionButton } from '@/components/admin/activation-action-button'
-import { copyBoardLinkAction } from '@/lib/shared/activation-action'
 import {
-  launchChecklistSummary,
-  type LaunchStatus,
-  type LaunchTask,
-} from '@/lib/shared/launch-checklist'
+  ActivationActionButton,
+  copyWithFallback,
+} from '@/components/admin/activation-action-button'
+import { copyBoardLinkAction } from '@/lib/shared/activation-action'
+import { markStatusLinkCopiedFn } from '@/lib/server/functions/activation'
+import { useBaseUrl } from '@/lib/client/hooks/use-root-context'
+import { launchOutcome, type LaunchStatus, type LaunchTask } from '@/lib/shared/launch-checklist'
 import { openGoingLiveSheet } from './going-live-events'
 
+/** The status page's public address on the portal. */
+export function statusPageUrl(baseUrl: string | undefined): string | null {
+  if (!baseUrl) return null
+  return new URL('/status', baseUrl).toString()
+}
+
+/** Copies the status page link and records it, which completes the status goal's step. */
+function CopyStatusLinkButton({ variant }: { variant: 'default' | 'outline' }) {
+  const intl = useIntl()
+  const baseUrl = useBaseUrl()
+  const queryClient = useQueryClient()
+  const [copying, setCopying] = useState(false)
+  const url = statusPageUrl(baseUrl)
+  if (!url) return null
+  return (
+    <Button
+      size="sm"
+      variant={variant}
+      disabled={copying}
+      onClick={async () => {
+        setCopying(true)
+        try {
+          await copyWithFallback(url)
+          await markStatusLinkCopiedFn()
+          await queryClient.invalidateQueries({ queryKey: ['admin', 'onboarding'] })
+          toast.success(
+            intl.formatMessage({
+              id: 'onboarding.launch.statusLinkCopied',
+              defaultMessage: 'Status page link copied',
+            })
+          )
+        } catch {
+          toast.error(
+            intl.formatMessage({
+              id: 'onboarding.launch.copyFailed',
+              defaultMessage: 'Could not copy the link. Try again.',
+            })
+          )
+        } finally {
+          setCopying(false)
+        }
+      }}
+    >
+      <FormattedMessage id="onboarding.launch.copyStatusLink" defaultMessage="Copy status link" />
+    </Button>
+  )
+}
+
 /**
- * The one action a launch step offers: copy the board link, create the board,
- * open the sheet that does the step in place, or open the page that does it. The automatic first win takes its
- * action from the caller. Null for a step that is done, skipped or blocked.
+ * The one action a launch step offers: copy the board or status link, create
+ * the board, open the sheet that does the step in place, or open the page that
+ * does it. The automatic first win takes its action from the caller. Null for
+ * a step that is done, skipped or blocked.
  */
 export function LaunchStepAction({
   task,
@@ -35,9 +87,7 @@ export function LaunchStepAction({
   if (task.classification === 'first_win') return firstWinAction ?? null
   const variant = primary ? 'default' : 'outline'
   const copy =
-    task.id === 'distribute-feedback'
-      ? copyBoardLinkAction(launchChecklistSummary(status).outcome, status)
-      : null
+    task.id === 'distribute-feedback' ? copyBoardLinkAction(launchOutcome(status), status) : null
   if (copy) {
     return (
       <ActivationActionButton
@@ -48,6 +98,7 @@ export function LaunchStepAction({
       />
     )
   }
+  if (task.id === 'share-status-page') return <CopyStatusLinkButton variant={variant} />
   if (task.id === 'create-board') {
     return (
       <Button size="sm" variant={variant} disabled={pending} onClick={onCreateBoard}>
@@ -66,7 +117,7 @@ export function LaunchStepAction({
   if (!task.href) return null
   return (
     <Button asChild size="sm" variant={variant}>
-      <Link to={task.href}>
+      <Link to={task.href} search={task.search as never}>
         <FormattedMessage id="onboarding.launch.start" defaultMessage="Start" />
       </Link>
     </Button>

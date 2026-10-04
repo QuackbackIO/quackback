@@ -44,7 +44,7 @@ export function firstWinTestStart(
   variant: string | undefined,
   paths: TestPaths
 ): TryMessengerStart | null {
-  if (variant === 'feedback') return paths.idea ? 'idea' : null
+  if (variant === 'feedback' || variant === 'private') return paths.idea ? 'idea' : null
   if (variant === 'support') return paths.message ? 'message' : null
   return null
 }

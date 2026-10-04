@@ -102,11 +102,14 @@ describe.skipIf(!fixture.available)('setup emails (real DB)', () => {
       unsubscribeUrl: string
     }
     expect(params.name).toBe('Sam')
-    expect(params.steps.map((step) => step.title)).toContain('Connect Messenger')
-    expect(params.steps.length).toBeLessThanOrEqual(3)
-    expect(params.steps.find((step) => step.title === 'Connect Messenger')?.url).toBe(
-      'https://acme.quackback.test/admin?open=install-messenger'
-    )
+    // The launch plan's path, the same three steps Home counts.
+    expect(params.steps.map((step) => step.title)).toEqual([
+      'Messenger is ready',
+      'Put Messenger on your site',
+      'A customer starts a conversation',
+    ])
+    expect(params.steps[1]?.url).toBe('https://acme.quackback.test/admin?open=install-messenger')
+    expect(params.steps[2]?.url).toBe('https://acme.quackback.test/admin?try=message')
     expect(params.unsubscribeUrl).toMatch(/^https:\/\/acme\.quackback\.test\/unsubscribe\?token=/)
 
     expect(await sendOnboardingEmail('welcome', owner)).toEqual({
@@ -163,7 +166,7 @@ describe.skipIf(!fixture.available)('setup emails (real DB)', () => {
   it('nudges once on day two with a test link, unless the first result has happened', async () => {
     expect(await sendOnboardingEmail('nudge', owner)).toEqual({ sent: true })
     expect(mail.nudge.mock.calls[0][0]).toMatchObject({
-      nextStep: { title: 'Connect Messenger' },
+      nextStep: { title: 'Put Messenger on your site' },
       test: {
         label: 'Send a test message',
         url: 'https://acme.quackback.test/admin?try=message',
@@ -191,6 +194,27 @@ describe.skipIf(!fixture.available)('setup emails (real DB)', () => {
     })
   })
 
+  it('is armed by the first win, not by chores: a finished checklist still nudges', async () => {
+    await seedWorkspace({ goals: ['product_feedback'] })
+    await testDb.insert(boards).values({ name: 'Ideas', slug: createId('board') })
+    await testDb.update(settings).set({
+      setupState: JSON.stringify({
+        version: 2,
+        goals: ['product_feedback'],
+        steps: { core: true, workspace: true },
+        completedAt: new Date().toISOString(),
+        activationMilestones: { publicBoardLinkCopiedAt: new Date().toISOString() },
+      }),
+    })
+    expect(await sendOnboardingEmail('nudge', owner)).toEqual({ sent: true })
+    expect(mail.nudge.mock.calls[0][0]).toMatchObject({
+      nextStep: {
+        title: 'A customer posts an idea',
+        url: 'https://acme.quackback.test/admin?try=idea',
+      },
+    })
+  })
+
   it('only writes to teammates', async () => {
     await testDb.update(principal).set({ role: 'user' }).where(eq(principal.id, owner))
     expect(await sendOnboardingEmail('welcome', owner)).toEqual({
@@ -211,19 +235,18 @@ describe.skipIf(!fixture.available)('setup emails (real DB)', () => {
     )
   })
 
-  it('marks steps already done as done and numbers only what is left', async () => {
+  it('marks the live page done and leads the feedback path with sharing the board', async () => {
     await seedWorkspace({ goals: ['product_feedback', 'customer_support'] })
     await testDb.insert(boards).values({ name: 'Ideas', slug: createId('board') })
     expect(await sendOnboardingEmail('welcome', owner)).toEqual({ sent: true })
     const { steps } = mail.welcome.mock.calls[0][0] as {
       steps: { title: string; outcome: string; done?: boolean }[]
     }
-    const done = steps.filter((step) => step.done)
-    const open = steps.filter((step) => !step.done)
-    expect(done.map((step) => step.title)).toContain('Create a feedback board')
-    expect(open.length).toBeGreaterThan(0)
-    expect(open.length).toBeLessThanOrEqual(3)
-    expect(steps.indexOf(done[0])).toBeLessThan(steps.indexOf(open[0]))
+    expect(steps.map((step) => [step.title, step.done === true])).toEqual([
+      ['Your board is live', true],
+      ['Share your board link', false],
+      ['A customer posts an idea', false],
+    ])
   })
 
   it('says what a step gets, as the plan does, not what was detected', async () => {
@@ -234,7 +257,7 @@ describe.skipIf(!fixture.available)('setup emails (real DB)', () => {
     const { steps } = mail.welcome.mock.calls[0][0] as {
       steps: { title: string; outcome: string }[]
     }
-    const messenger = steps.find((step) => step.title === 'Connect Messenger')
+    const messenger = steps.find((step) => step.title === 'Put Messenger on your site')
     expect(messenger?.outcome).toBe('Customers reach you from your site')
     expect(steps.some((step) => /found on/i.test(step.outcome))).toBe(false)
   })

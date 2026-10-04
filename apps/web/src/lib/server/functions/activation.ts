@@ -191,6 +191,23 @@ export const markPublicBoardLinkCopiedFn = createServerFn({ method: 'POST' })
     return value
   })
 
+/** Record the first time an admin copied the status page link: the status goal's step. */
+export const markStatusLinkCopiedFn = createServerFn({ method: 'POST' }).handler(async () => {
+  await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+  const { value } = await mutateSetupStateAtomic(async (current) => {
+    const copiedAt = current.activationMilestones?.statusLinkCopiedAt ?? new Date().toISOString()
+    return {
+      state: {
+        ...current,
+        activationMilestones: { ...current.activationMilestones, statusLinkCopiedAt: copiedAt },
+      },
+      value: { copiedAt },
+    }
+  })
+  log.info({ copied_at: value.copiedAt }, 'status page link copied')
+  return value
+})
+
 export const acknowledgeActivationHandoffFn = createServerFn({ method: 'POST' }).handler(
   async () => {
     await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })

@@ -52,11 +52,11 @@ describe('launch task labels', () => {
   })
 
   it.each([
-    [['product_feedback'], false, 'Get your first idea'],
-    [['product_feedback'], true, 'Get your first idea'],
-    [['customer_support', 'product_feedback'], false, 'Get your first conversation'],
-    [['help_center'], false, 'Publish your first article'],
-    [['status_page', 'help_center'], false, 'Add your first service'],
+    [['product_feedback'], false, 'A customer posts an idea'],
+    [['product_feedback'], true, 'A teammate posts an idea'],
+    [['customer_support', 'product_feedback'], false, 'A customer starts a conversation'],
+    [['help_center'], false, 'A customer finds it helpful'],
+    [['status_page', 'help_center'], false, 'A customer subscribes'],
   ] as const)('names the first win for goals %j (private %s): %s', (goals, isPrivate, title) => {
     expect(label(status([...goals], isPrivate), 'first-win')).toBe(title)
   })

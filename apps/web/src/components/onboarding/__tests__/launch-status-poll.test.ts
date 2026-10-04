@@ -22,10 +22,10 @@ describe('launch status polling', () => {
     expect(launchStatusRefetchInterval(supportOnly)).toBe(15_000)
   })
 
-  it('stops once the plan is resolved, even before a first win', () => {
-    const resolved = { ...supportOnly, hasWidgetInstalled: true, hasWidgetEnabled: true }
-    expect(resolved.hasFirstWin).toBe(false)
-    expect(launchStatusRefetchInterval(resolved)).toBe(false)
+  it('keeps polling with every chore done, until the first win', () => {
+    const chores = { ...supportOnly, hasWidgetInstalled: true, hasWidgetEnabled: true }
+    expect(launchStatusRefetchInterval(chores)).toBe(15_000)
+    expect(launchStatusRefetchInterval({ ...chores, hasFirstWin: true })).toBe(false)
   })
 
   it('waits for data', () => {

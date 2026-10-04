@@ -80,9 +80,10 @@ export async function loadLaunchStatus(caller: LaunchStatusCaller) {
       columns: { id: true },
       where: eq(integrations.status, 'connected'),
     }),
+    // The help center step is to publish: a draft does not complete it.
     db.query.helpCenterArticles.findFirst({
       columns: { id: true },
-      where: isNull(helpCenterArticles.deletedAt),
+      where: and(isNull(helpCenterArticles.deletedAt), isNotNull(helpCenterArticles.publishedAt)),
     }),
     db.query.changelogEntries.findFirst({
       columns: { id: true },
@@ -135,6 +136,7 @@ export async function loadLaunchStatus(caller: LaunchStatusCaller) {
     publicBoardSlug: publicBoard?.slug ?? null,
     publicBoardPath: publicBoard ? `/?board=${encodeURIComponent(publicBoard.slug)}` : null,
     publicBoardLinkCopiedAt: setupState?.activationMilestones?.publicBoardLinkCopiedAt ?? null,
+    statusLinkCopiedAt: setupState?.activationMilestones?.statusLinkCopiedAt ?? null,
     hasInternalBoard,
     memberCount: humanMembers.length,
     hasTeamInvite: humanMembers.some((member) => member.teamInvited),

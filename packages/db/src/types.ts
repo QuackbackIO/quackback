@@ -350,6 +350,8 @@ export type OutcomeTaskResolutions = Partial<
 export interface ActivationMilestones {
   /** A workspace admin copied a publicly viewable board's distribution link. */
   publicBoardLinkCopiedAt?: string
+  /** A workspace admin copied the status page link. */
+  statusLinkCopiedAt?: string
 }
 
 export type SetupCompletionSource = 'wizard' | 'managed' | 'legacy'
@@ -513,6 +515,11 @@ export function normalizeSetupStateV2(value: unknown): SetupState | null {
       ? value.activationMilestones
       : undefined
     const publicBoardLinkCopiedAt = asIsoString(storedMilestones?.publicBoardLinkCopiedAt)
+    const statusLinkCopiedAt = asIsoString(storedMilestones?.statusLinkCopiedAt)
+    const activationMilestones = {
+      ...(publicBoardLinkCopiedAt ? { publicBoardLinkCopiedAt } : {}),
+      ...(statusLinkCopiedAt ? { statusLinkCopiedAt } : {}),
+    }
     return {
       version: 2,
       steps: {
@@ -531,7 +538,7 @@ export function normalizeSetupStateV2(value: unknown): SetupState | null {
         ? { activationHandoffSeenAt: value.activationHandoffSeenAt as string }
         : {}),
       ...(taskResolutions ? { taskResolutions } : {}),
-      ...(publicBoardLinkCopiedAt ? { activationMilestones: { publicBoardLinkCopiedAt } } : {}),
+      ...(Object.keys(activationMilestones).length > 0 ? { activationMilestones } : {}),
     }
   }
 

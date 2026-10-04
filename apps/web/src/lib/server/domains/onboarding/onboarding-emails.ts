@@ -21,7 +21,13 @@ import {
 } from '@/lib/server/db'
 import { getSetupState } from '@/lib/shared/db-types'
 import { isLaunchWindowOpen, launchWindowFor } from '@/lib/shared/launch-window'
-import { buildLaunchTasks, type LaunchStatus, type LaunchTask } from '@/lib/shared/launch-checklist'
+import {
+  LAUNCH_LIVE_STEP,
+  launchPath,
+  type LaunchPath,
+  type LaunchStatus,
+  type LaunchTask,
+} from '@/lib/shared/launch-checklist'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { isTeamMember } from '@/lib/shared/roles'
 import { enqueueJob } from '@/lib/server/jobs/job-queue'
@@ -55,7 +61,6 @@ export type OnboardingEmailSkip =
   | 'tips-off'
   | 'already-sent'
   | 'first-result-reached'
-  | 'nothing-left'
 
 /** Queue the welcome now and the nudge for day two; the job decides at run time. */
 export async function scheduleOnboardingEmails(
@@ -81,10 +86,8 @@ interface EmailContext {
   name: string
   workspaceName: string
   status: LaunchStatus
-  /** Goal-path steps already done, in plan order. */
-  done: LaunchTask[]
-  /** Goal-path steps still to do, in plan order. */
-  tasks: LaunchTask[]
+  /** The launch plan's one path, the same three steps Home shows. */
+  path: LaunchPath
 }
 
 /** Why this email should not go out, or what it needs when it should. */
@@ -142,34 +145,65 @@ export async function onboardingEmailContext(
     role: person.role as Role,
     permissions: permissionsForLegacyRole(person.role as Role),
   })
-  // The goal path as the plan lists it: what is done, then what is left.
-  const path = buildLaunchTasks(status).filter(
-    (task) => task.classification === 'prerequisite' && !task.isSkipped
-  )
-  const done = path.filter((task) => task.isCompleted)
-  const tasks = path.filter((task) => !task.isCompleted)
-  if (tasks.length === 0) return { ok: false, reason: 'nothing-left' }
+  // The path as Home shows it. Only the first win closes it: a workspace that
+  // has done every chore still gets the nudge toward its first customer.
+  const path = launchPath(status)
+  if (path.complete) return { ok: false, reason: 'first-result-reached' }
   const name = (person.userName || person.displayName || '').split(' ')[0] || 'there'
   return {
     ok: true,
-    context: { to, name, workspaceName: org.name, status, done, tasks },
+    context: { to, name, workspaceName: org.name, status, path },
   }
 }
 
-function emailStep(task: LaunchTask, base: string, done: boolean): OnboardingEmailStep {
+function emailStep(
+  task: LaunchTask,
+  status: LaunchStatus,
+  base: string,
+  done: boolean
+): OnboardingEmailStep {
   return {
     title: task.title,
     outcome: launchTaskOutcome(task)?.defaultMessage?.toString() ?? '',
-    url: stepUrl(task, base),
+    url: stepUrl(task, base, status),
     done,
   }
 }
 
-/** Where a step's link lands: its sheet when it has one, else its page. */
-export function stepUrl(task: LaunchTask, base: string): string {
+/**
+ * The path's three steps for an email, in order: the live page (done), the
+ * goal step and the first win. The same list and count Home shows.
+ */
+export function emailPathSteps(
+  path: LaunchPath,
+  status: LaunchStatus,
+  base: string
+): OnboardingEmailStep[] {
+  const [goalStep, win] = path.steps
+  return [
+    {
+      title: LAUNCH_LIVE_STEP[path.goal].defaultMessage,
+      outcome: '',
+      url: `${base.replace(/\/$/, '')}/admin/getting-started`,
+      done: true,
+    },
+    emailStep(goalStep, status, base, goalStep.isCompleted || goalStep.isReady),
+    emailStep(win, status, base, win.isCompleted),
+  ]
+}
+
+/**
+ * Where a step's link lands: its sheet when it has one, the test that shows
+ * the first win, else its page (with the view it needs).
+ */
+export function stepUrl(task: LaunchTask, base: string, status?: LaunchStatus): string {
   const root = base.replace(/\/$/, '')
   if (task.sheet) return `${root}/admin?open=${task.sheet}`
-  return `${root}${task.href ?? '/admin'}`
+  if (task.classification === 'first_win') {
+    return (status && testLink(status, base)?.url) ?? `${root}/admin`
+  }
+  const search = task.search ? `?${new URLSearchParams(task.search).toString()}` : ''
+  return `${root}${task.href ?? '/admin'}${search}`
 }
 
 /** The test that shows the primary goal working, as a link. */
@@ -246,21 +280,17 @@ async function deliver(
       to: context.to,
       name: context.name,
       workspaceName: context.workspaceName,
-      // Done steps show as done; at most three are left to do.
-      steps: [
-        ...context.done.map((task) => emailStep(task, base, true)),
-        ...context.tasks.slice(0, 3).map((task) => emailStep(task, base, false)),
-      ],
+      steps: emailPathSteps(context.path, context.status, base),
       homeUrl: `${base.replace(/\/$/, '')}/admin`,
       unsubscribeUrl: unsubscribe,
     })
   } else {
-    const next = context.tasks[0]
+    const next = context.path.next ?? context.path.steps[1]
     await sendOnboardingNudgeEmail({
       to: context.to,
       name: context.name,
       workspaceName: context.workspaceName,
-      nextStep: { title: next.title, url: stepUrl(next, base) },
+      nextStep: { title: next.title, url: stepUrl(next, base, context.status) },
       test: testLink(context.status, base),
       unsubscribeUrl: unsubscribe,
     })

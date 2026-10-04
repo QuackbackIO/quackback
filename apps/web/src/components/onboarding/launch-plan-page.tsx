@@ -1,13 +1,14 @@
 import { useState, type ReactNode } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
-import { CheckIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
+import { CheckIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { CreateBoardDialog } from '@/components/admin/settings/boards/create-board-dialog'
+import { useBaseUrl } from '@/lib/client/hooks/use-root-context'
 import {
-  launchPlanGroups,
-  launchPlanProgress,
-  type LaunchPlanGroupId,
+  LAUNCH_LIVE_STEP,
+  launchPath,
+  type LaunchPathGoal,
   type LaunchStatus,
   type LaunchTask,
 } from '@/lib/shared/launch-checklist'
@@ -17,22 +18,27 @@ import { LaunchTaskLabel, LaunchTaskOutcome, launchTaskMessage } from './launch-
 import { useProductTour } from './product-tour'
 import { launchStatusQuery, useLaunchTaskResolution } from './use-launch-plan'
 
-const GROUP_NAME: Record<
-  Exclude<LaunchPlanGroupId, 'polish'>,
-  { id: string; defaultMessage: string }
-> = {
-  product_feedback: { id: 'onboarding.launch.group.feedback', defaultMessage: 'Feedback' },
-  customer_support: { id: 'onboarding.launch.group.support', defaultMessage: 'Support' },
-  help_center: { id: 'onboarding.launch.group.helpCenter', defaultMessage: 'Help Center' },
-  status_page: { id: 'onboarding.launch.group.status', defaultMessage: 'Status' },
-}
-
 const isOpen = (task: LaunchTask) => !task.isCompleted && !task.isSkipped
 
+/** The live page's public address, for the path's first step. */
+function livePageHref(goal: LaunchPathGoal, status: LaunchStatus, baseUrl?: string) {
+  if (!baseUrl) return undefined
+  const path =
+    goal === 'helpCenter'
+      ? '/hc'
+      : goal === 'status'
+        ? '/status'
+        : goal === 'support'
+          ? '/'
+          : (status.publicBoardPath ?? '/')
+  return new URL(path, baseUrl).toString()
+}
+
 /**
- * The whole launch plan: the live portal, then each goal's path, one row per
- * step with its outcome and one action, and the polish under Later. Steps
- * setup did itself read Ready; automatic steps say they complete themselves.
+ * The whole launch plan: the three-step path to a first win (the live page,
+ * the goal step, the win), counted the same as Home and the sidebar, then
+ * every other step under Later with one action and a Skip. Steps setup did
+ * itself are left out.
  */
 export function LaunchPlanPage({
   firstWinAction,
@@ -40,34 +46,23 @@ export function LaunchPlanPage({
   /** An action for the automatic first-win step, such as sending a test message. */
   firstWinAction?: ReactNode
 }) {
-  const intl = useIntl()
   const tour = useProductTour()
   const queryClient = useQueryClient()
+  const baseUrl = useBaseUrl()
   const { data: status } = useSuspenseQuery(launchStatusQuery())
   const resolution = useLaunchTaskResolution()
   const [createBoardOpen, setCreateBoardOpen] = useState(false)
-  const [laterOpen, setLaterOpen] = useState(false)
-  const groups = launchPlanGroups(status)
-  const goalGroups = groups.flatMap((group) =>
-    group.id === 'polish' ? [] : [{ id: group.id, tasks: group.tasks }]
-  )
-  const later = groups.find((group) => group.id === 'polish')?.tasks ?? []
-  const progress = launchPlanProgress(status)
+  const path = launchPath(status)
   const canSkip = status.permissions?.settingsManage !== false
-  const nextTaskId = groups
-    .flatMap((group) => group.tasks)
-    .find(
-      (task) =>
-        isOpen(task) && task.availability === 'available' && task.classification !== 'first_win'
-    )?.id
-  const percent = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0
-  const renderRow = (task: LaunchTask) => (
+  const percent = Math.round(((path.complete ? path.total : path.step - 1) / path.total) * 100)
+  const liveHref = livePageHref(path.goal, status, baseUrl)
+  const renderRow = (task: LaunchTask, onPath: boolean) => (
     <LaunchPlanRow
       key={task.id}
       task={task}
       status={status}
-      next={task.id === nextTaskId}
-      canSkip={canSkip}
+      next={task.id === path.next?.id}
+      canSkip={canSkip && !onPath}
       pending={resolution.isPending}
       firstWinAction={firstWinAction}
       onSkip={(resolved) =>
@@ -80,16 +75,16 @@ export function LaunchPlanPage({
   return (
     <div className="mx-auto w-full max-w-3xl space-y-7 px-4 pb-14 pt-8 [--ring:var(--muted-foreground)] sm:px-6 sm:pt-10">
       <header className="flex flex-wrap items-end gap-3">
-        <div className="min-w-[16rem] flex-1 space-y-2.5">
+        <div className="min-w-[min(16rem,100%)] flex-1 space-y-2.5">
           <h1 className="text-2xl font-semibold">
             <FormattedMessage id="onboarding.launch.name" defaultMessage="Launch plan" />
           </h1>
           <div className="flex items-center gap-3">
             <div
               role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={progress.total}
-              aria-valuenow={progress.done}
+              aria-valuemin={1}
+              aria-valuemax={path.total}
+              aria-valuenow={path.step}
               aria-labelledby="launch-plan-progress"
               className="h-1.5 w-56 max-w-full overflow-hidden rounded-full bg-muted"
             >
@@ -99,11 +94,15 @@ export function LaunchPlanPage({
               />
             </div>
             <span id="launch-plan-progress" className="text-sm text-muted-foreground">
-              <FormattedMessage
-                id="onboarding.launch.progressDone"
-                defaultMessage="{done} of {total} done"
-                values={{ done: progress.done, total: progress.total }}
-              />
+              {path.complete ? (
+                <FormattedMessage id="onboarding.launch.done" defaultMessage="Done" />
+              ) : (
+                <FormattedMessage
+                  id="onboarding.launch.stepOf"
+                  defaultMessage="Step {step} of {total}"
+                  values={{ step: path.step, total: path.total }}
+                />
+              )}
             </span>
           </div>
         </div>
@@ -116,42 +115,31 @@ export function LaunchPlanPage({
         <li className="flex min-h-14 items-center gap-3 border-b border-border/60 py-1.5">
           <StepMark done />
           <span className="min-w-0 flex-1 text-[15px] font-medium text-muted-foreground">
-            <FormattedMessage id="onboarding.launch.live" defaultMessage="Portal is live" />
+            <FormattedMessage {...LAUNCH_LIVE_STEP[path.goal]} />
           </span>
           <span className="text-sm text-muted-foreground">
             <FormattedMessage id="onboarding.launch.done" defaultMessage="Done" />
           </span>
+          {liveHref ? (
+            <Button asChild size="sm" variant="outline">
+              <a href={liveHref} target="_blank" rel="noopener noreferrer">
+                <FormattedMessage id="onboarding.launch.review" defaultMessage="Review" />
+              </a>
+            </Button>
+          ) : null}
         </li>
+        {path.steps.map((task) => renderRow(task, true))}
       </ul>
 
-      {goalGroups.map((group) => (
-        <section key={group.id} aria-labelledby={`launch-group-${group.id}`}>
+      {path.later.length > 0 && (
+        <section aria-labelledby="launch-group-later">
           <h2
-            id={`launch-group-${group.id}`}
+            id="launch-group-later"
             className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
           >
-            {intl.formatMessage(GROUP_NAME[group.id])}
-          </h2>
-          <ul>{group.tasks.map(renderRow)}</ul>
-        </section>
-      ))}
-
-      {later.length > 0 && (
-        <section>
-          <button
-            type="button"
-            aria-expanded={laterOpen}
-            aria-controls="launch-group-later"
-            onClick={() => setLaterOpen((open) => !open)}
-            className="mb-1 flex items-center gap-1.5 rounded text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground"
-          >
-            <ChevronRightIcon
-              aria-hidden="true"
-              className={cn('size-3.5 motion-safe:transition-transform', laterOpen && 'rotate-90')}
-            />
             <FormattedMessage id="onboarding.launch.later" defaultMessage="Later" />
-          </button>
-          {laterOpen && <ul id="launch-group-later">{later.map(renderRow)}</ul>}
+          </h2>
+          <ul>{path.later.map((task) => renderRow(task, false))}</ul>
         </section>
       )}
 
@@ -238,7 +226,14 @@ function LaunchPlanRow({
       defaultMessage="Ask a workspace admin to complete this step."
     />
   ) : automatic && open ? (
-    <FormattedMessage id="onboarding.launch.auto" defaultMessage="Marked done when it happens" />
+    <>
+      {next ? (
+        <span className="me-2 font-medium text-foreground">
+          <FormattedMessage id="onboarding.home.next" defaultMessage="Next" />
+        </span>
+      ) : null}
+      <FormattedMessage id="onboarding.launch.auto" defaultMessage="Marked done when it happens" />
+    </>
   ) : null
 
   return (

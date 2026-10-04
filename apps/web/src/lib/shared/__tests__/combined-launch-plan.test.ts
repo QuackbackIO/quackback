@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { getSetupState } from '@/lib/shared/db-types'
-import { buildLaunchTasks, launchChecklistSummary, type LaunchStatus } from '../launch-checklist'
+import { buildLaunchTasks, launchOutcome, launchPath, type LaunchStatus } from '../launch-checklist'
 
 const status: LaunchStatus = {
   hasBoards: false,
@@ -38,18 +38,12 @@ describe('combined launch plan', () => {
       'connect-messenger',
     ])
   })
-  it('summarizes the complete goal list and uses the first goal for the win', () => {
-    const summary = launchChecklistSummary({ ...status, hasHelpArticle: true })
-    expect(summary.denominator).toBe(2)
-    expect(summary.doneCount).toBe(1)
-    expect(summary.outcome).toBe('customer_support')
-  })
-  it('uses adding a service as the status prerequisite', () => {
+  it('shares the status page and adds a service for the status goal', () => {
     expect(
       buildLaunchTasks(status, ['status_page'])
         .filter((t) => t.classification === 'prerequisite')
         .map((t) => t.id)
-    ).toEqual(['add-status-service'])
+    ).toEqual(['add-status-service', 'share-status-page'])
   })
 })
 
@@ -71,14 +65,12 @@ it('names the first win and summary for private team feedback, including legacy 
       features: { ...status.features!, supportInbox: false, helpCenter: false, statusPage: false },
     }
     const tasks = buildLaunchTasks(privateStatus)
-    expect(tasks.find((task) => task.id === 'first-win')?.title).toBe('Get your first idea')
+    expect(tasks.find((task) => task.id === 'first-win')?.title).toBe('A teammate posts an idea')
     expect(tasks.find((task) => task.id === 'create-board')?.title).toBe(
       'Create a private team board'
     )
-    expect(launchChecklistSummary(privateStatus)).toMatchObject({
-      outcome: 'internal',
-      headline: '2 steps to your first team idea',
-    })
+    expect(launchOutcome(privateStatus)).toBe('internal')
+    expect(launchPath(privateStatus)).toMatchObject({ goal: 'private', step: 2 })
   }
 })
 
@@ -91,7 +83,7 @@ it('keeps the primary goal when private feedback is secondary and keeps public f
   expect(buildLaunchTasks(publicStatus).find((task) => task.id === 'create-board')?.title).toBe(
     'Create a feedback board'
   )
-  expect(launchChecklistSummary(publicStatus).outcome).toBe('product_feedback')
+  expect(launchOutcome(publicStatus)).toBe('product_feedback')
 
   const helpStatus: LaunchStatus = {
     ...status,
@@ -99,12 +91,12 @@ it('keeps the primary goal when private feedback is secondary and keeps public f
     feedbackPrivate: true,
   }
   expect(buildLaunchTasks(helpStatus).find((task) => task.id === 'first-win')?.title).toBe(
-    'Publish your first article'
+    'A customer finds it helpful'
   )
-  expect(launchChecklistSummary(helpStatus).outcome).toBe('help_center')
+  expect(launchOutcome(helpStatus)).toBe('help_center')
 })
 
-it('keeps a private feedback plan open until a teammate joins, though the board is seeded', () => {
+it('keeps a private feedback plan open until a teammate posts, though the board is seeded', () => {
   const privateOnly: LaunchStatus = {
     ...status,
     hasBoards: true,
@@ -113,12 +105,14 @@ it('keeps a private feedback plan open until a teammate joins, though the board 
     feedbackPrivate: true,
     features: { ...status.features!, supportInbox: false, helpCenter: false, statusPage: false },
   }
-  const summary = launchChecklistSummary(privateOnly)
   expect(
-    summary.tasks.filter((task) => task.classification === 'prerequisite').map((task) => task.id)
+    buildLaunchTasks(privateOnly)
+      .filter((task) => task.classification === 'prerequisite')
+      .map((task) => task.id)
   ).toEqual(['create-board', 'invite-team'])
-  expect(summary.resolved).toBe(false)
-  expect(launchChecklistSummary({ ...privateOnly, memberCount: 2 }).resolved).toBe(true)
+  expect(launchPath(privateOnly).complete).toBe(false)
+  expect(launchPath({ ...privateOnly, memberCount: 2 })).toMatchObject({ step: 3, complete: false })
+  expect(launchPath({ ...privateOnly, memberCount: 2, hasFirstWin: true }).complete).toBe(true)
   expect(
     buildLaunchTasks({ ...privateOnly, goals: ['product_feedback', 'customer_support'] })
       .filter((task) => task.classification === 'prerequisite')

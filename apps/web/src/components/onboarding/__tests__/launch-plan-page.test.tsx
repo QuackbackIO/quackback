@@ -34,7 +34,13 @@ vi.mock('@/lib/server/functions/admin', () => ({
     return { taskResolutions: {} }
   },
 }))
-vi.mock('@/lib/server/functions/activation', () => ({ markPublicBoardLinkCopiedFn: vi.fn() }))
+vi.mock('@/lib/server/functions/activation', () => ({
+  markPublicBoardLinkCopiedFn: vi.fn(),
+  markStatusLinkCopiedFn: vi.fn(),
+}))
+vi.mock('@/lib/client/hooks/use-root-context', () => ({
+  useBaseUrl: () => 'https://acme.example.com',
+}))
 vi.mock('@/lib/client/plg-events', () => ({ recordPlgEvent: vi.fn() }))
 vi.mock('@/components/admin/settings/boards/create-board-dialog', () => ({
   CreateBoardDialog: () => null,
@@ -47,7 +53,9 @@ const AT = '2026-10-03T10:00:00.000Z'
 
 const status: LaunchStatus = {
   hasBoards: true,
-  hasPublicBoard: false,
+  hasPublicBoard: true,
+  publicBoardId: 'board_1',
+  publicBoardPath: '/?board=feedback',
   memberCount: 1,
   hasBranding: true,
   goals: ['product_feedback', 'customer_support'],
@@ -87,55 +95,50 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('Launch plan page', () => {
-  it('leads with the live portal and the goal paths, with polish under a collapsed Later', () => {
+  it('leads with the three-step path and its one count, then everything else under Later', () => {
     mount()
     expect(screen.getByRole('heading', { level: 1, name: 'Launch plan' })).toBeVisible()
-    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
-      'Feedback',
-      'Support',
-    ])
-    expect(within(row('Portal is live')).getByText('Done')).toBeTruthy()
-    const later = screen.getByRole('button', { name: 'Later' })
-    expect(later).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.queryByText('Add your logo')).toBeNull()
-    fireEvent.click(later)
-    expect(later).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByText('Add your logo')).toBeVisible()
-    // Portal and logo are done and the integration is skipped; the seeded
-    // board is Ready and left out: 3 of 6.
-    expect(screen.getByText('3 of 6 done')).toBeVisible()
-    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '3')
-    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuemax', '6')
+    expect(screen.getByText('Step 2 of 3')).toBeVisible()
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '2')
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuemax', '3')
+    const live = row('Your board is live')
+    expect(within(live).getByText('Done')).toBeTruthy()
+    expect(within(live).getByRole('link', { name: 'Review' })).toHaveAttribute(
+      'href',
+      'https://acme.example.com/?board=feedback'
+    )
+    expect(
+      within(row('Share your board link')).getByRole('button', { name: 'Copy board link' })
+    ).toBeVisible()
+    expect(screen.getByRole('heading', { level: 2, name: 'Later' })).toBeVisible()
+    expect(within(row('Add your logo')).getByText('Done')).toBeVisible()
   })
 
-  it('shows a step setup did itself as Ready, not as done by the person', () => {
+  it('leaves out a step setup did itself', () => {
     mount()
-    const board = row('Create a feedback board')
-    expect(within(board).getByText('Ready')).toBeVisible()
-    expect(within(board).queryByText('Done')).toBeNull()
-    expect(within(board).queryByRole('button')).toBeNull()
+    expect(screen.queryByText('Create a feedback board')).toBeNull()
   })
 
   it('gives every step a short outcome line and never strikes a step through', () => {
     mount()
     expect(
-      within(row('Connect Messenger')).getByText('Customers reach you from your site')
+      within(row('Put Messenger on your site')).getByText('Customers reach you from your site')
     ).toBeVisible()
-    fireEvent.click(screen.getByRole('button', { name: 'Later' }))
     expect(document.querySelector('.line-through')).toBeNull()
   })
 
-  it('says automatic steps complete themselves and offers no skip for them', () => {
+  it('says the first win completes itself and offers no skip on the path', () => {
     mount()
-    const win = row('Get your first idea')
+    const win = row('A customer posts an idea')
     expect(within(win).getByText('Marked done when it happens')).toBeVisible()
     expect(within(win).queryByRole('button')).toBeNull()
+    expect(within(row('Share your board link')).queryByRole('button', { name: /^Skip/ })).toBeNull()
   })
 
-  it('gives each open step one action and a Skip, and skips it', async () => {
+  it('gives each open later step one action and a Skip, and skips it', async () => {
     mount()
-    const messenger = row('Connect Messenger')
-    // Connect Messenger opens its install sheet in place.
+    const messenger = row('Put Messenger on your site')
+    // Messenger opens its install sheet in place.
     expect(within(messenger).queryByRole('link')).toBeNull()
     const opened = vi.fn()
     window.addEventListener('quackback:open-going-live', (event) =>
@@ -143,7 +146,9 @@ describe('Launch plan page', () => {
     )
     fireEvent.click(within(messenger).getByRole('button', { name: 'Start' }))
     expect(opened).toHaveBeenCalledWith('install-messenger')
-    fireEvent.click(within(messenger).getByRole('button', { name: 'Skip Connect Messenger' }))
+    fireEvent.click(
+      within(messenger).getByRole('button', { name: 'Skip Put Messenger on your site' })
+    )
     await waitFor(() =>
       expect(hoisted.resolutions).toEqual([
         { data: { taskId: 'connect-messenger', resolution: 'dismissed' } },
@@ -153,7 +158,6 @@ describe('Launch plan page', () => {
 
   it('shows a skipped step as skipped and undoes the skip', async () => {
     mount()
-    fireEvent.click(screen.getByRole('button', { name: 'Later' }))
     const integration = row('Connect an integration')
     expect(within(integration).getByText('Skipped')).toBeVisible()
     expect(within(integration).queryByRole('link')).toBeNull()
@@ -165,6 +169,19 @@ describe('Launch plan page', () => {
     )
   })
 
+  it('stays open with every chore done until a customer acts', () => {
+    hoisted.status = {
+      ...status,
+      publicBoardLinkCopiedAt: AT,
+      hasWidgetInstalled: true,
+      hasWidgetEnabled: true,
+      memberCount: 2,
+    }
+    mount()
+    expect(screen.getByText('Step 3 of 3')).toBeVisible()
+    expect(within(row('A customer posts an idea')).getByText('Next')).toBeVisible()
+  })
+
   it('replays the tour', () => {
     mount()
     fireEvent.click(screen.getByRole('button', { name: 'Replay the tour' }))
@@ -172,7 +189,6 @@ describe('Launch plan page', () => {
   })
 
   it('offers no skip to someone who cannot change the plan', () => {
-    // Later is closed by default; skips there are checked once it is open.
     hoisted.status = {
       ...status,
       permissions: {
@@ -186,18 +202,24 @@ describe('Launch plan page', () => {
       },
     }
     mount()
-    fireEvent.click(screen.getByRole('button', { name: 'Later' }))
     expect(screen.queryByRole('button', { name: /^Skip/ })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Undo skip' })).toBeNull()
   })
 
   it('asks for a workspace admin only when the viewer lacks permission', () => {
-    hoisted.status = { ...status, hasBoards: false, boardCount: 1, maxBoards: 1 }
+    hoisted.status = {
+      ...status,
+      hasPublicBoard: false,
+      hasBoards: false,
+      boardCount: 1,
+      maxBoards: 1,
+    }
     mount()
     expect(within(row('Create a feedback board')).queryByText(/Ask a workspace admin/)).toBeNull()
     cleanup()
     hoisted.status = {
       ...status,
+      hasPublicBoard: false,
       hasBoards: false,
       permissions: {
         settingsManage: true,

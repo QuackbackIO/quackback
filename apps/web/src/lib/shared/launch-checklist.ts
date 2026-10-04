@@ -25,6 +25,8 @@ export interface LaunchStatus {
   publicBoardSlug?: string | null
   publicBoardPath?: string | null
   publicBoardLinkCopiedAt?: string | null
+  /** When an admin first copied the status page link. */
+  statusLinkCopiedAt?: string | null
   hasInternalBoard?: boolean
   boardCount?: number
   maxBoards?: number | null
@@ -72,6 +74,7 @@ export type LaunchTaskHref =
   | '/admin/settings/boards'
   | '/admin/settings/members'
   | '/admin/settings/portal'
+  | '/admin/settings/general'
   | '/admin/settings/widget/install'
   | '/admin/settings/integrations'
   | '/admin/settings/agent'
@@ -105,6 +108,8 @@ export interface LaunchTask {
   blocked?: LaunchTaskBlocked
   blockedReason?: string
   href?: LaunchTaskHref
+  /** Search params for {@link href}, for a step that lands on one view of a page. */
+  search?: Record<string, string>
   /** Done in place: the step opens this going-live sheet instead of navigating. */
   sheet?: 'install-messenger' | 'invite-team'
   actionLabel?: string
@@ -167,11 +172,11 @@ export const FIRST_WIN_NOUN: Record<OnboardingOutcome, string> = {
 
 /** The first win names what it is for the primary goal. */
 const FIRST_WIN_WORDING: Record<OnboardingOutcome, { variant: string; title: string }> = {
-  product_feedback: { variant: 'feedback', title: 'Get your first idea' },
-  internal: { variant: 'feedback', title: 'Get your first idea' },
-  customer_support: { variant: 'support', title: 'Get your first conversation' },
-  help_center: { variant: 'helpCenter', title: 'Publish your first article' },
-  status_page: { variant: 'status', title: 'Add your first service' },
+  product_feedback: { variant: 'feedback', title: 'A customer posts an idea' },
+  internal: { variant: 'private', title: 'A teammate posts an idea' },
+  customer_support: { variant: 'support', title: 'A customer starts a conversation' },
+  help_center: { variant: 'helpCenter', title: 'A customer finds it helpful' },
+  status_page: { variant: 'status', title: 'A customer subscribes' },
 }
 
 const ALLOW_ALL: LaunchPermissions = {
@@ -189,7 +194,8 @@ function resolvedFeatures(features?: LaunchStatus['features']) {
     supportInbox: features?.supportInbox ?? false,
     helpCenter: features?.helpCenter ?? false,
     statusPage: features?.statusPage ?? false,
-    integrations: features?.integrations ?? true,
+    // Integrations come with a higher plan: offered only when the plan says so.
+    integrations: features?.integrations ?? false,
     changelog: features?.changelog ?? true,
     assistant: features?.assistant ?? true,
   }
@@ -269,6 +275,7 @@ function materializeTask(task: LaunchTaskInput, resolutions: TaskResolutionMap):
     ...(blocked ? { blocked } : {}),
     ...(blockedReason ? { blockedReason } : {}),
     ...(task.href && task.canAct !== false ? { href: task.href } : {}),
+    ...(task.href && task.search && task.canAct !== false ? { search: task.search } : {}),
     ...(task.sheet && task.canAct !== false ? { sheet: task.sheet } : {}),
     ...(task.actionLabel ? { actionLabel: task.actionLabel } : {}),
     completedLabel: task.completedLabel,
@@ -314,7 +321,7 @@ function buildOutcomeTasks(
     Boolean(status.publicBoardLinkCopiedAt) || widgetDistributed || status.hasFirstWin === true
   const distributeFeedback: LaunchTaskInput = {
     id: 'distribute-feedback',
-    title: 'Share your feedback board',
+    title: 'Share your board link',
     description: status.publicBoardLinkCopiedAt
       ? 'Your public board link has been copied.'
       : widgetDistributed
@@ -339,7 +346,7 @@ function buildOutcomeTasks(
   }
   const connectMessenger: LaunchTaskInput = {
     id: 'connect-messenger',
-    title: 'Connect Messenger',
+    title: 'Put Messenger on your site',
     description: status.hasWidgetInstalled
       ? `Messenger was found on ${status.widgetOriginHost ?? 'your site'}.`
       : 'We’ll mark this when the widget loads on your site.',
@@ -367,8 +374,8 @@ function buildOutcomeTasks(
   }
   const helpDraft: LaunchTaskInput = {
     id: 'help-article',
-    title: 'Write your first article',
-    description: 'Draft the first answer your customers should find.',
+    title: 'Publish your first article',
+    description: 'Publish the first answer your customers should find.',
     completed: Boolean(status.hasHelpArticle),
     canAct: permissions.helpCenterManage,
     classification: 'prerequisite',
@@ -384,12 +391,23 @@ function buildOutcomeTasks(
     canAct: permissions.settingsManage,
     classification: 'prerequisite',
     href: '/admin/status',
+    search: { view: 'components' },
     actionLabel: 'Add service',
     completedLabel: 'Open status',
   }
+  const shareStatusPage: LaunchTaskInput = {
+    id: 'share-status-page',
+    title: 'Share your status page',
+    description: 'Link it from your footer or docs so customers can subscribe.',
+    completed: Boolean(status.statusLinkCopiedAt) || status.hasFirstWin === true,
+    canAct: permissions.settingsManage,
+    classification: 'prerequisite',
+    actionLabel: 'Copy status link',
+    completedLabel: 'Status page shared',
+  }
   const invite: LaunchTaskInput = {
     id: 'invite-team',
-    title: 'Invite a teammate',
+    title: 'Invite your team',
     description: 'Bring in someone to help respond, publish, or manage feedback.',
     // The first invite sent completes the step; joining is up to them.
     completed: status.memberCount > 1 || status.hasTeamInvite === true,
@@ -408,7 +426,7 @@ function buildOutcomeTasks(
     completed: status.hasBranding,
     canAct: permissions.brandingManage,
     classification: 'polish',
-    href: '/admin/settings/portal',
+    href: '/admin/settings/general',
     actionLabel: 'Add logo',
     completedLabel: 'Edit branding',
   }
@@ -445,6 +463,7 @@ function buildOutcomeTasks(
   if (features.supportInbox && features.assistant) inputs.push(setUpQuinn)
   if (features.helpCenter) inputs.push(helpDraft)
   if (features.statusPage) inputs.push(addStatusService)
+  if (features.statusPage && outcome === 'status_page') inputs.push(shareStatusPage)
   inputs.push(invite, branding)
   // A step the plan does not include is not part of the plan.
   if (features.integrations) inputs.push(integration)
@@ -476,7 +495,7 @@ export function buildLaunchTasks(
     internal: ['create-board', 'invite-team'],
     customer_support: ['connect-messenger', 'set-up-quinn'],
     help_center: ['help-article'],
-    status_page: ['add-status-service'],
+    status_page: ['share-status-page', 'add-status-service'],
   }
   const tasks: LaunchTask[] = []
   const seen = new Set<string>()
@@ -506,165 +525,101 @@ export function buildLaunchTasks(
   ]
 }
 
-export function launchChecklistSummary(
-  status: LaunchStatus,
-  outcomeOverride?: OnboardingOutcome
-): {
-  tasks: LaunchTask[]
-  skippedTasks: LaunchTask[]
-  outcome: OnboardingOutcome
-  doneCount: number
-  denominator: number
-  remaining: number
-  blockedCount: number
-  allComplete: boolean
-  firstWinComplete: boolean
-  resolved: boolean
-  headline: string
-  percent: number
-} {
-  const selectedOutcome = outcomeOverride ?? status.goals?.[0] ?? normalizeOutcome(status.useCase)
-  const outcome =
-    selectedOutcome === 'product_feedback' && status.feedbackPrivate ? 'internal' : selectedOutcome
-  const tasks = buildLaunchTasks(status, outcomeOverride)
-  const prerequisites = tasks.filter((task) => task.classification === 'prerequisite')
-  const skippedTasks = tasks.filter((task) => task.isSkipped && task.classification !== 'first_win')
-  const counted = prerequisites.filter((task) => !task.isSkipped)
-  const doneCount = counted.filter((task) => task.isCompleted).length
-  const remaining = counted.filter((task) => !task.isCompleted).length
-  const blockedCount = counted.filter((task) => task.availability === 'blocked').length
-  const firstWinComplete = tasks.some(
-    (task) => task.classification === 'first_win' && task.isCompleted
-  )
-  const hasAvailable = counted.some(
-    (task) => task.availability === 'available' && !task.isCompleted
-  )
-  const allComplete = remaining === 0
-  const winNoun = FIRST_WIN_NOUN[outcome]
+/** The outcome the plan is built around: the primary goal, private feedback as its own. */
+export function launchOutcome(status: LaunchStatus): OnboardingOutcome {
+  const selected = status.goals?.[0] ?? normalizeOutcome(status.useCase)
+  return selected === 'product_feedback' && status.feedbackPrivate ? 'internal' : selected
+}
+
+/** Which path a workspace walks: one per goal. */
+export type LaunchPathGoal = 'feedback' | 'private' | 'support' | 'helpCenter' | 'status'
+
+const PATH_GOAL: Record<OnboardingOutcome, LaunchPathGoal> = {
+  product_feedback: 'feedback',
+  internal: 'private',
+  customer_support: 'support',
+  help_center: 'helpCenter',
+  status_page: 'status',
+}
+
+/** The goal's one step between the live page and the first win. */
+const GOAL_STEP: Record<LaunchPathGoal, readonly string[]> = {
+  feedback: ['distribute-feedback', 'create-board'],
+  private: ['invite-team'],
+  support: ['connect-messenger'],
+  helpCenter: ['help-article'],
+  status: ['share-status-page'],
+}
+
+/** The path's first step: the page setup made live, already done. */
+export const LAUNCH_LIVE_STEP: Record<LaunchPathGoal, { id: string; defaultMessage: string }> = {
+  feedback: { id: 'onboarding.path.live.feedback', defaultMessage: 'Your board is live' },
+  private: { id: 'onboarding.path.live.private', defaultMessage: 'Your team board is ready' },
+  support: { id: 'onboarding.path.live.support', defaultMessage: 'Messenger is ready' },
+  helpCenter: { id: 'onboarding.path.live.helpCenter', defaultMessage: 'Your help center is live' },
+  status: { id: 'onboarding.path.live.status', defaultMessage: 'Your status page is live' },
+}
+
+/** Steps on the path: the live page, the goal step and the first win. */
+export const LAUNCH_PATH_LENGTH = 3
+
+export interface LaunchPath {
+  goal: LaunchPathGoal
+  /** The goal step, then the first win. The live page is step 1 and always done. */
+  steps: [LaunchTask, LaunchTask]
+  /** The step the workspace is on, 1-based, out of {@link LAUNCH_PATH_LENGTH}. */
+  step: number
+  total: number
+  /** A customer (or, for a private board, a teammate) has acted: the plan is done. */
+  complete: boolean
+  /** The one step to lead with, or null once the plan is done. */
+  next: LaunchTask | null
+  /** Every other step, in plan order. Steps setup did itself are left out. */
+  later: LaunchTask[]
+}
+
+const isDone = (task: LaunchTask) => task.isCompleted || task.isReady
+
+/**
+ * The launch plan as everything shows it: Home, the sidebar dock, the Launch
+ * plan page and the setup emails all read this one path and its one count.
+ * The plan stays open until the first real win, however many chores are done.
+ */
+export function launchPath(status: LaunchStatus): LaunchPath {
+  const outcome = launchOutcome(status)
+  const tasks = buildLaunchTasks(status)
+  const win = tasks.find((task) => task.classification === 'first_win')!
+  const preferred = PATH_GOAL[outcome]
+  // A goal whose module is off has no step to show; feedback is always there.
+  const goalStepFor = (goal: LaunchPathGoal) =>
+    GOAL_STEP[goal].map((id) => tasks.find((task) => task.id === id)).find(Boolean)
+  const goal = goalStepFor(preferred) ? preferred : 'feedback'
+  const goalStep = goalStepFor(goal) ?? tasks.find((task) => task.id === 'create-board')!
+  const complete = win.isCompleted
+  const step = complete || isDone(goalStep) ? 3 : 2
+  const goalOpen = !isDone(goalStep) && !goalStep.isSkipped && goalStep.availability !== 'blocked'
   return {
-    tasks,
-    skippedTasks,
-    outcome,
-    doneCount,
-    denominator: counted.length,
-    remaining,
-    blockedCount,
-    allComplete,
-    firstWinComplete,
-    resolved: allComplete,
-    percent: counted.length === 0 ? 100 : Math.round((doneCount / counted.length) * 100),
-    headline: firstWinComplete
-      ? 'You’re up and running'
-      : blockedCount > 0 && !hasAvailable
-        ? 'One thing needs attention before you can launch'
-        : remaining === 0
-          ? `You’re ready for your first ${winNoun}`
-          : `${remaining} step${remaining === 1 ? '' : 's'} to your first ${winNoun}`,
+    goal,
+    steps: [goalStep, win],
+    step,
+    total: LAUNCH_PATH_LENGTH,
+    complete,
+    next: complete ? null : goalOpen ? goalStep : win,
+    later: tasks.filter((task) => task !== goalStep && task !== win && !task.isReady),
   }
 }
 
-/**
- * Progress as the sidebar dock and the Launch plan page show it: every row of
- * the plan, done or skipped, out of all rows. `resolved` hides the dock.
- */
+/** The one count: the sidebar dock and the Launch plan page show this. */
 export function launchPlanProgress(status: LaunchStatus): {
-  done: number
+  step: number
   total: number
   resolved: boolean
 } {
-  const summary = launchChecklistSummary(status)
-  // The live portal is the one step that starts done; steps setup did itself
-  // are not the person's progress.
-  const counted = summary.tasks.filter((task) => !task.isReady)
-  return {
-    done: 1 + counted.filter((task) => task.isCompleted || task.isSkipped).length,
-    total: 1 + counted.length,
-    resolved: summary.resolved,
-  }
+  const path = launchPath(status)
+  return { step: path.step, total: path.total, resolved: path.complete }
 }
 
-const isOpen = (task: LaunchTask) => !task.isCompleted && !task.isSkipped
-
-/**
- * Home's short path to a first result: after the live portal, the primary
- * goal's step still to do (or its last done one), then the first win. `next`
- * is the single step Home leads with; once the path is done it is the next
- * open step of another goal. `later` is the open polish, at most three.
- */
-export function launchGoalPath(status: LaunchStatus): {
-  steps: LaunchTask[]
-  next: LaunchTask | null
-  later: LaunchTask[]
-} {
-  const groups = launchPlanGroups(status)
-  const primary = groups[0]?.id === 'polish' ? undefined : groups[0]
-  const work = (primary?.tasks ?? []).filter(
-    (task) => !task.isReady && task.classification !== 'first_win'
-  )
-  const win = primary?.tasks.find((task) => task.classification === 'first_win')
-  const step = work.find(isOpen) ?? work.at(-1)
-  const steps = [step, win].filter((task): task is LaunchTask => Boolean(task))
-  const others = groups
-    .filter((group) => group !== primary && group.id !== 'polish')
-    .flatMap((group) => group.tasks)
-    .filter((task) => !task.isReady && isOpen(task) && task.availability !== 'blocked')
-  const next =
-    steps.find((task) => isOpen(task) && task.availability !== 'blocked') ?? others[0] ?? null
-  const later = (groups.find((group) => group.id === 'polish')?.tasks ?? [])
-    .filter((task) => !task.isReady && isOpen(task) && task.classification === 'polish')
-    .slice(0, 3)
-  return { steps, next, later }
-}
-
-export type LaunchPlanGroupId =
-  'product_feedback' | 'customer_support' | 'help_center' | 'status_page' | 'polish'
-
-/** The goal whose work a task is. Anything else is polish. */
-const TASK_GROUP: Record<string, Exclude<LaunchPlanGroupId, 'polish'>> = {
-  'create-board': 'product_feedback',
-  'distribute-feedback': 'product_feedback',
-  'connect-messenger': 'customer_support',
-  'set-up-quinn': 'customer_support',
-  'help-article': 'help_center',
-  'add-status-service': 'status_page',
-}
-
-const GOAL_GROUPS = ['product_feedback', 'customer_support', 'help_center', 'status_page'] as const
-
-/**
- * The plan as the Launch plan page lists it: a group for each goal in the
- * order chosen, the first win under the primary goal, then Polish.
- */
-export function launchPlanGroups(
-  status: LaunchStatus
-): { id: LaunchPlanGroupId; tasks: LaunchTask[] }[] {
-  const { tasks } = launchChecklistSummary(status)
-  const primary = launchResolutionKey(status)
-  const asGroup = (goal: OnboardingOutcome): LaunchPlanGroupId =>
-    goal === 'internal' ? 'product_feedback' : goal
-  const groupOf = (task: LaunchTask): LaunchPlanGroupId =>
-    task.classification === 'first_win'
-      ? asGroup(primary)
-      : task.classification === 'prerequisite' && task.id === 'invite-team'
-        ? 'product_feedback'
-        : (TASK_GROUP[task.id] ?? 'polish')
-  const order: LaunchPlanGroupId[] = []
-  for (const id of [
-    ...(status.goals?.length ? status.goals : [primary]).map(asGroup),
-    ...GOAL_GROUPS,
-    'polish' as const,
-  ]) {
-    if (!order.includes(id)) order.push(id)
-  }
-  return order
-    .map((id) => ({ id, tasks: tasks.filter((task) => groupOf(task) === id) }))
-    .filter((group) => group.tasks.length > 0)
-}
-
-/** Home card visibility. First win no longer holds this. */
-export function isLaunchPlanActive(summary: {
-  resolved: boolean
-  firstWinComplete?: boolean
-}): boolean {
-  return !summary.resolved
+/** The plan is open until the first real win. */
+export function isLaunchPlanActive(status: LaunchStatus): boolean {
+  return !launchPath(status).complete
 }

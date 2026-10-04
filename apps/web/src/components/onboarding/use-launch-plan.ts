@@ -3,16 +3,12 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { setLaunchTaskResolutionFn } from '@/lib/server/functions/admin'
-import {
-  isLaunchPlanActive,
-  launchChecklistSummary,
-  type LaunchStatus,
-} from '@/lib/shared/launch-checklist'
+import { isLaunchPlanActive, type LaunchStatus } from '@/lib/shared/launch-checklist'
 
 /** Poll only while the plan is open: a resolved plan has nothing left to watch for. */
 export function launchStatusRefetchInterval(data: LaunchStatus | undefined): number | false {
   if (!data) return false
-  return isLaunchPlanActive(launchChecklistSummary(data)) ? 15_000 : false
+  return isLaunchPlanActive(data) ? 15_000 : false
 }
 
 /** The launch status for Home and the Launch plan page, kept fresh while the plan is open. */

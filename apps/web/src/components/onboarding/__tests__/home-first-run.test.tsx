@@ -28,6 +28,7 @@ vi.mock('@/components/admin/branding/use-automatic-website-branding', () => ({
 }))
 vi.mock('@/lib/client/hooks/use-root-context', () => ({
   useWorkspaceSettings: () => ({ name: 'Acme' }),
+  useBaseUrl: () => 'https://acme.example.com',
 }))
 vi.mock('@/lib/client/hooks/use-permission', () => ({ usePermission: () => true }))
 const tourView = vi.hoisted(() => ({ narrow: false, copilot: false }))
@@ -136,14 +137,14 @@ describe('Home first-run cards', () => {
     hoisted.status = status()
     const { client } = mount()
     expect(await screen.findByText('New here? Take the 60-second tour')).toBeVisible()
-    expect(screen.getByText('Next step · 2 of 3')).toBeVisible()
+    expect(screen.getByText('Launch plan · Step 2 of 3')).toBeVisible()
     expect(screen.queryByText('Try it yourself')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Not now' }))
     await waitFor(() => expect(hoisted.dismiss).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(screen.queryByText('New here? Take the 60-second tour')).toBeNull())
     expect(hoisted.start).not.toHaveBeenCalled()
-    expect(screen.getByText('Next step · 2 of 3')).toBeVisible()
+    expect(screen.getByText('Launch plan · Step 2 of 3')).toBeVisible()
 
     await client.invalidateQueries({ queryKey: ['onboarding', 'progress'] })
     expect(screen.queryByText('New here? Take the 60-second tour')).toBeNull()
@@ -189,7 +190,7 @@ describe('Home first-run cards', () => {
     tourView.narrow = true
     const { client } = mount()
     await waitFor(() => expect(client.getQueryData(['onboarding', 'progress'])).toBeDefined())
-    await screen.findByText('Next step · 2 of 3')
+    await screen.findByText('Launch plan · Step 2 of 3')
     expect(screen.queryByText('New here? Take the 60-second tour')).toBeNull()
     cleanup()
     tourView.copilot = true

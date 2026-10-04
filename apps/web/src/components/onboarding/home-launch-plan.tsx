@@ -14,7 +14,7 @@ import {
 import { CreateBoardDialog } from '@/components/admin/settings/boards/create-board-dialog'
 import { AutomaticBrandingNotice } from '@/components/admin/branding/automatic-branding-notice'
 import { useAutomaticWebsiteBranding } from '@/components/admin/branding/use-automatic-website-branding'
-import { isLaunchPlanActive, launchChecklistSummary } from '@/lib/shared/launch-checklist'
+import { isLaunchPlanActive } from '@/lib/shared/launch-checklist'
 import { launchStatusQuery, useLaunchTaskResolution } from './use-launch-plan'
 
 const PROGRESS_KEY = ['onboarding', 'progress'] as const
@@ -72,7 +72,7 @@ export function HomeGettingStarted({ portalUrl }: { portalUrl?: string }) {
     Boolean(progress.data) &&
     !progress.data?.tourSeenAt &&
     !progress.data?.tourDismissedAt
-  const planShown = inWindow && isLaunchPlanActive(launchChecklistSummary(statusQuery.data))
+  const planShown = inWindow && isLaunchPlanActive(statusQuery.data)
   // The lookup starts only while its notice has a live launch plan to sit in.
   const branding = useAutomaticWebsiteBranding({ enabled: planShown })
   const brandingShown =

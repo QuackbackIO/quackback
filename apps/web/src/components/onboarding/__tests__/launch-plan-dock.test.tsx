@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '@/locales/en.json'
 import type { LaunchStatus } from '@/lib/shared/launch-checklist'
 
-const hoisted = vi.hoisted(() => ({ fetches: 0, canView: true }))
+const hoisted = vi.hoisted(() => ({ fetches: 0, canView: true, role: 'admin' }))
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ to, children, ...props }: { to: string; children: ReactNode }) => (
@@ -32,6 +32,7 @@ vi.mock('@/lib/client/hooks/use-permission', () => ({
 }))
 vi.mock('@/lib/client/hooks/use-root-context', () => ({
   useSessionContext: () => ({ user: { id: 'user_acme' } }),
+  useUserRole: () => hoisted.role,
 }))
 
 import { LaunchPlanDock } from '../launch-plan-dock'
@@ -50,13 +51,17 @@ const open: LaunchStatus = {
     assistant: false,
   },
 }
-const resolved: LaunchStatus = {
+// Every chore is done: the plan still waits for a customer.
+const choresDone: LaunchStatus = {
   ...open,
   publicBoardLinkCopiedAt: '2026-10-03T10:00:00.000Z',
   hasWidgetInstalled: true,
   hasWidgetEnabled: true,
   hasHelpArticle: true,
+  hasBranding: true,
+  memberCount: 2,
 }
+const resolved: LaunchStatus = { ...choresDone, hasFirstWin: true }
 
 function mount(cached?: LaunchStatus) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -74,15 +79,16 @@ beforeEach(() => {
   localStorage.clear()
   hoisted.fetches = 0
   hoisted.canView = true
+  hoisted.role = 'admin'
 })
 afterEach(cleanup)
 
 describe('launch plan dock', () => {
-  it('is a plain link to the Launch plan page with real progress', async () => {
+  it("is a plain link to the Launch plan page with the plan's one count", async () => {
     mount(open)
     const link = await screen.findByRole('link', { name: /Launch plan/ })
     expect(link).toHaveAttribute('href', '/admin/getting-started')
-    expect(link).toHaveTextContent('1 of 9')
+    expect(link).toHaveTextContent('Step 2 of 3')
     expect(screen.queryByRole('button')).toBeNull()
     expect(hoisted.fetches).toBe(0)
   })
@@ -94,8 +100,14 @@ describe('launch plan dock', () => {
 
     mount()
     const link = await screen.findByRole('link', { name: /Launch plan/ })
-    expect(link).toHaveTextContent('1 of 9')
+    expect(link).toHaveTextContent('Step 2 of 3')
     expect(hoisted.fetches).toBe(0)
+  })
+
+  it('stays while the chores are done but no customer has acted', async () => {
+    mount(choresDone)
+    const link = await screen.findByRole('link', { name: /Launch plan/ })
+    expect(link).toHaveTextContent('Step 3 of 3')
   })
 
   it('hides once the plan is resolved, including after a reload', async () => {
@@ -108,6 +120,19 @@ describe('launch plan dock', () => {
     cleanup()
 
     mount()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(screen.queryByRole('link', { name: /Launch plan/ })).toBeNull()
+  })
+
+  it('is absent for a teammate who is not an admin', async () => {
+    hoisted.role = 'member'
+    mount(open)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(screen.queryByRole('link', { name: /Launch plan/ })).toBeNull()
+  })
+
+  it('is absent once the launch window has closed', async () => {
+    mount({ ...open, inLaunchWindow: false })
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(screen.queryByRole('link', { name: /Launch plan/ })).toBeNull()
   })
