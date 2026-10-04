@@ -7,8 +7,11 @@ import {
   sql,
   desc,
   isNull,
+  gt,
+  like,
   workspaceAssistantThreads,
   conversationMessages,
+  assistantPendingActions,
   type Transaction,
 } from '@/lib/server/db'
 import type { Actor } from '@/lib/server/policy/types'
@@ -22,6 +25,7 @@ import type {
 } from '@/lib/shared/assistant/workspace-contract'
 import type { AssistantThreadMessage } from './assistant.runtime'
 import { WORKSPACE_THREAD_PREFIX } from './workspace-safety'
+import { RETRIEVED_CONTENT_NOTE } from './injection-guard'
 
 const LEASE_MS = 5 * 60 * 1000
 function missing(): never {
@@ -218,11 +222,13 @@ export async function acquireWorkspaceTurn(
         sender: row.senderType === 'visitor' ? ('customer' as const) : ('assistant' as const),
         content: row.content,
       }))
+    const lastAnswer = rows.filter((row) => row.senderType === 'agent').at(-1)
+    const allowed = await allowedConnectorResults(tx, key, lastAnswer?.createdAt)
     return {
       status: 'acquired',
       leaseToken,
       messageId,
-      messages: [...history, { sender: 'customer', content: question.trim() }],
+      messages: [...history, ...allowed, { sender: 'customer', content: question.trim() }],
     }
   })
 }
@@ -285,4 +291,39 @@ export async function failWorkspaceTurn(
         eq(workspaceAssistantThreads.leaseToken, leaseToken)
       )
     )
+}
+
+const CONNECTOR_RESULT_MAX_CHARS = 6000
+
+/**
+ * Connector reads the teammate allowed since the last answer, handed to the
+ * next turn as Copilot's own retrieved data. They are framed as content, never
+ * instructions, and never as the teammate's words.
+ */
+async function allowedConnectorResults(
+  tx: Transaction,
+  key: string,
+  since: Date | undefined
+): Promise<AssistantThreadMessage[]> {
+  const rows = await tx
+    .select({
+      summary: assistantPendingActions.summary,
+      result: assistantPendingActions.result,
+    })
+    .from(assistantPendingActions)
+    .where(
+      and(
+        eq(assistantPendingActions.workspaceThreadKey, key),
+        eq(assistantPendingActions.status, 'executed'),
+        like(assistantPendingActions.toolName, 'connector\\_%'),
+        since ? gt(assistantPendingActions.executedAt, since) : undefined
+      )
+    )
+    .orderBy(assistantPendingActions.executedAt)
+  return rows.map((row) => ({
+    sender: 'assistant' as const,
+    content: `Allowed by the teammate: ${row.summary}. ${RETRIEVED_CONTENT_NOTE}\n${JSON.stringify(
+      row.result ?? null
+    ).slice(0, CONNECTOR_RESULT_MAX_CHARS)}`,
+  }))
 }

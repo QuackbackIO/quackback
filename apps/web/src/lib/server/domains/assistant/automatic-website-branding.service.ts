@@ -4,6 +4,8 @@ import type { Actor } from '@/lib/server/policy/types'
 import { logger } from '@/lib/server/logger'
 import { ForbiddenError } from '@/lib/shared/errors'
 import { companyEmailDomain } from '@/lib/server/personal-email-domains'
+import { getSetupState } from '@/lib/shared/db-types'
+import { isLaunchWindowOpen, launchWindowFor } from '@/lib/shared/launch-window'
 import type { AutomaticBrandingStatus } from '@/lib/shared/website-branding'
 import { fetchWebsiteBranding } from '@/lib/server/content/website-branding'
 import {
@@ -48,12 +50,17 @@ async function permittedPerson(
 
 /**
  * The domain this teammate's lookup would fetch, or null when it may not run
- * for them: the operator switched it off, storage cannot hold a logo, or their
- * email is personal. The shared launch-window rule for first-run behaviour
- * belongs here too, once it exists.
+ * for them: the operator switched it off, storage cannot hold a logo, their
+ * email is personal, or the workspace is past its launch window (automatic
+ * branding is first-run behaviour).
  */
-function lookupDomain(person: AutomaticBrandingPerson): string | null {
+function lookupDomain(person: AutomaticBrandingPerson, row: SettingsRecord): string | null {
   if (!automaticBrandingAvailable()) return null
+  const window = launchWindowFor({
+    setupState: getSetupState(row.setupState),
+    workspaceCreatedAt: row.createdAt,
+  })
+  if (!isLaunchWindowOpen(window)) return null
   return person.email ? companyEmailDomain(person.email) : null
 }
 
@@ -70,7 +77,7 @@ export async function getAutomaticWebsiteBrandingStatus(
   const person = await permittedPerson(actor)
   if (!person) return null
   if (!hasLookupAttempt(row)) {
-    const domain = lookupDomain(person)
+    const domain = lookupDomain(person, row)
     return domain ? quietStatus(domain, 'eligible') : null
   }
   const lookup = lookupFromRow(row)
@@ -102,7 +109,7 @@ async function claimLookup(
         status: recorded ? presentLookup(row, recorded, person.permissions) : null,
       }
     }
-    const domain = lookupDomain(person)
+    const domain = lookupDomain(person, row)
     if (!domain) return { claim: null, status: null }
     const now = new Date().toISOString()
     const lookup = await storeLookup(tx, {

@@ -503,13 +503,15 @@ export function StatusComponentsView() {
           </DndContext>
 
           {groups.length === 0 && ungrouped.length === 0 && (
-            <EmptyState
-              icon={ServerStackIcon}
-              title="No services yet"
-              description="Track a service so you can publish incidents, maintenance, and uptime."
-              action={<NewButton noun="service" onClick={() => setCreateGroupId(null)} />}
-              size="compact"
-            />
+            <div data-tour="status-empty">
+              <EmptyState
+                icon={ServerStackIcon}
+                title="No services yet"
+                description="Track a service so you can publish incidents, maintenance, and uptime."
+                action={<NewButton noun="service" onClick={() => setCreateGroupId(null)} />}
+                size="compact"
+              />
+            </div>
           )}
 
           <ComponentFormDialog

@@ -123,6 +123,8 @@ describe('ConversationListColumn launch status', () => {
     renderColumn([])
 
     expect(await screen.findByText('Send yourself a test message')).toBeTruthy()
+    // Title and one action: no explanatory paragraph under the title.
+    expect(screen.queryByText(/When customers message you/)).toBeNull()
     expect(fetchOnboardingStatus).toHaveBeenCalledTimes(1)
   })
 })

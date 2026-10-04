@@ -30,6 +30,9 @@ import {
   invalidInboundDomainValues,
   platformInboxAddress,
   isPlatformInboxRecipient,
+  testEmailAlias,
+  testAliasTokensIn,
+  testAliasTokenMatches,
 } from '../conversation.email-channel'
 
 // 'whsec_' + base64('testsecret') / base64('othersecret').
@@ -974,5 +977,55 @@ describe('ticket Message-ID threading', () => {
 
   it('returns null when no sending domain is configured', () => {
     expect(ticketRootMessageId(TICKET_ID, {})).toBeNull()
+  })
+})
+
+describe('the test alias', () => {
+  const OWNER = 'principal_01kw8qxn1eeh4t2rek7varh033'
+  const OTHER = 'principal_01kw8qxn1eeh4t2rek7varh034'
+
+  it('mints a stable, per-teammate plus-address on the inbound domain', () => {
+    const alias = testEmailAlias(OWNER, 'acme', ENV)
+    expect(alias).toMatch(/^acme\+test-[0-9a-f]{20}@tenaevexeo\.resend\.app$/)
+    expect(testEmailAlias(OWNER, 'acme', ENV)).toBe(alias)
+    expect(testEmailAlias(OTHER, 'acme', ENV)).not.toBe(alias)
+    expect(testEmailAlias(OWNER, 'other', ENV)).not.toBe(alias?.replace('acme', 'other'))
+    expect(testEmailAlias(OWNER, 'acme', OTHER_ENV)).not.toBe(alias)
+  })
+
+  it('has no alias without a slug, an inbound domain or a signing secret', () => {
+    expect(testEmailAlias(OWNER, null, ENV)).toBeNull()
+    expect(
+      testEmailAlias(OWNER, 'acme', { EMAIL_INBOUND_DOMAIN: ENV.EMAIL_INBOUND_DOMAIN })
+    ).toBeNull()
+    expect(
+      testEmailAlias(OWNER, 'acme', {
+        EMAIL_INBOUND_SIGNING_SECRET: ENV.EMAIL_INBOUND_SIGNING_SECRET,
+      })
+    ).toBeNull()
+  })
+
+  it('reads the token back, case-insensitively, only for this workspace and domain', () => {
+    const alias = testEmailAlias(OWNER, 'acme', ENV)!
+    const [token] = testAliasTokensIn(`"Acme" <${alias.toUpperCase()}>`, 'acme', ENV)
+    expect(token).toMatch(/^[0-9a-f]{20}$/)
+    expect(testAliasTokenMatches(token, OWNER, 'acme', ENV)).toBe(true)
+    expect(testAliasTokenMatches(token, OTHER, 'acme', ENV)).toBe(false)
+    expect(testAliasTokenMatches(token, OWNER, 'acme', OTHER_ENV)).toBe(false)
+    expect(testAliasTokensIn(alias, 'other', ENV)).toEqual([])
+    expect(
+      testAliasTokensIn(alias.replace('tenaevexeo.resend.app', 'example.com'), 'acme', ENV)
+    ).toEqual([])
+  })
+
+  it('rejects a wrong-shaped token and leaves ordinary sub-addressing alone', () => {
+    expect(testAliasTokensIn('acme+test-123@tenaevexeo.resend.app', 'acme', ENV)).toEqual([])
+    expect(testAliasTokensIn('acme+testing@tenaevexeo.resend.app', 'acme', ENV)).toEqual([])
+    expect(testAliasTokenMatches('0'.repeat(20), OWNER, 'acme', ENV)).toBe(false)
+    // Neither address family claims the alias.
+    const alias = testEmailAlias(OWNER, 'acme', ENV)!
+    expect(bearsTicketMarker(alias)).toBe(false)
+    expect(conversationIdFromInboundAddress(alias, ENV)).toBeNull()
+    expect(isPlatformInboxRecipient(alias, 'acme', ENV)).toBe(true)
   })
 })

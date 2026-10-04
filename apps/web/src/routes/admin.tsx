@@ -1,15 +1,16 @@
 import { useEffect, type ComponentProps } from 'react'
 import { createFileRoute, Outlet, redirect, useRouterState } from '@tanstack/react-router'
 import { IntlProvider } from 'react-intl'
-import { WorkspaceCopilotProvider } from '@/components/admin/ask/workspace-copilot'
+import { SearchPaletteProvider } from '@/components/admin/ask/search-palette'
+import { AdminWorkspaceFrame } from '@/components/admin/admin-workspace-frame'
 import { useAdminPresence } from '@/lib/client/hooks/use-admin-presence'
-import { DEFAULT_LOCALE, loadMessages, withoutViewerMessages } from '@/lib/shared/i18n'
+import { DEFAULT_LOCALE, adminSeedMessages, loadMessages } from '@/lib/shared/i18n'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { unreadCountQuery } from '@/lib/client/hooks/use-notifications-queries'
 import { getLatestVersion, isNewerVersion } from '@/lib/server/functions/version'
-import { ProductTourProvider } from '@/components/onboarding/product-tour'
+import { AdminProductTourProvider } from '@/components/onboarding/admin-product-tour'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
 import { ArticleModal, ChangelogModal, PostModal } from '@/components/admin/entity-modals'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -105,7 +106,7 @@ export const Route = createFileRoute('/admin')({
         currentUser: null,
         planNotice: null,
         locale: DEFAULT_LOCALE,
-        messages: withoutViewerMessages(await loadMessages(DEFAULT_LOCALE)),
+        messages: adminSeedMessages(await loadMessages(DEFAULT_LOCALE)),
       }
     }
 
@@ -126,7 +127,7 @@ export const Route = createFileRoute('/admin')({
       }),
       getLatestVersion(),
       getPlanNotice(),
-      loadMessages(locale).then(withoutViewerMessages),
+      loadMessages(locale).then(adminSeedMessages),
       // The rail's unread badge rides the document rather than a request of
       // its own after hydration. Unreadable now, it is left to the bell.
       context.queryClient.ensureQueryData(unreadCountQuery()).catch(() => null),
@@ -254,38 +255,70 @@ function AdminLayout() {
 
   return (
     <IntlProvider locale={locale} defaultLocale={DEFAULT_LOCALE} messages={messages}>
-      <CloudQuackbackWidget />
-      <WorkspaceCopilotProvider>
-        <ProductTourProvider>
+      <SearchPaletteProvider>
+        <AdminProductTourProvider>
           <TooltipProvider delay={0}>
-            <div className="flex h-screen bg-background">
-              <AdminSidebar initialUserData={initialUserData} latestVersion={latestVersion} />
-              <main
-                data-admin-shell=""
-                className="flex-1 min-w-0 overflow-hidden bg-chrome p-0 sm:h-screen sm:py-2 sm:pe-2"
-              >
-                {/* Mobile: Add padding for fixed header */}
-                <div
-                  data-admin-canvas=""
-                  className="h-full sm:pt-0 pt-14 overflow-hidden flex flex-col bg-background text-foreground sm:rounded-[14px] sm:border sm:border-chrome-hairline sm:shadow-chrome-canvas"
-                >
-                  <PlanNoticeBanner notice={planNotice} />
-                  <UpdateBanner
-                    latestVersion={latestVersion}
-                    dismissedVersion={updateBannerDismissedVersion}
-                  />
-                  <div className="flex-1 min-h-0 overflow-hidden">
-                    <FileViewerProvider onJumpToMessage={scrollToMessage}>
-                      <Outlet />
-                    </FileViewerProvider>
-                  </div>
-                </div>
-              </main>
-              <EntityModals currentUser={currentUser} />
-            </div>
+            <AdminContent
+              initialUserData={initialUserData}
+              latestVersion={latestVersion}
+              updateBannerDismissedVersion={updateBannerDismissedVersion}
+              planNotice={planNotice}
+              currentUser={currentUser}
+            />
           </TooltipProvider>
-        </ProductTourProvider>
-      </WorkspaceCopilotProvider>
+        </AdminProductTourProvider>
+      </SearchPaletteProvider>
     </IntlProvider>
+  )
+}
+
+function AdminContent({
+  initialUserData,
+  latestVersion,
+  updateBannerDismissedVersion,
+  planNotice,
+  currentUser,
+}: Pick<
+  ReturnType<typeof Route.useLoaderData>,
+  | 'initialUserData'
+  | 'latestVersion'
+  | 'updateBannerDismissedVersion'
+  | 'planNotice'
+  | 'currentUser'
+>) {
+  // A started Home chat is full screen: its thread is in the URL.
+  const canUseCopilot = useHasPermission(PERMISSIONS.COPILOT_USE)
+  const chatOpen = useRouterState({
+    select: (state) =>
+      /^\/admin\/?$/.test(state.location.pathname) &&
+      typeof (state.location.search as { copilotThread?: unknown }).copilotThread === 'string',
+  })
+  const focused = canUseCopilot && chatOpen
+  return (
+    <>
+      <CloudQuackbackWidget launcherHidden={focused} />
+      <AdminWorkspaceFrame
+        focused={focused}
+        sidebar={
+          initialUserData && (
+            <AdminSidebar initialUserData={initialUserData} latestVersion={latestVersion} />
+          )
+        }
+        notices={
+          <>
+            <PlanNoticeBanner notice={planNotice} />
+            <UpdateBanner
+              latestVersion={latestVersion}
+              dismissedVersion={updateBannerDismissedVersion}
+            />
+          </>
+        }
+      >
+        <FileViewerProvider onJumpToMessage={scrollToMessage}>
+          <Outlet />
+        </FileViewerProvider>
+      </AdminWorkspaceFrame>
+      <EntityModals currentUser={currentUser} />
+    </>
   )
 }

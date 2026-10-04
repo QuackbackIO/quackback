@@ -1,6 +1,7 @@
 import { db, principal, conversations, inArray, eq, and } from '@/lib/server/db'
 import { isTeamMember } from '@/lib/shared/roles'
 import { listOnlineAgentIds } from '@/lib/server/realtime/presence'
+import { notTestPrincipal } from '@/lib/server/test-data'
 import type { PrincipalId } from '@quackback/ids'
 import type { RoutingContext, RoutingResult, RoutingStrategy } from '../routing.types'
 
@@ -37,7 +38,9 @@ export async function countOpenConversationLoad(
     .where(
       and(
         inArray(conversations.assignedAgentPrincipalId, candidates),
-        eq(conversations.status, 'open')
+        eq(conversations.status, 'open'),
+        // A teammate's own test thread is not work.
+        notTestPrincipal(conversations.visitorPrincipalId)
       )
     )
   const load = new Map<PrincipalId, number>()

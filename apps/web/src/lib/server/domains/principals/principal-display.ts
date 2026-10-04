@@ -9,6 +9,7 @@ import { db, principal, user, eq, inArray } from '@/lib/server/db'
 import type { PrincipalId } from '@quackback/ids'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import type { ConversationAuthorDTO } from '@/lib/shared/conversation/types'
+import { rememberTestOwner } from '@/lib/server/test-data'
 import { supportContactName } from '@/lib/shared/support-contact-name'
 
 /**
@@ -77,7 +78,7 @@ async function selectAuthorRows(
   // S3 key), else an external image URL, falling back to the principal's synced
   // copy. principal.avatarUrl alone is not reliably kept in sync, so agents
   // whose avatar lives only on the user row would otherwise show initials.
-  return db
+  const rows = await db
     .select({
       id: principal.id,
       displayName: principal.displayName,
@@ -86,10 +87,14 @@ async function selectAuthorRows(
       avatarKey: principal.avatarKey,
       userImage: user.image,
       userImageKey: user.imageKey,
+      testOwnerPrincipalId: principal.testOwnerPrincipalId,
     })
     .from(principal)
     .leftJoin(user, eq(user.id, principal.userId))
     .where(inArray(principal.id, unique))
+  // The same read answers whether each author is a test customer.
+  for (const row of rows) rememberTestOwner(row)
+  return rows
 }
 
 /**

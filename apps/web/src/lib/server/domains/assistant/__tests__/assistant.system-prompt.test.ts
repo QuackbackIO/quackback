@@ -413,3 +413,32 @@ describe('assistant production system prompt', () => {
     expect(occurrences(withTool, '</workspace_board_catalogue>')).toBe(1)
   })
 })
+
+describe('knowledge search guidance per role', () => {
+  const GENERIC = 'Search for product, pricing, policy, capability, or procedure questions'
+  it('keys the generic search line to Home knowledge search, not the entity search', () => {
+    const home = joined({
+      role: 'workspace_assistant',
+      surface: 'workspace',
+      agentKind: 'copilot',
+      tools: [
+        { name: 'search', promptGuidance: 'Find workspace entities by name.' },
+        { name: 'search_knowledge', promptGuidance: 'Search knowledge.' },
+      ],
+    })
+    expect(home).toContain(`- search_knowledge: ${GENERIC}`)
+    expect(home).not.toContain(`- search: ${GENERIC}`)
+  })
+  it('keeps the line on search for Slack and Quinn', () => {
+    for (const overrides of [
+      { role: 'workspace_assistant' as const, surface: 'slack' as const },
+      { role: 'customer_support' as const },
+    ]) {
+      const text = joined({
+        ...overrides,
+        tools: [{ name: 'search', promptGuidance: 'Search knowledge.' }],
+      })
+      expect(text).toContain(`- search: ${GENERIC}`)
+    }
+  })
+})

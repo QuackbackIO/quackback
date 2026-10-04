@@ -29,10 +29,11 @@ function loadSdk() {
  * workspace admin pages. Self-host never loads it. Portal / public /
  * widget surfaces stay clean so customer end-users never see it.
  */
-export function CloudQuackbackWidget() {
+export function CloudQuackbackWidget({ launcherHidden = false }: { launcherHidden?: boolean }) {
   const cloudEnabled = useCloudEnabled()
   const session = useSessionContext()
   const booted = useRef(false)
+  const hidden = useRef(false)
 
   const userId = session?.user?.id
   const email = session?.user?.email
@@ -53,6 +54,13 @@ export function CloudQuackbackWidget() {
       booted.current = true
     }
   }, [cloudEnabled])
+
+  // A full-screen view hides the launcher; it comes back only if it hid it.
+  useEffect(() => {
+    if (!cloudEnabled || launcherHidden === hidden.current) return
+    hidden.current = launcherHidden
+    window.Quackback?.(launcherHidden ? 'hideLauncher' : 'showLauncher')
+  }, [cloudEnabled, launcherHidden])
 
   useEffect(() => {
     if (!cloudEnabled || !canIdentify) return

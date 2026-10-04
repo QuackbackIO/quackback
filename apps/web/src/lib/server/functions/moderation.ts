@@ -18,6 +18,7 @@ import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'moderation' })
 import { db, posts, postComments, boards, sql } from '@/lib/server/db'
+import { notTestPrincipal } from '@/lib/server/test-data'
 import type { PostId, PostCommentId } from '@quackback/ids'
 import { requireAuth } from '@/lib/server/functions/auth-helpers'
 import { actorFromAuth } from '@/lib/server/audit/log'
@@ -128,13 +129,16 @@ export const getModerationStatus = createServerFn({ method: 'GET' }).handler(asy
         (select count(*)::int from ${posts}
           inner join ${boards} on ${posts.boardId} = ${boards.id}
           where ${posts.moderationState} = 'pending'
-            and ${posts.deletedAt} is null and ${boards.deletedAt} is null) as posts,
+            and ${posts.deletedAt} is null and ${boards.deletedAt} is null
+            and ${notTestPrincipal(posts.principalId)}) as posts,
         (select count(*)::int from ${postComments}
           inner join ${posts} on ${postComments.postId} = ${posts.id}
           inner join ${boards} on ${posts.boardId} = ${boards.id}
           where ${postComments.moderationState} = 'pending'
             and ${postComments.deletedAt} is null
-            and ${posts.deletedAt} is null and ${boards.deletedAt} is null) as comments,
+            and ${posts.deletedAt} is null and ${boards.deletedAt} is null
+            and ${notTestPrincipal(postComments.principalId)}
+            and ${notTestPrincipal(posts.principalId)}) as comments,
         (select count(*)::int from ${boards}
           where ${boards.deletedAt} is null
             and (${boards.access}->'moderation'->>'anonPosts' = 'on'

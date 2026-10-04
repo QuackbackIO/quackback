@@ -23,6 +23,7 @@ import { getCategoriesForEntries, categoryGateAllows } from './changelog-categor
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import type { PublicChangelogEntry, PublicChangelogListResult } from './changelog.types'
 import { contentJsonForClient } from '@/lib/server/content/storage-read-urls'
+import { notTestPrincipal } from '@/lib/server/test-data'
 import { resignStoredAssetUrl } from '@/lib/server/storage/s3'
 
 const effectiveDisplayDate = sql<Date>`coalesce(${changelogEntries.displayDate}, ${changelogEntries.publishedAt})`
@@ -135,7 +136,9 @@ export async function getPublicChangelogById(
         isNull(posts.deletedAt),
         eq(posts.moderationState, 'published'),
         isNull(boards.deletedAt),
-        sql`${boards.access}->>'view' = 'anonymous'`
+        sql`${boards.access}->>'view' = 'anonymous'`,
+        // 5. A test customer's idea is never public.
+        notTestPrincipal(posts.principalId)
       )
     )
 

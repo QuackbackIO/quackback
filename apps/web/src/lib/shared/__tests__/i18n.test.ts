@@ -11,6 +11,11 @@ import {
   loadViewerMessages,
   loadWidgetMessages,
   withoutViewerMessages,
+  loadAskMessages,
+  isAskMessage,
+  adminSeedMessages,
+  isTourMessage,
+  loadTourMessages,
 } from '../i18n'
 
 describe('normalizeLocale', () => {
@@ -186,5 +191,35 @@ describe('viewer strings', () => {
     expect(Object.keys(viewer).length + Object.keys(withoutViewerMessages(all)).length).toBe(
       Object.keys(all).length
     )
+  })
+
+  it('leaves Copilot and search strings to the chunks that render them', async () => {
+    const all = await loadMessages('fr')
+    const seeded = adminSeedMessages(all)
+    const ask = await loadAskMessages('fr')
+    expect(Object.keys(seeded).filter(isAskMessage)).toEqual([])
+    // The sidebar Search row renders on every admin page.
+    expect(seeded['ask.search.row']).toBe(all['ask.search.row'])
+    expect(ask['ask.chat.newChat']).toBe(all['ask.chat.newChat'])
+    expect(ask['ask.destination.settings_portal']).toBe(all['ask.destination.settings_portal'])
+    expect(Object.keys(ask).every(isAskMessage)).toBe(true)
+  })
+})
+
+describe('admin seed', () => {
+  it('leaves out the viewer, tour overlay and wizard strings and keeps the rest', async () => {
+    const [all, tour] = await Promise.all([loadMessages('de'), loadTourMessages('de')])
+    const seeded = adminSeedMessages(all)
+    expect(Object.keys(seeded).filter(isViewerMessage)).toEqual([])
+    expect(Object.keys(seeded).filter(isTourMessage)).toEqual([])
+    expect(seeded['onboarding.goals.title']).toBeUndefined()
+    expect(seeded['onboarding.workspace.title']).toBeUndefined()
+    // The tour's entry points and the launch plan stay seeded.
+    expect(seeded['onboarding.tour.replay']).toBe(all['onboarding.tour.replay'])
+    expect(seeded['onboarding.launch.title']).toBe(all['onboarding.launch.title'])
+    expect(seeded['files.download']).toBe(all['files.download'])
+    expect(tour['onboarding.tour.next']).toBe(all['onboarding.tour.next'])
+    expect(Object.keys(tour).every(isTourMessage)).toBe(true)
+    expect(Object.keys(tour).length).toBeGreaterThan(20)
   })
 })

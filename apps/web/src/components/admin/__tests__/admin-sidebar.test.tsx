@@ -4,10 +4,10 @@ import { render, cleanup, screen, fireEvent } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { WorkspaceCopilotContext } from '../ask/workspace-copilot-context'
+import { SearchPaletteContext } from '../ask/search-palette'
 
 const openPalette = vi.fn()
-const copilotContext = { composer: null, conversation: null, starters: null, openPalette }
+const searchContext = { open: openPalette }
 
 // Injected by Vite at build time (see vite.config.ts `define`); absent in vitest.
 vi.stubGlobal('__APP_VERSION__', '0.0.0-test')
@@ -104,9 +104,9 @@ function renderSidebar(
   return render(
     <IntlProvider locale="en" messages={{}}>
       <TooltipProvider>
-        <WorkspaceCopilotContext.Provider value={copilotContext}>
+        <SearchPaletteContext.Provider value={searchContext}>
           <AdminSidebar />
-        </WorkspaceCopilotContext.Provider>
+        </SearchPaletteContext.Provider>
       </TooltipProvider>
     </IntlProvider>
   )
@@ -272,9 +272,9 @@ describe('AdminSidebar: labeled rail', () => {
       const { container } = render(
         <IntlProvider locale="en" messages={{}}>
           <TooltipProvider>
-            <WorkspaceCopilotContext.Provider value={copilotContext}>
+            <SearchPaletteContext.Provider value={searchContext}>
               <AdminSidebar />
-            </WorkspaceCopilotContext.Provider>
+            </SearchPaletteContext.Provider>
           </TooltipProvider>
         </IntlProvider>
       )
@@ -368,9 +368,10 @@ describe('AdminSidebar rail', () => {
   })
 })
 
-it('opens the shared palette from the sidebar search button', () => {
-  renderSidebar('admin')
-  fireEvent.click(screen.getAllByRole('button', { name: 'Search Quackback' })[0]!)
+it('opens the shared palette from the sidebar search button, the one tour stop', () => {
+  const { container } = renderSidebar('admin')
+  fireEvent.click(screen.getAllByRole('button', { name: 'Search' })[0]!)
   expect(openPalette).toHaveBeenCalledOnce()
+  expect(container.ownerDocument.querySelectorAll('[data-tour="search"]')).toHaveLength(1)
   cleanup()
 })

@@ -9,6 +9,7 @@ import { assistantPendingActionQueries } from '@/lib/client/queries/assistant-pe
 import type { CopilotProposedAction } from '@/lib/shared/assistant/copilot-contract'
 import {
   settingsProposalSchema,
+  type MessengerEffect,
   type SettingsChange,
 } from '@/lib/shared/assistant/settings-proposals'
 import {
@@ -26,13 +27,11 @@ export const SETTINGS_CARD_AREA_COPY = {
   office_hours: 'Office hours',
   changelog: 'Changelog',
 } as const
+/** Labels for every field a settings proposal can carry. */
 export const SETTINGS_CARD_FIELD_COPY: Record<string, string> = {
   logoKey: 'Logo',
-  preset: 'Theme',
   themeMode: 'Appearance',
   displayName: 'Workspace name',
-  headerDisplayName: 'Header name',
-  headerDisplayMode: 'Header display',
   enabled: 'Enabled',
   welcomeMessage: 'Welcome message',
   supportInbox: 'Support inbox',
@@ -48,48 +47,34 @@ export const SETTINGS_CARD_FIELD_COPY: Record<string, string> = {
   background: 'Background',
   foreground: 'Text',
   card: 'Card',
-  cardForeground: 'Card text',
-  popover: 'Popover',
-  popoverForeground: 'Popover text',
   primary: 'Brand color',
-  primaryForeground: 'Primary text',
   secondary: 'Secondary',
-  secondaryForeground: 'Secondary text',
   muted: 'Muted',
   mutedForeground: 'Muted text',
   accent: 'Accent',
-  accentForeground: 'Accent text',
   destructive: 'Destructive',
-  destructiveForeground: 'Destructive text',
   border: 'Border',
-  input: 'Input',
   ring: 'Focus ring',
   radius: 'Corner radius',
-  sidebarBackground: 'Sidebar background',
-  sidebarForeground: 'Sidebar text',
-  sidebarPrimary: 'Sidebar primary',
-  sidebarPrimaryForeground: 'Sidebar primary text',
-  sidebarAccent: 'Sidebar accent',
-  sidebarAccentForeground: 'Sidebar accent text',
-  sidebarBorder: 'Sidebar border',
-  sidebarRing: 'Sidebar focus ring',
-  chart1: 'Chart 1',
-  chart2: 'Chart 2',
-  chart3: 'Chart 3',
-  chart4: 'Chart 4',
-  chart5: 'Chart 5',
   success: 'Success',
-  accentInk: 'Accent text',
   fontSans: 'Font',
-  shadow2xs: 'Shadow 2XS',
-  shadowXs: 'Shadow XS',
-  shadowSm: 'Shadow S',
-  shadow: 'Shadow',
-  shadowMd: 'Shadow M',
-  shadowLg: 'Shadow L',
-  shadowXl: 'Shadow XL',
-  shadow2xl: 'Shadow 2XL',
 }
+const MESSENGER_EFFECT_COPY: Record<MessengerEffect, { id: string; defaultMessage: string }> = {
+  messengerTab: {
+    id: 'ask.settings.effect.messengerTabOn',
+    defaultMessage: 'Shows the Messages tab in the widget',
+  },
+  widget: { id: 'ask.settings.effect.widget', defaultMessage: 'Turns on the widget' },
+  supportInbox: {
+    id: 'ask.settings.effect.supportInbox',
+    defaultMessage: 'Turns on the support inbox and portal chats',
+  },
+}
+const MESSENGER_TAB_OFF_COPY = {
+  id: 'ask.settings.effect.messengerTabOff',
+  defaultMessage: 'Hides the Messages tab in the widget',
+}
+
 export interface SettingsChangeCardProps {
   changes: readonly SettingsChange[]
   status: 'proposed' | 'executed' | 'undone' | 'unavailable'
@@ -100,6 +85,31 @@ export interface SettingsChangeCardProps {
   onOpenSettings: (href: string) => void
 }
 
+/** Office hours and other structured values as one readable line. */
+function readableValue(value: unknown, locale: string): string {
+  if (!Array.isArray(value)) {
+    if (value && typeof value === 'object')
+      return Object.values(value as Record<string, unknown>)
+        .map((item) => readableValue(item, locale))
+        .join(', ')
+    return String(value)
+  }
+  const weekday = new Intl.DateTimeFormat(locale, { weekday: 'short', timeZone: 'UTC' })
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') return String(item)
+      const entry = item as Record<string, unknown>
+      if (typeof entry.day === 'number' && typeof entry.start === 'string')
+        return `${weekday.format(Date.UTC(2023, 0, 1 + entry.day))} ${entry.start}-${String(entry.end)}`
+      if (typeof entry.date === 'string')
+        return typeof entry.name === 'string' && entry.name
+          ? `${entry.name} (${entry.date})`
+          : entry.date
+      return readableValue(entry, locale)
+    })
+    .join(', ')
+}
+
 function SettingsValue({ value, preview }: { value: unknown; preview?: string | null }) {
   const intl = useIntl()
   const enums: Record<string, string> = {
@@ -108,12 +118,9 @@ function SettingsValue({ value, preview }: { value: unknown; preview?: string | 
     user: 'Follow visitor',
     public: 'Public',
     authenticated: 'Signed-in users',
-    logo_and_name: 'Logo and name',
-    logo_only: 'Logo only',
-    custom_logo: 'Custom logo',
   }
   const text =
-    value == null || value === ''
+    value == null || value === '' || (Array.isArray(value) && value.length === 0)
       ? intl.formatMessage({ id: 'ask.settings.notSet', defaultMessage: 'Not set' })
       : typeof value === 'boolean'
         ? intl.formatMessage({
@@ -122,9 +129,7 @@ function SettingsValue({ value, preview }: { value: unknown; preview?: string | 
           })
         : typeof value === 'string' && enums[value]
           ? intl.formatMessage({ id: `ask.settings.value.${value}`, defaultMessage: enums[value] })
-          : typeof value === 'object'
-            ? JSON.stringify(value)
-            : String(value)
+          : readableValue(value, intl.locale)
   const color =
     typeof value === 'string' &&
     /^(?:#[\da-f]{3,8}|(?:oklch|oklab|hsl|hsla|rgb|rgba)\([\d\s.,%+\-/]+\)|transparent)$/i.test(
@@ -168,6 +173,21 @@ export function SettingsChangeCard({
   const [selection, setSelection] = useState<Set<string> | null>(null)
   const selected = selection ?? new Set(changes.map((change) => change.id))
   const count = changes.filter((change) => selected.has(change.id)).length
+  // One way into settings per card: a link per page the changes live on.
+  const pages = [
+    ...new Map(
+      changes.map((change) => [
+        change.settingsHref,
+        {
+          href: change.settingsHref,
+          area: intl.formatMessage({
+            id: `ask.settings.area.${change.area}`,
+            defaultMessage: SETTINGS_CARD_AREA_COPY[change.area],
+          }),
+        },
+      ])
+    ).values(),
+  ]
   const title =
     status === 'executed'
       ? intl.formatMessage({ id: 'ask.settings.applied', defaultMessage: 'Changes applied' })
@@ -224,18 +244,6 @@ export function SettingsChangeCard({
                 )}
                 <span className="truncate font-medium">{changeLabel}</span>
               </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="shrink-0 text-xs focus-visible:ring-foreground/25"
-                onClick={() => onOpenSettings(change.settingsHref)}
-              >
-                {intl.formatMessage({
-                  id: 'ask.settings.open',
-                  defaultMessage: 'Open in settings',
-                })}
-              </Button>
             </div>
             <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 text-xs">
               <SettingsValue
@@ -248,43 +256,75 @@ export function SettingsChangeCard({
                 preview={status === 'undone' ? change.beforePreview : change.afterPreview}
               />
             </div>
+            {status !== 'undone' && change.effects && change.effects.length > 0 && (
+              <ul className="space-y-0.5 text-xs text-muted-foreground">
+                {change.effects.map((effect) => (
+                  <li key={effect}>
+                    {intl.formatMessage(
+                      effect === 'messengerTab' && change.after !== true
+                        ? MESSENGER_TAB_OFF_COPY
+                        : MESSENGER_EFFECT_COPY[effect]
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )
       })}
-      {status === 'proposed' && (
-        <Button
-          type="button"
-          size="sm"
-          disabled={busy || count === 0}
-          className="focus-visible:ring-foreground/25"
-          onClick={() => {
-            if (count > 0)
-              onApply(
-                changes.filter((change) => selected.has(change.id)).map((change) => change.id)
-              )
-          }}
-        >
-          {intl.formatMessage(
-            {
-              id: 'ask.settings.apply',
-              defaultMessage: 'Apply {count, plural, one {# change} other {# changes}}',
-            },
-            { count }
-          )}
-        </Button>
-      )}
-      {status === 'executed' && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={busy}
-          onClick={onUndo}
-          className="focus-visible:ring-foreground/25"
-        >
-          {intl.formatMessage({ id: 'ask.settings.undo', defaultMessage: 'Undo' })}
-        </Button>
-      )}
+      <div className="flex flex-wrap items-center gap-2">
+        {status === 'proposed' && (
+          <Button
+            type="button"
+            size="sm"
+            disabled={busy || count === 0}
+            className="focus-visible:ring-foreground/25"
+            onClick={() => {
+              if (count > 0)
+                onApply(
+                  changes.filter((change) => selected.has(change.id)).map((change) => change.id)
+                )
+            }}
+          >
+            {intl.formatMessage(
+              {
+                id: 'ask.settings.apply',
+                defaultMessage: 'Apply {count, plural, one {# change} other {# changes}}',
+              },
+              { count }
+            )}
+          </Button>
+        )}
+        {status === 'executed' && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={onUndo}
+            className="focus-visible:ring-foreground/25"
+          >
+            {intl.formatMessage({ id: 'ask.settings.undo', defaultMessage: 'Undo' })}
+          </Button>
+        )}
+        {pages.map((page) => (
+          <Button
+            key={page.href}
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-xs focus-visible:ring-foreground/25"
+            onClick={() => onOpenSettings(page.href)}
+          >
+            {pages.length === 1
+              ? intl.formatMessage({ id: 'ask.settings.open', defaultMessage: 'Open in settings' })
+              : intl.formatMessage(
+                  { id: 'ask.settings.openArea', defaultMessage: '{area} settings' },
+                  { area: page.area }
+                )}
+          </Button>
+        ))}
+      </div>
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}
@@ -315,7 +355,7 @@ export function WorkspaceSettingsProposalCard({ action }: { action: CopilotPropo
       },
       SETTINGS_PERMISSION_REQUIRED: {
         id: 'ask.settings.permissionRequired',
-        defaultMessage: 'Ask a workspace Owner to make this change.',
+        defaultMessage: 'Ask a workspace owner to make this change.',
       },
       SETTINGS_CHANGED: {
         id: 'ask.settings.changed',

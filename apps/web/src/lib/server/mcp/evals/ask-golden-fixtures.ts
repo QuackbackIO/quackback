@@ -76,6 +76,7 @@ export async function seedAskGoldenFixture(
         supportTickets: modulesEnabled,
         helpCenter: modulesEnabled,
         statusPage: modulesEnabled,
+        copilotHome: true,
       }),
       widgetConfig: JSON.stringify({ messenger: { enabled: false, welcomeMessage: 'Welcome' } }),
       brandingConfig: JSON.stringify({ light: { primary: '#121212' } }),

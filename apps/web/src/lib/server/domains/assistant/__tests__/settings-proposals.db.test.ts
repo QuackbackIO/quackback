@@ -10,6 +10,8 @@ import {
   roles,
   apiKeys,
   principalRoleAssignments,
+  permissions,
+  rolePermissions,
   type Transaction,
 } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
@@ -17,7 +19,6 @@ import { ALL_PERMISSIONS, PERMISSIONS } from '@/lib/shared/permissions'
 import type { Actor } from '@/lib/server/policy/types'
 import { expandTheme } from '@/lib/shared/theme/expand'
 import { generateThemeCSS } from '@/lib/shared/theme/generator'
-import { brandingConfigSchema } from '@/lib/shared/schemas/settings'
 
 const guards = vi.hoisted(() => ({
   managed: new Set<string>(),
@@ -69,8 +70,8 @@ const fixture = await createDbTestFixture({
     const current = getExecuteRows<{ name: string }>(
       await db.execute(sql`select current_database() as name`)
     )[0]
-    if (current?.name !== 'quackback_test')
-      throw new Error('Settings proposals tests require quackback_test')
+    if (!current?.name.startsWith('quackback_test'))
+      throw new Error('Settings proposals tests require a quackback_test database')
     await db.select({ id: settings.id }).from(settings).limit(0)
   },
 })
@@ -217,7 +218,7 @@ describe.skipIf(!fixture.available)('settings proposal adapters (real Postgres)'
     })
     expect((await read()).name).toBe('Acme team')
   })
-  it('exposes only the real portal name and requires both page and writer permissions', async () => {
+  it('exposes only the real portal name and requires the branding permission its writer uses', async () => {
     await testDb
       .update(settings)
       .set({ headerDisplayName: 'Unused header', headerDisplayMode: 'logo_only' })
@@ -226,21 +227,21 @@ describe.skipIf(!fixture.available)('settings proposal adapters (real Postgres)'
     const proposal = await prepareSettingsChanges(actor, [
       { area: 'portal', patch: { displayName: 'Acme team' } },
     ])
-    expect(proposal.changes[0].settingsHref).toBe('/admin/settings/general')
-    for (const missing of [PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.SETTINGS_BRANDING]) {
+    expect(proposal.changes[0].settingsHref).toBe('/admin/settings/portal')
+    for (const missing of [PERMISSIONS.SETTINGS_BRANDING]) {
       const restricted = {
         ...actor,
         permissions: new Set(ALL_PERMISSIONS.filter((permission) => permission !== missing)),
       }
-      await expect(getSettingsForActor(restricted, 'portal')).rejects.toThrow(/Owner/)
+      await expect(getSettingsForActor(restricted, 'portal')).rejects.toThrow(/workspace owner/)
       await expect(
         prepareSettingsChanges(restricted, [
           { area: 'portal', patch: { displayName: 'Forbidden' } },
         ])
-      ).rejects.toThrow(/Owner/)
+      ).rejects.toThrow(/workspace owner/)
       await expect(
         applySettingsChangesInTransaction(tx(), restricted, proposal, ['portal.displayName'])
-      ).rejects.toThrow(/Owner/)
+      ).rejects.toThrow(/workspace owner/)
     }
     const receipt = await applySettingsChangesInTransaction(tx(), actor, proposal, [
       'portal.displayName',
@@ -248,7 +249,7 @@ describe.skipIf(!fixture.available)('settings proposal adapters (real Postgres)'
     expect((await getSettingsForActor(actor, 'portal')).settings).toEqual({
       displayName: 'Acme team',
     })
-    for (const missing of [PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.SETTINGS_BRANDING]) {
+    for (const missing of [PERMISSIONS.SETTINGS_BRANDING]) {
       await expect(
         undoSettingsChangesInTransaction(
           tx(),
@@ -258,7 +259,7 @@ describe.skipIf(!fixture.available)('settings proposal adapters (real Postgres)'
           },
           receipt
         )
-      ).rejects.toThrow(/Owner/)
+      ).rejects.toThrow(/workspace owner/)
     }
     await undoSettingsChangesInTransaction(tx(), actor, receipt)
     expect((await getSettingsForActor(actor, 'portal')).settings).toEqual({ displayName: 'Acme' })
@@ -287,16 +288,16 @@ describe.skipIf(!fixture.available)('settings proposal adapters (real Postgres)'
     expect((await read()).brandingConfig).toBeNull()
   })
   it('writes an effective theme token while retaining the full branding form values for Undo', async () => {
-    const stored = brandingConfigSchema.parse({
+    const stored = {
       preset: 'custom',
-      themeMode: 'light',
+      themeMode: 'light' as const,
       light: {
         primary: '#123456',
         primaryForeground: '#fefefe',
         shadowMd: '0 1px 2px #111111',
         fontSans: 'Inter',
       },
-    })
+    }
     await testDb
       .update(settings)
       .set({ brandingConfig: JSON.stringify(stored) })
@@ -307,7 +308,7 @@ describe.skipIf(!fixture.available)('settings proposal adapters (real Postgres)'
     const receipt = await applySettingsChangesInTransaction(tx(), actor, proposal, [
       'branding.light.primary',
     ])
-    const applied = brandingConfigSchema.parse(JSON.parse((await read()).brandingConfig!))
+    const applied = JSON.parse((await read()).brandingConfig!)
     expect(applied).toEqual({
       ...stored,
       light: { ...stored.light, primary: '#0F766E' },
@@ -319,6 +320,35 @@ describe.skipIf(!fixture.available)('settings proposal adapters (real Postgres)'
     expect(generateThemeCSS(JSON.parse((await read()).brandingConfig!))).toBe(
       generateThemeCSS(stored)
     )
+  })
+  it('applies a model patch over a page-saved config the model could not propose', async () => {
+    const stored = {
+      preset: 'retired-preset',
+      themeMode: 'user',
+      light: {
+        primary: 'var(--brand)',
+        background: 'white',
+        accent: 'color-mix(in oklch, white 40%, black)',
+        legacyToken: 'lab(52% 40 59)',
+        radius: '0',
+      },
+    }
+    await testDb
+      .update(settings)
+      .set({ brandingConfig: JSON.stringify(stored) })
+      .where(eq(settings.id, settingsId))
+    const proposal = await prepareSettingsChanges(actor, [
+      { area: 'branding', patch: { dark: { primary: '#0F766E' } } },
+    ])
+    const receipt = await applySettingsChangesInTransaction(tx(), actor, proposal, [
+      'branding.dark.primary',
+    ])
+    expect(JSON.parse((await read()).brandingConfig!)).toEqual({
+      ...stored,
+      dark: { primary: '#0F766E' },
+    })
+    await undoSettingsChangesInTransaction(tx(), actor, receipt)
+    expect(JSON.parse((await read()).brandingConfig!)).toEqual(stored)
   })
   it('prepares without writing and applies only the checked stored field', async () => {
     const proposal = await prepareSettingsChanges(actor, [
@@ -333,6 +363,107 @@ describe.skipIf(!fixture.available)('settings proposal adapters (real Postgres)'
     expect(JSON.parse((await read()).featureFlags!).supportInbox).toBe(false)
     await undoSettingsChangesInTransaction(tx(), actor, receipt)
     expect((await read()).name).toBe('Acme')
+  })
+  it('applies a partial office hours patch onto the stored schedule', async () => {
+    const intervals = [
+      { day: 1, start: '09:00', end: '17:00' },
+      { day: 2, start: '10:00', end: '18:00' },
+    ]
+    const first = await prepareSettingsChanges(actor, [
+      {
+        area: 'office_hours',
+        patch: { enabled: true, timezone: 'UTC', intervals, holidays: [] },
+      },
+    ])
+    await applySettingsChangesInTransaction(
+      tx(),
+      actor,
+      first,
+      first.changes.map((change) => change.id)
+    )
+    const proposal = await prepareSettingsChanges(actor, [
+      { area: 'office_hours', patch: { timezone: 'Europe/Paris' } },
+    ])
+    expect(proposal.changes.map((change) => change.id)).toEqual(['office_hours.timezone'])
+    const receipt = await applySettingsChangesInTransaction(tx(), actor, proposal, [
+      'office_hours.timezone',
+    ])
+    expect((await getSettingsForActor(actor, 'office_hours')).settings).toMatchObject({
+      enabled: true,
+      timezone: 'Europe/Paris',
+      intervals,
+    })
+    await undoSettingsChangesInTransaction(tx(), actor, receipt)
+    expect((await getSettingsForActor(actor, 'office_hours')).settings).toMatchObject({
+      timezone: 'UTC',
+      intervals,
+    })
+  })
+  it('turns Messenger off with its own switch and leaves Support on', async () => {
+    const liveWidget = { enabled: true, tabs: { messenger: true, feedback: true } }
+    await testDb
+      .update(settings)
+      .set({
+        featureFlags: JSON.stringify({ supportInbox: true, supportTickets: true }),
+        widgetConfig: JSON.stringify(liveWidget),
+      })
+      .where(eq(settings.id, settingsId))
+    const proposal = await prepareSettingsChanges(actor, [
+      { area: 'messenger', patch: { enabled: false } },
+    ])
+    expect(proposal.changes).toEqual([
+      expect.objectContaining({ id: 'messenger.enabled', effects: ['messengerTab'] }),
+    ])
+    const receipt = await applySettingsChangesInTransaction(tx(), actor, proposal, [
+      'messenger.enabled',
+    ])
+    const applied = await read()
+    expect(JSON.parse(applied.featureFlags!)).toMatchObject({
+      supportInbox: true,
+      supportTickets: true,
+    })
+    expect(JSON.parse(applied.widgetConfig!)).toMatchObject({
+      enabled: true,
+      tabs: { messenger: false, feedback: true },
+    })
+    await undoSettingsChangesInTransaction(tx(), actor, receipt)
+    expect(JSON.parse((await read()).widgetConfig!)).toMatchObject(liveWidget)
+  })
+  it('turns Messenger on with the widget and Support it needs, and lists them', async () => {
+    const proposal = await prepareSettingsChanges(actor, [
+      { area: 'messenger', patch: { enabled: true } },
+    ])
+    expect(proposal.changes[0]!.effects).toEqual(['messengerTab', 'widget', 'supportInbox'])
+    const receipt = await applySettingsChangesInTransaction(tx(), actor, proposal, [
+      'messenger.enabled',
+    ])
+    const applied = await read()
+    expect(JSON.parse(applied.featureFlags!).supportInbox).toBe(true)
+    expect(JSON.parse(applied.widgetConfig!)).toMatchObject({
+      enabled: true,
+      tabs: { messenger: true },
+    })
+    await undoSettingsChangesInTransaction(tx(), actor, receipt)
+    expect(JSON.parse((await read()).featureFlags!).supportInbox).toBe(false)
+    expect(JSON.parse((await read()).widgetConfig!)).toEqual({})
+  })
+  it('refuses Messenger on when what it needs changed after the card was shown', async () => {
+    await testDb
+      .update(settings)
+      .set({ featureFlags: JSON.stringify({ supportInbox: true }) })
+      .where(eq(settings.id, settingsId))
+    const proposal = await prepareSettingsChanges(actor, [
+      { area: 'messenger', patch: { enabled: true } },
+    ])
+    expect(proposal.changes[0]!.effects).toEqual(['messengerTab', 'widget'])
+    await testDb
+      .update(settings)
+      .set({ featureFlags: JSON.stringify({ supportInbox: false }) })
+      .where(eq(settings.id, settingsId))
+    await expect(
+      applySettingsChangesInTransaction(tx(), actor, proposal, ['messenger.enabled'])
+    ).rejects.toMatchObject({ code: 'SETTINGS_CHANGED' })
+    expect(JSON.parse((await read()).featureFlags!).supportInbox).toBe(false)
   })
   it('undo restores coupled module activation and preserves unrelated settings', async () => {
     const proposal = await prepareSettingsChanges(actor, [
@@ -369,6 +500,28 @@ describe.skipIf(!fixture.available)('settings proposal adapters (real Postgres)'
     await testDb.update(settings).set({ name: 'Later name' }).where(eq(settings.id, settingsId))
     await expect(undoSettingsChangesInTransaction(tx(), actor, receipt)).rejects.toThrow(/changed/i)
     expect((await read()).name).toBe('Later name')
+  })
+  it('lets a branding-only teammate rename the workspace, as the settings page does', async () => {
+    const [brandingRole] = await testDb
+      .insert(roles)
+      .values({ key: `branding-${createId('role')}`, name: 'Branding', isSystem: false })
+      .returning()
+    const [permission] = await testDb
+      .select({ id: permissions.id })
+      .from(permissions)
+      .where(eq(permissions.key, PERMISSIONS.SETTINGS_BRANDING))
+    await testDb
+      .insert(rolePermissions)
+      .values({ roleId: brandingRole.id, permissionId: permission.id })
+    await testDb
+      .insert(principalRoleAssignments)
+      .values({ principalId: actor.principalId!, roleId: brandingRole.id })
+    const branding: Actor = { ...actor, permissions: new Set([PERMISSIONS.SETTINGS_BRANDING]) }
+    const proposal = await prepareSettingsChanges(branding, [
+      { area: 'portal', patch: { displayName: 'Acme team' } },
+    ])
+    await applySettingsChangesInTransaction(tx(), branding, proposal, ['portal.displayName'])
+    expect((await read()).name).toBe('Acme team')
   })
   it('rechecks assignment-derived permission on Apply and Undo', async () => {
     const proposal = await prepareSettingsChanges(actor, [
@@ -456,7 +609,7 @@ describe.skipIf(!fixture.available)('settings proposal adapters (real Postgres)'
         { ...actor, permissions: new Set([PERMISSIONS.SETTINGS_BRANDING]) },
         'logos/rehosted.png'
       )
-    ).rejects.toThrow(/Owner/)
+    ).rejects.toThrow(/workspace owner/)
     await expect(
       prepareRehostedBrandingLogoChange(actor, 'https://example.com/logo.png')
     ).rejects.toThrow()
@@ -470,7 +623,7 @@ describe.skipIf(!fixture.available)('settings proposal adapters (real Postgres)'
       prepareSettingsChanges({ ...actor, permissions: new Set() }, [
         { area: 'portal', patch: { displayName: 'Acme team' } },
       ])
-    ).rejects.toThrow(/Owner/)
+    ).rejects.toThrow(/workspace owner/)
   })
   it('binds an API-key proposal to its current human creator and refuses revoked ownership', async () => {
     const serviceId = createId('principal') as PrincipalId

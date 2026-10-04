@@ -119,6 +119,15 @@ const audits = (event: string) =>
     .from(auditLog)
     .where(and(eq(auditLog.eventType, event), eq(auditLog.targetId, settingsId)))
 const daysAgo = (days: number) => new Date(Date.now() - days * 24 * 60 * 60_000).toISOString()
+/** A workspace created and set up `days` ago: inside its launch window for 14 days. */
+const launchedDaysAgo = (days: number) => ({
+  createdAt: new Date(daysAgo(days)),
+  setupState: JSON.stringify({
+    version: 2,
+    steps: { core: true, workspace: true, startingPoint: null },
+    completedAt: daysAgo(days),
+  }),
+})
 const fetchReturns = (result: WebsiteBranding | null) =>
   seams.fetch.mockImplementation(async (site: string) => {
     expect(site).toBe('example.com')
@@ -176,6 +185,7 @@ beforeEach(async () => {
     metadata: JSON.stringify({ sibling: 'keep' }),
     featureFlags: '{}',
     cloudIdentity: null,
+    ...launchedDaysAgo(0),
   })
   seams.objects.set(good.logoKey, 'image/png')
   seams.objects.set(weak.logoKey, 'image/x-icon')
@@ -321,6 +331,16 @@ describe('automatic website branding (real Postgres)', () => {
       code: 'WEBSITE_BRANDING_UNAVAILABLE',
     })
     expect((await read()).logoKey).toBe('logos/manual.png')
+  })
+
+  it('never looks up a workspace outside its launch window', async () => {
+    await setRow(launchedDaysAgo(30))
+    expect(await getAutomaticWebsiteBrandingStatus(actor)).toBeNull()
+    expect(await ensureAutomaticWebsiteBranding(actor)).toBeNull()
+    expect(seams.fetch).not.toHaveBeenCalled()
+    expect(await metadata()).toEqual({ sibling: 'keep' })
+    await setRow(launchedDaysAgo(13))
+    expect(await getAutomaticWebsiteBrandingStatus(actor)).toMatchObject({ status: 'eligible' })
   })
 
   it('never looks up a workspace marked as existing by migration 0293', async () => {

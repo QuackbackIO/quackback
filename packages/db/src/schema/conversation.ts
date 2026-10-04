@@ -206,11 +206,6 @@ export const conversations = pgTable(
     index('conversations_spam_resolved_at_idx')
       .on(table.resolvedAt)
       .where(sql`status = 'closed' AND end_reason = 'spam'`),
-    // Test threads are a handful per teammate: the inbox Test count and the
-    // 7-day test-data sweep read this set, never a scan (migration 0291).
-    index('conversations_test_created_at_idx')
-      .on(table.createdAt)
-      .where(sql`coalesce(custom_attributes->>'test', 'false') = 'true'`),
     // SLA sweep passes (sla.service.ts's sweepOverdueSlaBreaches +
     // sweepApproachingSlaBreaches + sweepSlaBreachTriggers, via the shared
     // scanAndClaimSlaClocks) all scan on `sla_applied IS NOT NULL` plus "at
@@ -329,11 +324,9 @@ export const conversationMessages = pgTable(
       'conversation_messages_workspace_internal_check',
       sql`${table.workspaceThreadKey} IS NULL OR ${table.isInternal} = true`
     ),
-    index('conversation_messages_workspace_created_idx').on(
-      table.workspaceThreadKey,
-      table.createdAt,
-      table.id
-    ),
+    index('conversation_messages_workspace_created_idx')
+      .on(table.workspaceThreadKey, table.createdAt, table.id)
+      .where(sql`${table.workspaceThreadKey} IS NOT NULL`),
     uniqueIndex('conversation_messages_workspace_run_sender_idx')
       .on(
         table.workspaceThreadKey,

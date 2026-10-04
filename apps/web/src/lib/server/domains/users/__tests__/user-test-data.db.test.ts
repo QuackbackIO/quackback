@@ -58,15 +58,11 @@ async function commentAndVote(by: PrincipalId, postId: PostId) {
   await testDb.insert(postVotes).values({ postId, principalId: by })
 }
 
+/** Test content is what a test customer authored; engaging with it is not real activity. */
 async function testActivity() {
-  const testPostIds = await Promise.all([
-    post(owner, { test: true }),
-    post(owner, { test: 'true' }),
-    post(owner, { onboardingGenerated: true }),
-    post(testCustomer),
-  ])
-  for (const id of testPostIds) await commentAndVote(owner, id)
-  return testPostIds
+  const testPostId = await post(testCustomer, { test: 'false' })
+  await commentAndVote(owner, testPostId)
+  return [testPostId]
 }
 
 async function realActivity() {
@@ -86,7 +82,7 @@ describe('test activity stays outside people and public profiles', () => {
     expect(fixture.available).toBe(true)
     await fixture.begin()
     const [database] = await testDb.execute(sql`select current_database() as name`)
-    expect(database.name).toBe('quackback_test')
+    expect(String(database.name)).toMatch(/^quackback_test(?:_\w+)?$/)
     label = `Acme ${createId('user')}`
     owner = await person()
     other = await person()
@@ -118,6 +114,10 @@ describe('test activity stays outside people and public profiles', () => {
       expect(filtered.items).toHaveLength(0)
       expect(filtered.total).toBe(0)
     }
+    // A legacy client marker on the person's own idea is real activity.
+    await post(owner, { test: 'true' })
+    const after = await listPortalUsers({ search: label })
+    expect(after.items.find((item) => item.principalId === owner)?.postCount).toBe(2)
   })
 
   it('keeps user detail activity and per-post comments on real content', async () => {
@@ -143,10 +143,10 @@ describe('test activity stays outside people and public profiles', () => {
   })
 
   it('does not promote anonymous visitors with only test activity into Leads', async () => {
-    const [author, commenter, voter, reactor, messenger, realLead] = await Promise.all(
-      Array.from({ length: 6 }, () => person('anonymous'))
+    const [commenter, voter, reactor, realLead, legacyLead] = await Promise.all(
+      Array.from({ length: 5 }, () => person('anonymous'))
     )
-    const testPost = await post(author, { test: true })
+    const testPost = await post(testCustomer)
     const [testComment] = await testDb
       .insert(postComments)
       .values({ postId: testPost, principalId: commenter, content: 'Acme test comment' })
@@ -159,21 +159,20 @@ describe('test activity stays outside people and public profiles', () => {
     })
     const [conversation] = await testDb
       .insert(conversations)
-      .values({
-        visitorPrincipalId: messenger,
-        channel: 'messenger',
-        customAttributes: { test: true },
-      })
+      .values({ visitorPrincipalId: testCustomer, channel: 'messenger' })
       .returning({ id: conversations.id })
     await testDb.insert(conversationMessages).values({
       conversationId: conversation.id,
-      principalId: messenger,
+      principalId: testCustomer,
       senderType: 'visitor',
       content: 'Acme test message',
     })
     await post(realLead)
+    await post(legacyLead, { test: true })
     const leads = await listPortalUsers({ lifecycle: 'leads', search: label })
-    expect(leads.items.map((item) => item.principalId)).toEqual([realLead])
-    expect(leads.total).toBe(1)
+    expect(leads.items.map((item) => item.principalId).sort()).toEqual(
+      [realLead, legacyLead].sort()
+    )
+    expect(leads.total).toBe(2)
   })
 })

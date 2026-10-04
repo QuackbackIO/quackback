@@ -21,7 +21,8 @@ import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/ide
 
 export const AREAS: Record<SettingsArea, { permission: PermissionKey; href: string }> = {
   branding: { permission: PERMISSIONS.SETTINGS_BRANDING, href: '/admin/settings/portal' },
-  portal: { permission: PERMISSIONS.SETTINGS_BRANDING, href: '/admin/settings/general' },
+  // Portal settings opens with the branding permission alone.
+  portal: { permission: PERMISSIONS.SETTINGS_BRANDING, href: '/admin/settings/portal' },
   messenger: {
     permission: PERMISSIONS.SETTINGS_MANAGE,
     href: '/admin/settings/channels/messenger',
@@ -52,7 +53,7 @@ export async function requireAreaPermission(
   if (!actor.principalId)
     throw new ForbiddenError(
       'SETTINGS_PERMISSION_REQUIRED',
-      'Ask a workspace Owner to make this change.'
+      'Ask a workspace owner to make this change.'
     )
   const [record] = await executor
     .select({ role: principal.role })
@@ -62,23 +63,16 @@ export async function requireAreaPermission(
   if (!record || (record.role !== 'admin' && record.role !== 'member'))
     throw new ForbiddenError(
       'SETTINGS_PERMISSION_REQUIRED',
-      'Ask a workspace Owner to make this change.'
+      'Ask a workspace owner to make this change.'
     )
   const permissions = await permissionsForPrincipal(actor.principalId, record.role, executor)
-  const required =
-    area === 'portal'
-      ? [PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.SETTINGS_BRANDING]
-      : [requiredPermission]
   if (
-    required.some(
-      (permission) =>
-        !permissions.has(permission) ||
-        (actor.permissions !== undefined && !actor.permissions.has(permission))
-    )
+    !permissions.has(requiredPermission) ||
+    (actor.permissions !== undefined && !actor.permissions.has(requiredPermission))
   )
     throw new ForbiddenError(
       'SETTINGS_PERMISSION_REQUIRED',
-      'Ask a workspace Owner to make this change.'
+      'Ask a workspace owner to make this change.'
     )
 }
 
@@ -132,11 +126,13 @@ export async function getSettingsForActor(
   settingsAreaSchema.parse(area)
   await requireAreaPermission(actor, area, executor)
   const row = await requireSettings(executor)
+  const managedName = area === 'portal' && parseIdentityProjection(row.cloudIdentity) !== null
   return {
     area,
     settings: areaValues(row, area),
-    settingsHref: AREAS[area].href,
-    ...(area === 'portal' ? { readOnly: parseIdentityProjection(row.cloudIdentity) !== null } : {}),
+    // An operator-managed name is shown, read-only, on General.
+    settingsHref: managedName ? '/admin/settings/general' : AREAS[area].href,
+    ...(area === 'portal' ? { readOnly: managedName } : {}),
     ...(area === 'branding' ? { logoUrl: getPublicUrlOrNull(row.logoKey) } : {}),
   }
 }

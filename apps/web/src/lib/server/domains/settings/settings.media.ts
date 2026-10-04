@@ -1,4 +1,3 @@
-import { brandingConfigSchema } from '@/lib/shared/schemas/settings'
 import { db, eq, settings } from '@/lib/server/db'
 import { deleteObject } from '@/lib/server/storage/s3'
 import { ValidationError } from '@/lib/shared/errors'
@@ -38,7 +37,6 @@ export async function updateBrandingConfig(
 ): Promise<BrandingConfig> {
   log.info('update branding config')
   try {
-    config = brandingConfigSchema.parse(config)
     // Setting custom theme colors (light/dark overrides) is gated.
     // Preset and themeMode swaps don't count as colour customisation —
     // they pick from the curated set the workspace already has access to.

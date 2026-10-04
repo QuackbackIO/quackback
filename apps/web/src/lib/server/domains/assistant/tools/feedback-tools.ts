@@ -19,6 +19,7 @@ import {
 import { listInboxPosts } from '@/lib/server/domains/posts/post.inbox'
 import { getBaseUrl } from '@/lib/server/config'
 import type { AssistantToolContext } from '../assistant.toolspec'
+import { notTestPrincipal } from '@/lib/server/test-data'
 import { RETRIEVED_CONTENT_NOTE } from '../injection-guard'
 // Zod 4.5+ requires seconds (`2020-01-01T06:15:00Z`). LLMs often omit them.
 // The documented union restores the 4.4 default: both precisions, Z only,
@@ -92,6 +93,7 @@ export async function executeListFeedback(
     dateFrom: args.since ? new Date(args.since) : undefined,
     sort: args.sort === 'votes' ? 'votes' : 'newest',
     limit: args.limit,
+    excludeTest: true,
   })
   const statuses = await db.query.postStatuses.findMany()
   const names = new Map(statuses.map((status) => [status.id, status.name]))
@@ -173,6 +175,7 @@ export async function executeFeedbackStats(
         isNull(posts.deletedAt),
         isNull(boards.deletedAt),
         isNull(posts.canonicalPostId),
+        notTestPrincipal(posts.principalId),
         args.since ? gte(posts.createdAt, new Date(args.since)) : undefined
       )
     )

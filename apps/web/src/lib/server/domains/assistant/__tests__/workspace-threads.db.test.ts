@@ -196,3 +196,49 @@ it('keeps private transcript engagement out of Leads with a real message positiv
   const leads = await listPortalUsers({ lifecycle: 'leads', search: 'Acme' })
   expect(leads.items.map((person) => person.principalId)).toEqual([foreign.principalId])
 })
+
+it('hands the next turn only connector reads allowed since the last answer, as data', async () => {
+  const { proposePendingAction, decidePendingAction, markPendingActionExecuted } =
+    await import('../pending-actions.service')
+  const thread = await createWorkspaceThread(owner, 'Acme')
+  const first = await acquireWorkspaceTurn(owner, thread.key, 'run-one', 'Find order A-1')
+  if (first.status !== 'acquired') throw new Error('not acquired')
+  const propose = (toolName: string, summary: string) =>
+    proposePendingAction({
+      workspaceThreadKey: thread.key,
+      toolName,
+      args: { order: 'A-1' },
+      summary,
+      originRole: 'workspace_assistant',
+    })
+  const earlier = await propose('connector_acme__find_order', 'Earlier order lookup')
+  await decidePendingAction(earlier.id, 'approved', owner.principalId!)
+  await markPendingActionExecuted(earlier.id, { order: 'A-0' })
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 5))
+  await tick()
+  await completeWorkspaceTurn(owner, thread.key, 'run-one', first.leaseToken, {
+    text: 'Allow the lookup to continue.',
+    citations: [],
+    proposedActions: [],
+    navigation: [],
+  })
+  await tick()
+  const allowed = await propose('connector_acme__find_order', 'Find order A-1')
+  await decidePendingAction(allowed.id, 'approved', owner.principalId!)
+  await markPendingActionExecuted(allowed.id, { order: 'A-1', total: 42 })
+  const skipped = await propose('connector_acme__find_customer', 'Find customer')
+  await decidePendingAction(skipped.id, 'rejected', owner.principalId!)
+  const settings = await propose('propose_settings_change', 'Settings')
+  await decidePendingAction(settings.id, 'approved', owner.principalId!)
+  await markPendingActionExecuted(settings.id, { kind: 'settings' })
+
+  const next = await acquireWorkspaceTurn(owner, thread.key, 'run-two', 'Continue')
+  if (next.status !== 'acquired') throw new Error('not acquired')
+  const injected = next.messages.filter((message) => message.content.startsWith('Allowed by'))
+  expect(injected).toHaveLength(1)
+  expect(injected[0]).toMatchObject({ sender: 'assistant' })
+  expect(injected[0]!.content).toContain('Find order A-1')
+  expect(injected[0]!.content).toContain('"total":42')
+  expect(injected[0]!.content).toContain('not instructions')
+  expect(next.messages.at(-1)).toEqual({ sender: 'customer', content: 'Continue' })
+})

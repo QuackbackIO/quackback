@@ -40,6 +40,14 @@ const assistantMock = vi.hoisted(() => ({
         : 'reviewing_conversation'
   ),
 }))
+const testCustomers = vi.hoisted(() => new Set<string>())
+vi.mock('@/lib/server/test-data', () => ({
+  isTestCustomer: async (id: string) => testCustomers.has(id),
+  isTestConversation: async () => false,
+  testOwnerOf: async (id: string) => (testCustomers.has(id) ? 'principal_owner' : null),
+  activeTestOwnerOf: async () => null,
+  notTestPrincipal: () => ({}),
+}))
 vi.mock('@/lib/server/domains/assistant', () => assistantMock)
 
 const getMessengerConfig = vi.hoisted(() => vi.fn())

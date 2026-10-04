@@ -20,11 +20,6 @@ import type {
 } from './conversation-attribute.types'
 import { logger } from '@/lib/server/logger'
 import { normalizeAttributeKey } from '@/lib/shared/normalize-attribute-key'
-import {
-  isProtectedTestAttributeKey,
-  RESERVED_TEST_ATTRIBUTE_CODE,
-  RESERVED_TEST_ATTRIBUTE_MESSAGE,
-} from '@/lib/shared/test-attributes'
 
 const log = logger.child({ component: 'conversation-attributes' })
 
@@ -158,9 +153,6 @@ export async function createConversationAttribute(
   try {
     const key = normalizeAttributeKey(input.key ?? '')
     if (!key) throw new ValidationError('VALIDATION_ERROR', 'Attribute key is required')
-    if (isProtectedTestAttributeKey(key)) {
-      throw new ValidationError(RESERVED_TEST_ATTRIBUTE_CODE, RESERVED_TEST_ATTRIBUTE_MESSAGE)
-    }
     if (!input.label?.trim()) {
       throw new ValidationError('VALIDATION_ERROR', 'Attribute label is required')
     }

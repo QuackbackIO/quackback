@@ -78,6 +78,7 @@ describe('wizard goals read and write', () => {
       supportInbox: true,
       supportTickets: true,
       helpCenter: true,
+      copilotHome: true,
     })
     expect(await testDb.query.boards.findMany()).toHaveLength(0)
   })
@@ -133,5 +134,33 @@ describe('wizard goals read and write', () => {
     expect(JSON.parse((await testDb.query.settings.findFirst())!.featureFlags!)).toEqual(
       DEFAULT_FEATURE_FLAGS
     )
+  })
+
+  it('keeps config-managed goals when the wizard saves without them and refuses a change', async () => {
+    await testDb.insert(settings).values({
+      name: 'Acme',
+      slug: 'acme',
+      createdAt: new Date(),
+      managedFieldPaths: ['workspace.useCase'],
+      setupState: JSON.stringify({
+        version: 2,
+        steps: { core: true, workspace: false, startingPoint: null },
+        useCase: 'customer_support',
+        goals: ['customer_support', 'help_center'],
+      }),
+      featureFlags: JSON.stringify(DEFAULT_FEATURE_FLAGS),
+    })
+    await expect(
+      saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme', goals: ['product_feedback'] } })
+    ).rejects.toThrow(/managed/)
+    await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme' } })
+    const row = await testDb.query.settings.findFirst()
+    expect(getSetupState(row!.setupState)).toMatchObject({
+      goals: ['customer_support', 'help_center'],
+      useCase: 'customer_support',
+      steps: { workspace: true },
+    })
+    expect(JSON.parse(row!.featureFlags!)).toMatchObject({ supportInbox: true, helpCenter: true })
+    expect(await testDb.query.boards.findMany()).toHaveLength(0)
   })
 })

@@ -66,7 +66,7 @@ import {
   type ResolveEmailAttachmentsOptions,
 } from './conversation.email-attachments'
 import { logger } from '@/lib/server/logger'
-import { isTestRecord } from '@/lib/server/test-data'
+import { testOwnerOf } from '@/lib/server/test-data'
 import { conversationTestDelivery } from './conversation.test-delivery'
 
 const log = logger.child({ component: 'conversation-notify' })
@@ -254,9 +254,8 @@ export async function notifyVisitorMessage(opts: {
   attachments?: ConversationAttachment[]
 }): Promise<void> {
   try {
-    const test = isTestRecord(opts.conversation.customAttributes)
-    const testOwner = opts.conversation.customAttributes?.testOwnerPrincipalId
-    if (test && typeof testOwner !== 'string') return
+    // A test thread alerts only the teammate who owns its test customer.
+    const testOwner = await testOwnerOf(opts.conversation.visitorPrincipalId)
 
     const agentsOnline = await isAnyAgentOnline()
     // Avoid email spam: only email the team on the first message of a
@@ -285,7 +284,7 @@ export async function notifyVisitorMessage(opts: {
         and(
           eq(principal.type, 'user'),
           inArray(principal.role, ['admin', 'member']),
-          test ? eq(principal.id, testOwner as PrincipalId) : undefined
+          testOwner ? eq(principal.id, testOwner) : undefined
         )
       )
 

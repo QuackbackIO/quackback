@@ -4,7 +4,6 @@ import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { GoalSelector } from '@/components/onboarding/goal-selector'
 import { getSetupState, type OnboardingOutcome } from '@/lib/shared/db-types'
-import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { saveWorkspaceAndGoalFn } from '@/lib/server/functions/onboarding'
@@ -21,11 +20,18 @@ const DRAFT_KEY = 'quackback:onboarding:workspace-name'
 
 type CloudIdentity = NonNullable<Awaited<ReturnType<typeof getCloudIdentityFn>>>
 
+/** The goals already in setup state: a config file's, or an earlier save's. */
+export interface WorkspaceSetupGoals {
+  goals?: OnboardingOutcome[]
+  feedbackPrivate?: boolean
+}
+
 export interface WorkspaceStepProps {
   isCloudProvisioned: boolean
   cloudIdentity: CloudIdentity | null
   existingWorkspaceName: string
   managedFieldPaths: string[]
+  setupGoals?: WorkspaceSetupGoals
 }
 
 export function WorkspaceStep({
@@ -33,12 +39,14 @@ export function WorkspaceStep({
   cloudIdentity,
   existingWorkspaceName,
   managedFieldPaths,
+  setupGoals,
 }: WorkspaceStepProps) {
   if (!isCloudProvisioned) {
     return (
       <WorkspaceNameStep
         existingWorkspaceName={existingWorkspaceName}
         managedFieldPaths={managedFieldPaths}
+        setupGoals={setupGoals}
       />
     )
   }
@@ -201,15 +209,18 @@ export function CloudWorkspaceDetailsForm(props: {
 function WorkspaceNameStep({
   existingWorkspaceName,
   managedFieldPaths,
+  setupGoals,
 }: {
   existingWorkspaceName: string
   managedFieldPaths: string[]
+  setupGoals?: WorkspaceSetupGoals
 }) {
   const intl = useIntl()
-  const settings = useWorkspaceSettings()
-  const setup = getSetupState(settings?.settings?.setupState ?? null)
-  const [goals, setGoals] = useState<OnboardingOutcome[]>(setup?.goals ?? ['product_feedback'])
-  const [feedbackPrivate, setFeedbackPrivate] = useState(setup?.feedbackPrivate ?? false)
+  const goalsManaged = isPathManagedFromBootstrap('workspace.useCase', managedFieldPaths)
+  const [goals, setGoals] = useState<OnboardingOutcome[]>(
+    setupGoals?.goals?.length || goalsManaged ? (setupGoals?.goals ?? []) : ['product_feedback']
+  )
+  const [feedbackPrivate, setFeedbackPrivate] = useState(setupGoals?.feedbackPrivate ?? false)
   const navigate = useNavigate()
   const nameManaged = isPathManagedFromBootstrap(MANAGED_PATHS.WORKSPACE_NAME, managedFieldPaths)
 
@@ -217,7 +228,6 @@ function WorkspaceNameStep({
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const nameValid = workspaceName.trim().length >= 2
-  const goalsManaged = isPathManagedFromBootstrap('workspace.useCase', managedFieldPaths)
 
   useEffect(() => {
     try {
@@ -259,8 +269,11 @@ function WorkspaceNameStep({
     setIsLoading(true)
     setError('')
     try {
+      // A config file owns managed goals: sending them would only be refused.
       const result = await saveWorkspaceAndGoalFn({
-        data: { workspaceName: workspaceName.trim(), goals, feedbackPrivate },
+        data: goalsManaged
+          ? { workspaceName: workspaceName.trim() }
+          : { workspaceName: workspaceName.trim(), goals, feedbackPrivate },
       })
       toastEnabledModules(result.enabledModules)
       localStorage.removeItem(DRAFT_KEY)
@@ -323,7 +336,8 @@ function WorkspaceNameStep({
         onGoalsChange={setGoals}
         feedbackPrivate={feedbackPrivate}
         onPrivateChange={setFeedbackPrivate}
-        disabled={isLoading || goalsManaged}
+        disabled={isLoading}
+        managed={goalsManaged}
       />
 
       <div aria-live="polite" aria-atomic="true">
@@ -340,7 +354,7 @@ function WorkspaceNameStep({
       <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 p-4 sm:static sm:border-0 sm:bg-transparent sm:p-0">
         <Button
           type="submit"
-          disabled={isLoading || !nameValid || goals.length === 0}
+          disabled={isLoading || !nameValid || (!goalsManaged && goals.length === 0)}
           className="mx-auto h-11 w-full max-w-sm"
         >
           {isLoading ? (

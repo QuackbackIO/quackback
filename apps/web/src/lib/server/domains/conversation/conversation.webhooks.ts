@@ -20,7 +20,7 @@ import type {
   EventMessageData,
 } from '@/lib/server/events/types'
 import { realEmail } from '@/lib/shared/anonymous-email'
-import { isTestRecord } from '@/lib/server/test-data'
+import { isTestCustomer } from '@/lib/server/test-data'
 import {
   dispatchConversationCreated,
   dispatchConversationStatusChanged,
@@ -108,7 +108,7 @@ export async function emitConversationCreated(
       await import('@/lib/server/domains/settings/settings.sla-default')
     const { applySlaToConversation } = await import('@/lib/server/domains/sla/sla.service')
     const { policyId } = await getDefaultSlaPolicySettings()
-    if (!policyId || isTestRecord(conversation.customAttributes)) return
+    if (!policyId || (await isTestCustomer(conversation.visitorPrincipalId))) return
     await applySlaToConversation(conversation.id as ConversationId, policyId as SlaPolicyId)
   })
   await safe('conversation.created', () =>

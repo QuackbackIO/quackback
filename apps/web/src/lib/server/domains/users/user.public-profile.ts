@@ -41,7 +41,7 @@ import { realEmail } from '@/lib/shared/anonymous-email'
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 import { postViewFilter, type Actor } from '@/lib/server/policy'
 import { logger } from '@/lib/server/logger'
-import { notTestPrincipal, notTestRecord } from '@/lib/server/test-data'
+import { notTestPrincipal } from '@/lib/server/test-data'
 
 const log = logger.child({ component: 'user-public-profile' })
 
@@ -147,11 +147,7 @@ export async function getPublicUserProfile(
     // (anonymous/authenticated/segments/team) + moderation state, from the
     // VIEWER's perspective. Requires the boards join (boardViewFilter reads
     // boards.access) — postViewFilter's own contract.
-    const viewerFilter = and(
-      postViewFilter(actor),
-      notTestRecord(posts.widgetMetadata),
-      notTestPrincipal(posts.principalId)
-    )
+    const viewerFilter = and(postViewFilter(actor), notTestPrincipal(posts.principalId))
 
     const activityColumns = {
       postId: posts.id,

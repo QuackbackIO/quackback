@@ -4,6 +4,7 @@ import {
   DEFAULT_PORTAL_CONFIG,
   DEFAULT_WIDGET_CONFIG,
   featureFlagsForUseCase,
+  NEW_WORKSPACE_FEATURE_FLAGS,
 } from '@/lib/server/domains/settings/settings.types'
 import { DEFAULT_ASSISTANT_CONFIG } from '@/lib/shared/assistant/config'
 import { getSetupState } from '@/lib/shared/db-types'
@@ -84,9 +85,10 @@ export function makeReconcileDeps(): ReconcileDeps {
           portalConfig: JSON.stringify(DEFAULT_PORTAL_CONFIG),
           widgetConfig: JSON.stringify(DEFAULT_WIDGET_CONFIG),
           assistantConfig: DEFAULT_ASSISTANT_CONFIG,
-          featureFlags: JSON.stringify(
-            featureFlagsForUseCase(getSetupState(insert.setupState ?? null)?.useCase)
-          ),
+          featureFlags: JSON.stringify({
+            ...featureFlagsForUseCase(getSetupState(insert.setupState ?? null)?.useCase),
+            copilotHome: NEW_WORKSPACE_FEATURE_FLAGS.copilotHome,
+          }),
         })
         .onConflictDoNothing({ target: settings.slug })
     },

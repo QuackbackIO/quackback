@@ -7,7 +7,7 @@
  */
 import { z } from 'zod'
 import { RETRIEVED_CONTENT_NOTE } from '../injection-guard'
-import { WORKSPACE_THREAD_PREFIX } from '../workspace-safety'
+import { isHomeTurn } from '../workspace-safety'
 import { toolDefinition } from '@tanstack/ai'
 import { eq } from 'drizzle-orm'
 import { db as defaultDb, connectors, type CachedConnectorTool } from '@/lib/server/db'
@@ -136,7 +136,7 @@ export function buildConnectorToolSpec(
             ok: result.ok,
             error: result.ok ? undefined : result.note,
           })
-          return ctx.workspaceThreadKey?.startsWith(WORKSPACE_THREAD_PREFIX)
+          return isHomeTurn(ctx)
             ? { ...result, note: [result.note, RETRIEVED_CONTENT_NOTE].filter(Boolean).join(' ') }
             : result
         } finally {

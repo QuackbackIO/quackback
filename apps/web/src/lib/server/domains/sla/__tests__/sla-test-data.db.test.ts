@@ -91,12 +91,14 @@ beforeEach(async () => {
     .insert(conversations)
     .values([
       { visitorPrincipalId: customer, channel: 'messenger', customAttributes: {} },
+      // A test customer thread is test whatever its attributes claim...
+      { visitorPrincipalId: customer, channel: 'messenger', customAttributes: { test: 'false' } },
+      // ...and a real visitor's legacy client marker changes nothing.
       {
-        visitorPrincipalId: owner,
+        visitorPrincipalId: ordinary,
         channel: 'messenger',
         customAttributes: { test: true, testOwnerPrincipalId: owner },
       },
-      { visitorPrincipalId: ordinary, channel: 'messenger', customAttributes: {} },
     ])
     .returning()
   testId = test.id
@@ -133,7 +135,7 @@ async function stored(id: ConversationId) {
     .slaApplied
 }
 
-it('rejects direct SLA application to both test identities and marked teammate conversations', async () => {
+it('rejects direct SLA application to test-customer conversations whatever their attributes', async () => {
   await expect(applySlaToConversation(testId, policyId, started)).rejects.toThrow(/unavailable/i)
   await expect(applySlaToConversation(teamTestId, policyId, started)).rejects.toThrow(
     /unavailable/i

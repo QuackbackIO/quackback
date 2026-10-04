@@ -1,10 +1,5 @@
 import { RETRIEVED_CONTENT_NOTE } from './injection-guard'
-import {
-  isWorkspaceToolAllowed,
-  isWorkspaceMutationAllowed,
-  workspaceProposalMode,
-  WORKSPACE_THREAD_PREFIX,
-} from './workspace-safety'
+import { isHomeTurn, isWorkspaceToolAllowed, workspaceProposalMode } from './workspace-safety'
 import { toolPermissions } from './tool-permissions'
 /**
  * Quinn's tool-execution pipeline: assembles the tool catalogue
@@ -23,6 +18,7 @@ import { toolPermissions } from './tool-permissions'
  * instead.
  */
 import { createHash } from 'node:crypto'
+import { toolDefinition } from '@tanstack/ai'
 import { DomainException } from '@/lib/shared/errors'
 import { can } from '@/lib/server/policy/authorize'
 import { logger } from '@/lib/server/logger'
@@ -54,26 +50,41 @@ function withDynamicPromptGuidance(
   specs: AssistantToolSpec[],
   ctx: AssistantToolContext
 ): AssistantToolSpec[] {
-  const enumeration = describeEnabledKnowledgeSources(ctx.knowledge.sources)
-  if (ctx.workspaceThreadKey?.startsWith(WORKSPACE_THREAD_PREFIX))
-    return specs.map((spec) =>
-      spec.risk === 'write'
-        ? {
-            ...spec,
-            promptGuidance: `${spec.description} Calling this tool files a proposal. Nothing changes until the teammate clicks Apply.`,
-          }
-        : spec
-    )
-  if (!enumeration) return specs
-  return specs.map((spec) =>
-    spec.name === 'search'
+  const home = isHomeTurn(ctx)
+  const enumeration = describeEnabledKnowledgeSources(ctx.knowledge.sources, home)
+  return specs.map((spec) => {
+    if (home && spec.risk === 'write')
+      return {
+        ...spec,
+        promptGuidance: `${spec.description} Calling this tool files a proposal. Nothing changes until the teammate clicks Apply.`,
+      }
+    if (home && spec.connector)
+      return {
+        ...spec,
+        promptGuidance: `${spec.promptGuidance} Each call waits for the teammate to Allow or Skip it.`,
+      }
+    const knowledgeSearch = spec.name === knowledgeSearchToolName(ctx)
+    return knowledgeSearch && enumeration
       ? { ...spec, promptGuidance: `${spec.promptGuidance} ${enumeration}` }
       : spec
-  )
+  })
+}
+
+const HOME_KNOWLEDGE_SEARCH = 'search_knowledge'
+const HOME_KNOWLEDGE_DESCRIPTION =
+  'Search the enabled workspace knowledge sources the current viewer can see.'
+const HOME_KNOWLEDGE_GUIDANCE =
+  'Call before answering anything factual or product-related; refine the query once more if the first search misses, then answer with what you have. Cite only the source types and ids it returns.'
+
+/** The knowledge retrieval tool's name for this turn's role and surface. */
+export function knowledgeSearchToolName(ctx: Pick<AssistantToolContext, 'role' | 'agentKind'>) {
+  return isHomeTurn(ctx) ? HOME_KNOWLEDGE_SEARCH : 'search'
 }
 
 const PENDING_APPROVAL_NOTE =
   'A teammate must approve this action; tell the customer it has been requested.'
+const CONNECTOR_ALLOW_NOTE =
+  'The teammate sees an Allow or Skip card for this call. Say what you want to look up and stop; nothing was fetched yet.'
 const DENIED_NOTE = 'This action is not permitted for the assistant.'
 const DUPLICATE_NOTE = 'This action was already performed for this message.'
 const FAILED_NOTE = 'This action could not be completed.'
@@ -108,8 +119,7 @@ export function resolveEffectiveToolMode(
   spec: AssistantToolSpec,
   ctx: AssistantToolContext
 ): ToolExecutionMode {
-  if (workspaceProposalMode({ ...ctx, risk: spec.risk, approvalPolicy: spec.approvalPolicy }))
-    return 'propose'
+  if (workspaceProposalMode({ ...ctx, name: spec.name, risk: spec.risk })) return 'propose'
   if (spec.risk === 'control') return 'autonomous'
   if (spec.approvalPolicy === 'always') return 'autonomous'
   if (spec.approvalPolicy === 'approval') return 'propose'
@@ -213,19 +223,7 @@ async function runWithPipeline(
     return { simulated: true, summary: spec.summarize(args, ctx) }
   }
 
-  if (
-    ctx.workspaceThreadKey?.startsWith(WORKSPACE_THREAD_PREFIX) &&
-    spec.risk === 'write' &&
-    !isWorkspaceMutationAllowed(spec.name, args)
-  ) {
-    return { status: 'denied', note: 'Open the relevant settings page to make this change.' }
-  }
-
-  if (
-    mode === 'propose' &&
-    spec.name === 'propose_settings_change' &&
-    ctx.workspaceThreadKey?.startsWith(WORKSPACE_THREAD_PREFIX)
-  ) {
+  if (mode === 'propose' && spec.name === 'propose_settings_change' && isHomeTurn(ctx)) {
     const { enqueueWorkspaceSettingsProposal } =
       await import('./workspace-settings-actions.service')
     const { settingsProposalInputSchema } =
@@ -235,7 +233,7 @@ async function runWithPipeline(
       pending = await enqueueWorkspaceSettingsProposal(
         ctx.actor,
         settingsProposalInputSchema.parse(args).changes,
-        ctx.workspaceThreadKey,
+        ctx.workspaceThreadKey!,
         ctx.latestCustomerMessageId ?? undefined
       )
     } catch (error) {
@@ -312,7 +310,10 @@ async function runWithPipeline(
         : {}),
     })
     ctx.ledger.toolOutcomes.push({ name: spec.name, outcome: 'proposed' })
-    return { status: 'pending_approval', note: PENDING_APPROVAL_NOTE }
+    return {
+      status: 'pending_approval',
+      note: spec.connector && isHomeTurn(ctx) ? CONNECTOR_ALLOW_NOTE : PENDING_APPROVAL_NOTE,
+    }
   }
 
   // mode === 'autonomous' from here: simulate and propose both returned above.
@@ -355,11 +356,7 @@ async function runWithPipeline(
     name: spec.name,
     outcome: settled.ok ? (spec.risk === 'read' ? 'read' : 'executed') : 'failed',
   })
-  if (
-    settled.ok &&
-    ctx.workspaceThreadKey?.startsWith(WORKSPACE_THREAD_PREFIX) &&
-    (spec.risk === 'read' || spec.name === 'use_skill')
-  ) {
+  if (settled.ok && isHomeTurn(ctx) && (spec.risk === 'read' || spec.name === 'use_skill')) {
     const data =
       settled.result && typeof settled.result === 'object' && !Array.isArray(settled.result)
         ? (settled.result as Record<string, unknown>)
@@ -494,12 +491,19 @@ export async function assembleAssistantToolset(
   // must not reach mode resolution, proposal, or the model at all on a
   // ticket-scoped turn. See `parents`'s own doc on AssistantToolSpec.
   const parentKind = turnParentKind(ctx)
-  const workspaceKeepBuiltins = new Set(['get_status', 'report_inability', 'use_skill'])
+  const home = isHomeTurn(ctx)
+  // Knowledge search (help center, internal notes, past conversations) is for
+  // the Home chat only; the workspace assistant elsewhere keeps its catalogue.
+  const workspaceKeepBuiltins = new Set([
+    ...(home ? ['search'] : []),
+    'get_status',
+    'report_inability',
+    'use_skill',
+  ])
   const fitsParent = (spec: AssistantToolSpec) =>
     spec.parents.includes(parentKind) &&
     (spec.availableWhen?.(ctx) ?? true) &&
-    (!ctx.workspaceThreadKey?.startsWith(WORKSPACE_THREAD_PREFIX) ||
-      isWorkspaceToolAllowed(spec.name, spec.risk))
+    (!home || isWorkspaceToolAllowed(spec.name, spec.risk))
   const availableBuiltin = (spec: AssistantToolSpec) =>
     fitsParent(spec) && (ctx.role !== 'workspace_assistant' || workspaceKeepBuiltins.has(spec.name))
 
@@ -514,7 +518,23 @@ export async function assembleAssistantToolset(
   )
   const connectorActiveSpecs = connectorActive.map((entry) => entry.spec)
 
-  const resolvedSpecs = (specs ?? resolveToolSpecs()).filter(availableBuiltin)
+  const resolvedSpecs = (specs ?? resolveToolSpecs()).filter(availableBuiltin).map((spec) => {
+    if (!home || spec.name !== 'search') return spec
+    // On Home, `search` is the entity search; knowledge retrieval keeps its
+    // schema and pipeline under its own name and describes every source.
+    return {
+      ...spec,
+      name: HOME_KNOWLEDGE_SEARCH,
+      description: HOME_KNOWLEDGE_DESCRIPTION,
+      promptGuidance: HOME_KNOWLEDGE_GUIDANCE,
+      definition: toolDefinition({
+        name: HOME_KNOWLEDGE_SEARCH,
+        description: HOME_KNOWLEDGE_DESCRIPTION,
+        inputSchema: spec.definition.inputSchema,
+        outputSchema: spec.definition.outputSchema,
+      }),
+    }
+  })
   const builtInTools = resolvedSpecs.map((spec) => {
     const mode = resolveEffectiveToolMode(spec, ctx)
     return spec.definition.server<AssistantToolContext>((args) =>

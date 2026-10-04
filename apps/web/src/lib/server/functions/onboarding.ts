@@ -27,10 +27,9 @@ import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.
 import { DEFAULT_ASSISTANT_CONFIG } from '@/lib/shared/assistant/config'
 import {
   DEFAULT_AUTH_CONFIG,
-  DEFAULT_FEATURE_FLAGS,
+  NEW_WORKSPACE_FEATURE_FLAGS,
   DEFAULT_PORTAL_CONFIG,
   DEFAULT_WIDGET_CONFIG,
-  flagsForGoal,
   flagsForGoals,
   resolveFeatureFlags,
 } from '@/lib/server/domains/settings/settings.types'
@@ -43,7 +42,11 @@ import {
   finishIdentityOnboarding,
   mutateSetupStateAtomic,
 } from '@/lib/server/setup-state'
-import { prepareOnboardingBoard } from '@/lib/server/onboarding-board'
+import {
+  applyOnboardingGoals,
+  prepareOnboardingBoard,
+  setupGoals,
+} from '@/lib/server/onboarding-board'
 import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/identity-projection'
 
 const log = logger.child({ component: 'onboarding' })
@@ -271,7 +274,7 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
           },
           useCase
         )
-        const { flags, enabledModules } = flagsForGoals(DEFAULT_FEATURE_FLAGS, goals)
+        const { flags, enabledModules } = flagsForGoals(NEW_WORKSPACE_FEATURE_FLAGS, goals)
         const created = await db.transaction(async (tx) => {
           const [row] = await tx
             .insert(settings)
@@ -380,57 +383,6 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
     }
   )
 
-const saveCloudOnboardingGoalSchema = z.object({ useCase: z.enum(ONBOARDING_OUTCOMES) }).strict()
-
-/** Save only the outcome for a control-plane-provisioned workspace. */
-export const saveCloudOnboardingGoalFn = createServerFn({ method: 'POST' })
-  .validator(saveCloudOnboardingGoalSchema)
-  .handler(async ({ data }) => {
-    const session = await getSession()
-    if (!session?.user) throw new Error('Authentication required')
-    if (session.session.scope !== 'dashboard') throw new Error('Only admin can change setup')
-    const caller = await db.query.principal.findFirst({
-      where: eq(principal.userId, session.user.id as UserId),
-    })
-    if (!caller || !isAdmin(caller.role)) throw new Error('Only admin can change setup')
-
-    const { state, value } = await mutateSetupStateAtomic(async (current, row, tx) => {
-      if (!parseIdentityProjection(row.cloudIdentity)) {
-        throw new Error('Cloud workspace identity is not enabled')
-      }
-      if (!current.workspaceDetailsSeenAt) {
-        throw new Error('Set your workspace name and URL first')
-      }
-      const { flags, enabledModules } = flagsForGoal(
-        resolveFeatureFlags(row.featureFlags),
-        data.useCase
-      )
-      await tx
-        .update(settings)
-        .set({ featureFlags: JSON.stringify(flags) })
-        .where(eq(settings.id, row.id))
-      return {
-        state: applyDeferredLaunchStartingPoint(
-          { ...current, goals: [data.useCase] },
-          data.useCase
-        ),
-        value: { enabledModules },
-      }
-    })
-
-    const existingStatuses = await db.query.postStatuses.findFirst()
-    if (!existingStatuses) {
-      await db.insert(postStatuses).values(
-        DEFAULT_STATUSES.map((status) => ({
-          id: generateId('post_status') as PostStatusId,
-          ...status,
-          createdAt: new Date(),
-        }))
-      )
-    }
-    return { useCase: state.useCase!, enabledModules: value.enabledModules }
-  })
-
 /** Stamp default outcome, friendly-host details, and handoff so Home can open. */
 export const ensureOnboardingHomeReadyFn = createServerFn({ method: 'POST' }).handler(async () => {
   const session = await getSession()
@@ -449,23 +401,15 @@ export const ensureOnboardingHomeReadyFn = createServerFn({ method: 'POST' }).ha
 
   const { value } = await mutateSetupStateAtomic(async (current, row, tx) => {
     const now = new Date().toISOString()
-    const goals = current.goals?.length ? current.goals : [current.useCase ?? 'product_feedback']
-    const goal = goals[0]
+    const goals = setupGoals(current)
     let next: SetupState = { ...current, goals }
     let modulesChanged = false
     if (hasFriendlyHost && !current.workspaceDetailsSeenAt) {
       next = { ...next, workspaceDetailsSeenAt: now }
     }
     if (!next.steps.startingPoint || next.steps.startingPoint.source === 'managed') {
-      const before = resolveFeatureFlags(row.featureFlags)
-      const { flags } = flagsForGoals(before, goals)
-      modulesChanged = JSON.stringify(flags) !== JSON.stringify(before)
-      await tx
-        .update(settings)
-        .set({ featureFlags: JSON.stringify(flags) })
-        .where(eq(settings.id, row.id))
-      await prepareOnboardingBoard(tx, next)
-      next = applyDeferredLaunchStartingPoint(next, goal, now)
+      ;({ modulesChanged } = await applyOnboardingGoals(tx, row, next))
+      next = applyDeferredLaunchStartingPoint(next, goals[0], now)
     }
     if (!next.activationHandoffSeenAt) {
       next = { ...next, activationHandoffSeenAt: now }

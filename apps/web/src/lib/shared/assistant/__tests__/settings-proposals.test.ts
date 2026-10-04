@@ -80,27 +80,17 @@ describe('settings proposals', () => {
       }).success
     ).toBe(false)
   })
-  it('accepts the existing theme variables and rejects injected font and shadow CSS', () => {
-    expect(
-      updateThemeSchema.parse({
-        brandingConfig: {
-          light: {
-            success: '#22c55e',
-            accentInk: '#111111',
-            fontSans: '"Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif',
-            shadow: '0px 1px 2px 0px rgb(0 0 0 / 0.05)',
-            shadow2xs: '0 0 0 0 transparent',
-          },
-        },
-      }).brandingConfig.light
-    ).toMatchObject({ success: '#22c55e', accentInk: '#111111' })
+  it('rejects injected font and shadow CSS in model branding patches', () => {
     for (const light of [
       { fontSans: 'Inter; } body { display: none' },
       { fontSans: 'url(https://example.com/font)' },
+      { primary: 'var(--unsafe)' },
+      { radius: '1rem; color: red' },
       { shadow: '0px 1px; background: url(https://example.com/image)' },
-      { shadow: 'var(--unsafe-shadow)' },
     ]) {
-      expect(updateThemeSchema.safeParse({ brandingConfig: { light } }).success).toBe(false)
+      expect(
+        settingsChangeInputSchema.safeParse({ area: 'branding', patch: { light } }).success
+      ).toBe(false)
     }
   })
   it('uses a strict typed patch for each area', () => {
@@ -168,6 +158,26 @@ describe('settings proposals', () => {
         },
       })
     ).toMatchObject({ area: 'branding', patch: { light: { primary: '#0F766E' } } })
+  })
+  it('takes a partial office hours patch without restating or defaulting the rest', () => {
+    expect(
+      settingsChangeInputSchema.parse({ area: 'office_hours', patch: { enabled: true } })
+    ).toEqual({ area: 'office_hours', patch: { enabled: true } })
+    expect(
+      settingsChangeInputSchema.parse({
+        area: 'office_hours',
+        patch: { intervals: [{ day: 1, start: '09:00', end: '17:00' }] },
+      }).patch
+    ).toEqual({ intervals: [{ day: 1, start: '09:00', end: '17:00' }] })
+    expect(
+      settingsChangeInputSchema.safeParse({
+        area: 'office_hours',
+        patch: { timezone: 'Not/AZone' },
+      }).success
+    ).toBe(false)
+    expect(
+      settingsChangeInputSchema.safeParse({ area: 'office_hours', patch: { open: true } }).success
+    ).toBe(false)
   })
   it('selects stored changes without accepting a client patch', () => {
     const proposal = settingsProposalSchema.parse({ kind: 'settings', version: 1, changes })

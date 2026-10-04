@@ -51,7 +51,6 @@ export async function assertPostViewable(postId: PostId, actor: Actor): Promise<
     .select({
       moderationState: posts.moderationState,
       principalId: posts.principalId,
-      widgetMetadata: posts.widgetMetadata,
       access: boards.access,
     })
     .from(posts)
@@ -76,7 +75,6 @@ export async function assertPostViewable(postId: PostId, actor: Actor): Promise<
     {
       moderationState: row.moderationState,
       principalId: row.principalId,
-      widgetMetadata: row.widgetMetadata,
     },
     { access: row.access }
   )
@@ -102,7 +100,6 @@ export async function assertPostVotable(postId: PostId, actor: Actor): Promise<v
     .select({
       moderationState: posts.moderationState,
       principalId: posts.principalId,
-      widgetMetadata: posts.widgetMetadata,
       access: boards.access,
     })
     .from(posts)
@@ -127,7 +124,6 @@ export async function assertPostVotable(postId: PostId, actor: Actor): Promise<v
     {
       moderationState: row.moderationState,
       principalId: row.principalId,
-      widgetMetadata: row.widgetMetadata,
     },
     { access: row.access }
   )
@@ -140,7 +136,6 @@ export async function assertPostVotable(postId: PostId, actor: Actor): Promise<v
       {
         moderationState: row.moderationState,
         principalId: row.principalId,
-        widgetMetadata: row.widgetMetadata,
       },
       { access: row.access }
     )
@@ -170,7 +165,6 @@ export async function assertCommentViewable(commentId: PostCommentId, actor: Act
       isPrivate: postComments.isPrivate,
       postModerationState: posts.moderationState,
       postPrincipalId: posts.principalId,
-      widgetMetadata: posts.widgetMetadata,
       access: boards.access,
     })
     .from(postComments)
@@ -205,7 +199,6 @@ export async function assertCommentViewable(commentId: PostCommentId, actor: Act
     {
       moderationState: row.postModerationState,
       principalId: row.postPrincipalId,
-      widgetMetadata: row.widgetMetadata,
     },
     { access: row.access }
   )

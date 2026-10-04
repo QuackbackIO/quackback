@@ -19,12 +19,22 @@ export const SETTINGS_AREAS = [
 ] as const
 export const settingsAreaSchema = z.enum(SETTINGS_AREAS)
 export type SettingsArea = z.infer<typeof settingsAreaSchema>
+const officeHoursShape = officeHoursScheduleSchema.shape
+/** Only the office hours fields a request names; Apply merges them onto the schedule. */
+const officeHoursPatchSchema = z
+  .object({
+    enabled: officeHoursShape.enabled.optional(),
+    timezone: officeHoursShape.timezone.optional(),
+    intervals: officeHoursShape.intervals.optional(),
+    holidays: officeHoursShape.holidays.unwrap().optional(),
+  })
+  .strict()
 export const settingsPatchSchemas = {
   branding: brandingPatchSchema,
   portal: portalBasicsSchema,
   messenger: messengerBasicsSchema,
   modules: modulesSchema,
-  office_hours: officeHoursScheduleSchema.strict(),
+  office_hours: officeHoursPatchSchema,
   changelog: changelogSettingsSchema.strict(),
 } as const
 export const settingsChangeInputSchema = z.discriminatedUnion('area', [
@@ -77,6 +87,9 @@ const jsonValue: z.ZodType<unknown> = z.lazy(() =>
     z.record(z.string(), jsonValue),
   ])
 )
+/** What turning Messenger on or off writes besides the derived switch. */
+export const MESSENGER_EFFECTS = ['messengerTab', 'widget', 'supportInbox'] as const
+export type MessengerEffect = (typeof MESSENGER_EFFECTS)[number]
 const changeSchema = z
   .object({
     id: z.string(),
@@ -95,6 +108,7 @@ const changeSchema = z
     settingsHref: z.string().startsWith('/admin/settings/'),
     beforePreview: z.string().nullable().optional(),
     afterPreview: z.string().nullable().optional(),
+    effects: z.array(z.enum(MESSENGER_EFFECTS)).max(MESSENGER_EFFECTS.length).optional(),
   })
   .strict()
   .refine((change) => change.id === `${change.area}.${change.path.join('.')}`)

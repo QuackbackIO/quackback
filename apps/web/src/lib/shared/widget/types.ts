@@ -25,6 +25,10 @@ export interface WidgetEventMap {
     commentId: string
     parentId: string | null
   }
+  /** A test session's first message opened this conversation (test frames only). */
+  'conversation:started': {
+    id: string
+  }
   identify: {
     success: boolean
     user: { id: string; name: string; email: string } | null

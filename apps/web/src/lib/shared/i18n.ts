@@ -166,11 +166,30 @@ export function isViewerMessage(key: string): boolean {
   return VIEWER_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
 }
 
+/**
+ * Copilot and search strings. Their chunks (the Home chat and the search
+ * dialog) load them as they open (see `AskMessages`); only the sidebar Search
+ * row renders on every page, so its strings stay in the seed.
+ */
+export function isAskMessage(key: string): boolean {
+  return key.startsWith('ask.') && !key.startsWith('ask.search.')
+}
+
 /** A catalog without the viewer's strings, for seeding a page. */
 export function withoutViewerMessages(all: Record<string, string>): Record<string, string> {
   const subset: Record<string, string> = {}
   for (const [key, value] of Object.entries(all)) {
     if (!isViewerMessage(key)) subset[key] = value
+  }
+  return subset
+}
+
+/** The Copilot and search strings in a locale. */
+export async function loadAskMessages(locale: SupportedLocale): Promise<Record<string, string>> {
+  const all = await loadMessages(locale)
+  const subset: Record<string, string> = {}
+  for (const [key, value] of Object.entries(all)) {
+    if (isAskMessage(key)) subset[key] = value
   }
   return subset
 }
@@ -181,6 +200,61 @@ export async function loadViewerMessages(locale: SupportedLocale): Promise<Recor
   const subset: Record<string, string> = {}
   for (const [key, value] of Object.entries(all)) {
     if (isViewerMessage(key)) subset[key] = value
+  }
+  return subset
+}
+
+/**
+ * Key prefixes only the product tour's overlay renders. The tour opens on a
+ * click, so admin pages leave these out of the catalog they seed and the tour
+ * loads them as it starts (see `ProductTourProvider`). The tour's entry points
+ * (`onboarding.tour.replay`, `.offer`, `.notNow`) stay seeded.
+ */
+export const TOUR_MESSAGE_PREFIXES = [
+  'onboarding.tour.stop.',
+  'onboarding.tour.end.',
+  'onboarding.tour.count',
+  'onboarding.tour.skipTour',
+  'onboarding.tour.back',
+  'onboarding.tour.next',
+  'onboarding.tour.finish',
+] as const
+
+export function isTourMessage(key: string): boolean {
+  return TOUR_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
+}
+
+/** The product tour overlay's strings in a locale. */
+export async function loadTourMessages(locale: SupportedLocale): Promise<Record<string, string>> {
+  const all = await loadMessages(locale)
+  const subset: Record<string, string> = {}
+  for (const [key, value] of Object.entries(all)) {
+    if (isTourMessage(key)) subset[key] = value
+  }
+  return subset
+}
+
+/**
+ * Key prefixes only the onboarding wizard renders (it seeds its own slice,
+ * see {@link loadOnboardingMessages}); no admin page shows them.
+ */
+const WIZARD_ONLY_MESSAGE_PREFIXES = [
+  'onboarding.goals.',
+  'onboarding.workspace.',
+  'onboarding.error.',
+] as const
+
+/**
+ * The catalog an admin page seeds: everything but the strings that load with
+ * a lazy surface (the file viewer, the product tour, Copilot and search) and
+ * the wizard's own.
+ */
+export function adminSeedMessages(all: Record<string, string>): Record<string, string> {
+  const subset: Record<string, string> = {}
+  for (const [key, value] of Object.entries(all)) {
+    if (isViewerMessage(key) || isTourMessage(key) || isAskMessage(key)) continue
+    if (WIZARD_ONLY_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))) continue
+    subset[key] = value
   }
   return subset
 }
