@@ -228,7 +228,7 @@ describe('guided tour', () => {
     mount()
     await startTour()
     expect(dialog()).toHaveTextContent('Support. Messages from Messenger and email arrive here.')
-    expect(dialog()).toHaveTextContent('1 of 6')
+    expect(dialog()).toHaveTextContent('1 of 5')
   })
 
   it("runs a stop's Try it: the tour closes and the test opens", async () => {

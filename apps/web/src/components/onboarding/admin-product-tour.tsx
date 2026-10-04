@@ -42,14 +42,15 @@ export function AdminProductTourProvider({ children }: { children: ReactNode }) 
     []
   )
   const endAction = useCallback<TourEndAction>(
-    ({ feedbackPrivate, close }) => (
+    ({ goals, close }) => (
       <Suspense fallback={null}>
         <TourEndTestAction
-          feedbackPrivate={feedbackPrivate}
+          goals={goals}
           onOpen={(start) => {
             close()
             open(start)
           }}
+          onLeave={close}
         />
       </Suspense>
     ),

@@ -11,7 +11,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
  * count is right from the first stop and nothing waits on the page.
  */
 
-export const MAX_TOUR_STOPS = 6
+export const MAX_TOUR_STOPS = 5
 
 export type TourStopId =
   | 'copilot'
@@ -214,14 +214,14 @@ function moduleStop(key: ModuleKey, ctx: TourContext): TourStop {
 }
 
 /**
- * The tour for this workspace and viewer: Copilot when Home is the chat, one
- * stop per module that is on (the goals' modules first, then the most useful
- * others), Your portal, then Search. At most six; on a phone the sidebar is
- * out of view, so only Copilot remains.
+ * The tour for this workspace and viewer: one stop per module that is on (the
+ * goals' modules first, then the most useful others), Your portal, then
+ * Search. At most five, ending on the end card's one test action. Home is
+ * where the tour starts, so it has no stop of its own; on a phone the sidebar
+ * is out of view, so there is no tour.
  */
 export function resolveTourStops(ctx: TourContext): TourStop[] {
   const stops: TourStop[] = []
-  if (ctx.copilotOnHome === true) stops.push(stop('copilot', 'copilot', '/admin'))
   if (ctx.narrow) return stops
 
   const modules: ModuleKey[] = []

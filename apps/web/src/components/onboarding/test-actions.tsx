@@ -1,4 +1,6 @@
 import { FormattedMessage } from 'react-intl'
+import { Link } from '@tanstack/react-router'
+import type { OnboardingOutcome } from '@/lib/shared/db-types'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { usePermission } from '@/lib/client/hooks/use-permission'
@@ -26,17 +28,26 @@ export function useTestPaths(flags: Partial<FeatureFlags> | undefined): TestPath
   }
 }
 
+export type TourEnd =
+  { kind: 'test'; start: TryMessengerStart } | { kind: 'article' } | { kind: 'service' }
+
 /**
- * The tour end card's next step: a test message, or a test idea when the
- * workspace's feedback is private. An idea that cannot land falls back to a
- * message, and to nothing when neither works.
+ * The tour end card's one action, for the primary goal: a test idea for
+ * feedback, a test message for support, the first article for a help center
+ * and a service for a status page. A test that cannot work falls back to the
+ * other test, and to nothing when neither works.
  */
-export function tourTestStart(
-  paths: TestPaths,
-  feedbackPrivate: boolean
-): TryMessengerStart | null {
-  if (feedbackPrivate && paths.idea) return 'idea'
-  return paths.message ? 'message' : null
+export function tourEndAction(
+  goals: readonly OnboardingOutcome[],
+  paths: TestPaths
+): TourEnd | null {
+  const primary = goals[0] ?? 'product_feedback'
+  if (primary === 'help_center') return { kind: 'article' }
+  if (primary === 'status_page') return { kind: 'service' }
+  const order: TryMessengerStart[] =
+    primary === 'customer_support' ? ['message', 'idea'] : ['idea', 'message']
+  const start = order.find((candidate) => paths[candidate])
+  return start ? { kind: 'test', start } : null
 }
 
 /** The test that matches the automatic first-win step, when it will work. */
@@ -57,19 +68,41 @@ function TestActionLabel({ start }: { start: TryMessengerStart }) {
   )
 }
 
-/** The tour end card's test action; the admin layout loads it as the card opens. */
+/** The tour end card's one action; the admin layout loads it as the card opens. */
 export function TourEndTestAction({
-  feedbackPrivate,
+  goals,
   onOpen,
+  onLeave,
 }: {
-  feedbackPrivate: boolean
+  goals: readonly OnboardingOutcome[]
   onOpen: (start: TryMessengerStart) => void
+  /** Closes the end card before an action that opens a page. */
+  onLeave: () => void
 }) {
-  const start = tourTestStart(useTestPaths(useFeatureFlags()), feedbackPrivate)
-  if (!start) return null
+  const action = tourEndAction(goals, useTestPaths(useFeatureFlags()))
+  if (!action) return null
+  if (action.kind === 'test') {
+    const start = action.start
+    return (
+      <Button onClick={() => onOpen(start)}>
+        <TestActionLabel start={start} />
+      </Button>
+    )
+  }
   return (
-    <Button onClick={() => onOpen(start)}>
-      <TestActionLabel start={start} />
+    <Button asChild>
+      {action.kind === 'article' ? (
+        <Link to="/admin/help-center" onClick={onLeave}>
+          <FormattedMessage
+            id="onboarding.tour.stop.try.article"
+            defaultMessage="Write your first article"
+          />
+        </Link>
+      ) : (
+        <Link to="/admin/status" search={{ view: 'components' }} onClick={onLeave}>
+          <FormattedMessage id="onboarding.tour.stop.try.service" defaultMessage="Add a service" />
+        </Link>
+      )}
     </Button>
   )
 }

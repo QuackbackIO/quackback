@@ -42,7 +42,6 @@ describe('resolveTourStops', () => {
       'support:nav-support',
       'feedback:nav-feedback',
       'help-center:nav-help-center',
-      'roadmap:nav-roadmap',
       'view-portal:view-portal@/admin',
       'search:search',
     ])
@@ -54,20 +53,13 @@ describe('resolveTourStops', () => {
     }
   })
 
-  it('leads with Copilot on Home and keeps at most six stops, goal modules kept', () => {
+  it('keeps at most five stops, the goal module first, and no Home stop', () => {
     const stops = resolveTourStops(
       context({ copilotOnHome: true, goals: ['status_page'], modules: allOn })
     )
     expect(stops.length).toBe(MAX_TOUR_STOPS)
-    expect(MAX_TOUR_STOPS).toBe(6)
-    expect(ids(stops)).toEqual([
-      'copilot',
-      'status',
-      'feedback',
-      'support',
-      'view-portal',
-      'search',
-    ])
+    expect(MAX_TOUR_STOPS).toBe(5)
+    expect(ids(stops)).toEqual(['status', 'feedback', 'support', 'view-portal', 'search'])
   })
 
   it('shows modules switched on after setup', () => {
@@ -109,7 +101,7 @@ describe('resolveTourStops', () => {
     expect(full.feedback).toMatchObject({ kind: 'test', start: 'idea' })
     expect(full.support).toMatchObject({ kind: 'test', start: 'message' })
     expect(full['help-center']).toMatchObject({ kind: 'link', to: '/admin/help-center' })
-    expect(full.roadmap).toBeNull()
+    expect(tries(context()).roadmap).toBeNull()
     const none = tries(
       context({
         goals: ['customer_support'],
@@ -122,11 +114,10 @@ describe('resolveTourStops', () => {
     expect(Object.values(none).every((value) => value === null)).toBe(true)
   })
 
-  it('leaves sidebar stops out on a phone', () => {
+  it('has no stops on a phone, where the sidebar is behind the menu', () => {
     expect(
-      ids(resolveTourStops(context({ narrow: true, copilotOnHome: true, modules: allOn })))
-    ).toEqual(['copilot'])
-    expect(resolveTourStops(context({ narrow: true }))).toEqual([])
+      resolveTourStops(context({ narrow: true, copilotOnHome: true, modules: allOn }))
+    ).toEqual([])
   })
 })
 

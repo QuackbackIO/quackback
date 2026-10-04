@@ -75,7 +75,7 @@ vi.mock('../try-messenger-sheet', () => ({
 }))
 
 import { useProductTour } from '../product-tour'
-import { firstWinTestStart, tourTestStart } from '../test-actions'
+import { firstWinTestStart, tourEndAction } from '../test-actions'
 import {
   AdminProductTourProvider,
   OPEN_TRY_MESSENGER_EVENT as HOST_EVENT,
@@ -208,12 +208,20 @@ describe('the sheet host', () => {
 })
 
 describe('choosing the test action', () => {
-  it('ends the tour on a message, or an idea when feedback is private and an idea can land', () => {
-    expect(tourTestStart({ message: true, idea: true }, false)).toBe('message')
-    expect(tourTestStart({ message: true, idea: true }, true)).toBe('idea')
-    expect(tourTestStart({ message: true, idea: false }, true)).toBe('message')
-    expect(tourTestStart({ message: false, idea: false }, true)).toBeNull()
-    expect(tourTestStart({ message: false, idea: true }, false)).toBeNull()
+  it("ends the tour on the primary goal's one action, falling back to a test that works", () => {
+    const both = { message: true, idea: true }
+    expect(tourEndAction(['product_feedback'], both)).toEqual({ kind: 'test', start: 'idea' })
+    expect(tourEndAction(['customer_support', 'product_feedback'], both)).toEqual({
+      kind: 'test',
+      start: 'message',
+    })
+    expect(tourEndAction(['product_feedback'], { message: true, idea: false })).toEqual({
+      kind: 'test',
+      start: 'message',
+    })
+    expect(tourEndAction(['help_center'], both)).toEqual({ kind: 'article' })
+    expect(tourEndAction(['status_page'], both)).toEqual({ kind: 'service' })
+    expect(tourEndAction(['product_feedback'], { message: false, idea: false })).toBeNull()
   })
 
   it('matches the first-win step and offers nothing that cannot work', () => {
@@ -226,9 +234,9 @@ describe('choosing the test action', () => {
 })
 
 describe('the admin tour', () => {
-  it('opens on the Copilot chat when Home is the chat, and on the first module otherwise', async () => {
+  it('opens on the goal module whether or not Home is the chat', async () => {
     for (const [copilotOnHome, lead] of [
-      [true, 'Copilot.'],
+      [true, 'Feedback.'],
       [false, 'Feedback.'],
     ] as const) {
       hoisted.copilotOnHome = copilotOnHome
@@ -254,7 +262,8 @@ describe('the admin tour', () => {
 })
 
 describe('the tour end card', () => {
-  it('sends a test message from the end card and opens the sheet', async () => {
+  it('sends a test message from the end card for a support workspace', async () => {
+    hoisted.context = { goals: ['customer_support'], feedbackPrivate: false }
     await finishTour()
     fireEvent.click(await screen.findByRole('button', { name: 'Send a test message' }))
     expect(screen.queryByRole('dialog', { name: "That's the tour" })).toBeNull()
@@ -263,7 +272,7 @@ describe('the tour end card', () => {
     )
   })
 
-  it('posts a test idea when feedback is private', async () => {
+  it('posts a test idea for a feedback workspace', async () => {
     hoisted.context = { goals: ['product_feedback'], feedbackPrivate: true }
     await finishTour()
     fireEvent.click(await screen.findByRole('button', { name: 'Post a test idea' }))
