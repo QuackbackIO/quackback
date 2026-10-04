@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import { createId, type PrincipalId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
+  boards,
   conversationMessages,
   conversations,
   eq,
@@ -208,5 +209,33 @@ describe.skipIf(!fixture.available)('setup emails (real DB)', () => {
     expect(new Date(jobs[1].run_at).getTime() - new Date(jobs[0].run_at).getTime()).toBe(
       NUDGE_DELAY_MS
     )
+  })
+
+  it('marks steps already done as done and numbers only what is left', async () => {
+    await seedWorkspace({ goals: ['product_feedback', 'customer_support'] })
+    await testDb.insert(boards).values({ name: 'Ideas', slug: createId('board') })
+    expect(await sendOnboardingEmail('welcome', owner)).toEqual({ sent: true })
+    const { steps } = mail.welcome.mock.calls[0][0] as {
+      steps: { title: string; outcome: string; done?: boolean }[]
+    }
+    const done = steps.filter((step) => step.done)
+    const open = steps.filter((step) => !step.done)
+    expect(done.map((step) => step.title)).toContain('Create a feedback board')
+    expect(open.length).toBeGreaterThan(0)
+    expect(open.length).toBeLessThanOrEqual(3)
+    expect(steps.indexOf(done[0])).toBeLessThan(steps.indexOf(open[0]))
+  })
+
+  it('says what a step gets, as the plan does, not what was detected', async () => {
+    await testDb
+      .update(settings)
+      .set({ widgetInstalledFirstSeenAt: new Date(), widgetInstalledOriginHost: 'www.acme.com' })
+    expect(await sendOnboardingEmail('welcome', owner)).toEqual({ sent: true })
+    const { steps } = mail.welcome.mock.calls[0][0] as {
+      steps: { title: string; outcome: string }[]
+    }
+    const messenger = steps.find((step) => step.title === 'Connect Messenger')
+    expect(messenger?.outcome).toBe('Customers reach you from your site')
+    expect(steps.some((step) => /found on/i.test(step.outcome))).toBe(false)
   })
 })

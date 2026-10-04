@@ -32,7 +32,12 @@ import { loadLaunchStatus } from './launch-status'
 import { permissionsForLegacyRole } from '@/lib/server/policy/permissions'
 import type { Role } from '@/lib/shared/roles'
 import { detectFirstWin } from '@/lib/server/activation-wins'
-import { sendOnboardingNudgeEmail, sendOnboardingWelcomeEmail } from '@quackback/email'
+import {
+  sendOnboardingNudgeEmail,
+  sendOnboardingWelcomeEmail,
+  type OnboardingEmailStep,
+} from '@quackback/email'
+import { launchTaskOutcome } from '@/lib/shared/launch-outcomes'
 
 const log = logger.child({ component: 'onboarding-emails' })
 
@@ -76,6 +81,9 @@ interface EmailContext {
   name: string
   workspaceName: string
   status: LaunchStatus
+  /** Goal-path steps already done, in plan order. */
+  done: LaunchTask[]
+  /** Goal-path steps still to do, in plan order. */
   tasks: LaunchTask[]
 }
 
@@ -134,14 +142,26 @@ export async function onboardingEmailContext(
     role: person.role as Role,
     permissions: permissionsForLegacyRole(person.role as Role),
   })
-  const tasks = buildLaunchTasks(status).filter(
-    (task) => task.classification === 'prerequisite' && !task.isCompleted && !task.isSkipped
+  // The goal path as the plan lists it: what is done, then what is left.
+  const path = buildLaunchTasks(status).filter(
+    (task) => task.classification === 'prerequisite' && !task.isSkipped
   )
+  const done = path.filter((task) => task.isCompleted)
+  const tasks = path.filter((task) => !task.isCompleted)
   if (tasks.length === 0) return { ok: false, reason: 'nothing-left' }
   const name = (person.userName || person.displayName || '').split(' ')[0] || 'there'
   return {
     ok: true,
-    context: { to, name, workspaceName: org.name, status, tasks },
+    context: { to, name, workspaceName: org.name, status, done, tasks },
+  }
+}
+
+function emailStep(task: LaunchTask, base: string, done: boolean): OnboardingEmailStep {
+  return {
+    title: task.title,
+    outcome: launchTaskOutcome(task)?.defaultMessage?.toString() ?? '',
+    url: stepUrl(task, base),
+    done,
   }
 }
 
@@ -226,11 +246,11 @@ async function deliver(
       to: context.to,
       name: context.name,
       workspaceName: context.workspaceName,
-      steps: context.tasks.slice(0, 3).map((task) => ({
-        title: task.title,
-        outcome: task.description,
-        url: stepUrl(task, base),
-      })),
+      // Done steps show as done; at most three are left to do.
+      steps: [
+        ...context.done.map((task) => emailStep(task, base, true)),
+        ...context.tasks.slice(0, 3).map((task) => emailStep(task, base, false)),
+      ],
       homeUrl: `${base.replace(/\/$/, '')}/admin`,
       unsubscribeUrl: unsubscribe,
     })

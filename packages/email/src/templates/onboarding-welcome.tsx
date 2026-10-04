@@ -6,6 +6,8 @@ export interface OnboardingEmailStep {
   title: string
   outcome: string
   url: string
+  /** Already done: shown with a check, muted, without a link. */
+  done?: boolean
 }
 
 interface OnboardingWelcomeEmailProps {
@@ -26,6 +28,7 @@ export function OnboardingWelcomeEmail({
   unsubscribeUrl,
   logoUrl,
 }: OnboardingWelcomeEmailProps) {
+  const open = steps.filter((step) => !step.done)
   return (
     <EmailLayout
       preview={`${workspaceName} is ready. Here are your next steps.`}
@@ -37,21 +40,28 @@ export function OnboardingWelcomeEmail({
         Hi {name}, here is the short path to your first real result.
       </Text>
       <Section style={{ marginBottom: '24px' }}>
-        {steps.map((step, index) => (
-          <Row key={step.url + step.title} style={{ marginBottom: '12px' }}>
-            <Column style={{ width: '28px', verticalAlign: 'top' }}>
-              <Text style={stepNumber}>{index + 1}</Text>
-            </Column>
-            <Column>
-              <Text style={stepTitle}>
-                <Link href={step.url} style={utils.link}>
-                  {step.title}
-                </Link>
-              </Text>
-              <Text style={stepOutcome}>{step.outcome}</Text>
-            </Column>
-          </Row>
-        ))}
+        {steps.map((step) => {
+          const number = step.done ? null : open.indexOf(step) + 1
+          return (
+            <Row key={step.url + step.title} style={{ marginBottom: '12px' }}>
+              <Column style={{ width: '28px', verticalAlign: 'top' }}>
+                <Text style={step.done ? stepCheck : stepNumber}>{step.done ? '✓' : number}</Text>
+              </Column>
+              <Column>
+                <Text style={step.done ? stepTitleDone : stepTitle}>
+                  {step.done ? (
+                    step.title
+                  ) : (
+                    <Link href={step.url} style={utils.link}>
+                      {step.title}
+                    </Link>
+                  )}
+                </Text>
+                <Text style={stepOutcome}>{step.done ? 'Done' : step.outcome}</Text>
+              </Column>
+            </Row>
+          )
+        })}
       </Section>
       <Section style={{ textAlign: 'center', marginBottom: '32px' }}>
         <Button style={button.primary} href={homeUrl}>
@@ -87,4 +97,15 @@ const stepOutcome = {
   fontSize: '14px',
   lineHeight: '20px',
   margin: '0',
+}
+
+const stepCheck = {
+  ...stepNumber,
+  color: colors.textMuted,
+}
+
+const stepTitleDone = {
+  ...stepTitle,
+  color: colors.textMuted,
+  fontWeight: '500' as const,
 }

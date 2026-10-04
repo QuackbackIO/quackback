@@ -26,7 +26,7 @@ export function OnboardingNudgeEmail({
       logoUrl={logoUrl}
       logoAlt={workspaceName}
     >
-      <Heading style={typography.h1}>One step to your first result</Heading>
+      <Heading style={typography.h1}>Your next step</Heading>
       <Text style={typography.text}>
         Hi {name}, {workspaceName} is set up. The next step takes a minute.
       </Text>
