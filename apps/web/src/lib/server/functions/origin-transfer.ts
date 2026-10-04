@@ -179,18 +179,49 @@ export async function consumeOpenHandoff(input: {
   returnTo?: string
   headers?: Headers
 }): Promise<OriginTransferResult> {
-  // Always the workspace root. The root route sends incomplete setup to
-  // /onboarding; a finished workspace stays on the portal. Do not honor a
-  // caller returnTo — Open must not drop a finished workspace into the
-  // wizard or /admin.
   if (!input.ott) return { kind: 'error', status: 'invalid' }
-  const first = await consumeOpenHandoffOnce(input.ott, input.headers)
+  const result = await consumeOpenHandoffSession(input.ott, input.headers)
+  if (result.kind !== 'redirect') return result
+  return { ...result, to: await openHandoffLanding(input.returnTo) }
+}
+
+/** A same-origin path with no control characters, never the setup wizard. */
+function isSafeOpenReturnTo(returnTo: string | undefined): returnTo is string {
+  return (
+    isSafeCallbackUrl(returnTo) &&
+    // eslint-disable-next-line no-control-regex
+    !/[\u0000-\u001f\u007f]/.test(returnTo) &&
+    !/^\/onboarding(\/|\?|$)/.test(returnTo)
+  )
+}
+
+/**
+ * Where Visit workspace lands. While the launch plan is open it is the admin,
+ * where the plan is; otherwise a safe returnTo, else the workspace root (the
+ * root itself sends unfinished setup to the wizard). Open never drops a
+ * finished workspace into the wizard.
+ */
+async function openHandoffLanding(returnTo: string | undefined): Promise<string> {
+  try {
+    const { isLaunchPlanOpen } = await import('@/lib/server/domains/onboarding/launch-landing')
+    if (await isLaunchPlanOpen()) return '/admin'
+  } catch {
+    // Unknown plan state: fall through to the caller's own destination.
+  }
+  return isSafeOpenReturnTo(returnTo) ? returnTo : '/'
+}
+
+async function consumeOpenHandoffSession(
+  ott: string,
+  headers?: Headers
+): Promise<OriginTransferResult> {
+  const first = await consumeOpenHandoffOnce(ott, headers)
   if (first.kind === 'redirect') return first
   if (!first.missedSnapshot) return { kind: 'error', status: first.status }
 
   for (const delayMs of OPEN_HANDOFF_SNAPSHOT_RETRY_MS) {
     await wait(delayMs)
-    const retry = await consumeOpenHandoffOnce(input.ott, input.headers)
+    const retry = await consumeOpenHandoffOnce(ott, headers)
     if (retry.kind === 'redirect') return retry
     if (!retry.missedSnapshot) return { kind: 'error', status: retry.status }
   }

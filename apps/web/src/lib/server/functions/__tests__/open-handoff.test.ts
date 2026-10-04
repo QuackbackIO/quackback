@@ -8,8 +8,13 @@ const hoisted = vi.hoisted(() => {
     getSession: vi.fn(),
     snapshotRows,
     nextSnapshot: () => snapshotRows.shift() ?? [],
+    planOpen: false,
   }
 })
+
+vi.mock('@/lib/server/domains/onboarding/launch-landing', () => ({
+  isLaunchPlanOpen: async () => hoisted.planOpen,
+}))
 
 vi.mock('@/lib/server/auth', () => ({
   auth: { handler: hoisted.handler, api: { getSession: hoisted.getSession } },
@@ -62,6 +67,7 @@ describe('consumeOpenHandoff', () => {
     hoisted.getSession.mockReset()
     hoisted.getSession.mockResolvedValue(null)
     hoisted.snapshotRows.length = 0
+    hoisted.planOpen = false
   })
 
   it('does not require an identity projection', async () => {
@@ -145,5 +151,47 @@ describe('consumeOpenHandoff', () => {
       cookies: ['session=abc; Path=/; HttpOnly'],
     })
     expect(hoisted.handler).toHaveBeenCalledTimes(1)
+  })
+
+  describe('where Visit workspace lands', () => {
+    const signIn = () => {
+      hoisted.snapshotRows.push([{ value: 'sess', expiresAt: new Date(Date.now() + 60_000) }])
+      hoisted.handler.mockResolvedValue({
+        ok: true,
+        headers: { getSetCookie: () => ['session=abc; Path=/; HttpOnly'], get: () => null },
+      })
+    }
+
+    it('opens the admin while the launch plan is still open', async () => {
+      hoisted.planOpen = true
+      signIn()
+      await expect(
+        consumeOpenHandoff({ ott: 'token-1', returnTo: '/roadmap' })
+      ).resolves.toMatchObject({ kind: 'redirect', to: '/admin' })
+    })
+
+    it('honours a safe same-origin returnTo once the plan is done', async () => {
+      signIn()
+      await expect(
+        consumeOpenHandoff({ ott: 'token-1', returnTo: '/admin/inbox?c=1' })
+      ).resolves.toMatchObject({ kind: 'redirect', to: '/admin/inbox?c=1' })
+    })
+
+    it('falls back to the root for a hostile returnTo', async () => {
+      for (const returnTo of [
+        'https://evil.example/x',
+        '//evil.example',
+        '/\\evil.example',
+        '/admin\u0000x',
+        '/admin\nSet-Cookie: x',
+        'javascript:alert(1)',
+      ]) {
+        signIn()
+        await expect(consumeOpenHandoff({ ott: 'token-1', returnTo })).resolves.toMatchObject({
+          kind: 'redirect',
+          to: '/',
+        })
+      }
+    })
   })
 })
