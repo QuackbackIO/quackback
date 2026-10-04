@@ -28,6 +28,11 @@ vi.mock('@/lib/server/functions/admin', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   fetchOnboardingStatus,
 }))
+const inboxHistory = vi.hoisted(() => ({ hasConversations: true }))
+vi.mock('@/lib/server/functions/onboarding-progress', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  hasConversationsFn: async () => ({ hasConversations: inboxHistory.hasConversations }),
+}))
 vi.mock('@/components/admin/conversation/new-conversation-dialog', () => ({
   NewConversationDialog: () => null,
 }))
@@ -126,5 +131,27 @@ describe('ConversationListColumn launch status', () => {
     // Title and one action: no explanatory paragraph under the title.
     expect(screen.queryByText(/When customers message you/)).toBeNull()
     expect(fetchOnboardingStatus).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('first-run empty inbox', () => {
+  it('shows the first-run state on a workspace that has never had a conversation', async () => {
+    fetchOnboardingStatus.mockImplementation(async () => ({
+      useCase: 'product_feedback',
+      hasFirstWin: false,
+      hasWidgetInstalled: false,
+      permissions: { settingsManage: true },
+    }))
+    inboxHistory.hasConversations = false
+    renderColumn([])
+    expect(await screen.findByText('No conversations yet')).toBeTruthy()
+    expect(await screen.findByText('Send yourself a test message')).toBeTruthy()
+    expect(screen.queryByText('Nothing to review')).toBeNull()
+  })
+
+  it('keeps Nothing to review once conversations exist', async () => {
+    inboxHistory.hasConversations = true
+    renderColumn([])
+    expect(await screen.findByText('Nothing to review')).toBeTruthy()
   })
 })
