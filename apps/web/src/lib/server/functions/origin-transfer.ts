@@ -4,10 +4,22 @@ export type OriginTransferResult =
   | { kind: 'redirect'; to: string; cookies: string[] }
   | { kind: 'error'; status: 'invalid' | 'error' }
 
+/** A redirect that also knows who it signed in; the id never leaves the server. */
+type SignedInRedirect = Extract<OriginTransferResult, { kind: 'redirect' }> & { userId?: string }
+
 export function isCanonicalIdentityHost(host: string | null, canonicalOrigin: string): boolean {
   if (!host) return false
   const requested = host.trim().toLowerCase().replace(/:\d+$/, '')
   return requested === new URL(canonicalOrigin).hostname
+}
+
+/** Who the verify response signed in, when its body says. */
+async function signedInUserId(response: Response): Promise<string | null> {
+  if (typeof response.json !== 'function') return null
+  const body: unknown = await response.json().catch(() => null)
+  const user = body && typeof body === 'object' && 'user' in body ? body.user : null
+  const id = user && typeof user === 'object' && 'id' in user ? user.id : null
+  return typeof id === 'string' ? id : null
 }
 
 function responseCookies(response: Response): string[] {
@@ -49,14 +61,15 @@ async function verifyOttCookies(
   ott: string,
   returnTo: string,
   headers?: Headers
-): Promise<OriginTransferResult> {
+): Promise<SignedInRedirect | Extract<OriginTransferResult, { kind: 'error' }>> {
   try {
     const { auth } = await import('@/lib/server/auth')
     const response = await auth.handler(ottVerifyRequest(ott, headers))
     if (!response.ok) return { kind: 'error', status: 'invalid' }
     const cookies = responseCookies(response)
     if (cookies.length === 0) return { kind: 'error', status: 'error' }
-    return { kind: 'redirect', to: returnTo, cookies }
+    const userId = await signedInUserId(response)
+    return { kind: 'redirect', to: returnTo, cookies, ...(userId ? { userId } : {}) }
   } catch {
     return { kind: 'error', status: 'invalid' }
   }
@@ -66,12 +79,14 @@ async function verifyOttCookies(
 async function continueIfAlreadySignedIn(
   returnTo: string,
   headers?: Headers
-): Promise<OriginTransferResult> {
+): Promise<SignedInRedirect | Extract<OriginTransferResult, { kind: 'error' }>> {
   if (!headers) return { kind: 'error', status: 'invalid' }
   try {
     const { auth } = await import('@/lib/server/auth')
     const session = await auth.api.getSession({ headers })
-    if (session?.user) return { kind: 'redirect', to: returnTo, cookies: [] }
+    if (session?.user) {
+      return { kind: 'redirect', to: returnTo, cookies: [], userId: session.user.id }
+    }
   } catch {
     // The token already failed closed; absence of a session stays invalid.
   }
@@ -82,7 +97,7 @@ async function consumeOrContinueExistingSession(
   ott: string,
   returnTo: string,
   headers?: Headers
-): Promise<OriginTransferResult> {
+): Promise<SignedInRedirect | Extract<OriginTransferResult, { kind: 'error' }>> {
   const verified = await verifyOttCookies(ott, returnTo, headers)
   if (verified.kind === 'redirect') return verified
   const existing = await continueIfAlreadySignedIn(returnTo, headers)
@@ -140,7 +155,7 @@ function wait(ms: number): Promise<void> {
 }
 
 type OpenHandoffAttempt =
-  | Extract<OriginTransferResult, { kind: 'redirect' }>
+  | SignedInRedirect
   | (Extract<OriginTransferResult, { kind: 'error' }> & { missedSnapshot: boolean })
 
 async function consumeOpenHandoffOnce(ott: string, headers?: Headers): Promise<OpenHandoffAttempt> {
@@ -182,7 +197,11 @@ export async function consumeOpenHandoff(input: {
   if (!input.ott) return { kind: 'error', status: 'invalid' }
   const result = await consumeOpenHandoffSession(input.ott, input.headers)
   if (result.kind !== 'redirect') return result
-  return { ...result, to: await openHandoffLanding(input.returnTo) }
+  return {
+    kind: 'redirect',
+    cookies: result.cookies,
+    to: await openHandoffLanding(input.returnTo, result.userId),
+  }
 }
 
 /** A same-origin path with no control characters, never the setup wizard. */
@@ -196,15 +215,22 @@ function isSafeOpenReturnTo(returnTo: string | undefined): returnTo is string {
 }
 
 /**
- * Where Visit workspace lands. While the launch plan is open it is the admin,
- * where the plan is; otherwise a safe returnTo, else the workspace root (the
+ * Where Visit workspace lands. For an admin while the launch plan is open it
+ * is the admin, where the plan is; otherwise a safe returnTo, else the workspace root (the
  * root itself sends unfinished setup to the wizard). Open never drops a
  * finished workspace into the wizard.
  */
-async function openHandoffLanding(returnTo: string | undefined): Promise<string> {
+async function openHandoffLanding(
+  returnTo: string | undefined,
+  userId: string | undefined
+): Promise<string> {
   try {
-    const { isLaunchPlanOpen } = await import('@/lib/server/domains/onboarding/launch-landing')
-    if (await isLaunchPlanOpen()) return '/admin'
+    if (userId) {
+      const { isLaunchPlanOpen, isWorkspaceAdmin } =
+        await import('@/lib/server/domains/onboarding/launch-landing')
+      // The plan is the owner's: only an admin-tier teammate is sent to it.
+      if ((await isWorkspaceAdmin(userId)) && (await isLaunchPlanOpen())) return '/admin'
+    }
   } catch {
     // Unknown plan state: fall through to the caller's own destination.
   }
@@ -214,7 +240,7 @@ async function openHandoffLanding(returnTo: string | undefined): Promise<string>
 async function consumeOpenHandoffSession(
   ott: string,
   headers?: Headers
-): Promise<OriginTransferResult> {
+): Promise<SignedInRedirect | Extract<OriginTransferResult, { kind: 'error' }>> {
   const first = await consumeOpenHandoffOnce(ott, headers)
   if (first.kind === 'redirect') return first
   if (!first.missedSnapshot) return { kind: 'error', status: first.status }

@@ -46,10 +46,9 @@ function OfferLine({ offer }: { offer: CopilotCreditsOffer }) {
 }
 
 /**
- * Over the greyed-out composer when Copilot has no AI credits: what is wrong,
- * the price of fixing it (only where the plan catalogue gives one) and a link
- * to billing. The link is a normal tab stop and the detail is read with it, so
- * hover is never the only way in.
+ * The offer over the greyed-out composer when Copilot has no AI credits: what
+ * is wrong, the price of fixing it (only where the plan catalogue gives one)
+ * and a link to billing. `LockedComposer` shows it on hover, focus or tap.
  */
 export function CopilotCreditsLock({ credits }: { credits: Exclude<AiCreditsState, 'available'> }) {
   const detailId = useId()

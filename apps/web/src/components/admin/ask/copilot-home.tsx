@@ -31,6 +31,7 @@ import {
 } from '@/lib/server/functions/workspace-copilot'
 import { AskMessages } from './ask-messages'
 import { ChatComposer } from './chat-composer'
+import { LockedComposer } from './locked-composer'
 import { ConnectorCallCard } from './connector-call-card'
 import { useSearchPalette, useSearchShortcutLabel } from './search-palette'
 import { WorkspaceAssistantMessage } from './workspace-assistant-message'
@@ -67,8 +68,8 @@ export interface CopilotHomeProps {
   /** Shortcuts under the composer, such as the launch plan's open steps. */
   chips?: ReactNode
   /**
-   * Copilot is out of AI credits: the composer shows greyed out, with this
-   * offer of a way to get more over it.
+   * Copilot is out of AI credits: the composer shows greyed out, and this
+   * offer of a way to get more appears over it on hover, focus or tap.
    */
   locked?: ReactNode
   below?: ReactNode
@@ -304,20 +305,17 @@ function CopilotHomeView({ threadKey, canAsk, header, chips, locked, below }: Co
             )}
           </div>
           {!canAsk && locked && !inChat && (
-            <div className="relative">
-              <div inert className="opacity-50 grayscale">
-                <ChatComposer
-                  query=""
-                  onQueryChange={() => {}}
-                  canAsk={false}
-                  busy={false}
-                  onAsk={() => {}}
-                  onStop={() => {}}
-                  autoFocus={false}
-                />
-              </div>
-              <div className="absolute inset-0 flex items-center justify-center p-3">{locked}</div>
-            </div>
+            <LockedComposer overlay={locked}>
+              <ChatComposer
+                query=""
+                onQueryChange={() => {}}
+                canAsk={false}
+                busy={false}
+                onAsk={() => {}}
+                onStop={() => {}}
+                autoFocus={false}
+              />
+            </LockedComposer>
           )}
           {canAsk && (
             <div

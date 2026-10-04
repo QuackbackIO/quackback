@@ -215,8 +215,10 @@ describe('Home idle', () => {
 
   it('greys out the composer without credits and offers the way to get them', async () => {
     mount({ canAsk: false, locked: true })
-    const composer = screen.getByRole('textbox', { name: 'Ask Copilot' })
+    const composer = screen.getByRole('textbox', { name: 'Ask Copilot', hidden: true })
     expect(composer.closest('[inert]')).not.toBeNull()
+    expect(screen.queryByRole('link', { name: 'Upgrade' })).toBeNull()
+    fireEvent.mouseEnter(screen.getByRole('group', { name: 'Ask Copilot' }))
     expect(screen.getByRole('link', { name: 'Upgrade' })).toHaveAttribute(
       'href',
       '/admin/settings/billing'

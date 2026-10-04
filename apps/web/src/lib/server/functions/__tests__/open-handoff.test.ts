@@ -9,11 +9,14 @@ const hoisted = vi.hoisted(() => {
     snapshotRows,
     nextSnapshot: () => snapshotRows.shift() ?? [],
     planOpen: false,
+    admins: ['user_admin'] as string[],
+    signedIn: 'user_admin',
   }
 })
 
 vi.mock('@/lib/server/domains/onboarding/launch-landing', () => ({
   isLaunchPlanOpen: async () => hoisted.planOpen,
+  isWorkspaceAdmin: async (userId: string) => hoisted.admins.includes(userId),
 }))
 
 vi.mock('@/lib/server/auth', () => ({
@@ -68,6 +71,7 @@ describe('consumeOpenHandoff', () => {
     hoisted.getSession.mockResolvedValue(null)
     hoisted.snapshotRows.length = 0
     hoisted.planOpen = false
+    hoisted.signedIn = 'user_admin'
   })
 
   it('does not require an identity projection', async () => {
@@ -159,6 +163,7 @@ describe('consumeOpenHandoff', () => {
       hoisted.handler.mockResolvedValue({
         ok: true,
         headers: { getSetCookie: () => ['session=abc; Path=/; HttpOnly'], get: () => null },
+        json: async () => ({ user: { id: hoisted.signedIn } }),
       })
     }
 
@@ -168,6 +173,18 @@ describe('consumeOpenHandoff', () => {
       await expect(
         consumeOpenHandoff({ ott: 'token-1', returnTo: '/roadmap' })
       ).resolves.toMatchObject({ kind: 'redirect', to: '/admin' })
+    })
+
+    it('never sends a teammate who is not an admin to the plan', async () => {
+      hoisted.planOpen = true
+      hoisted.signedIn = 'user_member'
+      signIn()
+      const result = await consumeOpenHandoff({ ott: 'token-1', returnTo: '/roadmap' })
+      expect(result).toEqual({
+        kind: 'redirect',
+        to: '/roadmap',
+        cookies: ['session=abc; Path=/; HttpOnly'],
+      })
     })
 
     it('honours a safe same-origin returnTo once the plan is done', async () => {
