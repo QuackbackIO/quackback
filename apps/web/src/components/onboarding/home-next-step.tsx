@@ -13,6 +13,15 @@ import type { TryMessengerStart } from './try-messenger-sheet'
 
 const PATH_LENGTH = 3
 
+/** Languages whose step titles start lowercase inside a sentence; German nouns, for one, do not. */
+const SENTENCE_CASE = new Set(['en', 'es', 'fr', 'nl', 'pl', 'pt', 'ru'])
+
+/** Items after the first continue the sentence, so they start lowercase where that is right. */
+function continueSentence(text: string, locale: string, index: number): string {
+  if (index === 0 || !SENTENCE_CASE.has(locale.split('-')[0]!.toLowerCase())) return text
+  return text.charAt(0).toLocaleLowerCase(locale) + text.slice(1)
+}
+
 /** The test on the Try Messenger sheet that shows a step working, if it has one. */
 function stepTest(task: LaunchTask): TryMessengerStart | null {
   if (task.id === 'distribute-feedback') return 'idea'
@@ -72,7 +81,9 @@ export function HomeNextStep({
   const nextIndex = next ? path.steps.findIndex((task) => task.id === next.id) : -1
   const test = next ? stepTest(next) : null
   const firstWin = next?.classification === 'first_win'
-  const later = path.later.map((task) => intl.formatMessage(launchTaskMessage(task)))
+  const later = path.later.map((task, index) =>
+    continueSentence(intl.formatMessage(launchTaskMessage(task)), intl.locale, index)
+  )
 
   return (
     <div className="space-y-4 [--ring:var(--muted-foreground)]">

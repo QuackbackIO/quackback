@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { AnchorHTMLAttributes, ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '@/locales/en.json'
+import de from '@/locales/de.json'
 import type { LaunchStatus } from '@/lib/shared/launch-checklist'
 
 const hoisted = vi.hoisted(() => ({ canConverse: true, opened: [] as unknown[] }))
@@ -103,7 +104,7 @@ describe("Home's next step", () => {
       .map((row) => row.textContent)
     expect(rows).toEqual(['Portal is liveDone', 'Share your boardNext', 'Get your first idea'])
     expect(path).toHaveTextContent(
-      'Later: Publish your first update, Invite a teammate, and Add your logo'
+      'Later: Publish your first update, invite a teammate, and add your logo'
     )
   })
 
@@ -128,5 +129,22 @@ describe("Home's next step", () => {
     mount(status, <button type="button">Undo</button>)
     const card = screen.getByRole('region', { name: 'Share your board' })
     expect(within(card).getByRole('button', { name: 'Undo' })).toBeVisible()
+  })
+
+  it('joins the Later line the way each language does', () => {
+    cleanup()
+    const client = new QueryClient()
+    client.setQueryData(['admin', 'onboarding'], status)
+    render(
+      <IntlProvider locale="de" messages={de}>
+        <QueryClientProvider client={client}>
+          <HomeNextStep status={status} pending={false} onCreateBoard={() => {}} />
+        </QueryClientProvider>
+      </IntlProvider>
+    )
+    // German keeps its capitals and joins with "und".
+    expect(screen.getByText(/^Später:/).textContent).toMatch(
+      /, Teammitglied einladen und Logo hinzufügen$/
+    )
   })
 })
