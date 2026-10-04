@@ -1220,6 +1220,23 @@ export const NEW_WORKSPACE_FEATURE_FLAGS: FeatureFlags = {
   copilotHome: true,
 }
 
+/**
+ * A new workspace's flags when its row was created bare (by an operator):
+ * each flag new workspaces start with that the row never stored is filled
+ * from NEW_WORKSPACE_FEATURE_FLAGS. A stored choice always stands.
+ */
+export function withNewWorkspaceFlags(
+  storedJson: string | null | undefined,
+  flags: FeatureFlags
+): FeatureFlags {
+  const stored = parseStoredFeatureFlags(storedJson)
+  const next = { ...flags }
+  for (const key of LABS_FEATURE_FLAGS) {
+    if (typeof stored[key] !== 'boolean') next[key] = NEW_WORKSPACE_FEATURE_FLAGS[key]
+  }
+  return next
+}
+
 /** Onboarding outcomes that may turn extra products on. Kept local so this
  *  file stays free of the db package. */
 export type FeatureFlagUseCase =
