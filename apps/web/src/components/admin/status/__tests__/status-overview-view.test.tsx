@@ -29,7 +29,15 @@ vi.mock('../status-schedule-maintenance-dialog', () => ({
   ScheduleMaintenanceDialog: () => <button>Schedule maintenance</button>,
 }))
 
+import { IntlProvider } from 'react-intl'
 import { StatusOverviewView } from '../status-overview-view'
+
+const renderOverview = () =>
+  render(
+    <IntlProvider locale="en" defaultLocale="en" onError={() => {}}>
+      <StatusOverviewView />
+    </IntlProvider>
+  )
 
 function makeOverview(overrides: Record<string, unknown> = {}) {
   return {
@@ -52,7 +60,7 @@ describe('<StatusOverviewView>', () => {
   })
 
   it('renders the standard page header with its actions', () => {
-    const { container } = render(<StatusOverviewView />)
+    const { container } = renderOverview()
     expect(container.querySelector('[data-page-header] h1')?.textContent).toBe('Overview')
     const header = container.querySelector('[data-page-header]') as HTMLElement
     expect(header.textContent).toContain('View public page')
@@ -62,7 +70,7 @@ describe('<StatusOverviewView>', () => {
   })
 
   it('links the public page and the settings from the header', () => {
-    render(<StatusOverviewView />)
+    renderOverview()
     expect(screen.getByRole('link', { name: /View public page/ }).getAttribute('href')).toBe(
       '/status'
     )
@@ -72,7 +80,7 @@ describe('<StatusOverviewView>', () => {
   })
 
   it('uses the glossary empty copy and a sentence-case banner label', () => {
-    render(<StatusOverviewView />)
+    renderOverview()
     expect(screen.getAllByText('No open incidents').length).toBeGreaterThan(0)
     expect(screen.queryByText(/All clear/)).toBeNull()
     const label = screen.getByText('Visitors currently see')
@@ -86,15 +94,23 @@ describe('<StatusOverviewView>', () => {
         { id: 'g2', name: 'Apps', components: [{ id: 'c2', name: 'API', status: 'operational' }] },
       ],
     })
-    render(<StatusOverviewView />)
+    renderOverview()
     expect(screen.queryByText('Infrastructure')).toBeNull()
     expect(screen.getByText('Apps')).toBeTruthy()
   })
 
   it('shows the stats as sentence-case tiles', () => {
-    render(<StatusOverviewView />)
+    renderOverview()
     const label = screen.getByText('90-day uptime')
     expect(label.className).not.toContain('uppercase')
     expect(screen.getByText('99.50%')).toBeTruthy()
+  })
+
+  it('offers to add the first service, without a paragraph', () => {
+    overview = makeOverview({ ungroupedComponents: [], groups: [] })
+    renderOverview()
+    expect(screen.getByText('No services yet')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Add a service' })).toBeTruthy()
+    expect(screen.queryByText(/Add the systems you want/)).toBeNull()
   })
 })

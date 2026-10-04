@@ -25,6 +25,8 @@ import { useStartStatusMaintenanceNow } from '@/lib/client/mutations/status'
 import { LifecycleBadge } from './status-incident-fields'
 import { ReportIncidentDialog } from './status-report-incident-dialog'
 import { ScheduleMaintenanceDialog } from './status-schedule-maintenance-dialog'
+import { FormattedMessage } from 'react-intl'
+import { NewButton } from '@/components/shared/new-button'
 import {
   COMPONENT_STATUS_COLORS,
   COMPONENT_STATUS_LABELS,
@@ -192,6 +194,19 @@ function ViewAllLink({
     >
       {label}
     </button>
+  )
+}
+
+/** The empty Service health card's one action: the Services page, ready to add. */
+function AddServiceButton() {
+  const navigate = useNavigate({ from: Route.fullPath })
+  return (
+    <NewButton
+      noun="service"
+      onClick={() => void navigate({ to: '/admin/status', search: { view: 'components' } })}
+    >
+      <FormattedMessage id="admin.empty.status.action" defaultMessage="Add a service" />
+    </NewButton>
   )
 }
 
@@ -414,8 +429,11 @@ function ServiceHealthCard({ data }: { data: StatusOverview }) {
   return (
     <CardShell title="Service health" action={<ViewAllLink view="components" label="Manage" />}>
       {!hasAny ? (
-        <div className="px-4 py-5 text-sm text-muted-foreground">
-          No services yet. Add the systems you want to report status for.
+        <div className="space-y-3 px-4 py-5">
+          <div className="text-sm font-medium">
+            <FormattedMessage id="admin.empty.status.title" defaultMessage="No services yet" />
+          </div>
+          <AddServiceButton />
         </div>
       ) : (
         <div>
