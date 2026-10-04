@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { FormattedMessage, useIntl, type IntlShape } from 'react-intl'
 import { Link } from '@tanstack/react-router'
 import { skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -22,6 +22,7 @@ import { DEFAULT_LOCALE, normalizeLocale, type SupportedLocale } from '@/lib/sha
 import type { ConversationStreamEvent } from '@/lib/shared/conversation/types'
 import {
   getTestCustomerOverviewFn,
+  getTestCustomerPhoneLinkStatusFn,
   mintTestCustomerPhoneLinkFn,
   mintTestCustomerTokenFn,
 } from '@/lib/server/functions/test-customer'
@@ -471,13 +472,31 @@ export function RoundTripStep({
   )
 }
 
+/** How often a shown phone code checks whether it was scanned or ran out. */
+export const PHONE_CODE_POLL_MS = 3000
+
 function PhoneCode({ locale }: { locale: SupportedLocale }) {
   const mint = useMutation({
     mutationFn: async () => {
-      const { url } = await mintTestCustomerPhoneLinkFn({ data: { locale } })
-      return QRCode.toDataURL(url, { margin: 1, width: 192 })
+      const { url, token } = await mintTestCustomerPhoneLinkFn({ data: { locale } })
+      return { token, src: await QRCode.toDataURL(url, { margin: 1, width: 192 }) }
     },
   })
+  const token = mint.data?.token ?? null
+  // A code works once and for ten minutes: when the phone has used it, or it
+  // ran out, the next one replaces it here.
+  const status = useQuery({
+    queryKey: ['onboarding', 'phone-code', token],
+    queryFn: () => getTestCustomerPhoneLinkStatusFn({ data: { token: token! } }),
+    enabled: !!token,
+    refetchInterval: PHONE_CODE_POLL_MS,
+  })
+  const spent = status.data?.pending === false
+  const { mutate, isPending, isError } = mint
+  useEffect(() => {
+    if (spent && !isPending && !isError) mutate()
+  }, [spent, isPending, isError, mutate])
+
   return (
     <div className="space-y-3">
       <p className="text-sm font-medium">
@@ -486,20 +505,17 @@ function PhoneCode({ locale }: { locale: SupportedLocale }) {
       {mint.data ? (
         <>
           <img
-            src={mint.data}
+            src={mint.data.src}
             alt=""
-            className="size-48 rounded-lg border bg-white p-2"
+            className={cn('size-48 rounded-lg border bg-white p-2', spent && 'opacity-30')}
             data-testid="try-messenger-qr"
           />
           <p className="text-xs text-muted-foreground">
             <FormattedMessage
               id="onboarding.test.phoneHint"
-              defaultMessage="Single use. Expires in 10 minutes."
+              defaultMessage="One use, valid 10 minutes. A new code appears here once it is used."
             />
           </p>
-          <Button size="sm" variant="ghost" onClick={() => mint.mutate()} disabled={mint.isPending}>
-            <FormattedMessage id="onboarding.test.phoneNew" defaultMessage="New code" />
-          </Button>
         </>
       ) : (
         <Button size="sm" variant="outline" onClick={() => mint.mutate()} disabled={mint.isPending}>

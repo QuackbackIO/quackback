@@ -162,4 +162,28 @@ describe('TryMessengerSheet', () => {
     )
     await waitFor(() => expect(live.textContent).toBe("That's the round trip"))
   })
+
+  it('swaps in a fresh phone code once the shown one is used or expires', async () => {
+    fns.overview.mockResolvedValue({ conversationId: null, testEmailAddress: null })
+    fns.mintPhone
+      .mockResolvedValueOnce({ url: 'https://acme.test/try-messenger?ott=one', token: 'one', expiresAt: '' })
+      .mockResolvedValueOnce({ url: 'https://acme.test/try-messenger?ott=two', token: 'two', expiresAt: '' })
+    fns.phoneStatus.mockResolvedValue({ pending: true })
+    const { client } = renderSheet()
+    fireEvent.click(await screen.findByRole('button', { name: 'Show code' }))
+    const qr = await screen.findByTestId('try-messenger-qr')
+    await waitFor(() => expect(qr.getAttribute('src')).toBe('data:qr,https://acme.test/try-messenger?ott=one'))
+    await waitFor(() => expect(fns.phoneStatus).toHaveBeenCalledWith({ data: { token: 'one' } }))
+    expect(fns.mintPhone).toHaveBeenCalledTimes(1)
+
+    fns.phoneStatus.mockResolvedValue({ pending: false })
+    await act(() => client.refetchQueries({ queryKey: ['onboarding', 'phone-code'] }))
+    await waitFor(() =>
+      expect(screen.getByTestId('try-messenger-qr').getAttribute('src')).toBe(
+        'data:qr,https://acme.test/try-messenger?ott=two'
+      )
+    )
+    expect(fns.mintPhone).toHaveBeenCalledTimes(2)
+    expect(screen.getByText('One use, valid 10 minutes. A new code appears here once it is used.')).toBeTruthy()
+  })
 })
