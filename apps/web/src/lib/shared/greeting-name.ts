@@ -20,3 +20,17 @@ export function greetingName(
   if (first && !first.includes('@') && /\p{L}/u.test(first)) return capitalize(first)
   return nameFromEmail(first.includes('@') ? first : email)
 }
+
+/**
+ * The name an account shows on its ideas and comments: the name it gave,
+ * else a friendly name from its email address. Null when neither gives one,
+ * so the caller can keep a name it already had.
+ */
+export function accountDisplayName(
+  name: string | null | undefined,
+  email: string | null | undefined
+): string | null {
+  const given = name?.trim() ?? ''
+  if (given && !given.includes('@')) return given
+  return nameFromEmail(given.includes('@') ? given : email)
+}
