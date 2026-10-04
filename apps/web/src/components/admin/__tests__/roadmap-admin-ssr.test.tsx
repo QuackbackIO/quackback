@@ -10,6 +10,9 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn(),
+  Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
+    <a href={to}>{children}</a>
+  ),
 }))
 vi.mock('@/routes/admin/roadmap', () => ({
   Route: { fullPath: '/admin/roadmap', useSearch: () => ({}) },

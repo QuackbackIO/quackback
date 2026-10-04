@@ -39,7 +39,15 @@ vi.mock('../changelog-list-item', () => ({
   ChangelogListItem: ({ title }: { title: string }) => <div data-testid="entry">{title}</div>,
 }))
 
+import { IntlProvider } from 'react-intl'
 import { ChangelogList } from '../changelog-list'
+
+const renderList = () =>
+  render(
+    <IntlProvider locale="en" defaultLocale="en" onError={() => {}}>
+      <ChangelogList />
+    </IntlProvider>
+  )
 
 afterEach(() => {
   cleanup()
@@ -54,20 +62,27 @@ describe('ChangelogList order', () => {
     // Server order for "oldest": A was created first, C last.
     pages = [{ items: [entry('a', 'A'), entry('b', 'B')] }, { items: [entry('c', 'C')] }]
     search = { sort: 'oldest' }
-    render(<ChangelogList />)
+    renderList()
     expect(screen.getAllByTestId('entry').map((n) => n.textContent)).toEqual(['A', 'B', 'C'])
   })
 
   it('keeps the server order for newest', () => {
     pages = [{ items: [entry('c', 'C'), entry('b', 'B'), entry('a', 'A')] }]
-    render(<ChangelogList />)
+    renderList()
     expect(screen.getAllByTestId('entry').map((n) => n.textContent)).toEqual(['C', 'B', 'A'])
   })
 
   it('asks the server for the chosen sort', () => {
     pages = []
     search = { sort: 'oldest' }
-    render(<ChangelogList />)
+    renderList()
     expect(listOptions).toHaveBeenCalledWith({ status: 'all', sort: 'oldest' })
+  })
+
+  it('offers one real action when there are no updates yet', () => {
+    pages = [{ items: [] }]
+    renderList()
+    expect(screen.getByText('No updates yet')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Write an update' })).toBeTruthy()
   })
 })

@@ -47,6 +47,7 @@ const { Component: CreateArticleDialog, preload: preloadCreateArticleDialog } = 
   'CreateArticleDialog'
 )
 import { TimeAgo } from '@/components/ui/time-ago'
+import { FormattedMessage, useIntl } from 'react-intl'
 import type { KbArticleId } from '@quackback/ids'
 
 const SORT_OPTIONS = [
@@ -104,6 +105,7 @@ function LiveHelpCenterFinder({
   onDeleteArticle,
   categoryActions,
 }: HelpCenterFinderProps) {
+  const intl = useIntl()
   const { filters, setFilters, clearFilters, hasActiveFilters } = useHelpCenterFilters()
 
   const [createArticleOpen, setCreateArticleOpen] = useState(false)
@@ -239,18 +241,28 @@ function LiveHelpCenterFinder({
                       ? 'No articles match your filters'
                       : currentCategory
                         ? 'No articles in this category yet'
-                        : 'Write your first article'
-                }
-                description={
-                  !filters.search && !hasActiveFilters && !currentCategory
-                    ? 'Answers customers can find without opening a ticket.'
-                    : undefined
+                        : intl.formatMessage({
+                            id: 'admin.empty.helpCenter.title',
+                            defaultMessage: 'No articles yet',
+                          })
                 }
                 action={
                   hasActiveFilters ? (
                     <Button variant="outline" size="sm" onClick={clearFilters}>
                       Clear all filters
                     </Button>
+                  ) : !filters.search && !currentCategory ? (
+                    <NewButton
+                      noun="article"
+                      onPointerEnter={preloadCreateArticleDialog}
+                      onFocus={preloadCreateArticleDialog}
+                      onClick={() => setCreateArticleOpen(true)}
+                    >
+                      <FormattedMessage
+                        id="admin.empty.helpCenter.action"
+                        defaultMessage="Write your first article"
+                      />
+                    </NewButton>
                   ) : (
                     newArticleButton
                   )

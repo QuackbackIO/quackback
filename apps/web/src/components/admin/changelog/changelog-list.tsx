@@ -1,6 +1,14 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { useState, useCallback, useEffect, useMemo, startTransition, Suspense } from 'react'
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  startTransition,
+  Suspense,
+  type ReactNode,
+} from 'react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/shared/spinner'
@@ -26,6 +34,7 @@ import { changelogQueries } from '@/lib/client/queries/changelog'
 import { useDeleteChangelog } from '@/lib/client/mutations/changelog'
 import { Route } from '@/routes/admin/changelog'
 import type { ChangelogId } from '@quackback/ids'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { DocumentTextIcon } from '@heroicons/react/24/solid'
 
 // The create dialog carries the editor and the entry form, which outweigh the
@@ -37,7 +46,7 @@ const { Component: CreateChangelogDialog, preload: preloadCreateChangelogDialog 
 )
 
 /** The New entry button and the create dialog it opens. */
-function NewChangelogEntryButton() {
+function NewChangelogEntryButton({ label }: { label?: ReactNode }) {
   const [open, setOpen] = useState(false)
   // Kept mounted after the first open so closing animates.
   const opened = useOpenedOnce(open)
@@ -49,7 +58,9 @@ function NewChangelogEntryButton() {
         onPointerEnter={preloadCreateChangelogDialog}
         onFocus={preloadCreateChangelogDialog}
         onClick={() => setOpen(true)}
-      />
+      >
+        {label}
+      </NewButton>
       {opened && (
         <Suspense fallback={null}>
           <CreateChangelogDialog open={open} onOpenChange={setOpen} />
@@ -80,6 +91,7 @@ function ChangelogSkeleton() {
 }
 
 export function ChangelogList() {
+  const intl = useIntl()
   const navigate = useNavigate({ from: Route.fullPath })
   const search = Route.useSearch()
   const { filters, setFilters, hasActiveFilters } = useChangelogFilters()
@@ -220,10 +232,22 @@ export function ChangelogList() {
                   ? 'No changelog entries match your search'
                   : hasActiveFilters
                     ? 'No changelog entries match your filters'
-                    : 'No changelog entries yet'
+                    : intl.formatMessage({
+                        id: 'admin.empty.changelog.title',
+                        defaultMessage: 'No updates yet',
+                      })
               }
               action={
-                !hasActiveFilters && !filters.search ? <NewChangelogEntryButton /> : undefined
+                !hasActiveFilters && !filters.search ? (
+                  <NewChangelogEntryButton
+                    label={
+                      <FormattedMessage
+                        id="admin.empty.changelog.action"
+                        defaultMessage="Write an update"
+                      />
+                    }
+                  />
+                ) : undefined
               }
               className="h-48"
             />

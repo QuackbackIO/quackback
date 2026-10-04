@@ -29,6 +29,9 @@ import { adminQueries } from '@/lib/client/queries/admin'
 import { roadmapPostsKeys } from '@/lib/client/hooks/use-roadmap-posts-query'
 import { Route } from '@/routes/admin/roadmap'
 import type { RoadmapViewPost, RoadmapPostsListResult } from '@/lib/shared/types'
+import { Link } from '@tanstack/react-router'
+import { FormattedMessage } from 'react-intl'
+import { Button } from '@/components/ui/button'
 import type { PostStatusId, PostId, RoadmapId } from '@quackback/ids'
 
 /**
@@ -176,6 +179,18 @@ export function RoadmapAdmin() {
     }
   }
 
+  // Ideas reach the roadmap from Feedback, by their status or ETA.
+  const moveIdeaAction = (
+    <Button asChild size="sm" variant="outline">
+      <Link to="/admin/feedback">
+        <FormattedMessage
+          id="admin.empty.roadmap.action"
+          defaultMessage="Move an idea onto the roadmap"
+        />
+      </Link>
+    </Button>
+  )
+
   return (
     <div className="flex h-full bg-background">
       <RoadmapSidebar selectedRoadmapId={selectedRoadmapId} onSelectRoadmap={setSelectedRoadmap} />
@@ -214,9 +229,10 @@ export function RoadmapAdmin() {
               <div className="flex-1 overflow-auto p-4 sm:p-6">
                 <div className="flex items-stretch gap-4 sm:gap-5">
                   {selectedRoadmap.type === 'column' &&
-                    selectedRoadmap.columns.map((column) => (
+                    selectedRoadmap.columns.map((column, index) => (
                       <RoadmapColumn
                         key={column.id}
+                        emptyAction={index === 0 ? moveIdeaAction : undefined}
                         roadmapId={selectedRoadmapId as RoadmapId}
                         columnId={column.id}
                         statusId={column.statusId}
@@ -228,9 +244,10 @@ export function RoadmapAdmin() {
                       />
                     ))}
                   {selectedRoadmap.type === 'date' &&
-                    dateBuckets.map((bucket) => (
+                    dateBuckets.map((bucket, index) => (
                       <RoadmapColumn
                         key={bucket.id}
+                        emptyAction={index === 0 ? moveIdeaAction : undefined}
                         roadmapId={selectedRoadmapId as RoadmapId}
                         columnId={bucket.id}
                         bucketId={bucket.id}
