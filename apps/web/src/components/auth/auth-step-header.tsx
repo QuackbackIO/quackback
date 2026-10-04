@@ -10,8 +10,8 @@ export interface FormContext {
  *  - `dialog`         — the public portal sign-in modal ("vote and comment").
  *  - `private-portal` — the private-portal gate, where the page IS the login
  *    screen, so the copy frames the portal as private instead.
- *  - `team`           — the sign-in a teammate meets on the way to an admin
- *    page, so the copy names the team rather than customers. */
+ *  - `team`: the sign-in a teammate meets on the way to an admin page, so
+ *    the copy names the team rather than customers. */
 export type AuthSurface = 'dialog' | 'private-portal' | 'team'
 
 interface HeaderOptions {

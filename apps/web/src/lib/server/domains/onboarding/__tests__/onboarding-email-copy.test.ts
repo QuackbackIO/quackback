@@ -130,7 +130,7 @@ describe('readyEmailCopy', () => {
       inviteeName: 'Kim',
       workspaceName: 'Acme',
     })
-    expect(JSON.stringify([copy, nudge, invite])).not.toMatch(/[–—]/)
+    expect(JSON.stringify([copy, nudge, invite])).not.toMatch(/[\u2013\u2014]/)
   })
 })
 
