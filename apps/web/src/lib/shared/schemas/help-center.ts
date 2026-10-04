@@ -53,7 +53,8 @@ export const deleteCategorySchema = z.object({
 // ============================================================================
 
 export const createArticleSchema = z.object({
-  categoryId: z.string().min(1),
+  /** Optional: an article saved without one is filed under General. */
+  categoryId: z.string().optional(),
   title: z.string().min(1, 'Title is required').max(200),
   content: z.string().min(1, 'Content is required'),
   contentJson: tiptapContentSchema.nullable().optional(),
