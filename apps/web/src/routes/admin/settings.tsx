@@ -34,13 +34,13 @@ function SettingsLayout() {
           </ScrollArea>
         </aside>
 
-        <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
+        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
           <ScrollArea className="min-h-0 flex-1">
             <div data-settings-page="" className="px-4 pb-6 pt-3.5 sm:px-6">
               <Outlet />
             </div>
           </ScrollArea>
-        </main>
+        </div>
       </div>
     </SettingsNavProvider>
   )

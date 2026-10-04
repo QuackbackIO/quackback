@@ -1,8 +1,19 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { boards, eq, getSetupState, principal, settings, user } from '@/lib/server/db'
+import {
+  boards,
+  eq,
+  getSetupState,
+  helpCenterCategories,
+  principal,
+  settings,
+  statusComponents,
+  user,
+} from '@/lib/server/db'
 import { DEFAULT_FEATURE_FLAGS } from '@/lib/server/domains/settings/settings.types'
+import { resolveStatusSettings } from '@/lib/server/domains/settings/settings.status'
+import { isStatusPagePublished } from '@/lib/shared/status-settings'
 
 vi.mock('@tanstack/react-start', () => ({
   createServerFn: (options: { method: string }) => {
@@ -29,7 +40,8 @@ vi.mock('@/lib/server/auth/session', () => ({ getSession: async () => sessionSta
 vi.mock('@/lib/server/functions/workspace', () => ({
   getSettings: async () => (await testDb.query.settings.findFirst()) ?? null,
 }))
-vi.mock('@/lib/server/domains/settings/settings.helpers', () => ({
+vi.mock('@/lib/server/domains/settings/settings.helpers', async (original) => ({
+  ...(await original<typeof import('@/lib/server/domains/settings/settings.helpers')>()),
   invalidateSettingsCache: async () => {},
 }))
 
@@ -64,7 +76,7 @@ describe('wizard goals read and write', () => {
   afterEach(fixture.rollback)
   afterAll(fixture.close)
 
-  it('persists Support plus Help center, enables both and creates no content', async () => {
+  it('persists Support plus Help center, enables both without Changelog and creates no board', async () => {
     await saveWorkspaceAndGoalFn({
       data: { workspaceName: 'Acme', goals: ['customer_support', 'help_center'] },
     })
@@ -75,15 +87,106 @@ describe('wizard goals read and write', () => {
     })
     expect(JSON.parse(row!.featureFlags!)).toEqual({
       ...DEFAULT_FEATURE_FLAGS,
+      changelog: false,
       supportInbox: true,
       supportTickets: true,
       helpCenter: true,
       copilotHome: true,
     })
     expect(await testDb.query.boards.findMany()).toHaveLength(0)
+    // Turning Support on through the one flag write also opens the portal surface.
+    expect(JSON.parse(row!.portalConfig!).support.enabled).toBe(true)
   })
 
-  it('seeds an empty private feedback board and preserves the reader on a second save', async () => {
+  it('keeps the Messenger idea tab only when Feedback is one of the goals', async () => {
+    await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme', goals: ['customer_support'] } })
+    let row = await testDb.query.settings.findFirst()
+    expect(JSON.parse(row!.widgetConfig!).tabs).toMatchObject({ feedback: false, messenger: true })
+    await testDb.delete(settings)
+    await saveWorkspaceAndGoalFn({
+      data: { workspaceName: 'Acme', goals: ['customer_support', 'product_feedback'] },
+    })
+    row = await testDb.query.settings.findFirst()
+    expect(JSON.parse(row!.widgetConfig!).tabs).toMatchObject({ feedback: true, messenger: true })
+  })
+
+  it('keeps Changelog on only when Feedback is one of the goals', async () => {
+    await saveWorkspaceAndGoalFn({
+      data: { workspaceName: 'Acme', goals: ['product_feedback', 'help_center'] },
+    })
+    const row = await testDb.query.settings.findFirst()
+    expect(JSON.parse(row!.featureFlags!).changelog).toBe(true)
+  })
+
+  it('publishes the status page with one service named after the workspace', async () => {
+    await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme', goals: ['status_page'] } })
+    let row = await testDb.query.settings.findFirst()
+    const flags = JSON.parse(row!.featureFlags!)
+    expect(flags.statusPage).toBe(true)
+    expect(isStatusPagePublished(flags, resolveStatusSettings(row!.metadata))).toBe(true)
+    const services = await testDb.query.statusComponents.findMany()
+    expect(services.map((service) => [service.name, service.status])).toEqual([
+      ['Acme', 'operational'],
+    ])
+    await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme', goals: ['status_page'] } })
+    row = await testDb.query.settings.findFirst()
+    expect(await testDb.query.statusComponents.findMany()).toHaveLength(1)
+  })
+
+  it('seeds one General help category so the first article has a home', async () => {
+    await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme', goals: ['help_center'] } })
+    await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme', goals: ['help_center'] } })
+    const categories = await testDb.query.helpCenterCategories.findMany()
+    expect(categories.map((category) => [category.name, category.slug, category.isPublic])).toEqual(
+      [['General', 'general', true]]
+    )
+  })
+
+  it('never seeds a category or a service for goals that do not need them', async () => {
+    await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme', goals: ['product_feedback'] } })
+    expect(await testDb.select().from(helpCenterCategories)).toHaveLength(0)
+    expect(await testDb.select().from(statusComponents)).toHaveLength(0)
+  })
+
+  it('publishes an operator-provisioned status page that already carried the flag', async () => {
+    await testDb.insert(settings).values({
+      name: 'Acme',
+      slug: 'acme',
+      createdAt: new Date(),
+      setupState: JSON.stringify({
+        version: 2,
+        steps: { core: true, workspace: true, startingPoint: null },
+        goals: ['status_page'],
+        activationHandoffSeenAt: new Date().toISOString(),
+      }),
+      featureFlags: JSON.stringify({ ...DEFAULT_FEATURE_FLAGS, statusPage: true }),
+    })
+    await ensureOnboardingHomeReadyFn()
+    const row = await testDb.query.settings.findFirst()
+    expect(resolveStatusSettings(row!.metadata).enabled).toBe(true)
+    expect(await testDb.query.statusComponents.findMany()).toHaveLength(1)
+  })
+
+  it('leaves a status page the workspace saved as unpublished alone', async () => {
+    await testDb.insert(settings).values({
+      name: 'Acme',
+      slug: 'acme',
+      createdAt: new Date(),
+      metadata: JSON.stringify({ statusSettings: { enabled: false } }),
+      setupState: JSON.stringify({
+        version: 2,
+        steps: { core: true, workspace: true, startingPoint: null },
+        goals: ['status_page'],
+        activationHandoffSeenAt: new Date().toISOString(),
+      }),
+      featureFlags: JSON.stringify({ ...DEFAULT_FEATURE_FLAGS, statusPage: true }),
+    })
+    await ensureOnboardingHomeReadyFn()
+    const row = await testDb.query.settings.findFirst()
+    expect(resolveStatusSettings(row!.metadata).enabled).toBe(false)
+  })
+
+  it('seeds one empty board anyone can post on, even when an old client asks for private', async () => {
     await saveWorkspaceAndGoalFn({
       data: {
         workspaceName: 'Acme',
@@ -92,22 +195,43 @@ describe('wizard goals read and write', () => {
       },
     })
     const board = await testDb.query.boards.findFirst({ where: eq(boards.slug, 'feedback') })
-    expect(board!.access.view).toBe('team')
+    expect(board!.access).toMatchObject({
+      view: 'anonymous',
+      vote: 'anonymous',
+      comment: 'anonymous',
+      submit: 'anonymous',
+    })
     expect(await testDb.query.posts.findMany()).toHaveLength(0)
     await saveWorkspaceAndGoalFn({
-      data: {
-        workspaceName: 'Acme',
-        goals: ['product_feedback', 'status_page'],
-        feedbackPrivate: true,
-      },
+      data: { workspaceName: 'Acme', goals: ['product_feedback', 'status_page'] },
     })
     const row = await testDb.query.settings.findFirst()
     expect(getSetupState(row!.setupState)).toMatchObject({
       goals: ['product_feedback', 'status_page'],
-      feedbackPrivate: true,
     })
+    expect(getSetupState(row!.setupState)!.feedbackPrivate ?? false).toBe(false)
     expect(JSON.parse(row!.featureFlags!).statusPage).toBe(true)
     expect(await testDb.query.boards.findMany()).toHaveLength(1)
+  })
+
+  it('keeps an existing private workspace private when it saves the step again', async () => {
+    await testDb.insert(settings).values({
+      name: 'Acme',
+      slug: 'acme',
+      createdAt: new Date(),
+      setupState: JSON.stringify({
+        version: 2,
+        steps: { core: true, workspace: true, startingPoint: null },
+        goals: ['product_feedback'],
+        feedbackPrivate: true,
+      }),
+      featureFlags: JSON.stringify(DEFAULT_FEATURE_FLAGS),
+    })
+    await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme', goals: ['product_feedback'] } })
+    const row = await testDb.query.settings.findFirst()
+    expect(getSetupState(row!.setupState)!.feedbackPrivate).toBe(true)
+    const board = await testDb.query.boards.findFirst({ where: eq(boards.slug, 'feedback') })
+    expect(board!.access.view).toBe('team')
   })
 
   it('reports initial module changes so Home can refresh its navigation context', async () => {

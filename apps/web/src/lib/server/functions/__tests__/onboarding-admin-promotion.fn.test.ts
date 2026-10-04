@@ -31,15 +31,20 @@ const hoisted = vi.hoisted(() => ({
   stamp: { value: null as string | null },
 }))
 
-vi.mock('@/lib/server/onboarding-board', () => ({
-  prepareOnboardingBoard: async (
+// Goal application itself is covered against a database in
+// onboarding-goals.db.test.ts; here it only records what setup handed it.
+vi.mock('@/lib/server/onboarding-board', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/onboarding-board')>()),
+  applyOnboardingGoals: async (
     executor: unknown,
+    _row: unknown,
     state: { goals?: string[]; useCase?: string }
   ) => {
     const writer = executor as { insert?: unknown; update?: unknown }
     expect(typeof writer.insert === 'function' || typeof writer.update === 'function').toBe(true)
     expect(state.goals?.[0]).toBe(state.useCase)
     hoisted.prepared.push({ executor, state })
+    return { modulesChanged: false }
   },
 }))
 
@@ -144,7 +149,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
 })
 
 const { saveWorkspaceAndGoalFn } = await import('../onboarding')
-const { DEFAULT_FEATURE_FLAGS, resolveFeatureFlags } =
+const { DEFAULT_FEATURE_FLAGS } =
   await import('@/lib/server/domains/settings/settings.types')
 const { bootstrapAdminLock } = await import('@/lib/server/domains/principals/bootstrap-admin')
 
@@ -367,8 +372,7 @@ describe('saveWorkspaceAndGoalFn bootstrap authorization', () => {
     })
 
     expect(result.enabledModules).toEqual(['Help Center'])
-    const written = hoisted.flagWrites.find((values) => typeof values.featureFlags === 'string')
-    expect(resolveFeatureFlags(written!.featureFlags as string).helpCenter).toBe(true)
+    expect(hoisted.prepared.map((call) => call.state.goals)).toEqual([['help_center']])
   })
 
   it.each([

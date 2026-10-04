@@ -88,7 +88,13 @@ import { ALL_PERMISSIONS, PERMISSIONS, SYSTEM_ROLE_PERMISSIONS } from '@/lib/sha
 
 function renderSidebar(
   userRole: 'admin' | 'member',
-  opts: { flags?: Record<string, boolean>; name?: string; permissions?: string[] } = {}
+  opts: {
+    flags?: Record<string, boolean>
+    name?: string
+    permissions?: string[]
+    locale?: string
+    messages?: Record<string, string>
+  } = {}
 ) {
   mockRole.current = userRole
   mockGetRouteContext.mockReturnValue({
@@ -102,7 +108,7 @@ function renderSidebar(
     billingEnabled: mockBillingEnabled.current,
   })
   return render(
-    <IntlProvider locale="en" messages={{}}>
+    <IntlProvider locale={opts.locale ?? 'en'} messages={opts.messages ?? {}}>
       <TooltipProvider>
         <SearchPaletteContext.Provider value={searchContext}>
           <AdminSidebar />
@@ -374,4 +380,20 @@ it('opens the shared palette from the sidebar search button, the one tour stop',
   expect(openPalette).toHaveBeenCalledOnce()
   expect(container.ownerDocument.querySelectorAll('[data-tour="search"]')).toHaveLength(1)
   cleanup()
+})
+
+describe('AdminSidebar: language', () => {
+  afterEach(() => cleanup())
+
+  it('names the rail items in the workspace language', async () => {
+    const de = (await import('@/locales/de.json')).default as Record<string, string>
+    renderSidebar('admin', { flags: ALL_ON, locale: 'de', messages: de })
+    const rail = document.querySelector('aside nav[data-tour="products"]') as HTMLElement
+    expect(rail.textContent).toContain(de['admin.nav.home'])
+    expect(rail.textContent).toContain(de['admin.nav.helpCenter'])
+    expect(rail.textContent).not.toContain('Help Center')
+    expect(document.querySelector('aside')?.textContent).toContain(de['admin.nav.settings'])
+    expect(document.querySelector('aside')?.textContent).not.toContain('View portal')
+    expect(document.querySelector('aside')?.getAttribute('lang')).toBe('de')
+  })
 })

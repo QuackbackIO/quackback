@@ -2,9 +2,8 @@ import { Suspense } from 'react'
 import { createFileRoute, notFound, redirect, useRouteContext } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
-import { useIntl } from 'react-intl'
-import { ChatBubbleOvalLeftEllipsisIcon } from '@heroicons/react/24/outline'
-import { EmptyState } from '@/components/shared/empty-state'
+import { PortalNoBoards } from '@/components/public/portal-no-boards'
+import { usePortalNavItems } from '@/components/public/use-portal-nav-items'
 import { FeedbackContainer } from '@/components/public/feedback/feedback-container'
 import { PortalWelcomeCard } from '@/components/public/feedback/portal-welcome-card'
 import { usePreviewWelcomeCard } from '@/components/public/preview-draft-context'
@@ -165,10 +164,10 @@ function PortalHero() {
  * preserved) while the header/hero above flush on the first byte.
  */
 function PortalFeed() {
-  const intl = useIntl()
   const session = useSessionContext()
   const settings = useWorkspaceSettings()
   const { showPoweredBy } = Route.useLoaderData()
+  const navItems = usePortalNavItems()
   const search = Route.useSearch()
 
   const currentBoard = search.board
@@ -193,24 +192,7 @@ function PortalFeed() {
 
   // Empty state if no boards exist (derived from the query, not the loader).
   if (portalData.boards.length === 0) {
-    return (
-      <EmptyState
-        icon={ChatBubbleOvalLeftEllipsisIcon}
-        title={intl.formatMessage({
-          id: 'portal.feedback.empty.comingSoonTitle',
-          defaultMessage: 'Coming Soon',
-        })}
-        description={intl.formatMessage(
-          {
-            id: 'portal.feedback.empty.comingSoonDescription',
-            defaultMessage:
-              '{orgName} is setting up their feedback portal. Check back soon to share your ideas and suggestions.',
-          },
-          { orgName: workspaceName }
-        )}
-        className="py-24"
-      />
-    )
+    return <PortalNoBoards orgName={workspaceName} items={navItems} />
   }
 
   return (

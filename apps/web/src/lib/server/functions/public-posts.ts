@@ -40,7 +40,7 @@ import {
 } from '@/lib/server/domains/posts/post.public.utils'
 import { createPost } from '@/lib/server/domains/posts/post.service'
 import { voteOnPost } from '@/lib/server/domains/posts/post.voting'
-import { checkAnonVoteRateLimit } from '@/lib/server/utils/anon-rate-limit'
+import { checkAnonPostRateLimit, checkAnonVoteRateLimit } from '@/lib/server/utils/anon-rate-limit'
 import { getPostPermissions } from '@/lib/server/domains/posts/post.permissions'
 import { userEditPost, softDeletePost } from '@/lib/server/domains/posts/post.user-actions'
 import { getPublicBoardById } from '@/lib/server/domains/boards/board.public'
@@ -318,6 +318,14 @@ export const userDeletePostFn = createServerFn({ method: 'POST' })
     return { id: postId }
   })
 
+/** The caller's address, as the anonymous rate limits key on it. */
+function clientIp(): string {
+  const headers = getRequestHeaders()
+  return (
+    headers.get('x-forwarded-for')?.split(',')[0]?.trim() || headers.get('x-real-ip') || '0.0.0.0'
+  )
+}
+
 /**
  * Toggle vote on a post. Requires authentication (including anonymous sessions).
  * Anonymous users sign in via Better Auth's anonymous plugin on the client side
@@ -353,10 +361,7 @@ export const runToggleVote = createServerOnlyFn(async function runToggleVote(
     }
 
     // Rate limit anonymous voters by IP
-    const headers = getRequestHeaders()
-    const ip =
-      headers.get('x-forwarded-for')?.split(',')[0]?.trim() || headers.get('x-real-ip') || '0.0.0.0'
-    if (!(await checkAnonVoteRateLimit(ip))) {
+    if (!(await checkAnonVoteRateLimit(clientIp()))) {
       throw new Error('Too many votes, please try again later')
     }
   }
@@ -428,6 +433,11 @@ export const runCreatePublicPost = createServerOnlyFn(async function runCreatePu
     // value from migration 0084).
     if (!actor.testFeedback?.canSubmit && !workspaceAllowsAnonymous(settings.portalConfig)) {
       throw new Error('Anonymous interaction is not enabled')
+    }
+    // Boards can take ideas without an account, so cap how many one address
+    // can post in an hour, across every anonymous identity it mints.
+    if (!actor.testFeedback?.canSubmit && !(await checkAnonPostRateLimit(clientIp()))) {
+      throw new Error('Too many ideas, please try again later')
     }
   } else if (!principalRecord) {
     throw new Error('You must be a member to submit feedback.')

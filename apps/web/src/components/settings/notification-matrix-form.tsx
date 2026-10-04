@@ -19,6 +19,7 @@ import {
   type NotificationPreferences,
 } from '@/lib/server/functions/user'
 import type { NotificationMatrix } from '@/lib/server/domains/subscriptions/notification-matrix'
+import { ONBOARDING_TIPS_KEY } from '@/lib/shared/onboarding-tips'
 
 const GROUP_LABELS: Record<NotificationGroup, string> = {
   feedback: 'Feedback',
@@ -86,6 +87,15 @@ export function NotificationMatrixForm({
       .map((group) => ({ group, items: grouped[group] }))
       .filter((entry) => entry.items.length > 0)
   }, [surface])
+
+  // Setup tips have no row of their own while they are on (quiet normal
+  // state). After "Stop setup tips" the row appears so they can be turned back
+  // on, and stays for the rest of the visit once it has appeared.
+  const tipsOff = preferences?.matrix?.[ONBOARDING_TIPS_KEY]?.email === false
+  const [showTips, setShowTips] = useState(tipsOff)
+  useEffect(() => {
+    if (tipsOff) setShowTips(true)
+  }, [tipsOff])
 
   const [activeGroup, setActiveGroup] = useState<NotificationGroup | undefined>(
     () => groups[0]?.group
@@ -180,6 +190,21 @@ export function NotificationMatrixForm({
           }
           className="py-0"
         />
+        {showTips ? (
+          <SettingRow
+            label="Setup tips"
+            description="Emails with the next step while you set up this workspace."
+            control={
+              <Switch
+                aria-label="Setup tips by email"
+                checked={!tipsOff}
+                onCheckedChange={(checked) => setCell(ONBOARDING_TIPS_KEY, 'email', checked)}
+                disabled={busy}
+              />
+            }
+            className="pt-4 pb-0"
+          />
+        ) : null}
       </Panel>
 
       <Tabs

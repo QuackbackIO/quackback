@@ -40,10 +40,11 @@ type AdminGuard = Pick<
  */
 const adminGuard = createRouteContextMemo<AdminGuard>()
 
-async function loadAdminGuard(): Promise<AdminGuard> {
+async function loadAdminGuard(callbackUrl: string): Promise<AdminGuard> {
   const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
+  // The page being opened rides along so a signed-out visitor returns to it.
   const { user, principal, permissions } = await requireWorkspaceRole({
-    data: { allowedRoles: ['admin', 'member'] },
+    data: { allowedRoles: ['admin', 'member'], callbackUrl },
   })
   return { user, principal, permissions }
 }
@@ -71,7 +72,9 @@ export const Route = createFileRoute('/admin')({
     // Role guard first: it throws a sign-in redirect. The billing helper's
     // requireAuth() throws a plain Error, so racing the two can surface an
     // error page for an unauthenticated visitor.
-    const { user, principal, permissions } = await adminGuard.get(loadAdminGuard)
+    const { user, principal, permissions } = await adminGuard.get(() =>
+      loadAdminGuard(location.href)
+    )
 
     // A pending plan downgrade locks billing managers to the pages where they
     // can get under the new plan's limits. Only a billing manager of a

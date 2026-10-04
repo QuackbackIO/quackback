@@ -199,6 +199,34 @@ export interface UnsubscribeResult {
   postId?: string
 }
 
+export interface UnsubscribePreview {
+  valid: boolean
+  error?: 'invalid' | 'failed'
+  action?: string
+  postTitle?: string
+}
+
+/**
+ * What an unsubscribe link would do, for the confirm page. Read-only: mail
+ * scanners and link previews open every link, so opening one changes nothing.
+ * The change happens only through {@link processUnsubscribeTokenFn} (the
+ * confirm button) or the one-click POST endpoint.
+ */
+export const peekUnsubscribeTokenFn = createServerFn({ method: 'GET' })
+  .validator(processUnsubscribeTokenSchema)
+  .handler(async ({ data }): Promise<UnsubscribePreview> => {
+    try {
+      const { peekUnsubscribeToken } =
+        await import('@/lib/server/domains/subscriptions/subscription.service')
+      const result = await peekUnsubscribeToken(data.token)
+      if (!result) return { valid: false, error: 'invalid' }
+      return { valid: true, action: result.action, postTitle: result.post?.title }
+    } catch (error) {
+      log.error({ err: error }, 'peek unsubscribe token failed')
+      return { valid: false, error: 'failed' }
+    }
+  })
+
 export const processUnsubscribeTokenFn = createServerFn({ method: 'POST' })
   .validator(processUnsubscribeTokenSchema)
   .handler(async ({ data }): Promise<UnsubscribeResult> => {

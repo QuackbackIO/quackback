@@ -1227,14 +1227,36 @@ export const NEW_WORKSPACE_FEATURE_FLAGS: FeatureFlags = {
  */
 export function withNewWorkspaceFlags(
   storedJson: string | null | undefined,
-  flags: FeatureFlags
+  flags: FeatureFlags,
+  goals?: readonly FeatureFlagUseCase[]
 ): FeatureFlags {
   const stored = parseStoredFeatureFlags(storedJson)
   const next = { ...flags }
   for (const key of LABS_FEATURE_FLAGS) {
     if (typeof stored[key] !== 'boolean') next[key] = NEW_WORKSPACE_FEATURE_FLAGS[key]
   }
+  if (goals && typeof stored.changelog !== 'boolean') {
+    next.changelog = newWorkspaceBaseFlags(goals).changelog
+  }
   return next
+}
+
+/** A new workspace's flags before its goals add their modules. */
+export function newWorkspaceBaseFlags(goals: readonly FeatureFlagUseCase[]): FeatureFlags {
+  return {
+    ...NEW_WORKSPACE_FEATURE_FLAGS,
+    changelog: goals.length === 0 || goals.includes('product_feedback'),
+  }
+}
+
+/**
+ * Flags a workspace starts with for the goals chosen at setup: the new
+ * workspace defaults plus each goal's modules. Changelog starts on only with
+ * the Feedback goal, so a support or status workspace is not handed a module
+ * it never asked for.
+ */
+export function newWorkspaceFlagsForGoals(goals: readonly FeatureFlagUseCase[]): FeatureFlags {
+  return flagsForGoals(newWorkspaceBaseFlags(goals), goals).flags
 }
 
 /** Onboarding outcomes that may turn extra products on. Kept local so this
@@ -1265,6 +1287,8 @@ export function enableFlagsForUseCase(
   const needed = featureFlagsForUseCase(useCase)
   return {
     ...current,
+    // Shipping updates belongs with collecting ideas; other goals leave it alone.
+    changelog: current.changelog || useCase === 'product_feedback',
     supportInbox: current.supportInbox || needed.supportInbox,
     supportTickets: current.supportTickets || needed.supportTickets,
     helpCenter: current.helpCenter || needed.helpCenter,

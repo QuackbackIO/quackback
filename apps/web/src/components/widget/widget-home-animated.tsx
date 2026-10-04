@@ -312,7 +312,7 @@ function TitleInput({
         onType(e.target.value)
       }}
       onFocus={onFocus}
-      className="flex-1 bg-transparent border-0 outline-none text-foreground placeholder:text-muted-foreground/50 placeholder:font-normal caret-primary focus-visible:ring-2 focus-visible:ring-ring/50"
+      className="flex-1 bg-transparent border-0 outline-none text-foreground placeholder:text-muted-foreground/50 placeholder:font-normal caret-primary"
       initial={false}
       animate={{
         fontSize: expanded ? '1rem' : '0.875rem',
@@ -1095,7 +1095,7 @@ export function WidgetHomeAnimated({
                       id: 'widget.home.popular.search.label',
                       defaultMessage: 'Search popular ideas',
                     })}
-                    className="flex-1 min-w-0 h-5 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/50 outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                    className="flex-1 min-w-0 h-5 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/50 outline-none"
                   />
                   <button
                     type="button"

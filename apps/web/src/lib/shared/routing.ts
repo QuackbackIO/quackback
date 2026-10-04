@@ -11,13 +11,19 @@
  * one place.
  */
 export function isSafeCallbackUrl(url: unknown): url is string {
-  return (
-    typeof url === 'string' &&
-    url.length > 0 &&
-    url.startsWith('/') &&
-    !url.startsWith('//') &&
-    !url.includes('\\')
-  )
+  if (typeof url !== 'string' || url.length === 0) return false
+  if (!url.startsWith('/') || url.startsWith('//') || url.includes('\\')) return false
+  // Browsers drop tab, CR and LF (and trim other C0 controls) before parsing,
+  // so "/\t/evil.com" would be fetched as "//evil.com". No real path carries one.
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f\s]/.test(url)) return false
+  // Belt and braces: whatever survived must still resolve to this origin.
+  try {
+    const origin = 'https://callback.invalid'
+    return new URL(url, origin).origin === origin
+  } catch {
+    return false
+  }
 }
 
 /** Consume a widget OTT on `/auth/widget-handoff` (teammate cookie guard lives there). */
@@ -33,5 +39,7 @@ export function widgetHandoffPath(ott: string, returnTo: string): string {
 export function isTeamCallback(callbackUrl: string | undefined): boolean {
   if (!callbackUrl) return false
   const teamPrefixes = ['/admin', '/complete-signup']
-  return teamPrefixes.some((p) => callbackUrl === p || callbackUrl.startsWith(p + '/'))
+  // Compare the path only: "/admin?post=1" and "/admin#plan" are team targets.
+  const path = callbackUrl.split(/[?#]/, 1)[0]
+  return teamPrefixes.some((p) => path === p || path.startsWith(p + '/'))
 }

@@ -956,7 +956,7 @@ function CopilotAskInput({
           ))}
         </div>
       )}
-      <div className="relative rounded-lg border border-border bg-background focus-within:ring-2 focus-within:ring-primary/20">
+      <div className="relative rounded-lg border border-border bg-background focus-within:ring-2 focus-within:ring-ring/20">
         <Textarea
           ref={inputRef}
           value={value}

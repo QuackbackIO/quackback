@@ -95,10 +95,9 @@ describe('generateThemeCSS with a partially-specified config', () => {
     expect(readVar(css, ROOT, '--border')).toBe('#d4d4d4')
     expect(readVar(css, ROOT, '--destructive')).toBe('oklch(0.577 0.245 27)')
     expect(readVar(css, ROOT, '--success')).toBe('oklch(0.49 0.115 165.6)')
-    // Derived variables follow the colour that was chosen, not the base's.
-    // (Only the pass-through ones: the derivations that read a colour's
-    // lightness and hue expect oklch, and fall back when handed hex.)
-    expect(readVar(css, ROOT, '--ring')).toBe('#ff5722')
+    // Focus stays neutral whatever the brand colour: the ring follows the
+    // muted text colour, not the primary.
+    expect(readVar(css, ROOT, '--ring')).toBe('#525252')
     // A config with no dark half still gets the dark base, so the page paints a
     // complete theme in either mode.
     expect(readVar(css, DARK, '--background')).toBe('#0a0a0a')
@@ -121,7 +120,7 @@ describe('generateThemeCSS with a partially-specified config', () => {
     expect(readVar(css, DARK, '--border')).toBe('#262626')
     expect(readVar(css, DARK, '--destructive')).toBe('oklch(0.70 0.19 25)')
     expect(readVar(css, DARK, '--success')).toBe('oklch(0.696 0.149 163)')
-    expect(readVar(css, DARK, '--ring')).toBe('#ff5722')
+    expect(readVar(css, DARK, '--ring')).toBe('#a1a1a1')
     expect(readVar(css, ROOT, '--background')).toBe('#ffffff')
   })
 

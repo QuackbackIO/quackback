@@ -214,6 +214,9 @@ describe('admin seed', () => {
     expect(Object.keys(seeded).filter(isTourMessage)).toEqual([])
     expect(seeded['onboarding.goals.title']).toBeUndefined()
     expect(seeded['onboarding.workspace.title']).toBeUndefined()
+    // Email copy is formatted on the server; no page renders it.
+    expect(Object.keys(seeded).filter((key) => key.startsWith('email.'))).toEqual([])
+    expect(all['email.onboarding.ready.heading']).toBeTruthy()
     // The tour's entry points and the launch plan stay seeded.
     expect(seeded['onboarding.tour.replay']).toBe(all['onboarding.tour.replay'])
     expect(seeded['onboarding.launch.title']).toBe(all['onboarding.launch.title'])
