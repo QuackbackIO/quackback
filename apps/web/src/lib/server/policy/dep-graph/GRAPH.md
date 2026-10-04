@@ -145,6 +145,7 @@ Edges (129):
 - merge-suggestions -> settings
 - moderation -> comments
 - moderation -> posts
+- onboarding -> assistant
 - onboarding -> settings
 - posts -> activity
 - posts -> ai
@@ -166,7 +167,6 @@ Edges (129):
 - sla -> office-hours
 - sla -> settings
 - subscriptions -> changelog
-- subscriptions -> onboarding
 - subscriptions -> posts
 - subscriptions -> status
 - summary -> ai

@@ -26,6 +26,11 @@ vi.mock('@/lib/server/config', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/config')>()),
   getBaseUrl: () => 'https://acme.quackback.test',
 }))
+// No model in the test environment: Quinn's step is simply unavailable.
+vi.mock('@/lib/server/domains/assistant', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/domains/assistant')>()),
+  isAssistantConfigured: () => false,
+}))
 const mail = vi.hoisted(() => ({
   welcome: vi.fn(async (_params: Record<string, unknown>) => ({ sent: true })),
   nudge: vi.fn(async (_params: Record<string, unknown>) => ({ sent: true })),

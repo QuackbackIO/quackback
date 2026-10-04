@@ -38,6 +38,7 @@ import { randomUUID } from 'crypto'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'subscriptions' })
+import { ONBOARDING_TIPS_KEY } from '@/lib/shared/onboarding-tips'
 import {
   levelFromFlags,
   type SubscriptionReason,
@@ -611,8 +612,6 @@ export async function processUnsubscribeToken(token: string): Promise<{
       break
     }
     case 'unsubscribe_onboarding': {
-      const { ONBOARDING_TIPS_KEY } =
-        await import('@/lib/server/domains/onboarding/onboarding-emails')
       const current = await getNotificationPreferences(tokenRecord.principalId)
       await updateNotificationPreferences(tokenRecord.principalId, {
         matrix: { ...current.matrix, [ONBOARDING_TIPS_KEY]: { email: false } },

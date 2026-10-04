@@ -12,10 +12,6 @@ import {
   db,
   eq,
   and,
-  inArray,
-  isNull,
-  sql,
-  boards,
   principal,
   user,
   settings,
@@ -28,10 +24,13 @@ import { isLaunchWindowOpen, launchWindowFor } from '@/lib/shared/launch-window'
 import { buildLaunchTasks, type LaunchStatus, type LaunchTask } from '@/lib/shared/launch-checklist'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { isTeamMember } from '@/lib/shared/roles'
-import { resolveFeatureFlags } from '@/lib/server/domains/settings/settings.types'
 import { enqueueJob } from '@/lib/server/jobs/job-queue'
 import { getBaseUrl } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
+import { ONBOARDING_TIPS_KEY } from '@/lib/shared/onboarding-tips'
+import { loadLaunchStatus } from './launch-status'
+import { permissionsForLegacyRole } from '@/lib/server/policy/permissions'
+import type { Role } from '@/lib/shared/roles'
 import { detectFirstWin } from '@/lib/server/activation-wins'
 import { sendOnboardingNudgeEmail, sendOnboardingWelcomeEmail } from '@quackback/email'
 
@@ -39,8 +38,6 @@ const log = logger.child({ component: 'onboarding-emails' })
 
 export const ONBOARDING_EMAIL_QUEUE = 'onboarding-email'
 export const NUDGE_DELAY_MS = 48 * 60 * 60 * 1000
-/** The notification-matrix key the "Stop setup tips" link turns off. */
-export const ONBOARDING_TIPS_KEY = 'onboarding_tips'
 
 export type OnboardingEmailKind = 'welcome' | 'nudge'
 
@@ -119,9 +116,11 @@ export async function onboardingEmailContext(
   if (prefs?.matrix?.[ONBOARDING_TIPS_KEY]?.email === false)
     return { ok: false, reason: 'tips-off' }
 
-  const sent = await db.query.onboardingEmails.findFirst({
-    where: and(eq(onboardingEmails.principalId, principalId), eq(onboardingEmails.kind, kind)),
-  })
+  const [sent] = await db
+    .select({ kind: onboardingEmails.kind })
+    .from(onboardingEmails)
+    .where(and(eq(onboardingEmails.principalId, principalId), eq(onboardingEmails.kind, kind)))
+    .limit(1)
   if (sent) return { ok: false, reason: 'already-sent' }
 
   if (kind === 'nudge') {
@@ -129,7 +128,12 @@ export async function onboardingEmailContext(
       return { ok: false, reason: 'first-result-reached' }
   }
 
-  const status = await launchStatusFor(org, setupState)
+  // The plan as this teammate would see it on Home.
+  const status: LaunchStatus = await loadLaunchStatus({
+    principalId,
+    role: person.role as Role,
+    permissions: permissionsForLegacyRole(person.role as Role),
+  })
   const tasks = buildLaunchTasks(status).filter(
     (task) => task.classification === 'prerequisite' && !task.isCompleted && !task.isSkipped
   )
@@ -139,46 +143,6 @@ export async function onboardingEmailContext(
     ok: true,
     context: { to, name, workspaceName: org.name, status, tasks },
   }
-}
-
-async function launchStatusFor(
-  org: typeof settings.$inferSelect,
-  setupState: ReturnType<typeof getSetupState>
-): Promise<LaunchStatus> {
-  const flags = resolveFeatureFlags(org.featureFlags)
-  const [counts] = await db
-    .select({
-      boards: sql<number>`(select count(*)::int from ${boards} where ${isNull(boards.deletedAt)})`,
-      members: sql<number>`count(*)::int`,
-    })
-    .from(principal)
-    .where(and(eq(principal.type, 'user'), inArray(principal.role, ['admin', 'member'])))
-  return {
-    hasBoards: (counts?.boards ?? 0) > 0,
-    memberCount: counts?.members ?? 1,
-    hasBranding: Boolean(org.logoKey),
-    hasWidgetInstalled: Boolean(org.widgetInstalledFirstSeenAt),
-    goals: setupState?.goals,
-    feedbackPrivate: setupState?.feedbackPrivate,
-    taskResolutions: setupState?.taskResolutions ?? {},
-    useCase: setupState?.goals?.[0] ?? setupState?.useCase ?? null,
-    permissions: {
-      settingsManage: true,
-      boardManage: true,
-      memberManage: true,
-      brandingManage: true,
-      integrationManage: true,
-      helpCenterManage: true,
-      assistantManage: true,
-    },
-    features: {
-      supportInbox: flags.supportInbox,
-      helpCenter: flags.helpCenter,
-      statusPage: flags.statusPage,
-      changelog: flags.changelog,
-      integrations: true,
-    },
-  } as LaunchStatus
 }
 
 /** Where a step's link lands: its sheet when it has one, else its page. */
