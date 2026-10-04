@@ -514,6 +514,35 @@ async function dispatch(
 }
 
 /**
+ * RFC 2369 / RFC 8058 headers for an email's unsubscribe link, so the mail
+ * client's own unsubscribe button works. A token link to the `/unsubscribe`
+ * page (which only asks for confirmation on GET) is offered as one-click
+ * against the POST endpoint beside it, `/api/unsubscribe`, with the same
+ * token. Any other link is offered as a plain link without one-click.
+ */
+export function listUnsubscribeHeaders(unsubscribeUrl: string | undefined): Record<string, string> {
+  if (!unsubscribeUrl) return {}
+  let url: URL
+  try {
+    url = new URL(unsubscribeUrl)
+  } catch {
+    return {}
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return {}
+  const token = url.searchParams.get('token')
+  if (url.pathname.replace(/\/$/, '').endsWith('/unsubscribe') && token) {
+    const oneClick = new URL(url.toString())
+    oneClick.pathname = oneClick.pathname.replace(/\/?unsubscribe\/?$/, '/api/unsubscribe')
+    oneClick.search = new URLSearchParams({ token }).toString()
+    return {
+      'List-Unsubscribe': `<${oneClick.toString()}>`,
+      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+    }
+  }
+  return { 'List-Unsubscribe': `<${url.toString()}>` }
+}
+
+/**
  * Send a branded email (rendered React template) from the workspace identity
  * (`EMAIL_FROM`). The transactional notifier — invites, notifications, alerts.
  */
@@ -522,6 +551,8 @@ async function sendEmail(
     to: string
     subject: string
     react: React.ReactElement
+    /** The email's unsubscribe link. Adds the List-Unsubscribe headers. */
+    unsubscribeUrl?: string
     /** Conversation-specific reply address (e.g. plus-addressed inbound). */
     replyTo?: string
     /** Override the workspace EMAIL_FROM (e.g. a per-team sending address). */
@@ -538,8 +569,13 @@ async function sendEmail(
   } & ThreadingOptions
 ): Promise<EmailResult> {
   const showPoweredBy = await resolveEmailPoweredBy()
+  const { unsubscribeUrl, ...rest } = options
+  const unsubscribeHeaders = listUnsubscribeHeaders(unsubscribeUrl)
   return dispatch({
-    ...options,
+    ...rest,
+    ...(Object.keys(unsubscribeHeaders).length > 0
+      ? { extraHeaders: { ...rest.extraHeaders, ...unsubscribeHeaders } }
+      : {}),
     react: createElement(EmailPoweredByProvider, {
       value: showPoweredBy,
       children: options.react,
@@ -684,6 +720,7 @@ export async function sendOnboardingWelcomeEmail(params: {
     to: params.to,
     subject: `${params.workspaceName} is ready: your next steps`,
     react: OnboardingWelcomeEmail(params),
+    unsubscribeUrl: params.unsubscribeUrl,
     emailType: 'OnboardingWelcomeEmail',
     preview: { homeUrl: params.homeUrl },
   })
@@ -702,6 +739,7 @@ export async function sendOnboardingNudgeEmail(params: {
     to: params.to,
     subject: `Your next step in ${params.workspaceName}`,
     react: OnboardingNudgeEmail(params),
+    unsubscribeUrl: params.unsubscribeUrl,
     emailType: 'OnboardingNudgeEmail',
     preview: { nextStep: params.nextStep.url },
   })
@@ -920,6 +958,7 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams): Pro
       preferencesUrl,
       logoUrl,
     }),
+    unsubscribeUrl,
     emailType: 'StatusChangeEmail',
     preview: { postUrl },
   })
@@ -970,6 +1009,7 @@ export async function sendNewCommentEmail(params: SendNewCommentParams): Promise
       preferencesUrl,
       logoUrl,
     }),
+    unsubscribeUrl,
     emailType: 'NewCommentEmail',
     preview: { postUrl },
   })
@@ -1411,6 +1451,7 @@ export async function sendPostMentionEmail(args: SendPostMentionEmailArgs): Prom
       preferencesUrl,
       logoUrl,
     }),
+    unsubscribeUrl,
     emailType: 'PostMentionEmail',
     preview: { postUrl },
   })
@@ -1527,6 +1568,7 @@ export async function sendChangelogPublishedEmail(
       logoUrl,
     }),
     from,
+    unsubscribeUrl,
     emailType: 'ChangelogPublishedEmail',
     preview: { changelogUrl },
   })
@@ -1576,6 +1618,7 @@ export async function sendFeedbackLinkedEmail(
       attributedByName,
       logoUrl,
     }),
+    unsubscribeUrl,
     emailType: 'FeedbackLinkedEmail',
     preview: { postUrl },
   })
@@ -1632,6 +1675,7 @@ export async function sendStatusIncidentPublishedEmail(
       preferencesUrl,
       logoUrl,
     }),
+    unsubscribeUrl,
     emailType: 'StatusIncidentPublishedEmail',
     preview: { incidentUrl },
   })
@@ -1690,6 +1734,7 @@ export async function sendStatusMaintenanceScheduledEmail(
       preferencesUrl,
       logoUrl,
     }),
+    unsubscribeUrl,
     emailType: 'StatusMaintenanceScheduledEmail',
     preview: { incidentUrl },
   })

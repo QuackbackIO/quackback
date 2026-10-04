@@ -23,6 +23,7 @@ import {
   inArray,
   isNull,
   isNotNull,
+  gt,
   sql,
   postSubscriptions,
   notificationPreferences,
@@ -535,9 +536,51 @@ export async function batchGenerateUnsubscribeTokens(
   return new Map(tokens.map((t) => [t.principalId, t.token]))
 }
 
+type UnsubscribeTokenRow = typeof unsubscribeTokens.$inferSelect
+
+async function postDetailsFor(
+  postId: PostId | null
+): Promise<{ title: string; boardSlug: string } | undefined> {
+  if (!postId) return undefined
+  const post = await db.query.posts.findFirst({
+    where: eq(posts.id, postId),
+    columns: { title: true },
+    with: { board: { columns: { slug: true } } },
+  })
+  return post ? { title: post.title, boardSlug: post.board.slug } : undefined
+}
+
 /**
- * Process an unsubscribe token
- * Returns the action performed with post details for redirect, or null if token is invalid/expired
+ * Read an unsubscribe token without spending it, for the confirm page. Mail
+ * scanners and link previews open every link in an email, so opening the link
+ * must never change anything. Null when the token is unknown, used or expired.
+ */
+export async function peekUnsubscribeToken(token: string): Promise<{
+  action: string
+  postId: PostId | null
+  post?: { title: string; boardSlug: string }
+} | null> {
+  const tokenRecord = await db.query.unsubscribeTokens.findFirst({
+    where: and(
+      eq(unsubscribeTokens.token, token),
+      isNull(unsubscribeTokens.usedAt),
+      gt(unsubscribeTokens.expiresAt, new Date())
+    ),
+  })
+  if (!tokenRecord) return null
+  return {
+    action: tokenRecord.action,
+    postId: tokenRecord.postId,
+    post: await postDetailsFor(tokenRecord.postId),
+  }
+}
+
+/**
+ * Spend an unsubscribe token: one explicit action (the confirm button, or a
+ * mail client's one-click POST). Returns the action performed with post
+ * details for the follow-up link, or null if the token is unknown, used or
+ * expired. The claim is a single conditional update, so a double click or a
+ * click racing a one-click POST performs the action once.
  */
 export async function processUnsubscribeToken(token: string): Promise<{
   action: string
@@ -546,27 +589,21 @@ export async function processUnsubscribeToken(token: string): Promise<{
   post?: { title: string; boardSlug: string }
 } | null> {
   log.debug('process unsubscribe token')
-  const tokenRecord = await db.query.unsubscribeTokens.findFirst({
-    where: eq(unsubscribeTokens.token, token),
-  })
-
-  if (!tokenRecord) {
-    return null
-  }
-
-  if (tokenRecord.usedAt) {
-    return null // Already used
-  }
-
-  if (new Date() > tokenRecord.expiresAt) {
-    return null // Expired
-  }
-
-  // Mark as used
-  await db
+  const [tokenRecord]: UnsubscribeTokenRow[] = await db
     .update(unsubscribeTokens)
     .set({ usedAt: new Date() })
-    .where(eq(unsubscribeTokens.id, tokenRecord.id))
+    .where(
+      and(
+        eq(unsubscribeTokens.token, token),
+        isNull(unsubscribeTokens.usedAt),
+        gt(unsubscribeTokens.expiresAt, new Date())
+      )
+    )
+    .returning()
+
+  if (!tokenRecord) {
+    return null // Unknown, already used or expired
+  }
 
   // Get principal's organization for workspace context
   const principalRecord = await db.query.principal.findFirst({
@@ -577,18 +614,7 @@ export async function processUnsubscribeToken(token: string): Promise<{
     return null
   }
 
-  // Get post details if postId exists
-  let postDetails: { title: string; boardSlug: string } | undefined
-  if (tokenRecord.postId) {
-    const post = await db.query.posts.findFirst({
-      where: eq(posts.id, tokenRecord.postId),
-      columns: { title: true },
-      with: { board: { columns: { slug: true } } },
-    })
-    if (post) {
-      postDetails = { title: post.title, boardSlug: post.board.slug }
-    }
-  }
+  const postDetails = await postDetailsFor(tokenRecord.postId)
 
   // Perform the action
   switch (tokenRecord.action) {
