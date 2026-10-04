@@ -27,7 +27,7 @@ import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.
 import { DEFAULT_ASSISTANT_CONFIG } from '@/lib/shared/assistant/config'
 import {
   DEFAULT_AUTH_CONFIG,
-  NEW_WORKSPACE_FEATURE_FLAGS,
+  newWorkspaceBaseFlags,
   DEFAULT_PORTAL_CONFIG,
   DEFAULT_WIDGET_CONFIG,
   flagsForGoals,
@@ -44,7 +44,6 @@ import {
 } from '@/lib/server/setup-state'
 import {
   applyOnboardingGoals,
-  prepareOnboardingBoard,
   setupGoals,
 } from '@/lib/server/onboarding-board'
 import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/identity-projection'
@@ -230,7 +229,6 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
       if (slug.length < 2) throw new Error('Invalid workspace name - cannot generate valid slug')
       const goals = [...new Set(data.goals ?? [data.useCase ?? 'product_feedback'])]
       const useCase = goals[0]
-      const feedbackPrivate = data.feedbackPrivate ?? data.useCase === 'internal'
       const existingSettings = await getSettings()
 
       // Who owns setup decides this, not what the setup state says. An earlier
@@ -265,16 +263,17 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
 
       let result: SaveWorkspaceAndGoalResult
       if (!existingSettings) {
+        // Setup no longer offers a private board: a new workspace's board is public.
         const initialState: SetupState = finishIdentityOnboarding(
           {
             ...DEFAULT_SETUP_STATE,
             goals,
-            feedbackPrivate,
             steps: { ...DEFAULT_SETUP_STATE.steps, workspace: true },
           },
           useCase
         )
-        const { flags, enabledModules } = flagsForGoals(NEW_WORKSPACE_FEATURE_FLAGS, goals)
+        const baseFlags = newWorkspaceBaseFlags(goals)
+        const { enabledModules } = flagsForGoals(baseFlags, goals)
         const created = await db.transaction(async (tx) => {
           const [row] = await tx
             .insert(settings)
@@ -288,11 +287,13 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
               assistantConfig: DEFAULT_ASSISTANT_CONFIG,
               authConfig: JSON.stringify({ ...DEFAULT_AUTH_CONFIG, openSignup: true }),
               setupState: JSON.stringify(initialState),
-              featureFlags: JSON.stringify(flags),
+              featureFlags: JSON.stringify(baseFlags),
             })
             .returning()
           if (!row) throw new Error('Failed to create workspace settings')
-          await prepareOnboardingBoard(tx, initialState)
+          // The goals' modules turn on through the one flag write, with what
+          // turning each on does (publishing the status page, for one).
+          await applyOnboardingGoals(tx, row, initialState)
           return row
         })
         await invalidateSettingsCache()
@@ -318,14 +319,16 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
               (data.goals &&
                 JSON.stringify(goals) !== JSON.stringify(current.goals ?? [current.useCase])) ||
               (data.feedbackPrivate !== undefined &&
-                feedbackPrivate !== (current.feedbackPrivate ?? false)))
+                data.feedbackPrivate !== (current.feedbackPrivate ?? false)))
           ) {
             throw new Error('Workspace goal is managed by your workspace admin')
           }
           const goal = useCaseManaged ? (current.useCase ?? useCase) : useCase
           const selectedGoals = useCaseManaged ? (current.goals ?? [goal]) : goals
-          const privateFeedback = useCaseManaged ? current.feedbackPrivate : feedbackPrivate
-          const { flags, enabledModules } = flagsForGoals(
+          // Setup no longer offers a private board; a workspace that chose one
+          // before keeps it.
+          const privateFeedback = current.feedbackPrivate
+          const { enabledModules } = flagsForGoals(
             resolveFeatureFlags(row.featureFlags),
             selectedGoals
           )
@@ -333,7 +336,6 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
             portalConfig: row.portalConfig ?? JSON.stringify(DEFAULT_PORTAL_CONFIG),
             authConfig:
               row.authConfig ?? JSON.stringify({ ...DEFAULT_AUTH_CONFIG, openSignup: true }),
-            featureFlags: JSON.stringify(flags),
           }
           if (!nameManaged) updatePayload.name = workspaceName
           if (!slugManaged) updatePayload.slug = slug
@@ -346,7 +348,7 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
             { ...current, goals: selectedGoals, feedbackPrivate: privateFeedback },
             goal
           )
-          await prepareOnboardingBoard(tx, next)
+          await applyOnboardingGoals(tx, updated!, next)
           return {
             state: next,
             value: {
