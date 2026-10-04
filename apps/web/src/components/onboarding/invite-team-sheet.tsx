@@ -125,7 +125,7 @@ function InviteTeamBody({ onDone }: { onDone: () => void }) {
           <label htmlFor="invite-emails" className="text-sm font-medium">
             <FormattedMessage id="onboarding.live.invite.emails" defaultMessage="Email addresses" />
           </label>
-          <div className="flex min-h-10 flex-wrap items-center gap-1.5 rounded-md border px-2 py-1.5 focus-within:ring-2 focus-within:ring-ring/40">
+          <div className="flex min-h-10 flex-wrap items-center gap-1.5 rounded-md border px-2 py-1.5 focus-within:border-muted-foreground/40">
             {emails.map((email) => (
               <span
                 key={email}

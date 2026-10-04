@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -46,10 +46,17 @@ export function InstallMessengerSheet({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const headingRef = useRef<HTMLElement>(null)
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-[560px]">
-        <header className="border-b px-5 py-4 pr-12">
+      <SheetContent
+        side="right"
+        className="w-full gap-0 p-0 sm:max-w-[560px]"
+        // Land on the heading, not the first tab: a ringed tab on open reads
+        // as a second selection.
+        initialFocus={headingRef}
+      >
+        <header ref={headingRef} tabIndex={-1} className="border-b px-5 py-4 pr-12 outline-none">
           <SheetTitle>
             <FormattedMessage
               id="onboarding.live.install.title"
