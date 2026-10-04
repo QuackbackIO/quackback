@@ -365,6 +365,7 @@ went stale the moment a queue moved.
 | `workflow-sweep`                | `*/5 * * * *`  | 1           | 3        | 60s   |
 | `workflow-retention`            | `0 4 * * *`    | 1           | 3        | 60s   |
 | `email-log-retention`           | `0 6 * * *`    | 1           | 3        | 60s   |
+| `onboarding-email`              | —              | 1           | 3        | 60s   |
 | `spam-retention`                | `0 5 * * *`    | 1           | 3        | 60s   |
 | `sending-domain-recheck`        | `20 6 * * *`   | 1           | 3        | 60s   |
 | `analytics`                     | `0 * * * *`    | 1           | 3        | 60s   |

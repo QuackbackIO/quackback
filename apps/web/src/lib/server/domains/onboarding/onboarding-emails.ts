@@ -32,6 +32,8 @@ import { resolveFeatureFlags } from '@/lib/server/domains/settings/settings.type
 import { enqueueJob } from '@/lib/server/jobs/job-queue'
 import { getBaseUrl } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
+import { detectFirstWin } from '@/lib/server/activation-wins'
+import { sendOnboardingNudgeEmail, sendOnboardingWelcomeEmail } from '@quackback/email'
 
 const log = logger.child({ component: 'onboarding-emails' })
 
@@ -123,7 +125,6 @@ export async function onboardingEmailContext(
   if (sent) return { ok: false, reason: 'already-sent' }
 
   if (kind === 'nudge') {
-    const { detectFirstWin } = await import('@/lib/server/activation-wins')
     if ((await detectFirstWin(setupState)).reached)
       return { ok: false, reason: 'first-result-reached' }
   }
@@ -237,9 +238,8 @@ export async function sendOnboardingEmail(
   const { context } = result
   const base = getBaseUrl()
   const unsubscribe = await unsubscribeUrl(principalId, base)
-  const email = await import('@quackback/email')
   try {
-    await deliver(kind, context, base, unsubscribe, email)
+    await deliver(kind, context, base, unsubscribe)
   } catch (error) {
     // Nothing went out: release the claim so the job's retry can send it.
     await db
@@ -255,11 +255,10 @@ async function deliver(
   kind: OnboardingEmailKind,
   context: EmailContext,
   base: string,
-  unsubscribe: string,
-  email: typeof import('@quackback/email')
+  unsubscribe: string
 ): Promise<void> {
   if (kind === 'welcome') {
-    await email.sendOnboardingWelcomeEmail({
+    await sendOnboardingWelcomeEmail({
       to: context.to,
       name: context.name,
       workspaceName: context.workspaceName,
@@ -273,7 +272,7 @@ async function deliver(
     })
   } else {
     const next = context.tasks[0]
-    await email.sendOnboardingNudgeEmail({
+    await sendOnboardingNudgeEmail({
       to: context.to,
       name: context.name,
       workspaceName: context.workspaceName,
