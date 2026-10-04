@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { FormattedMessage, useIntl, type IntlShape } from 'react-intl'
 import { Link } from '@tanstack/react-router'
 import { skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -48,10 +48,20 @@ export function TryMessengerSheet({
   onOpenChange: (open: boolean) => void
   start?: TryMessengerStart
 }) {
+  const headingRef = useRef<HTMLElement>(null)
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-[1200px]">
-        <header className="flex shrink-0 items-center gap-3 border-b px-5 py-4 pr-12">
+      <SheetContent
+        side="right"
+        className="w-full gap-0 p-0 sm:max-w-[1200px]"
+        // Land on the heading: a ringed tab on open reads as a second selection.
+        initialFocus={headingRef}
+      >
+        <header
+          ref={headingRef}
+          tabIndex={-1}
+          className="flex shrink-0 items-center gap-3 border-b px-5 py-4 pr-12 outline-none"
+        >
           <SheetTitle>
             <FormattedMessage id="onboarding.test.title" defaultMessage="Try Messenger" />
           </SheetTitle>
@@ -211,7 +221,7 @@ function TryMessengerBody({
               document.getElementById(`try-messenger-${next}-tab`)?.focus()
             }}
             className={cn(
-              'flex h-10 items-center justify-center gap-1.5 rounded-lg text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'flex h-10 items-center justify-center gap-1.5 rounded-lg text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground/50',
               pane === key ? 'bg-background shadow-sm' : 'text-muted-foreground'
             )}
           >
@@ -314,7 +324,8 @@ function TryMessengerBody({
               item={{ kind: 'conversation', id: conversationId }}
               targetMessageId={null}
               onChanged={() => {}}
-              onBack={() => {}}
+              // Its back arrow shows only where one side fits: go back to the customer.
+              onBack={() => setPane('customer')}
               onSelectItem={() => {}}
               onOpenPost={() => {}}
               isVisitorTyping={false}

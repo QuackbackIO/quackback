@@ -156,7 +156,7 @@ function InstallMessengerBody({ onDone }: { onDone: () => void }) {
                   id: 'onboarding.live.install.snippet',
                   defaultMessage: 'Messenger snippet',
                 })}
-                className="max-h-64 overflow-y-auto whitespace-pre-wrap break-all rounded-lg border bg-muted/50 p-3 font-mono text-xs leading-relaxed outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="max-h-64 overflow-y-auto whitespace-pre-wrap break-all rounded-lg border bg-muted/50 p-3 font-mono text-xs leading-relaxed outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground/50"
               >
                 {snippet}
               </pre>
@@ -286,7 +286,7 @@ function InstallMessengerBody({ onDone }: { onDone: () => void }) {
 function SignedInUsers() {
   return (
     <Collapsible className="rounded-lg border px-3 py-2">
-      <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 rounded-sm text-left text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 rounded-sm text-left text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground/50">
         <FormattedMessage
           id="onboarding.live.install.signedIn"
           defaultMessage="Recognise signed-in users (optional)"
