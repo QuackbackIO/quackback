@@ -1611,5 +1611,7 @@
   "ask.locked.topUp": "更多额度 {price} 起。",
   "ask.locked.upgrade": "升级",
   "ask.locked.addCredits": "增加额度",
-  "ask.locked.askOwner": "请工作区所有者增加额度。"
+  "ask.locked.askOwner": "请工作区所有者增加额度。",
+  "admin.help.contact": "联系我们",
+  "admin.help.whatsNew": "新功能"
 }

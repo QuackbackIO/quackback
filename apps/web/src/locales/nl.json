@@ -1611,5 +1611,7 @@
   "ask.locked.topUp": "Extra tegoed vanaf {price}.",
   "ask.locked.upgrade": "Upgraden",
   "ask.locked.addCredits": "Tegoed toevoegen",
-  "ask.locked.askOwner": "Vraag een eigenaar van de workspace om tegoed toe te voegen."
+  "ask.locked.askOwner": "Vraag een eigenaar van de workspace om tegoed toe te voegen.",
+  "admin.help.contact": "Contact opnemen",
+  "admin.help.whatsNew": "Wat is er nieuw"
 }

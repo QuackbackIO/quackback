@@ -1611,5 +1611,7 @@
   "ask.locked.topUp": "Дополнительные кредиты от {price}.",
   "ask.locked.upgrade": "Улучшить тариф",
   "ask.locked.addCredits": "Добавить кредиты",
-  "ask.locked.askOwner": "Попросите владельца рабочего пространства добавить кредиты."
+  "ask.locked.askOwner": "Попросите владельца рабочего пространства добавить кредиты.",
+  "admin.help.contact": "Связаться с нами",
+  "admin.help.whatsNew": "Что нового"
 }

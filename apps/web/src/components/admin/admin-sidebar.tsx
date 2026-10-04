@@ -1,4 +1,5 @@
 import { LaunchPlanDock } from '@/components/onboarding/launch-plan-dock'
+import { openHelpLauncher } from '@/components/shared/cloud-quackback-widget'
 import { PlanNoticeQuiet } from '@/components/admin/plan-notice-banner'
 import type { PlanNotice } from '@/lib/server/domains/settings/tier-limits.types'
 import { SearchTrigger } from '@/components/admin/ask/search-palette'
@@ -10,6 +11,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link, useRouter, useRouterState } from '@tanstack/react-router'
 import {
   ChatBubbleLeftIcon,
+  ChatBubbleLeftRightIcon,
   MapIcon,
   UsersIcon,
   Cog6ToothIcon,
@@ -441,6 +443,12 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
                       defaultMessage="Replay the tour"
                     />
                   </DropdownMenuItem>
+                  {cloudEnabled && (
+                    <DropdownMenuItem onClick={openHelpLauncher}>
+                      <ChatBubbleLeftRightIcon className="mr-2 h-4 w-4" />
+                      <FormattedMessage id="admin.help.contact" defaultMessage="Contact us" />
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem asChild>
                     <a
                       href="https://www.quackback.io/docs/"
@@ -458,7 +466,7 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
                       rel="noopener noreferrer"
                     >
                       <DocumentTextIcon className="mr-2 h-4 w-4" />
-                      Changelog
+                      <FormattedMessage id="admin.help.whatsNew" defaultMessage="What's new" />
                     </a>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
@@ -562,6 +570,10 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
                 />
               ))}
               <div className="h-px bg-border/40 my-4" />
+              <PlanNoticeQuiet notice={planNotice ?? null} />
+              <div onClickCapture={() => setMobileMenuOpen(false)}>
+                <LaunchPlanDock />
+              </div>
               {showSettings && (
                 <MobileNavLink
                   href="/admin/settings"
@@ -624,8 +636,21 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
                 className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-muted-foreground/80 hover:text-foreground hover:bg-muted/50 transition-colors"
               >
                 <DocumentTextIcon className="h-5 w-5" />
-                Changelog
+                <FormattedMessage id="admin.help.whatsNew" defaultMessage="What's new" />
               </a>
+              {cloudEnabled && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false)
+                    openHelpLauncher()
+                  }}
+                  className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-muted-foreground/80 hover:text-foreground hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground"
+                >
+                  <ChatBubbleLeftRightIcon className="h-5 w-5" />
+                  <FormattedMessage id="admin.help.contact" defaultMessage="Contact us" />
+                </button>
+              )}
               <div className="px-4 py-2 flex flex-col gap-1">
                 <span className="text-xs text-muted-foreground/50">v{__APP_VERSION__}</span>
                 {latestVersion && (

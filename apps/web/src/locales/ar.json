@@ -1611,5 +1611,7 @@
   "ask.locked.topUp": "تبدأ الأرصدة الإضافية من {price}.",
   "ask.locked.upgrade": "ترقية",
   "ask.locked.addCredits": "إضافة أرصدة",
-  "ask.locked.askOwner": "اطلب من مالك مساحة العمل إضافة أرصدة."
+  "ask.locked.askOwner": "اطلب من مالك مساحة العمل إضافة أرصدة.",
+  "admin.help.contact": "تواصل معنا",
+  "admin.help.whatsNew": "ما الجديد"
 }

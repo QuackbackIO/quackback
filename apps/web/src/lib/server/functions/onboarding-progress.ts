@@ -56,6 +56,21 @@ export const getFirstWinCardFn = createServerFn({ method: 'GET' }).handler(async
   return { summary: await firstWinSummary(setupState) }
 })
 
+/**
+ * Whether the workspace is in its launch window: while it is, the admin keeps
+ * its own help launcher out of the way and Help offers Contact us instead.
+ */
+export const getLaunchWindowOpenFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
+  const settings = await getSettings()
+  const setupState = getSetupState(settings?.setupState ?? null)
+  return {
+    open: isLaunchWindowOpen(
+      launchWindowFor({ setupState, workspaceCreatedAt: settings?.createdAt })
+    ),
+  }
+})
+
 /** Dismiss on the first-win card: it stays away for this person. */
 export const dismissFirstWinFn = createServerFn({ method: 'POST' }).handler(async () => {
   const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })

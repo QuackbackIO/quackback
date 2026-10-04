@@ -1611,5 +1611,7 @@
   "ask.locked.topUp": "Mais créditos a partir de {price}.",
   "ask.locked.upgrade": "Fazer upgrade",
   "ask.locked.addCredits": "Adicionar créditos",
-  "ask.locked.askOwner": "Peça a um proprietário do workspace para adicionar créditos."
+  "ask.locked.askOwner": "Peça a um proprietário do workspace para adicionar créditos.",
+  "admin.help.contact": "Fale conosco",
+  "admin.help.whatsNew": "Novidades"
 }

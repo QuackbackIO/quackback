@@ -106,6 +106,7 @@ export const Route = createFileRoute('/admin')({
         updateBannerDismissedVersion: null,
         currentUser: null,
         planNotice: null,
+        inLaunchWindow: false,
         locale: DEFAULT_LOCALE,
         messages: adminSeedMessages(await loadMessages(DEFAULT_LOCALE)),
       }
@@ -122,13 +123,19 @@ export const Route = createFileRoute('/admin')({
       (context.permissions ?? []).includes(PERMISSIONS.POST_APPROVE)
 
     const locale = context.acceptLanguageLocale ?? DEFAULT_LOCALE
-    const [avatarData, latestRelease, planNotice, messages] = await Promise.all([
+    const [avatarData, latestRelease, planNotice, messages, launchWindow] = await Promise.all([
       fetchUserAvatar({
         data: { userId: user.id, fallbackImageUrl: user.image },
       }),
       getLatestVersion(),
       getPlanNotice(),
       loadMessages(locale).then(adminSeedMessages),
+      // Only cloud loads the help launcher, so only cloud asks whether to hide it.
+      context.cloudEnabled
+        ? import('@/lib/server/functions/onboarding-progress')
+            .then((module) => module.getLaunchWindowOpenFn())
+            .catch(() => ({ open: false }))
+        : { open: false },
       // The rail's unread badge rides the document rather than a request of
       // its own after hydration. Unreadable now, it is left to the bell.
       context.queryClient.ensureQueryData(unreadCountQuery()).catch(() => null),
@@ -154,6 +161,7 @@ export const Route = createFileRoute('/admin')({
       latestVersion,
       updateBannerDismissedVersion: context.updateBannerDismissedVersion ?? null,
       planNotice,
+      inLaunchWindow: launchWindow.open,
       locale,
       messages,
       currentUser: {
@@ -238,6 +246,7 @@ function AdminLayout() {
     latestVersion,
     updateBannerDismissedVersion,
     planNotice,
+    inLaunchWindow,
     currentUser,
     locale,
     messages,
@@ -264,6 +273,7 @@ function AdminLayout() {
               latestVersion={latestVersion}
               updateBannerDismissedVersion={updateBannerDismissedVersion}
               planNotice={planNotice}
+              inLaunchWindow={inLaunchWindow}
               currentUser={currentUser}
             />
             <GoingLiveSheets />
@@ -279,6 +289,7 @@ function AdminContent({
   latestVersion,
   updateBannerDismissedVersion,
   planNotice,
+  inLaunchWindow,
   currentUser,
 }: Pick<
   ReturnType<typeof Route.useLoaderData>,
@@ -286,6 +297,7 @@ function AdminContent({
   | 'latestVersion'
   | 'updateBannerDismissedVersion'
   | 'planNotice'
+  | 'inLaunchWindow'
   | 'currentUser'
 >) {
   // An open Home chat sits above the corner launcher's spot; the launcher steps aside.
@@ -297,7 +309,9 @@ function AdminContent({
   })
   return (
     <>
-      <CloudQuackbackWidget launcherHidden={canUseCopilot && chatOpen} />
+      {/* In the launch window the corner launcher stays hidden (it reads like the
+          workspace's own Messenger); Help, Contact us opens it. */}
+      <CloudQuackbackWidget launcherHidden={inLaunchWindow || (canUseCopilot && chatOpen)} />
       <AdminWorkspaceFrame
         sidebar={
           initialUserData && (

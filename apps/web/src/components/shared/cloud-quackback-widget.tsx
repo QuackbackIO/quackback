@@ -24,6 +24,11 @@ function loadSdk() {
   document.head.appendChild(script)
 }
 
+/** Open the help launcher's panel, for a Contact us entry when the launcher itself is hidden. */
+export function openHelpLauncher() {
+  window.Quackback?.('open')
+}
+
 /**
  * Cloud-only dogfood: load the feedback.quackback.io widget on Cloud
  * workspace admin pages. Self-host never loads it. Portal / public /

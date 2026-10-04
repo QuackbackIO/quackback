@@ -1611,5 +1611,7 @@
   "ask.locked.topUp": "Mehr Guthaben gibt es ab {price}.",
   "ask.locked.upgrade": "Upgraden",
   "ask.locked.addCredits": "Guthaben hinzufügen",
-  "ask.locked.askOwner": "Bitte einen Workspace-Inhaber, Guthaben hinzuzufügen."
+  "ask.locked.askOwner": "Bitte einen Workspace-Inhaber, Guthaben hinzuzufügen.",
+  "admin.help.contact": "Kontakt",
+  "admin.help.whatsNew": "Neuigkeiten"
 }

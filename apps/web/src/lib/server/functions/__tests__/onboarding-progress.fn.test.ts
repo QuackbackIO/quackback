@@ -52,8 +52,13 @@ vi.mock('@/lib/server/activation-wins', () => ({
   },
 }))
 
-const { markTourSeenFn, dismissTourOfferFn, getFirstWinCardFn, dismissFirstWinFn } =
-  await import('../onboarding-progress')
+const {
+  markTourSeenFn,
+  dismissTourOfferFn,
+  getFirstWinCardFn,
+  dismissFirstWinFn,
+  getLaunchWindowOpenFn,
+} = await import('../onboarding-progress')
 
 function workspace(createdAt: number, completedAt: number) {
   hoisted.settings = {
@@ -142,5 +147,20 @@ describe('the first-win card', () => {
     const now = Date.now()
     workspace(now - DAY, now - DAY)
     expect(await getFirstWinCardFn()).toBeNull()
+  })
+})
+
+describe('the launch window, for hiding the help launcher', () => {
+  it('is open for a new workspace and closed for an established one', async () => {
+    const now = Date.now()
+    workspace(now - DAY, now - DAY)
+    expect(await getLaunchWindowOpenFn()).toEqual({ open: true })
+    workspace(now - 400 * DAY, now - 300 * DAY)
+    expect(await getLaunchWindowOpenFn()).toEqual({ open: false })
+  })
+
+  it('is only read by the team', async () => {
+    hoisted.permissions = []
+    await expect(getLaunchWindowOpenFn()).rejects.toThrow(/member\.view/)
   })
 })

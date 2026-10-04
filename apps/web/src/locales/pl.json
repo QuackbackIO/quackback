@@ -1611,5 +1611,7 @@
   "ask.locked.topUp": "Dodatkowe kredyty od {price}.",
   "ask.locked.upgrade": "Ulepsz plan",
   "ask.locked.addCredits": "Dodaj kredyty",
-  "ask.locked.askOwner": "Poproś właściciela przestrzeni roboczej o dodanie kredytów."
+  "ask.locked.askOwner": "Poproś właściciela przestrzeni roboczej o dodanie kredytów.",
+  "admin.help.contact": "Skontaktuj się z nami",
+  "admin.help.whatsNew": "Co nowego"
 }
