@@ -2,7 +2,6 @@ import { db, settings, type Transaction } from '@/lib/server/db'
 import type { Actor } from '@/lib/server/policy/types'
 import { recordAuditEventInTransaction } from '@/lib/server/audit/log'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
-import { brandingConfigSchema } from '@/lib/shared/schemas/settings'
 import { generateThemeCSS } from '@/lib/shared/theme/generator'
 import type { ThemeConfig } from '@/lib/shared/theme/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -41,11 +40,10 @@ import {
 /** An explicit appearance or custom CSS keeps the administrator's chosen theme. */
 function hasDefaultTheme(row: SettingsRecord): boolean {
   if (row.customCss?.trim()) return false
-  const parsed = brandingConfigSchema.safeParse(
-    row.brandingConfig === null ? {} : parseJsonOrNull<ThemeConfig>(row.brandingConfig)
-  )
-  if (!parsed.success) return false
-  return generateThemeCSS(parsed.data) === generateThemeCSS({})
+  // The page stores what its editor produces, so read the config as stored.
+  const config = row.brandingConfig === null ? {} : parseJsonOrNull<ThemeConfig>(row.brandingConfig)
+  if (!config || typeof config !== 'object' || Array.isArray(config)) return false
+  return generateThemeCSS(config) === generateThemeCSS({})
 }
 
 /** Whether the plan allows custom colors, read before any row lock is taken. */
