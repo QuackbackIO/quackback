@@ -12,135 +12,121 @@ function context(overrides: Partial<TourContext> = {}): TourContext {
   return {
     goals: ['product_feedback'],
     feedbackPrivate: false,
-    modules: { feedback: true, support: true, helpCenter: true, status: true },
-    permissions: new Set([PERMISSIONS.CONVERSATION_VIEW]),
+    modules: { feedback: true, changelog: false, support: false, helpCenter: false, status: false },
+    permissions: new Set([PERMISSIONS.HELP_CENTER_MANAGE, PERMISSIONS.STATUS_PAGE_MANAGE]),
     narrow: false,
-    empty: { feedback: false, support: false, helpCenter: false, status: false },
+    empty: { feedback: true, support: true, helpCenter: true, status: true },
+    tests: { idea: true, message: true },
     ...overrides,
   }
 }
+
+const allOn = { feedback: true, changelog: true, support: true, helpCenter: true, status: true }
 
 const ids = (stops: TourStop[]) => stops.map((stop) => stop.id)
 const brief = (stops: TourStop[]) =>
   stops.map((stop) => `${stop.id}:${stop.target}${stop.route ? `@${stop.route}` : ''}`)
 
 describe('resolveTourStops', () => {
-  it('builds Feedback plus Support from their empty states, then portal and search', () => {
-    const stops = resolveTourStops(
-      context({
-        goals: ['product_feedback', 'customer_support'],
-        empty: { feedback: true, support: true, helpCenter: false, status: false },
-      })
-    )
-    expect(brief(stops)).toEqual([
-      'products:products@/admin',
-      'feedback:feedback-empty@/admin/feedback',
-      'support:support-empty@/admin/inbox',
-      'view-portal:view-portal@/admin',
-      'search:search',
-    ])
-    expect(stops[1]!.line.defaultMessage).toBe(
-      'Ideas from customers land here. Share the board link to get the first one.'
-    )
-  })
-
-  it('leads with Copilot when Home is the Copilot chat', () => {
-    expect(ids(resolveTourStops(context({ copilotOnHome: true })))).toEqual([
-      'copilot',
-      'feedback',
-      'roadmap',
-      'view-portal',
-      'search',
-    ])
-  })
-
-  it('fills the second goal stop with Roadmap only when Feedback is the only goal', () => {
-    expect(brief(resolveTourStops(context()))).toEqual([
-      'products:products@/admin',
+  it('gives each enabled module its own sidebar stop, goal modules first, then portal and search', () => {
+    expect(
+      brief(
+        resolveTourStops(
+          context({
+            goals: ['customer_support'],
+            modules: { ...allOn, changelog: false, status: false },
+          })
+        )
+      )
+    ).toEqual([
+      'support:nav-support',
       'feedback:nav-feedback',
+      'help-center:nav-help-center',
       'roadmap:nav-roadmap',
       'view-portal:view-portal@/admin',
       'search:search',
     ])
-    expect(ids(resolveTourStops(context({ goals: ['product_feedback', 'status_page'] })))).toEqual([
-      'products',
-      'feedback',
+  })
+
+  it('never spotlights the whole sidebar', () => {
+    for (const copilotOnHome of [true, false]) {
+      expect(ids(resolveTourStops(context({ copilotOnHome })))).not.toContain('products')
+    }
+  })
+
+  it('leads with Copilot on Home and keeps at most six stops, goal modules kept', () => {
+    const stops = resolveTourStops(
+      context({ copilotOnHome: true, goals: ['status_page'], modules: allOn })
+    )
+    expect(stops.length).toBe(MAX_TOUR_STOPS)
+    expect(MAX_TOUR_STOPS).toBe(6)
+    expect(ids(stops)).toEqual([
+      'copilot',
       'status',
+      'feedback',
+      'support',
       'view-portal',
       'search',
     ])
+  })
+
+  it('shows modules switched on after setup', () => {
+    expect(
+      ids(
+        resolveTourStops(
+          context({
+            goals: ['product_feedback'],
+            modules: { ...context().modules, changelog: true },
+          })
+        )
+      )
+    ).toEqual(['feedback', 'roadmap', 'changelog', 'view-portal', 'search'])
+  })
+
+  it('skips a module that is off', () => {
+    expect(
+      ids(
+        resolveTourStops(
+          context({
+            goals: ['customer_support'],
+            modules: { ...context().modules, support: false },
+          })
+        )
+      )
+    ).toEqual(['feedback', 'roadmap', 'view-portal', 'search'])
   })
 
   it('uses the team-only line for private feedback', () => {
     const stops = resolveTourStops(context({ feedbackPrivate: true }))
     expect(ids(stops)).toContain('feedback-private')
     expect(ids(stops)).not.toContain('feedback')
-    expect(stops.find((stop) => stop.id === 'feedback-private')!.line.defaultMessage).toBe(
-      'Ideas from your team land here. Only teammates can see this board.'
-    )
   })
 
-  it('keeps two goal stops in goal order', () => {
-    expect(
-      ids(resolveTourStops(context({ goals: ['help_center', 'status_page', 'customer_support'] })))
-    ).toEqual(['products', 'help-center', 'status', 'view-portal', 'search'])
-  })
-
-  it('gates goal stops on the module, and Support on seeing conversations', () => {
-    expect(
-      ids(
-        resolveTourStops(
-          context({
-            goals: ['customer_support', 'help_center'],
-            modules: { feedback: false, support: false, helpCenter: true, status: true },
-          })
-        )
-      )
-    ).toEqual(['products', 'help-center', 'view-portal', 'search'])
-    expect(
-      ids(resolveTourStops(context({ goals: ['customer_support'], permissions: new Set() })))
-    ).toEqual(['products', 'view-portal', 'search'])
-  })
-
-  it('does not gate Feedback on viewing private posts', () => {
-    expect(ids(resolveTourStops(context({ permissions: new Set() })))).toContain('feedback')
-  })
-
-  it('ends on the sidebar Search row, which every page has, whatever the modules', () => {
-    const stops = resolveTourStops(
+  it('offers a Try it that runs the real thing, only where it works', () => {
+    const tries = (ctx: TourContext) =>
+      Object.fromEntries(resolveTourStops(ctx).map((stop) => [stop.id, stop.tryIt ?? null]))
+    const full = tries(context({ goals: ['customer_support'], modules: allOn }))
+    expect(full.feedback).toMatchObject({ kind: 'test', start: 'idea' })
+    expect(full.support).toMatchObject({ kind: 'test', start: 'message' })
+    expect(full['help-center']).toMatchObject({ kind: 'link', to: '/admin/help-center' })
+    expect(full.roadmap).toBeNull()
+    const none = tries(
       context({
-        goals: ['status_page'],
-        modules: { feedback: false, support: false, helpCenter: false, status: true },
+        goals: ['customer_support'],
+        modules: allOn,
+        tests: { idea: false, message: false },
+        permissions: new Set(),
+        empty: { feedback: false, support: false, helpCenter: false, status: false },
       })
     )
-    expect(brief(stops).at(-1)).toBe('search:search')
+    expect(Object.values(none).every((value) => value === null)).toBe(true)
   })
 
-  it('leaves sidebar stops out on a phone but keeps empty states', () => {
+  it('leaves sidebar stops out on a phone', () => {
     expect(
-      brief(
-        resolveTourStops(
-          context({
-            narrow: true,
-            goals: ['customer_support', 'product_feedback'],
-            empty: { feedback: false, support: true, helpCenter: false, status: false },
-          })
-        )
-      )
-    ).toEqual(['support:support-empty@/admin/inbox'])
-  })
-
-  it('never has more than five stops', () => {
-    for (const copilotOnHome of [true, false]) {
-      const stops = resolveTourStops(
-        context({
-          copilotOnHome,
-          goals: ['product_feedback', 'customer_support', 'help_center', 'status_page'],
-        })
-      )
-      expect(stops.length).toBeLessThanOrEqual(MAX_TOUR_STOPS)
-      expect(new Set(ids(stops)).size).toBe(stops.length)
-    }
+      ids(resolveTourStops(context({ narrow: true, copilotOnHome: true, modules: allOn })))
+    ).toEqual(['copilot'])
+    expect(resolveTourStops(context({ narrow: true }))).toEqual([])
   })
 })
 

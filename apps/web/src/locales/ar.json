@@ -1290,8 +1290,6 @@
   "onboarding.launch.progress": "{done} من {total}",
   "onboarding.tour.stop.copilot.lead": "Copilot.",
   "onboarding.tour.stop.copilot.line": "اسأل عن أي شيء، أو أخبره بما تريد تغييره. لا يتغير شيء حتى تطبّق.",
-  "onboarding.tour.stop.products.lead": "منتجاتك.",
-  "onboarding.tour.stop.products.line": "كل ما فعّلته موجود هنا.",
   "onboarding.tour.stop.feedback.lead": "الملاحظات.",
   "onboarding.tour.stop.feedback.line": "تصل أفكار العملاء إلى هنا. شارك رابط اللوحة لتحصل على أول فكرة.",
   "onboarding.tour.stop.feedbackPrivate.line": "تصل أفكار فريقك إلى هنا. لا يرى هذه اللوحة إلا أعضاء الفريق.",
@@ -1501,5 +1499,11 @@
   "onboarding.branding.permissionRequired": "اطلب من مالك مساحة العمل تغيير العلامة التجارية.",
   "onboarding.branding.unavailable": "لم يعد تغيير العلامة التجارية هذا متاحًا.",
   "onboarding.branding.failed": "تعذر حفظ العلامة التجارية. حاول مجددًا.",
-  "ask.settings.websiteUnavailable": "اختر موقعًا آخر أو حمّل شعارًا في إعدادات البوابة."
+  "ask.settings.websiteUnavailable": "اختر موقعًا آخر أو حمّل شعارًا في إعدادات البوابة.",
+  "onboarding.tour.stop.changelog.lead": "سجل التغييرات.",
+  "onboarding.tour.stop.changelog.line": "أخبر العملاء بما أطلقته، وأغلق الدائرة على أفكارهم.",
+  "onboarding.tour.stop.try.idea": "انشر فكرة تجريبية",
+  "onboarding.tour.stop.try.message": "أرسل رسالة تجريبية",
+  "onboarding.tour.stop.try.article": "اكتب أول مقال",
+  "onboarding.tour.stop.try.service": "إضافة خدمة"
 }

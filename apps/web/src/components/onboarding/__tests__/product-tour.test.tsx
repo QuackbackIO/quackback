@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '@/locales/en.json'
 import de from '@/locales/de.json'
 import { adminSeedMessages } from '@/lib/shared/i18n'
@@ -14,10 +14,13 @@ const hoisted = vi.hoisted(() => ({
     feedbackPrivate: false,
     empty: { feedback: true, support: true, helpCenter: true, status: true },
   },
-  flags: { feedback: true, supportInbox: true, helpCenter: true, statusPage: true } as Record<
-    string,
-    boolean
-  >,
+  flags: {
+    feedback: true,
+    changelog: false,
+    supportInbox: false,
+    helpCenter: false,
+    statusPage: false,
+  } as Record<string, boolean>,
   permissions: new Set<string>(),
   narrow: false,
   seen: 0,
@@ -50,14 +53,12 @@ vi.mock('@/lib/client/use-permissions', () => ({ usePermissions: () => hoisted.p
 import { ProductTourProvider, useProductTour, type TourEndAction } from '../product-tour'
 
 const TARGETS = [
-  'products',
-  'feedback-empty',
   'nav-feedback',
   'nav-roadmap',
-  'support-empty',
+  'nav-changelog',
   'nav-support',
-  'help-center-empty',
-  'status-empty',
+  'nav-help-center',
+  'nav-status',
   'view-portal',
   'search',
 ]
@@ -73,12 +74,20 @@ function Start() {
 
 function mount(
   endAction?: TourEndAction,
-  { locale = 'en', messages = en }: { locale?: string; messages?: Record<string, string> } = {}
+  {
+    locale = 'en',
+    messages = en,
+    openTest,
+  }: {
+    locale?: string
+    messages?: Record<string, string>
+    openTest?: (start: 'idea' | 'message') => void
+  } = {}
 ) {
   return render(
     <IntlProvider locale={locale} messages={messages}>
       <QueryClientProvider client={new QueryClient()}>
-        <ProductTourProvider endAction={endAction}>
+        <ProductTourProvider endAction={endAction} openTest={openTest}>
           <Start />
           {TARGETS.map((target) => (
             <div key={target} data-tour={target} />
@@ -97,7 +106,7 @@ async function startTour() {
   await act(async () => {
     fireEvent.click(start)
   })
-  await waitFor(() => expect(dialog()).toHaveTextContent(/^.*1 of \d/))
+  await waitFor(() => expect(dialog()).toHaveTextContent(/^.*1 of \d/), { timeout: 5000 })
   return start
 }
 
@@ -106,6 +115,11 @@ async function press(key: string) {
     fireEvent.keyDown(document, { key })
   })
 }
+
+// The runner loads on first start; load it once up front so no test pays for it.
+beforeAll(async () => {
+  await import('../product-tour-runner')
+}, 30_000)
 
 beforeEach(() => {
   hoistedPath.current = '/admin'
@@ -118,6 +132,13 @@ beforeEach(() => {
   hoisted.permissions = new Set([PERMISSIONS.MEMBER_VIEW, PERMISSIONS.CONVERSATION_VIEW])
   hoisted.narrow = false
   hoisted.seen = 0
+  hoisted.flags = {
+    feedback: true,
+    changelog: false,
+    supportInbox: false,
+    helpCenter: false,
+    statusPage: false,
+  }
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
     () =>
       ({
@@ -144,31 +165,29 @@ afterEach(() => {
 })
 
 describe('guided tour', () => {
-  it('never starts on its own and walks five stops with the keyboard to the end card', async () => {
+  it('never starts on its own and walks the modules with the keyboard to the end card', async () => {
     mount()
     expect(screen.queryByRole('dialog')).toBeNull()
     const start = await startTour()
 
-    expect(dialog()).toHaveTextContent('Your products. Everything you turned on lives here.')
-    expect(dialog()).toHaveTextContent('1 of 5')
+    expect(dialog()).toHaveTextContent(
+      'Feedback. Ideas from customers land here. Share the board link to get the first one.'
+    )
+    expect(dialog()).toHaveTextContent('1 of 4')
     expect(screen.queryByRole('button', { name: 'Back' })).toBeNull()
     await waitFor(() => expect(dialog()).toHaveFocus())
 
     await press('ArrowRight')
-    await waitFor(() => expect(dialog()).toHaveTextContent('2 of 5'))
-    expect(dialog()).toHaveTextContent(
-      'Feedback. Ideas from customers land here. Share the board link to get the first one.'
-    )
-    expect(hoistedPath.navigations).toContain('/admin/feedback')
-
+    await waitFor(() => expect(dialog()).toHaveTextContent('2 of 4'))
+    expect(dialog()).toHaveTextContent('Roadmap.')
     await press('ArrowLeft')
-    await waitFor(() => expect(dialog()).toHaveTextContent('1 of 5'))
-    for (const step of [2, 3, 4, 5]) {
+    await waitFor(() => expect(dialog()).toHaveTextContent('1 of 4'))
+    for (const step of [2, 3, 4]) {
       await press('ArrowRight')
-      await waitFor(() => expect(dialog()).toHaveTextContent(`${step} of 5`))
+      await waitFor(() => expect(dialog()).toHaveTextContent(`${step} of 4`))
     }
     expect(dialog()).toHaveTextContent('Search. Jump to any page or record from anywhere with')
-    expect(screen.getByRole('button', { name: 'Finish' })).toBeVisible()
+    expect(hoistedPath.navigations.every((path) => path === '/admin')).toBe(true)
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Finish' }))
@@ -177,11 +196,6 @@ describe('guided tour', () => {
       expect(screen.getByRole('dialog', { name: "That's the tour" })).toBeVisible()
     )
     expect(hoistedPath.current).toBe('/admin')
-    expect(screen.getByText('Replay it any time from Help.')).toBeVisible()
-    expect(screen.getAllByRole('button').filter((b) => b.closest('[role="dialog"]'))).toHaveLength(
-      1
-    )
-
     fireEvent.click(screen.getByRole('button', { name: 'Done' }))
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(start).toHaveFocus()
@@ -201,35 +215,51 @@ describe('guided tour', () => {
     mount()
     await startTour()
     await press('ArrowRight')
-    await waitFor(() => expect(dialog()).toHaveTextContent('2 of 5'))
+    await waitFor(() => expect(dialog()).toHaveTextContent('2 of 4'))
     const buttons = Array.from(dialog().querySelectorAll('button'))
     buttons.at(-1)!.focus()
     await press('Tab')
     expect(buttons[0]).toHaveFocus()
   })
 
-  it('builds the stops from the goals before it opens', async () => {
-    hoisted.context = {
-      goals: ['customer_support'],
-      feedbackPrivate: false,
-      empty: { feedback: false, support: true, helpCenter: false, status: false },
-    }
+  it('includes a module switched on after setup, goal modules first', async () => {
+    hoisted.context = { ...hoisted.context, goals: ['customer_support'] }
+    hoisted.flags = { ...hoisted.flags, supportInbox: true, changelog: true }
     mount()
     await startTour()
-    expect(dialog()).toHaveTextContent('1 of 4')
-    await press('ArrowRight')
-    await waitFor(() =>
-      expect(dialog()).toHaveTextContent('Support. Messages from Messenger and email arrive here.')
-    )
-    expect(hoistedPath.navigations).toContain('/admin/inbox')
+    expect(dialog()).toHaveTextContent('Support. Messages from Messenger and email arrive here.')
+    expect(dialog()).toHaveTextContent('1 of 6')
   })
 
-  it('leaves sidebar stops out on a phone', async () => {
-    hoisted.narrow = true
+  it("runs a stop's Try it: the tour closes and the test opens", async () => {
+    const openTest = vi.fn()
+    hoisted.context = { ...hoisted.context, goals: ['customer_support'] }
+    hoisted.flags = { ...hoisted.flags, supportInbox: true }
+    mount(undefined, { openTest })
+    await startTour()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Send a test message' }))
+    })
+    expect(openTest).toHaveBeenCalledWith('message')
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('offers no Try it without a way to run it', async () => {
+    hoisted.flags = { ...hoisted.flags, supportInbox: true }
+    hoisted.context = { ...hoisted.context, goals: ['customer_support'] }
     mount()
     await startTour()
-    expect(dialog()).toHaveTextContent('1 of 1')
-    expect(dialog()).toHaveTextContent('Feedback.')
+    expect(screen.queryByRole('button', { name: 'Send a test message' })).toBeNull()
+  })
+
+  it('has no stops on a phone without Copilot on Home', async () => {
+    hoisted.narrow = true
+    mount()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Start tour' }))
+    })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('offers the end card next step from the slot, with the private-feedback choice', async () => {
@@ -242,11 +272,9 @@ describe('guided tour', () => {
     mount(endAction)
     await startTour()
     for (let step = 0; step < 4; step++) await press('ArrowRight')
-    await press('ArrowRight')
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Post a test idea' })).toBeVisible()
     )
-    expect(screen.getByRole('button', { name: 'Done' })).toBeVisible()
     fireEvent.click(screen.getByRole('button', { name: 'Post a test idea' }))
     expect(screen.queryByRole('dialog')).toBeNull()
   })
@@ -267,7 +295,7 @@ describe('strings', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Start tour' }))
     })
-    await waitFor(() => expect(dialog()).toHaveTextContent('Weiter'))
-    expect(dialog()).toHaveTextContent(de['onboarding.tour.stop.products.lead'])
+    await waitFor(() => expect(dialog()).toHaveTextContent('Weiter'), { timeout: 5000 })
+    expect(dialog()).toHaveTextContent(de['onboarding.tour.stop.feedback.lead'])
   })
 })

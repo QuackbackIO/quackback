@@ -122,6 +122,7 @@ const RAIL_ITEMS: RailItem[] = [
     href: '/admin/changelog',
     icon: ENTITY_ICONS.changelog,
     product: 'changelog',
+    tour: 'nav-changelog',
   },
   // One Support entry covers conversations and tickets: the unified inbox
   // shell serves both (gated on either flag being on).

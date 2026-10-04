@@ -1290,8 +1290,6 @@
   "onboarding.launch.progress": "{done} z {total}",
   "onboarding.tour.stop.copilot.lead": "Copilot.",
   "onboarding.tour.stop.copilot.line": "Zapytaj o cokolwiek albo powiedz, co zmienić. Nic się nie zmieni, dopóki tego nie zastosujesz.",
-  "onboarding.tour.stop.products.lead": "Twoje produkty.",
-  "onboarding.tour.stop.products.line": "Wszystko, co włączono, znajdziesz tutaj.",
   "onboarding.tour.stop.feedback.lead": "Opinie.",
   "onboarding.tour.stop.feedback.line": "Tutaj trafiają pomysły klientów. Udostępnij link do tablicy, aby otrzymać pierwszy.",
   "onboarding.tour.stop.feedbackPrivate.line": "Tutaj trafiają pomysły zespołu. Tę tablicę widzą tylko członkowie zespołu.",
@@ -1501,5 +1499,11 @@
   "onboarding.branding.permissionRequired": "Poproś właściciela przestrzeni roboczej o zmianę wyglądu marki.",
   "onboarding.branding.unavailable": "Ta zmiana wyglądu marki nie jest już dostępna.",
   "onboarding.branding.failed": "Nie udało się zapisać wyglądu marki. Spróbuj ponownie.",
-  "ask.settings.websiteUnavailable": "Wybierz inną stronę lub prześlij logo w ustawieniach portalu."
+  "ask.settings.websiteUnavailable": "Wybierz inną stronę lub prześlij logo w ustawieniach portalu.",
+  "onboarding.tour.stop.changelog.lead": "Dziennik zmian.",
+  "onboarding.tour.stop.changelog.line": "Pokaż klientom, co wydano, i domknij temat ich pomysłów.",
+  "onboarding.tour.stop.try.idea": "Opublikuj testowy pomysł",
+  "onboarding.tour.stop.try.message": "Wyślij wiadomość testową",
+  "onboarding.tour.stop.try.article": "Napisz pierwszy artykuł",
+  "onboarding.tour.stop.try.service": "Dodaj usługę"
 }

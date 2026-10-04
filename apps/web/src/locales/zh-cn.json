@@ -1290,8 +1290,6 @@
   "onboarding.launch.progress": "{done}/{total}",
   "onboarding.tour.stop.copilot.lead": "Copilot。",
   "onboarding.tour.stop.copilot.line": "随便问，或告诉它要改什么。在你应用之前不会有任何更改。",
-  "onboarding.tour.stop.products.lead": "你的产品。",
-  "onboarding.tour.stop.products.line": "你开启的所有功能都在这里。",
   "onboarding.tour.stop.feedback.lead": "反馈。",
   "onboarding.tour.stop.feedback.line": "客户的想法会出现在这里。分享看板链接，收集第一条想法。",
   "onboarding.tour.stop.feedbackPrivate.line": "团队的想法会出现在这里。只有团队成员能看到这个看板。",
@@ -1501,5 +1499,11 @@
   "onboarding.branding.permissionRequired": "请工作区所有者更改品牌设置。",
   "onboarding.branding.unavailable": "此品牌设置更改已不可用。",
   "onboarding.branding.failed": "无法保存品牌设置。请重试。",
-  "ask.settings.websiteUnavailable": "选择另一个网站，或在门户设置中上传标志。"
+  "ask.settings.websiteUnavailable": "选择另一个网站，或在门户设置中上传标志。",
+  "onboarding.tour.stop.changelog.lead": "更新日志。",
+  "onboarding.tour.stop.changelog.line": "告诉客户上线了什么，让他们的想法有始有终。",
+  "onboarding.tour.stop.try.idea": "发布测试想法",
+  "onboarding.tour.stop.try.message": "发送测试消息",
+  "onboarding.tour.stop.try.article": "撰写第一篇文章",
+  "onboarding.tour.stop.try.service": "添加服务"
 }

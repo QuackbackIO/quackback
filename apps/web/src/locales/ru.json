@@ -1290,8 +1290,6 @@
   "onboarding.launch.progress": "{done} из {total}",
   "onboarding.tour.stop.copilot.lead": "Copilot.",
   "onboarding.tour.stop.copilot.line": "Спрашивайте что угодно или скажите, что изменить. Ничего не изменится, пока вы не примените.",
-  "onboarding.tour.stop.products.lead": "Ваши продукты.",
-  "onboarding.tour.stop.products.line": "Здесь всё, что вы включили.",
   "onboarding.tour.stop.feedback.lead": "Обратная связь.",
   "onboarding.tour.stop.feedback.line": "Сюда приходят идеи клиентов. Поделитесь ссылкой на доску, чтобы получить первую.",
   "onboarding.tour.stop.feedbackPrivate.line": "Сюда приходят идеи вашей команды. Эту доску видят только участники команды.",
@@ -1501,5 +1499,11 @@
   "onboarding.branding.permissionRequired": "Попросите владельца рабочего пространства изменить оформление.",
   "onboarding.branding.unavailable": "Это изменение оформления больше недоступно.",
   "onboarding.branding.failed": "Не удалось сохранить оформление. Попробуйте ещё раз.",
-  "ask.settings.websiteUnavailable": "Выберите другой сайт или загрузите логотип в настройках портала."
+  "ask.settings.websiteUnavailable": "Выберите другой сайт или загрузите логотип в настройках портала.",
+  "onboarding.tour.stop.changelog.lead": "Список изменений.",
+  "onboarding.tour.stop.changelog.line": "Расскажите клиентам, что вышло, и замкните цикл по их идеям.",
+  "onboarding.tour.stop.try.idea": "Опубликовать тестовую идею",
+  "onboarding.tour.stop.try.message": "Отправить тестовое сообщение",
+  "onboarding.tour.stop.try.article": "Написать первую статью",
+  "onboarding.tour.stop.try.service": "Добавить сервис"
 }

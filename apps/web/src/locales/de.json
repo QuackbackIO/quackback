@@ -1290,8 +1290,6 @@
   "onboarding.launch.progress": "{done} von {total}",
   "onboarding.tour.stop.copilot.lead": "Copilot.",
   "onboarding.tour.stop.copilot.line": "Frag alles oder sag, was geändert werden soll. Nichts ändert sich, bevor du es anwendest.",
-  "onboarding.tour.stop.products.lead": "Deine Produkte.",
-  "onboarding.tour.stop.products.line": "Alles, was du aktiviert hast, findest du hier.",
   "onboarding.tour.stop.feedback.lead": "Feedback.",
   "onboarding.tour.stop.feedback.line": "Hier landen die Ideen deiner Kunden. Teile den Board-Link, um die erste zu bekommen.",
   "onboarding.tour.stop.feedbackPrivate.line": "Hier landen die Ideen deines Teams. Nur Teammitglieder sehen dieses Board.",
@@ -1501,5 +1499,11 @@
   "onboarding.branding.permissionRequired": "Bitte einen Workspace-Eigentümer, das Branding zu ändern.",
   "onboarding.branding.unavailable": "Diese Branding-Änderung ist nicht mehr verfügbar.",
   "onboarding.branding.failed": "Das Branding konnte nicht gespeichert werden. Versuche es erneut.",
-  "ask.settings.websiteUnavailable": "Wähle eine andere Website oder lade ein Logo in den Portal-Einstellungen hoch."
+  "ask.settings.websiteUnavailable": "Wähle eine andere Website oder lade ein Logo in den Portal-Einstellungen hoch.",
+  "onboarding.tour.stop.changelog.lead": "Changelog.",
+  "onboarding.tour.stop.changelog.line": "Zeig Kunden, was neu ist, und schließ den Kreis zu ihren Ideen.",
+  "onboarding.tour.stop.try.idea": "Testidee posten",
+  "onboarding.tour.stop.try.message": "Testnachricht senden",
+  "onboarding.tour.stop.try.article": "Ersten Artikel schreiben",
+  "onboarding.tour.stop.try.service": "Dienst hinzufügen"
 }

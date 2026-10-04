@@ -37,11 +37,14 @@ export function ProductTourProvider({
   children,
   copilotOnHome = false,
   endAction,
+  openTest,
 }: {
   children: ReactNode
   /** Home leads with the Copilot chat, so the tour opens on it. */
   copilotOnHome?: boolean
   endAction?: TourEndAction
+  /** Opens a test on the Try Messenger sheet, for the stops' Try it actions. */
+  openTest?: (start: 'idea' | 'message') => void
 }) {
   // Counts start requests; each new value starts the tour from the top.
   const [runId, setRunId] = useState(0)
@@ -52,7 +55,12 @@ export function ProductTourProvider({
       {children}
       {runId > 0 && (
         <Suspense fallback={null}>
-          <ProductTourRunner runId={runId} copilotOnHome={copilotOnHome} endAction={endAction} />
+          <ProductTourRunner
+            runId={runId}
+            copilotOnHome={copilotOnHome}
+            endAction={endAction}
+            openTest={openTest}
+          />
         </Suspense>
       )}
     </TourApi.Provider>
