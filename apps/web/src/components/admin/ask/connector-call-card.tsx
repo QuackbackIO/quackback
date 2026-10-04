@@ -44,7 +44,7 @@ export function ConnectorCallCard({
   const status = detail.data?.status ?? 'proposed'
   const name = action.connector.name
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-background p-3">
+    <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3 shadow-raise">
       <span
         aria-hidden="true"
         className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-semibold"

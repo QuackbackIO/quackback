@@ -31,7 +31,7 @@ export function GettingStartedCard({
     <Card
       role="region"
       aria-labelledby="getting-started-title"
-      className="gap-4 rounded-xl p-4 [--ring:var(--muted-foreground)]"
+      className="gap-4 rounded-xl p-4 shadow-raise [--ring:var(--muted-foreground)]"
     >
       <div className="flex items-center justify-between">
         <h2 id="getting-started-title" className="text-sm font-semibold">

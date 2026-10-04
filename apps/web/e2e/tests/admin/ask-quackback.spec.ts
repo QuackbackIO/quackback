@@ -138,26 +138,38 @@ test.describe('Copilot on Home', () => {
     await expect(page.getByText(ANSWER)).toBeVisible()
   }
 
-  test('a chat goes full screen, Esc returns Home and Continue reopens it', async ({ page }) => {
+  test('a chat opens inline: the sidebar stays, the overview folds away and comes back', async ({
+    page,
+  }) => {
     const turns = await stubCopilot(page)
     const question = `Set my brand color ${Date.now()}`
     await startChat(page, question)
     expect(turns).toHaveLength(1)
-    // Full screen: the sidebar, and its Search row, are gone until Home.
     const sidebarSearch = page.locator('[data-tour="search"]')
-    await expect(sidebarSearch).toHaveCount(0)
+    const welcome = page.getByRole('heading', { name: /^Welcome/ })
+    await expect(sidebarSearch).toBeVisible()
+    await expect(welcome).toBeHidden()
+    await expect(homeComposer(page)).toBeFocused()
     await page.keyboard.press('Escape')
     await expect(page).toHaveURL(/\/admin\/?$/)
+    await expect(welcome).toBeVisible()
     await expect(sidebarSearch).toBeVisible()
     await expect(homeComposer(page)).toHaveValue('')
     await page.getByRole('button', { name: new RegExp(`Continue: ${question}`) }).click()
     await expect(page.getByText(question).first()).toBeVisible()
+    await expect(welcome).toBeHidden()
+    await page.getByRole('button', { name: 'Back', exact: true }).click()
+    await expect(page).toHaveURL(/\/admin\/?$/)
+    await expect(welcome).toBeVisible()
+    await page.goForward()
+    await expect(welcome).toBeHidden()
     await page.goBack()
     await expect(page).toHaveURL(/\/admin\/?$/)
+    await expect(welcome).toBeVisible()
     expect(turns).toHaveLength(1)
   })
 
-  test('Ctrl+K opens search over the full-screen chat', async ({ page }) => {
+  test('Ctrl+K opens search over the chat', async ({ page }) => {
     await stubCopilot(page)
     await startChat(page, `Find our refund policy ${Date.now()}`)
     await page.keyboard.press('Control+k')
@@ -170,7 +182,7 @@ test.describe('Copilot on Home', () => {
     await expect(page).toHaveURL(/\/admin\/?$/)
   })
 
-  test('the full-screen chat fits a phone', async ({ page }) => {
+  test('the chat fits a phone', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await stubCopilot(page)
     await startChat(page, `Invite my team ${Date.now()}`)
@@ -178,6 +190,7 @@ test.describe('Copilot on Home', () => {
       () => document.documentElement.scrollWidth - window.innerWidth
     )
     expect(overflow).toBeLessThanOrEqual(0)
-    await expect(page.getByRole('button', { name: /Home/ }).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Back', exact: true })).toBeVisible()
+    await expect(homeComposer(page)).toBeInViewport()
   })
 })

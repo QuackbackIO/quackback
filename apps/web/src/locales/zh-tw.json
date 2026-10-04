@@ -1402,6 +1402,7 @@
   "ask.chat.stop": "停止",
   "ask.search.row": "搜尋",
   "ask.chat.newChat": "新對話",
+  "ask.chat.back": "返回",
   "ask.chat.continue": "繼續：{title}",
   "ask.connector.sends": "會將此請求傳送到 {name}",
   "ask.connector.skipped": "已略過 {name}，未傳送任何內容。",

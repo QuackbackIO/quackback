@@ -1420,6 +1420,7 @@
   "ask.chat.stop": "Остановить",
   "ask.search.row": "Поиск",
   "ask.chat.newChat": "Новый чат",
+  "ask.chat.back": "Назад",
   "ask.chat.continue": "Продолжить: {title}",
   "ask.connector.sends": "Отправляет этот запрос в {name}",
   "ask.connector.skipped": "{name} пропущен. Ничего не отправлено.",

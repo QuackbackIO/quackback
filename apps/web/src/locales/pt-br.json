@@ -1402,6 +1402,7 @@
   "ask.chat.stop": "Parar",
   "ask.search.row": "Pesquisar",
   "ask.chat.newChat": "Novo chat",
+  "ask.chat.back": "Voltar",
   "ask.chat.continue": "Continuar: {title}",
   "ask.connector.sends": "Envia esta solicitação para {name}",
   "ask.connector.skipped": "{name} ignorado. Nada foi enviado.",

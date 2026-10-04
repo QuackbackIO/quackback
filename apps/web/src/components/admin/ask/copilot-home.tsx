@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { useIntl } from 'react-intl'
@@ -9,7 +9,7 @@ import {
   MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { cn } from '@/lib/shared/utils'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -85,13 +85,11 @@ function CopilotHomeView({ threadKey, canAsk, header, below }: CopilotHomeProps)
   const principalId = usePrincipalId()
   const keys = threadKeys(principalId)
   const { start, stop, clear } = useAguiTurn({ url: '/api/admin/assistant/workspace' })
-  const [homeQuery, setHomeQuery] = useState('')
-  const [chatQuery, setChatQuery] = useState('')
+  const [query, setQuery] = useState('')
   const [draft, setDraft] = useState<DraftTurn | null>(null)
   const [pending, setPending] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [homeFocus, setHomeFocus] = useState(false)
   const busyRef = useRef(false)
   const epoch = useRef(0)
   const enteredFromHome = useRef(false)
@@ -133,7 +131,6 @@ function CopilotHomeView({ threadKey, canAsk, header, below }: CopilotHomeProps)
       enteredFromHome.current = false
       router.history.back()
     } else void router.navigate({ to: '/admin', search: {} })
-    setHomeFocus(true)
   }
   const openThread = (key: string) => {
     if (!threadKey) enteredFromHome.current = true
@@ -176,7 +173,7 @@ function CopilotHomeView({ threadKey, canAsk, header, below }: CopilotHomeProps)
     try {
       if (!key) {
         setPending(trimmed)
-        setHomeQuery('')
+        setQuery('')
         const created = await createWorkspaceCopilotThreadFn({
           data: { title: trimmed.slice(0, 120) },
         })
@@ -184,7 +181,7 @@ function CopilotHomeView({ threadKey, canAsk, header, below }: CopilotHomeProps)
         key = created.key
         clear()
         openThread(key)
-      } else setChatQuery('')
+      } else setQuery('')
       const turnKey = key
       setDraft({ threadKey: turnKey, question: trimmed, text: '' })
       await start({
@@ -203,7 +200,7 @@ function CopilotHomeView({ threadKey, canAsk, header, below }: CopilotHomeProps)
           onError: () => {
             if (epoch.current !== requestedAt) return
             setError(failed())
-            setChatQuery((previous) => previous || trimmed)
+            setQuery((previous) => previous || trimmed)
           },
         },
       })
@@ -211,8 +208,7 @@ function CopilotHomeView({ threadKey, canAsk, header, below }: CopilotHomeProps)
       if (epoch.current !== requestedAt) return
       setPending(null)
       if (!(failure instanceof Error && failure.name === 'AbortError')) setError(failed())
-      if (key) setChatQuery((previous) => previous || trimmed)
-      else setHomeQuery((previous) => previous || trimmed)
+      setQuery((previous) => previous || trimmed)
       setDraft(null)
     } finally {
       if (epoch.current === requestedAt) {
@@ -229,44 +225,15 @@ function CopilotHomeView({ threadKey, canAsk, header, below }: CopilotHomeProps)
     stop()
   }
 
-  if (inChat)
-    return (
-      <CopilotChat
-        title={
-          threads.data?.find((item) => item.key === threadKey)?.title ||
-          pending ||
-          intl.formatMessage({ id: 'ask.chat.name', defaultMessage: 'Copilot' })
-        }
-        threads={threads.data ?? []}
-        busy={busy}
-        canAsk={canAsk}
-        messages={messages}
-        draft={liveDraft ?? (pending ? { threadKey: '', question: pending, text: '' } : null)}
-        loadFailed={thread.isError}
-        error={error}
-        query={chatQuery}
-        onQueryChange={setChatQuery}
-        onAsk={(question) => void ask(question, threadKey)}
-        onStop={stopTurn}
-        onHome={goHome}
-        onNewChat={goHome}
-        onOpenThread={openThread}
-        onNavigate={(href) => void router.navigate({ href })}
-        onConnectorAllowed={(name) =>
-          void ask(
-            intl.formatMessage(
-              { id: 'ask.connector.continue', defaultMessage: 'Go ahead with {name}.' },
-              { name }
-            ),
-            threadKey
-          )
-        }
-        viewportRef={viewport}
-        onScroll={(element) => {
-          following.current = element.scrollHeight - element.scrollTop - element.clientHeight < 96
-        }}
-      />
-    )
+  const composer = useRef<HTMLDivElement>(null)
+  // The one composer moves with the chat; it keeps focus on the way in and out.
+  const entered = useRef(inChat)
+  useEffect(() => {
+    if (entered.current === inChat) return
+    entered.current = inChat
+    composer.current?.querySelector('textarea')?.focus()
+    following.current = true
+  }, [inChat])
 
   const latest = threads.data?.[0]
   const completed = launch.data
@@ -280,117 +247,185 @@ function CopilotHomeView({ threadKey, canAsk, header, below }: CopilotHomeProps)
   const starters = canAsk
     ? buildAskStarterPrompts(launch.data?.goals ?? ['product_feedback'], completed)
     : []
+  const title =
+    threads.data?.find((item) => item.key === threadKey)?.title ||
+    pending ||
+    intl.formatMessage({ id: 'ask.chat.name', defaultMessage: 'Copilot' })
+  const draftShown = liveDraft ?? (pending ? { threadKey: '', question: pending, text: '' } : null)
+
   return (
-    <ScrollArea className="h-full">
-      <div className="px-4 pt-10 pb-16 sm:px-6 sm:pt-20">
-        <div className="mx-auto w-full max-w-3xl space-y-6">
-          {header}
+    <div
+      data-home-copilot=""
+      data-chat={inChat || undefined}
+      className="flex h-full min-h-0 flex-col"
+    >
+      <div
+        ref={viewport}
+        onScroll={(event) => {
+          const element = event.currentTarget
+          following.current = element.scrollHeight - element.scrollTop - element.clientHeight < 96
+        }}
+        data-slot="copilot-viewport"
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+      >
+        <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-4 sm:px-6">
+          <Collapse open={!inChat}>
+            <div className="pt-10 pb-6 sm:pt-20">{header}</div>
+          </Collapse>
+          <div
+            className={cn(
+              'flex flex-col transition-[flex-grow,opacity] duration-300 ease-out motion-reduce:transition-none',
+              inChat ? 'grow opacity-100' : 'grow-0 opacity-0'
+            )}
+          >
+            {inChat && (
+              <CopilotThread
+                title={title}
+                threads={threads.data ?? []}
+                busy={busy}
+                messages={messages}
+                draft={draftShown}
+                loadFailed={thread.isError}
+                error={error}
+                onBack={goHome}
+                onNewChat={goHome}
+                onOpenThread={openThread}
+                onNavigate={(href) => void router.navigate({ href })}
+                onConnectorAllowed={(name) =>
+                  void ask(
+                    intl.formatMessage(
+                      { id: 'ask.connector.continue', defaultMessage: 'Go ahead with {name}.' },
+                      { name }
+                    ),
+                    threadKey
+                  )
+                }
+              />
+            )}
+          </div>
           {canAsk && (
-            <div data-tour="copilot">
+            <div
+              ref={composer}
+              data-tour="copilot"
+              className={cn(
+                'z-10',
+                inChat &&
+                  'sticky bottom-0 bg-linear-to-t from-background from-70% to-transparent pt-8 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-6'
+              )}
+            >
               <ChatComposer
-                query={homeQuery}
-                onQueryChange={setHomeQuery}
+                query={query}
+                onQueryChange={setQuery}
                 canAsk={canAsk}
                 busy={busy}
-                onAsk={(question) => void ask(question)}
+                onAsk={(question) => void ask(question, threadKey)}
                 onStop={stopTurn}
-                autoFocus={homeFocus}
+                autoFocus={false}
               />
             </div>
           )}
-          {error && (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          )}
-          {starters.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {starters.map((prompt) => {
-                const text = intl.formatMessage({
-                  id: prompt.id,
-                  defaultMessage: prompt.defaultMessage,
-                })
-                return (
-                  <Button
-                    key={prompt.id}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={busy}
-                    className="max-w-full rounded-full text-[13px] font-normal focus-visible:ring-foreground/25"
-                    onClick={() => void ask(text)}
-                  >
-                    {text}
-                  </Button>
-                )
-              })}
+          <Collapse open={!inChat}>
+            <div className="space-y-6 pt-6 pb-16">
+              {error && !inChat && (
+                <p role="alert" className="text-sm text-destructive">
+                  {error}
+                </p>
+              )}
+              {starters.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {starters.map((prompt) => {
+                    const text = intl.formatMessage({
+                      id: prompt.id,
+                      defaultMessage: prompt.defaultMessage,
+                    })
+                    return (
+                      <Button
+                        key={prompt.id}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={busy}
+                        className="max-w-full rounded-full bg-card text-[13px] font-normal shadow-raise transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-px hover:shadow-raise-hover focus-visible:ring-foreground/25"
+                        onClick={() => void ask(text)}
+                      >
+                        {text}
+                      </Button>
+                    )
+                  })}
+                </div>
+              )}
+              {latest && (
+                <button
+                  type="button"
+                  onClick={() => openThread(latest.key)}
+                  className="flex w-full items-center gap-2 rounded-lg px-1 py-1.5 text-start text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/25"
+                >
+                  <ChatBubbleLeftIcon className="size-4 shrink-0" aria-hidden="true" />
+                  <span className="min-w-0 truncate">
+                    {intl.formatMessage(
+                      { id: 'ask.chat.continue', defaultMessage: 'Continue: {title}' },
+                      { title: latest.title }
+                    )}
+                  </span>
+                  <span className="shrink-0 text-xs">
+                    · {getTimeAgo(latest.updatedAt, intl.locale)}
+                  </span>
+                </button>
+              )}
+              {below}
             </div>
-          )}
-          {latest && (
-            <button
-              type="button"
-              onClick={() => openThread(latest.key)}
-              className="flex w-full items-center gap-2 rounded-lg px-1 py-1.5 text-start text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/25"
-            >
-              <ChatBubbleLeftIcon className="size-4 shrink-0" aria-hidden="true" />
-              <span className="min-w-0 truncate">
-                {intl.formatMessage(
-                  { id: 'ask.chat.continue', defaultMessage: 'Continue: {title}' },
-                  { title: latest.title }
-                )}
-              </span>
-              <span className="shrink-0 text-xs">
-                · {getTimeAgo(latest.updatedAt, intl.locale)}
-              </span>
-            </button>
-          )}
-          {below}
+          </Collapse>
         </div>
       </div>
-    </ScrollArea>
+    </div>
   )
 }
 
-function CopilotChat({
+/**
+ * Overview content that folds away upward while a chat is open. Closed, it
+ * is inert, so nothing inside it takes focus or reaches assistive tech.
+ */
+function Collapse({ open, children }: { open: boolean; children: ReactNode }) {
+  return (
+    <div
+      inert={!open}
+      data-state={open ? 'open' : 'closed'}
+      className={cn(
+        'grid transition-[grid-template-rows,opacity,translate,visibility] duration-300 ease-out motion-reduce:transition-none',
+        open ? 'grid-rows-[1fr] opacity-100' : 'invisible grid-rows-[0fr] -translate-y-2 opacity-0'
+      )}
+    >
+      <div className="min-h-0 overflow-hidden">{children}</div>
+    </div>
+  )
+}
+
+function CopilotThread({
   title,
   threads,
   busy,
-  canAsk,
   messages,
   draft,
   loadFailed,
   error,
-  query,
-  onQueryChange,
-  onAsk,
-  onStop,
-  onHome,
+  onBack,
   onNewChat,
   onOpenThread,
   onNavigate,
   onConnectorAllowed,
-  viewportRef,
-  onScroll,
 }: {
   title: string
   threads: { key: string; title: string }[]
   busy: boolean
-  canAsk: boolean
   messages: WorkspaceCopilotMessage[]
   draft: DraftTurn | null
   loadFailed: boolean
   error: string | null
-  query: string
-  onQueryChange: (query: string) => void
-  onAsk: (question: string) => void
-  onStop: () => void
-  onHome: () => void
+  onBack: () => void
   onNewChat: () => void
   onOpenThread: (key: string) => void
   onNavigate: (href: string) => void
   onConnectorAllowed: (connectorName: string) => void
-  viewportRef: RefObject<HTMLDivElement | null>
-  onScroll: (element: HTMLElement) => void
 }) {
   const intl = useIntl()
   const search = useSearchPalette()
@@ -426,7 +461,7 @@ function CopilotChat({
                 variant="outline"
                 size="sm"
                 onClick={() => onNavigate(link.href)}
-                className="focus-visible:ring-foreground/25"
+                className="bg-card shadow-raise transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-px hover:shadow-raise-hover focus-visible:ring-foreground/25"
               >
                 {link.messageId
                   ? intl.formatMessage({ id: link.messageId, defaultMessage: link.label })
@@ -439,19 +474,18 @@ function CopilotChat({
     ) : null
   const userBubble = 'ms-auto w-fit max-w-[90%] rounded-2xl bg-muted px-4 py-3 sm:max-w-[80%]'
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background" data-copilot-focused="">
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b px-3 sm:px-5">
+    <>
+      <header className="sticky top-0 z-10 -mx-4 flex h-14 shrink-0 items-center gap-2 bg-background px-3 after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-4 after:bg-linear-to-b after:from-background after:to-transparent sm:-mx-6 sm:px-5">
         <Button
           type="button"
           variant="ghost"
           size="sm"
           className="gap-2 text-muted-foreground focus-visible:ring-foreground/25"
-          onClick={onHome}
+          onClick={onBack}
           aria-keyshortcuts="Escape"
         >
           <ArrowLeftIcon className="size-4" aria-hidden="true" />
-          {intl.formatMessage({ id: 'ask.destination.home', defaultMessage: 'Home' })}
-          <kbd className="hidden text-[11px] text-muted-foreground sm:inline">Esc</kbd>
+          {intl.formatMessage({ id: 'ask.chat.back', defaultMessage: 'Back' })}
         </Button>
         <h1 className="min-w-0 flex-1 truncate text-center text-sm font-medium">{title}</h1>
         <Button
@@ -501,87 +535,64 @@ function CopilotChat({
           {intl.formatMessage({ id: 'ask.chat.newChat', defaultMessage: 'New chat' })}
         </Button>
       </header>
-      <ScrollArea
-        className="min-h-0 flex-1"
-        viewportRef={viewportRef}
-        onScrollCapture={(event) => onScroll(event.target as HTMLElement)}
-      >
-        <section
-          aria-label={copilot}
-          className="mx-auto w-full max-w-3xl space-y-8 px-4 py-8 sm:px-6 sm:py-10"
-        >
-          {loadFailed && (
-            <p role="alert" className="text-sm text-destructive">
-              {intl.formatMessage({
-                id: 'ask.settings.unavailable',
-                defaultMessage: 'These changes are unavailable.',
-              })}
-            </p>
-          )}
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={message.sender === 'customer' ? userBubble : 'space-y-3 leading-7'}
-            >
-              {message.sender === 'assistant' ? (
-                <>
-                  <span className="text-xs font-medium">{copilot}</span>
-                  <WorkspaceAssistantMessage
-                    text={message.text}
-                    citations={message.payload?.citations ?? []}
-                  />
-                </>
-              ) : (
-                <MessageMarkdown text={message.text} />
-              )}
-              {payload(message.payload)}
-            </div>
-          ))}
-          {draft && (
-            <>
-              <div className={userBubble}>
-                <MessageMarkdown text={draft.question} />
-              </div>
-              <div className="space-y-3 leading-7" aria-live="polite" aria-busy={busy}>
+      <section aria-label={copilot} className="space-y-8 py-6">
+        {loadFailed && (
+          <p role="alert" className="text-sm text-destructive">
+            {intl.formatMessage({
+              id: 'ask.settings.unavailable',
+              defaultMessage: 'These changes are unavailable.',
+            })}
+          </p>
+        )}
+        {messages.map((message) => (
+          <div
+            key={message.id}
+            className={message.sender === 'customer' ? userBubble : 'space-y-3 leading-7'}
+          >
+            {message.sender === 'assistant' ? (
+              <>
                 <span className="text-xs font-medium">{copilot}</span>
-                {draft.text ? (
-                  <WorkspaceAssistantMessage
-                    text={draft.text}
-                    citations={draft.final?.citations ?? []}
-                    streaming={busy}
-                  />
-                ) : (
-                  busy && (
-                    <p className="text-sm text-muted-foreground">
-                      {intl.formatMessage({ id: 'ask.chat.thinking', defaultMessage: 'Thinking…' })}
-                    </p>
-                  )
-                )}
-                {payload(draft.final)}
-              </div>
-            </>
-          )}
-          {error && (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          )}
-        </section>
-      </ScrollArea>
-      {canAsk && (
-        <div className="shrink-0 bg-background px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:pb-6">
-          <div className="mx-auto w-full max-w-3xl">
-            <ChatComposer
-              query={query}
-              onQueryChange={onQueryChange}
-              canAsk={canAsk}
-              busy={busy}
-              onAsk={onAsk}
-              onStop={onStop}
-            />
+                <WorkspaceAssistantMessage
+                  text={message.text}
+                  citations={message.payload?.citations ?? []}
+                />
+              </>
+            ) : (
+              <MessageMarkdown text={message.text} />
+            )}
+            {payload(message.payload)}
           </div>
-        </div>
-      )}
-    </div>
+        ))}
+        {draft && (
+          <>
+            <div className={userBubble}>
+              <MessageMarkdown text={draft.question} />
+            </div>
+            <div className="space-y-3 leading-7" aria-live="polite" aria-busy={busy}>
+              <span className="text-xs font-medium">{copilot}</span>
+              {draft.text ? (
+                <WorkspaceAssistantMessage
+                  text={draft.text}
+                  citations={draft.final?.citations ?? []}
+                  streaming={busy}
+                />
+              ) : (
+                busy && (
+                  <p className="text-sm text-muted-foreground">
+                    {intl.formatMessage({ id: 'ask.chat.thinking', defaultMessage: 'Thinking…' })}
+                  </p>
+                )
+              )}
+              {payload(draft.final)}
+            </div>
+          </>
+        )}
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
+      </section>
+    </>
   )
 }

@@ -37,7 +37,7 @@ function TryItCard({ paths }: { paths: TestPaths }) {
   const canTryIdea = paths.idea
   const canTryMessage = paths.message
   return (
-    <section className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-4">
+    <section className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-4 shadow-raise">
       <span
         className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted"
         aria-hidden="true"

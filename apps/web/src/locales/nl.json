@@ -1420,6 +1420,7 @@
   "ask.chat.stop": "Stoppen",
   "ask.search.row": "Zoeken",
   "ask.chat.newChat": "Nieuwe chat",
+  "ask.chat.back": "Terug",
   "ask.chat.continue": "Doorgaan: {title}",
   "ask.connector.sends": "Stuurt dit verzoek naar {name}",
   "ask.connector.skipped": "{name} overgeslagen. Er is niets verstuurd.",

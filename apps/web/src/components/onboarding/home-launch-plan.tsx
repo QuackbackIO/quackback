@@ -72,7 +72,7 @@ export function HomeGettingStarted({
   return (
     <>
       {showWin && (
-        <section className="rounded-xl border bg-card p-4 flex items-center justify-between gap-4">
+        <section className="rounded-xl border bg-card p-4 shadow-raise flex items-center justify-between gap-4">
           <p className="text-sm font-medium">
             <FormattedMessage
               id="onboarding.home.firstWin"
@@ -100,7 +100,7 @@ export function HomeGettingStarted({
           }
         >
           {showTourOffer && (
-            <section className="[--ring:var(--muted-foreground)] flex items-center gap-2 rounded-xl border bg-card py-2.5 ps-4 pe-2.5">
+            <section className="[--ring:var(--muted-foreground)] flex items-center gap-2 rounded-xl border bg-card py-2.5 shadow-raise ps-4 pe-2.5">
               <h2 className="min-w-0 flex-1 text-sm font-medium">
                 <FormattedMessage
                   id="onboarding.tour.offer"

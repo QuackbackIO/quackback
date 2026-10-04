@@ -38,7 +38,7 @@ export function ChatComposer({
   }, [autoFocus])
 
   return (
-    <div className="rounded-2xl border bg-card p-3 shadow-sm focus-within:border-foreground/25 focus-within:ring-2 focus-within:ring-foreground/10 motion-reduce:transition-none">
+    <div className="rounded-2xl border border-border bg-card p-3 shadow-float transition-[box-shadow,border-color,translate] duration-300 ease-out focus-within:-translate-y-px focus-within:border-foreground/20 focus-within:shadow-float-focus motion-reduce:transition-none motion-reduce:focus-within:translate-y-0">
       <Textarea
         ref={input}
         value={query}

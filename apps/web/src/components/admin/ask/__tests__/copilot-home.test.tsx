@@ -171,13 +171,17 @@ describe('Home idle', () => {
     ])
   })
 
-  it('opens the Continue row as the full-screen chat', async () => {
+  it('opens the Continue row inline: the overview folds away and the same composer stays', async () => {
     state.threads = [savedThread('workspace:brand', 'Brand color', 'Use a green brand')]
     mount()
+    const composer = screen.getByRole('textbox', { name: 'Ask Copilot' })
     fireEvent.click(await screen.findByText('Continue: Brand color'))
     expect(await screen.findByText('Use a green brand')).toBeTruthy()
-    expect(screen.getByRole('button', { name: /Home/ })).toBeTruthy()
-    expect(screen.queryByText('Launch plan')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Back' })).toBeTruthy()
+    expect(overview('Launch plan')).toEqual({ state: 'closed', inert: true })
+    expect(overview('Welcome, Acme')).toEqual({ state: 'closed', inert: true })
+    expect(screen.getByRole('textbox', { name: 'Ask Copilot' })).toBe(composer)
+    await waitFor(() => expect(document.activeElement).toBe(composer))
   })
 
   it('shows the starter chips and blocked-area prompts', async () => {
@@ -188,7 +192,70 @@ describe('Home idle', () => {
   })
 })
 
-describe('full-screen chat', () => {
+function overview(text: string) {
+  const region = screen.getByText(text).closest('[data-state]')
+  return { state: region?.getAttribute('data-state'), inert: region?.hasAttribute('inert') }
+}
+
+async function openContinue() {
+  state.threads = [savedThread('workspace:brand', 'Brand color', 'Use a green brand')]
+  mount()
+  fireEvent.click(await screen.findByText('Continue: Brand color'))
+  await screen.findByText('Use a green brand')
+}
+
+describe('leaving the inline chat', () => {
+  it('returns to the overview from the Back control and focuses the composer', async () => {
+    await openContinue()
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    await waitFor(() => expect(state.backs).toBe(1))
+    expect(overview('Launch plan')).toEqual({ state: 'open', inert: false })
+    expect(screen.queryByText('Use a green brand')).toBeNull()
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Ask Copilot' }))
+    )
+  })
+
+  it('returns to the overview when the browser goes back', async () => {
+    await openContinue()
+    act(() => state.setThread(undefined))
+    expect(overview('Launch plan')).toEqual({ state: 'open', inert: false })
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull()
+  })
+
+  it('keeps a streaming turn running when the person leaves', async () => {
+    let handlers!: StartAguiTurnOptions['handlers']
+    state.start.mockImplementation(
+      (options: StartAguiTurnOptions) =>
+        new Promise<void>(() => {
+          handlers = options.handlers
+        })
+    )
+    await openContinue()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Ask Copilot' }), {
+      target: { value: 'And the logo?' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(state.start).toHaveBeenCalledOnce())
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    await waitFor(() => expect(state.backs).toBe(1))
+    expect(state.stop).not.toHaveBeenCalled()
+    expect(handlers).toBeDefined()
+  })
+
+  it('swaps instantly under reduced motion', async () => {
+    await openContinue()
+    const regions = document.querySelectorAll('[data-home-copilot] [class*="transition-"]')
+    const moving = [...regions].filter((element) =>
+      /transition-\[[^\]]*(grid-template-rows|flex-grow)/.test(element.className)
+    )
+    expect(moving.length).toBe(3)
+    for (const element of moving)
+      expect(element.className).toContain('motion-reduce:transition-none')
+  })
+})
+
+describe('inline chat', () => {
   it('returns Home on Esc, through history when it came from Home', async () => {
     state.threads = [savedThread('workspace:brand', 'Brand color', 'Use a green brand')]
     mount()
@@ -230,9 +297,7 @@ describe('full-screen chat', () => {
     state.threads = [savedThread('workspace:long', 'Long', 'A long conversation')]
     const view = mount({ thread: 'workspace:long' })
     await screen.findByText('A long conversation')
-    const viewport = view.container.querySelector(
-      '[data-slot="scroll-area-viewport"]'
-    ) as HTMLElement
+    const viewport = view.container.querySelector('[data-slot="copilot-viewport"]') as HTMLElement
     await waitFor(() => expect(viewport.scrollTop).toBe(900))
     scrollHeight.mockRestore()
   })

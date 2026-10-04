@@ -1420,6 +1420,7 @@
   "ask.chat.stop": "Stoppen",
   "ask.search.row": "Suchen",
   "ask.chat.newChat": "Neuer Chat",
+  "ask.chat.back": "Zurück",
   "ask.chat.continue": "Weiter: {title}",
   "ask.connector.sends": "Sendet diese Anfrage an {name}",
   "ask.connector.skipped": "{name} übersprungen. Es wurde nichts gesendet.",
