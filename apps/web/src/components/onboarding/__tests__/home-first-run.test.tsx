@@ -135,7 +135,15 @@ describe('Home first-run cards', () => {
   it('starts the tour from the offer and hides the offer once it was seen', async () => {
     hoisted.status = status()
     mount()
-    fireEvent.click(await screen.findByRole('button', { name: 'Start' }))
+    // The tour offer's own Start, not a launch step's.
+    await screen.findByText('Take the 60-second tour')
+    const starts = screen.getAllByRole('button', { name: 'Start' })
+    const tourStart = starts.find((button) =>
+      button
+        .closest('section, [data-slot="card"]')
+        ?.textContent?.includes('Take the 60-second tour')
+    )
+    fireEvent.click(tourStart ?? starts[0])
     expect(hoisted.start).toHaveBeenCalledTimes(1)
     cleanup()
 

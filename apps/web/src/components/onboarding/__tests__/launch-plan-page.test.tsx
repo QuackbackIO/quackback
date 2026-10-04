@@ -111,11 +111,14 @@ describe('Launch plan page', () => {
   it('gives each open step one action and a Skip, and skips it', async () => {
     mount()
     const messenger = row('Connect Messenger')
-    expect(within(messenger).getAllByRole('link')).toHaveLength(1)
-    expect(within(messenger).getByRole('link')).toHaveAttribute(
-      'href',
-      '/admin/settings/widget/install'
+    // Connect Messenger opens its install sheet in place.
+    expect(within(messenger).queryByRole('link')).toBeNull()
+    const opened = vi.fn()
+    window.addEventListener('quackback:open-going-live', (event) =>
+      opened((event as CustomEvent).detail)
     )
+    fireEvent.click(within(messenger).getByRole('button', { name: 'Start' }))
+    expect(opened).toHaveBeenCalledWith('install-messenger')
     fireEvent.click(within(messenger).getByRole('button', { name: 'Skip Connect Messenger' }))
     await waitFor(() =>
       expect(hoisted.resolutions).toEqual([

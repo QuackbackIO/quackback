@@ -344,7 +344,7 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
   const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
 
   const { getWidgetConfig } = await import('@/lib/server/domains/settings/settings.widget')
-  const { boards, changelogEntries, helpCenterArticles, isNotNull, isNull, statusComponents } =
+  const { boards, changelogEntries, helpCenterArticles, isNotNull, isNull, sql, statusComponents } =
     await import('@/lib/server/db')
   const { getSetupState } = await import('@/lib/shared/db-types')
   const { permissionsForLegacyRole } = await import('@/lib/server/policy/permissions')
@@ -373,7 +373,11 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
     }),
     // Teammates only (admin/member) — portal role=user must not complete "invite"
     db
-      .select({ id: principal.id })
+      .select({
+        id: principal.id,
+        // Rides the same read: any team invitation sent, joined or not.
+        teamInvited: sql<boolean>`exists (select 1 from ${invitation} where ${invitation.kind} = 'team')`,
+      })
       .from(principal)
       .where(and(eq(principal.type, 'user'), inArray(principal.role, ['admin', 'member']))),
     getSettings(),
@@ -440,6 +444,7 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
     publicBoardLinkCopiedAt: setupState?.activationMilestones?.publicBoardLinkCopiedAt ?? null,
     hasInternalBoard,
     memberCount: humanMembers.length,
+    hasTeamInvite: humanMembers.some((member) => member.teamInvited),
     hasBranding,
     hasWidgetInstalled: Boolean(orgSettings?.widgetInstalledFirstSeenAt),
     widgetOriginHost: orgSettings?.widgetInstalledOriginHost ?? null,

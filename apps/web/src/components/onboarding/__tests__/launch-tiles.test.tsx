@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
@@ -39,7 +39,15 @@ it('shows three tiles drawn from Support and Help center with real destinations'
   expect(screen.getByText('Connect Messenger')).toBeVisible()
   expect(screen.getByText('Write your first article')).toBeVisible()
   expect(container.querySelector('a[href="/admin/help-center"]')).not.toBeNull()
-  expect(container.querySelector('a[href="/admin/settings/widget/install"]')).not.toBeNull()
+  // Connect Messenger opens the install sheet in place rather than navigating.
+  expect(container.querySelector('a[href="/admin/settings/widget/install"]')).toBeNull()
+  const opened = vi.fn()
+  window.addEventListener('quackback:open-going-live', (event) =>
+    opened((event as CustomEvent).detail)
+  )
+  const messengerTile = screen.getByText('Connect Messenger').closest('li')!
+  fireEvent.click(within(messengerTile).getByRole('button', { name: 'Start' }))
+  expect(opened).toHaveBeenCalledWith('install-messenger')
 })
 
 it('fills the next tile with shared work when a single goal has one prerequisite', () => {

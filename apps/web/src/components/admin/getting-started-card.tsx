@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card'
 import { ActivationActionButton } from '@/components/admin/activation-action-button'
 import { LaunchTaskLabel, launchTaskMessage } from '@/components/onboarding/launch-task-label'
 import { copyBoardLinkAction } from '@/lib/shared/activation-action'
+import { openGoingLiveSheet } from '@/components/onboarding/going-live-events'
 import { launchChecklistSummary, type LaunchStatus } from '@/lib/shared/launch-checklist'
 
 export function GettingStartedCard({
@@ -115,6 +116,10 @@ export function GettingStartedCard({
                     disabled={pending || task.availability === 'blocked'}
                     onClick={onCreateBoard}
                   >
+                    <FormattedMessage id="onboarding.launch.start" defaultMessage="Start" />
+                  </Button>
+                ) : task.sheet && task.availability !== 'blocked' ? (
+                  <Button size="sm" onClick={() => openGoingLiveSheet(task.sheet!)}>
                     <FormattedMessage id="onboarding.launch.start" defaultMessage="Start" />
                   </Button>
                 ) : task.href && task.availability !== 'blocked' ? (

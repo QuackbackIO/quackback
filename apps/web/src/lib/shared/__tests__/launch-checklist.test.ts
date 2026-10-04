@@ -314,6 +314,33 @@ describe('buildLaunchTasks', () => {
     expect(isLaunchPlanActive({ resolved: true, firstWinComplete: true })).toBe(false)
   })
 
+  it('opens Connect Messenger and Invite in place, and completes Invite on the first invite sent', () => {
+    const support: LaunchStatus = {
+      ...base,
+      features: { ...noExtraModules, supportInbox: true },
+      permissions: {
+        settingsManage: true,
+        boardManage: true,
+        memberManage: true,
+        brandingManage: true,
+        integrationManage: true,
+        helpCenterManage: true,
+        assistantManage: true,
+      },
+    }
+    const find = (status: LaunchStatus, id: string) =>
+      buildLaunchTasks(status, 'customer_support').find((task) => task.id === id)
+    expect(find(support, 'connect-messenger')?.sheet).toBe('install-messenger')
+    expect(find(support, 'invite-team')?.sheet).toBe('invite-team')
+    expect(find(support, 'invite-team')?.isCompleted).toBe(false)
+    expect(find({ ...support, hasTeamInvite: true }, 'invite-team')?.isCompleted).toBe(true)
+    const noPermission: LaunchStatus = {
+      ...support,
+      permissions: { ...support.permissions!, memberManage: false },
+    }
+    expect(find(noPermission, 'invite-team')?.sheet).toBeUndefined()
+  })
+
   it('keeps invite as polish, except for private team feedback, where it is the first step', () => {
     expect(
       buildLaunchTasks(base, 'product_feedback').find((task) => task.id === 'invite-team')

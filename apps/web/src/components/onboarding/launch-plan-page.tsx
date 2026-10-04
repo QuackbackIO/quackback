@@ -18,6 +18,7 @@ import {
 import { cn } from '@/lib/shared/utils'
 import { LaunchTaskLabel, launchTaskMessage } from './launch-task-label'
 import { useProductTour } from './product-tour'
+import { openGoingLiveSheet } from './going-live-events'
 import { launchStatusQuery, useLaunchTaskResolution } from './use-launch-plan'
 
 const GROUP_NAME: Record<LaunchPlanGroupId, { id: string; defaultMessage: string }> = {
@@ -177,6 +178,13 @@ function LaunchPlanRow({
     } else if (task.id === 'create-board') {
       action = (
         <Button size="sm" variant={variant} disabled={pending} onClick={onCreateBoard}>
+          <FormattedMessage id="onboarding.launch.start" defaultMessage="Start" />
+        </Button>
+      )
+    } else if (task.sheet) {
+      const sheet = task.sheet
+      action = (
+        <Button size="sm" variant={variant} onClick={() => openGoingLiveSheet(sheet)}>
           <FormattedMessage id="onboarding.launch.start" defaultMessage="Start" />
         </Button>
       )

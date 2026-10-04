@@ -29,6 +29,8 @@ export interface LaunchStatus {
   boardCount?: number
   maxBoards?: number | null
   memberCount: number
+  /** A teammate has been invited, whether or not they have joined yet. */
+  hasTeamInvite?: boolean
   hasBranding: boolean
   hasWidgetInstalled?: boolean
   widgetOriginHost?: string | null
@@ -101,6 +103,8 @@ export interface LaunchTask {
   blocked?: LaunchTaskBlocked
   blockedReason?: string
   href?: LaunchTaskHref
+  /** Done in place: the step opens this going-live sheet instead of navigating. */
+  sheet?: 'install-messenger' | 'invite-team'
   actionLabel?: string
   completedLabel: string
 }
@@ -259,6 +263,7 @@ function materializeTask(task: LaunchTaskInput, resolutions: TaskResolutionMap):
     ...(blocked ? { blocked } : {}),
     ...(blockedReason ? { blockedReason } : {}),
     ...(task.href && task.canAct !== false ? { href: task.href } : {}),
+    ...(task.sheet && task.canAct !== false ? { sheet: task.sheet } : {}),
     ...(task.actionLabel ? { actionLabel: task.actionLabel } : {}),
     completedLabel: task.completedLabel,
   }
@@ -339,6 +344,7 @@ function buildOutcomeTasks(
     canAct: permissions.settingsManage,
     classification: 'prerequisite',
     href: '/admin/settings/widget/install',
+    sheet: 'install-messenger',
     actionLabel: 'Connect Messenger',
     completedLabel: 'View installation',
   }
@@ -379,11 +385,13 @@ function buildOutcomeTasks(
     id: 'invite-team',
     title: 'Invite a teammate',
     description: 'Bring in someone to help respond, publish, or manage feedback.',
-    completed: status.memberCount > 1,
+    // The first invite sent completes the step; joining is up to them.
+    completed: status.memberCount > 1 || status.hasTeamInvite === true,
     canAct: permissions.memberManage,
     // A private team board is only useful once the team is in it.
     classification: outcome === 'internal' ? 'prerequisite' : 'polish',
     href: '/admin/settings/members',
+    sheet: 'invite-team',
     actionLabel: 'Invite teammate',
     completedLabel: 'Manage team',
   }

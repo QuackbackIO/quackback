@@ -40,6 +40,9 @@ import { SignupNotAllowedEmail } from './templates/signup-not-allowed'
 import { InvitationEmail } from './templates/invitation'
 import { PortalInviteEmail } from './templates/portal-invite'
 import { WelcomeEmail } from './templates/welcome'
+import { MessengerInstallEmail } from './templates/messenger-install'
+import { OnboardingWelcomeEmail, type OnboardingEmailStep } from './templates/onboarding-welcome'
+import { OnboardingNudgeEmail } from './templates/onboarding-nudge'
 import { StatusChangeEmail } from './templates/status-change'
 import { NewCommentEmail } from './templates/new-comment'
 import { ConversationMessageEmail } from './templates/conversation-message'
@@ -642,6 +645,65 @@ export async function sendWelcomeEmail(params: SendWelcomeParams): Promise<Email
     react: WelcomeEmail({ name, workspaceName, dashboardUrl, logoUrl }),
     emailType: 'WelcomeEmail',
     preview: { dashboardUrl },
+  })
+}
+
+// ============================================================================
+// Going live: install instructions and the onboarding welcome / nudge
+// ============================================================================
+
+export async function sendMessengerInstallEmail(params: {
+  to: string
+  senderName: string
+  workspaceName: string
+  snippet: string
+  logoUrl?: string
+}): Promise<EmailResult> {
+  const { to, senderName, workspaceName, snippet, logoUrl } = params
+  return sendEmail({
+    to,
+    subject: `Add ${workspaceName} Messenger to the website`,
+    react: MessengerInstallEmail({ senderName, workspaceName, snippet, logoUrl }),
+    emailType: 'MessengerInstallEmail',
+    preview: { workspaceName },
+  })
+}
+
+export type { OnboardingEmailStep }
+
+export async function sendOnboardingWelcomeEmail(params: {
+  to: string
+  name: string
+  workspaceName: string
+  steps: OnboardingEmailStep[]
+  homeUrl: string
+  unsubscribeUrl: string
+  logoUrl?: string
+}): Promise<EmailResult> {
+  return sendEmail({
+    to: params.to,
+    subject: `${params.workspaceName} is ready: your next steps`,
+    react: OnboardingWelcomeEmail(params),
+    emailType: 'OnboardingWelcomeEmail',
+    preview: { homeUrl: params.homeUrl },
+  })
+}
+
+export async function sendOnboardingNudgeEmail(params: {
+  to: string
+  name: string
+  workspaceName: string
+  nextStep: { title: string; url: string }
+  test: { label: string; url: string } | null
+  unsubscribeUrl: string
+  logoUrl?: string
+}): Promise<EmailResult> {
+  return sendEmail({
+    to: params.to,
+    subject: `Your next step in ${params.workspaceName}`,
+    react: OnboardingNudgeEmail(params),
+    emailType: 'OnboardingNudgeEmail',
+    preview: { nextStep: params.nextStep.url },
   })
 }
 
@@ -1687,6 +1749,9 @@ export async function sendCsatRequestEmail(
 export { InvitationEmail } from './templates/invitation'
 export { PortalInviteEmail } from './templates/portal-invite'
 export { WelcomeEmail } from './templates/welcome'
+export { MessengerInstallEmail } from './templates/messenger-install'
+export { OnboardingWelcomeEmail } from './templates/onboarding-welcome'
+export { OnboardingNudgeEmail } from './templates/onboarding-nudge'
 export { MagicLinkEmail } from './templates/magic-link'
 export { SignupNotAllowedEmail } from './templates/signup-not-allowed'
 export { StatusChangeEmail } from './templates/status-change'
