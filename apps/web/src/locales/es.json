@@ -1613,5 +1613,7 @@
   "ask.locked.addCredits": "Añadir créditos",
   "ask.locked.askOwner": "Pide a un propietario del espacio de trabajo que añada créditos.",
   "admin.help.contact": "Contáctanos",
-  "admin.help.whatsNew": "Novedades"
+  "admin.help.whatsNew": "Novedades",
+  "onboarding.launch.writeArticle": "Escribir artículo",
+  "onboarding.launch.visibility": "Quién puede verlo"
 }

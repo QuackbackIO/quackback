@@ -165,9 +165,9 @@ export const OUTCOME_HOME: Record<OnboardingOutcome, { label: string; href: Laun
 export const FIRST_WIN_NOUN: Record<OnboardingOutcome, string> = {
   product_feedback: 'customer post or vote',
   customer_support: 'customer conversation',
-  help_center: 'published article',
-  internal: 'team idea',
-  status_page: 'service',
+  help_center: 'helpful vote from a visitor',
+  internal: 'idea from a teammate',
+  status_page: 'subscriber',
 }
 
 /** The first win names what it is for the primary goal. */
@@ -250,8 +250,8 @@ export function withLaunchTaskResolution(
   return Object.keys(all).length > 0 ? all : undefined
 }
 
-/** Steps setup completes on its own: the seeded board and Quinn, on by default. */
-const READY_TASK_IDS = new Set(['create-board', 'set-up-quinn'])
+/** Steps setup completes on its own: the seeded board and service, and Quinn, on by default. */
+const READY_TASK_IDS = new Set(['create-board', 'set-up-quinn', 'add-status-service'])
 
 function materializeTask(task: LaunchTaskInput, resolutions: TaskResolutionMap): LaunchTask {
   const stored = resolutions[task.id]
@@ -558,6 +558,22 @@ export const LAUNCH_LIVE_STEP: Record<LaunchPathGoal, { id: string; defaultMessa
   support: { id: 'onboarding.path.live.support', defaultMessage: 'Messenger is ready' },
   helpCenter: { id: 'onboarding.path.live.helpCenter', defaultMessage: 'Your help center is live' },
   status: { id: 'onboarding.path.live.status', defaultMessage: 'Your status page is live' },
+}
+
+/**
+ * Where an admin decides who can see the live page: the real control for each
+ * goal (board access, status page visibility, portal visibility). Null where
+ * there is nothing to keep private.
+ */
+export function launchVisibilityHref(goal: LaunchPathGoal, status: LaunchStatus): string | null {
+  if (goal === 'feedback' || goal === 'private') {
+    return status.publicBoardSlug
+      ? `/admin/settings/boards/${encodeURIComponent(status.publicBoardSlug)}?tab=access`
+      : '/admin/settings/boards'
+  }
+  if (goal === 'status') return '/admin/settings/status'
+  if (goal === 'helpCenter') return '/admin/settings/security/authentication'
+  return null
 }
 
 /** Steps on the path: the live page, the goal step and the first win. */

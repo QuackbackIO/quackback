@@ -56,6 +56,7 @@ const status: LaunchStatus = {
   hasPublicBoard: true,
   publicBoardId: 'board_1',
   publicBoardPath: '/?board=feedback',
+  publicBoardSlug: 'feedback',
   memberCount: 1,
   hasBranding: true,
   goals: ['product_feedback', 'customer_support'],
@@ -106,6 +107,10 @@ describe('Launch plan page', () => {
     expect(within(live).getByRole('link', { name: 'Review' })).toHaveAttribute(
       'href',
       'https://acme.example.com/?board=feedback'
+    )
+    expect(within(live).getByRole('link', { name: 'Who can see it' })).toHaveAttribute(
+      'href',
+      '/admin/settings/boards/feedback?tab=access'
     )
     expect(
       within(row('Share your board link')).getByRole('button', { name: 'Copy board link' })

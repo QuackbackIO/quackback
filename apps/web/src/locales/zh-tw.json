@@ -1613,5 +1613,7 @@
   "ask.locked.addCredits": "增加額度",
   "ask.locked.askOwner": "請工作區擁有者增加額度。",
   "admin.help.contact": "聯絡我們",
-  "admin.help.whatsNew": "新功能"
+  "admin.help.whatsNew": "新功能",
+  "onboarding.launch.writeArticle": "撰寫文章",
+  "onboarding.launch.visibility": "誰可以查看"
 }

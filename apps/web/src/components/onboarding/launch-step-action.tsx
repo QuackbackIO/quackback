@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { lazy, Suspense, useState, type ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { useQueryClient } from '@tanstack/react-query'
@@ -13,6 +13,30 @@ import { markStatusLinkCopiedFn } from '@/lib/server/functions/activation'
 import { useBaseUrl } from '@/lib/client/hooks/use-root-context'
 import { launchOutcome, type LaunchStatus, type LaunchTask } from '@/lib/shared/launch-checklist'
 import { openGoingLiveSheet } from './going-live-events'
+
+// The editor loads when the step opens it, not with every page that lists the step.
+const CreateArticleDialog = lazy(() =>
+  import('@/components/admin/help-center/create-article-dialog').then((module) => ({
+    default: module.CreateArticleDialog,
+  }))
+)
+
+/** Opens the article editor in place: setup seeded a category, so the first article saves. */
+function WriteArticleButton({ variant }: { variant: 'default' | 'outline' }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <Button size="sm" variant={variant} onClick={() => setOpen(true)}>
+        <FormattedMessage id="onboarding.launch.writeArticle" defaultMessage="Write article" />
+      </Button>
+      {open ? (
+        <Suspense fallback={null}>
+          <CreateArticleDialog open onOpenChange={setOpen} />
+        </Suspense>
+      ) : null}
+    </>
+  )
+}
 
 /** The status page's public address on the portal. */
 export function statusPageUrl(baseUrl: string | undefined): string | null {
@@ -99,6 +123,7 @@ export function LaunchStepAction({
     )
   }
   if (task.id === 'share-status-page') return <CopyStatusLinkButton variant={variant} />
+  if (task.id === 'help-article') return <WriteArticleButton variant={variant} />
   if (task.id === 'create-board') {
     return (
       <Button size="sm" variant={variant} disabled={pending} onClick={onCreateBoard}>

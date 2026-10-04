@@ -1613,5 +1613,7 @@
   "ask.locked.addCredits": "Tegoed toevoegen",
   "ask.locked.askOwner": "Vraag een eigenaar van de workspace om tegoed toe te voegen.",
   "admin.help.contact": "Contact opnemen",
-  "admin.help.whatsNew": "Wat is er nieuw"
+  "admin.help.whatsNew": "Wat is er nieuw",
+  "onboarding.launch.writeArticle": "Artikel schrijven",
+  "onboarding.launch.visibility": "Wie het kan zien"
 }

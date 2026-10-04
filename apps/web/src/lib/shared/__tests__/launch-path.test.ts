@@ -4,6 +4,7 @@ import {
   isLaunchPlanActive,
   launchPath,
   launchPlanProgress,
+  launchVisibilityHref,
   type LaunchStatus,
 } from '../launch-checklist'
 
@@ -119,6 +120,22 @@ describe('the launch path', () => {
     const service = tasks.find((task) => task.id === 'add-status-service')
     expect(service?.href).toBe('/admin/status')
     expect(service?.search).toEqual({ view: 'components' })
+  })
+
+  it('treats the service setup seeds as Ready, leaving sharing the page as the step', () => {
+    const status = { ...base, goals: ['status_page' as const], hasStatusComponent: true }
+    const path = launchPath(status)
+    expect(path.next?.id).toBe('share-status-page')
+    expect(path.later.map((task) => task.id)).not.toContain('add-status-service')
+  })
+
+  it('links each goal to the control that keeps its page private', () => {
+    expect(launchVisibilityHref('feedback', { ...base, publicBoardSlug: 'feedback' })).toBe(
+      '/admin/settings/boards/feedback?tab=access'
+    )
+    expect(launchVisibilityHref('status', base)).toBe('/admin/settings/status')
+    expect(launchVisibilityHref('helpCenter', base)).toBe('/admin/settings/security/authentication')
+    expect(launchVisibilityHref('support', base)).toBeNull()
   })
 
   it('completes sharing the status page when its link is copied', () => {

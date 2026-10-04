@@ -1613,5 +1613,7 @@
   "ask.locked.addCredits": "إضافة أرصدة",
   "ask.locked.askOwner": "اطلب من مالك مساحة العمل إضافة أرصدة.",
   "admin.help.contact": "تواصل معنا",
-  "admin.help.whatsNew": "ما الجديد"
+  "admin.help.whatsNew": "ما الجديد",
+  "onboarding.launch.writeArticle": "اكتب مقالة",
+  "onboarding.launch.visibility": "من يمكنه رؤيتها"
 }

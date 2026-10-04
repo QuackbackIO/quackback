@@ -8,6 +8,7 @@ import { useBaseUrl } from '@/lib/client/hooks/use-root-context'
 import {
   LAUNCH_LIVE_STEP,
   launchPath,
+  launchVisibilityHref,
   type LaunchPathGoal,
   type LaunchStatus,
   type LaunchTask,
@@ -56,6 +57,7 @@ export function LaunchPlanPage({
   const canSkip = status.permissions?.settingsManage !== false
   const percent = Math.round(((path.complete ? path.total : path.step - 1) / path.total) * 100)
   const liveHref = livePageHref(path.goal, status, baseUrl)
+  const visibilityHref = canSkip ? launchVisibilityHref(path.goal, status) : null
   const renderRow = (task: LaunchTask, onPath: boolean) => (
     <LaunchPlanRow
       key={task.id}
@@ -120,6 +122,16 @@ export function LaunchPlanPage({
           <span className="text-sm text-muted-foreground">
             <FormattedMessage id="onboarding.launch.done" defaultMessage="Done" />
           </span>
+          {visibilityHref ? (
+            <Button asChild size="sm" variant="ghost">
+              <a href={visibilityHref}>
+                <FormattedMessage
+                  id="onboarding.launch.visibility"
+                  defaultMessage="Who can see it"
+                />
+              </a>
+            </Button>
+          ) : null}
           {liveHref ? (
             <Button asChild size="sm" variant="outline">
               <a href={liveHref} target="_blank" rel="noopener noreferrer">
