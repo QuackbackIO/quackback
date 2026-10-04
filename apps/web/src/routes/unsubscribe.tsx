@@ -139,6 +139,11 @@ function getActionText(action?: string): { title: string; message: string } {
         title: 'Unsubscribed',
         message: "You won't receive any more changelog emails. You can resubscribe any time.",
       }
+    case 'unsubscribe_onboarding':
+      return {
+        title: 'Unsubscribed',
+        message: "You won't receive any more setup tips by email.",
+      }
     case 'unsubscribe_status':
       return {
         title: 'Unsubscribed',

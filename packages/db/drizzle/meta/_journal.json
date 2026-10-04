@@ -1905,6 +1905,13 @@
       "when": 1791000100000,
       "tag": "0294_validate_workspace_copilot_checks",
       "breakpoints": true
+    },
+    {
+      "idx": 272,
+      "version": "7",
+      "when": 1791000200000,
+      "tag": "0295_onboarding_emails",
+      "breakpoints": true
     }
   ]
 }

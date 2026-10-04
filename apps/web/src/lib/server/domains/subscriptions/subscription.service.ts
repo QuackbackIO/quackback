@@ -610,6 +610,15 @@ export async function processUnsubscribeToken(token: string): Promise<{
       await unsubscribe(tokenRecord.principalId)
       break
     }
+    case 'unsubscribe_onboarding': {
+      const { ONBOARDING_TIPS_KEY } =
+        await import('@/lib/server/domains/onboarding/onboarding-emails')
+      const current = await getNotificationPreferences(tokenRecord.principalId)
+      await updateNotificationPreferences(tokenRecord.principalId, {
+        matrix: { ...current.matrix, [ONBOARDING_TIPS_KEY]: { email: false } },
+      })
+      break
+    }
   }
 
   return {

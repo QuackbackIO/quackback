@@ -342,6 +342,7 @@ export {
   postSubscriptions,
   postSubscriptionsRelations,
   unsubscribeTokens,
+  onboardingEmails,
   unsubscribeTokensRelations,
   // Schema tables - sentiment
   postSentiment,

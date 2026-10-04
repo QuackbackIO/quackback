@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import type { UserId, PostStatusId } from '@quackback/ids'
+import type { UserId, PostStatusId, PrincipalId } from '@quackback/ids'
 import { generateId } from '@quackback/ids'
 import {
   ONBOARDING_OUTCOMES,
@@ -411,11 +411,20 @@ export const ensureOnboardingHomeReadyFn = createServerFn({ method: 'POST' }).ha
       ;({ modulesChanged } = await applyOnboardingGoals(tx, row, next))
       next = applyDeferredLaunchStartingPoint(next, goals[0], now)
     }
-    if (!next.activationHandoffSeenAt) {
+    const firstLanding = !next.activationHandoffSeenAt
+    if (firstLanding) {
       next = { ...next, activationHandoffSeenAt: now }
     }
-    return { state: next, value: { modulesChanged } }
+    return { state: next, value: { modulesChanged, firstLanding } }
   })
+  // The owner's first landing queues the welcome and the day-two nudge.
+  if (value.firstLanding) {
+    const { scheduleOnboardingEmails } =
+      await import('@/lib/server/domains/onboarding/onboarding-emails')
+    await scheduleOnboardingEmails(caller.id as PrincipalId).catch((error) =>
+      log.warn({ err: error }, 'onboarding emails not scheduled')
+    )
+  }
   return { ok: true as const, modulesChanged: value.modulesChanged }
 })
 
