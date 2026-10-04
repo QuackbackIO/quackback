@@ -25,6 +25,8 @@ import {
   mintTestCustomerTokenFn,
 } from '@/lib/server/functions/test-customer'
 import { cn } from '@/lib/shared/utils'
+import { openGoingLiveSheet } from './going-live-events'
+import { applyQuinnPreview } from './quinn-preview'
 import {
   TestCustomerFrame,
   type TestCustomerFrameOpen,
@@ -61,13 +63,27 @@ export function TryMessengerSheet({
             />
           </SheetDescription>
         </header>
-        {open && <TryMessengerBody start={start} />}
+        {open && (
+          <TryMessengerBody
+            start={start}
+            onPutOnSite={() => {
+              onOpenChange(false)
+              openGoingLiveSheet('install-messenger')
+            }}
+          />
+        )}
       </SheetContent>
     </Sheet>
   )
 }
 
-function TryMessengerBody({ start }: { start: TryMessengerStart }) {
+function TryMessengerBody({
+  start,
+  onPutOnSite,
+}: {
+  start: TryMessengerStart
+  onPutOnSite: () => void
+}) {
   const intl = useIntl()
   const queryClient = useQueryClient()
   const locale = normalizeLocale(intl.locale) ?? DEFAULT_LOCALE
@@ -103,11 +119,15 @@ function TryMessengerBody({ start }: { start: TryMessengerStart }) {
         if (!startedId) void queryClient.invalidateQueries({ queryKey: OVERVIEW_KEY })
         return
       }
-      if (evt.kind === 'assistant_activity' || evt.kind === 'assistant_delta') return
+      if (evt.kind === 'assistant_activity') return
+      // Quinn's live turn streams into the inbox pane, then its reply replaces it.
       reconcileCachedThread<AgentThreadCache>(
         queryClient,
         conversationKeys.agentThread(id),
-        (prev) => applyAgentThreadEvent(prev, evt, id)
+        (prev) => {
+          const live = applyQuinnPreview(prev, evt)
+          return evt.kind === 'assistant_delta' ? live : applyAgentThreadEvent(live, evt, id)
+        }
       )
     },
   })
@@ -222,17 +242,28 @@ function TryMessengerBody({ start }: { start: TryMessengerStart }) {
 
       <aside className="flex min-h-0 flex-col gap-6 overflow-y-auto p-5">
         {steps.seen ? (
-          <div className="space-y-3 rounded-xl border bg-card p-4">
-            <p className="text-sm font-medium">
-              <FormattedMessage id="onboarding.test.done" defaultMessage="That's the round trip" />
-            </p>
-            <Button asChild size="sm">
-              <Link to="/admin/settings/widget/install">
+          <div className="space-y-3 rounded-xl border bg-card p-4" data-testid="round-trip-done">
+            <div className="flex items-center gap-2">
+              <CheckCircleIcon
+                className="size-6 shrink-0 text-primary motion-safe:animate-in motion-safe:zoom-in-50 motion-safe:duration-500"
+                aria-hidden
+              />
+              <p className="text-sm font-medium">
                 <FormattedMessage
-                  id="onboarding.test.install"
-                  defaultMessage="Put Messenger on your site"
+                  id="onboarding.test.done"
+                  defaultMessage="That's the round trip"
                 />
-              </Link>
+              </p>
+            </div>
+            <Button
+              size="sm"
+              className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-700"
+              onClick={onPutOnSite}
+            >
+              <FormattedMessage
+                id="onboarding.test.install"
+                defaultMessage="Put Messenger on your site"
+              />
             </Button>
           </div>
         ) : (
@@ -305,7 +336,7 @@ function Step({
           {index}
         </span>
       )}
-      <span className={cn(done && 'text-muted-foreground line-through')}>{children}</span>
+      <span className={cn(done && 'text-muted-foreground')}>{children}</span>
     </li>
   )
 }
