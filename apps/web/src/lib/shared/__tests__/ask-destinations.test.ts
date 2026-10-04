@@ -70,6 +70,14 @@ describe('Ask destinations', () => {
     ).toBe('/admin/settings/billing')
     expect(searchAskDestinations('  ', options)).toHaveLength(0)
   })
+  it('offers at most three prompts, so they fit on one line', () => {
+    for (const goals of [
+      ['product_feedback', 'customer_support', 'help_center', 'status_page'],
+      ['customer_support', 'product_feedback'],
+    ] as const) {
+      expect(buildAskStarterPrompts(goals).length).toBeLessThanOrEqual(3)
+    }
+  })
   it('offers three useful prompts when the default feedback board already exists', () => {
     expect(
       buildAskStarterPrompts(['product_feedback'], ['create-board']).map((item) => item.id)
