@@ -83,7 +83,8 @@ function SidebarContent({
         <div className="flex items-center gap-1.5">
           <Select value={categoryId || undefined} onValueChange={onCategoryChange}>
             <SelectTrigger size="sm" className="flex-1 min-w-0">
-              <SelectValue placeholder="Select category..." />
+              {/* Saving without a pick files the article under General. */}
+              <SelectValue placeholder="General" />
             </SelectTrigger>
             <SelectContent align="end">
               {categories?.map((cat) => (

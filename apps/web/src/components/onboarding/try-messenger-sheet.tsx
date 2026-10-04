@@ -1,5 +1,5 @@
-import { useCallback, useState } from 'react'
-import { FormattedMessage, useIntl } from 'react-intl'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { FormattedMessage, useIntl, type IntlShape } from 'react-intl'
 import { Link } from '@tanstack/react-router'
 import { skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import QRCode from 'qrcode'
@@ -17,10 +17,12 @@ import {
 import { conversationKeys } from '@/components/conversation/query-keys'
 import { reconcileCachedThread } from '@/lib/client/conversation/reconcile-cached-thread'
 import { useConversationStream } from '@/lib/client/hooks/use-conversation-stream'
+import { useMediaQuery } from '@/lib/client/hooks/use-media-query'
 import { DEFAULT_LOCALE, normalizeLocale, type SupportedLocale } from '@/lib/shared/i18n'
 import type { ConversationStreamEvent } from '@/lib/shared/conversation/types'
 import {
   getTestCustomerOverviewFn,
+  getTestCustomerPhoneLinkStatusFn,
   mintTestCustomerPhoneLinkFn,
   mintTestCustomerTokenFn,
 } from '@/lib/server/functions/test-customer'
@@ -46,10 +48,20 @@ export function TryMessengerSheet({
   onOpenChange: (open: boolean) => void
   start?: TryMessengerStart
 }) {
+  const headingRef = useRef<HTMLElement>(null)
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-[1200px]">
-        <header className="flex shrink-0 items-center gap-3 border-b px-5 py-4 pr-12">
+      <SheetContent
+        side="right"
+        className="w-full gap-0 p-0 sm:max-w-[1200px]"
+        // Land on the heading: a ringed tab on open reads as a second selection.
+        initialFocus={headingRef}
+      >
+        <header
+          ref={headingRef}
+          tabIndex={-1}
+          className="flex shrink-0 items-center gap-3 border-b px-5 py-4 pr-12 outline-none"
+        >
           <SheetTitle>
             <FormattedMessage id="onboarding.test.title" defaultMessage="Try Messenger" />
           </SheetTitle>
@@ -62,10 +74,17 @@ export function TryMessengerSheet({
               defaultMessage="See both sides of a conversation."
             />
           </SheetDescription>
+          <span className="ml-auto hidden text-xs text-muted-foreground lg:inline" aria-hidden>
+            <FormattedMessage
+              id="onboarding.test.escHint"
+              defaultMessage="Esc closes, even inside Messenger"
+            />
+          </span>
         </header>
         {open && (
           <TryMessengerBody
             start={start}
+            onClose={() => onOpenChange(false)}
             onPutOnSite={() => {
               onOpenChange(false)
               openGoingLiveSheet('install-messenger')
@@ -77,11 +96,16 @@ export function TryMessengerSheet({
   )
 }
 
+type TryMessengerPane = 'customer' | 'inbox'
+const PANES: TryMessengerPane[] = ['customer', 'inbox']
+
 function TryMessengerBody({
   start,
+  onClose,
   onPutOnSite,
 }: {
   start: TryMessengerStart
+  onClose: () => void
   onPutOnSite: () => void
 }) {
   const intl = useIntl()
@@ -103,6 +127,15 @@ function TryMessengerBody({
     enabled: !!conversationId,
   })
   const steps = roundTripSteps(conversationId, thread)
+  // Below lg the sheet shows one side at a time; both stay mounted so the
+  // customer's frame keeps its session while the inbox is in view.
+  const [pane, setPane] = useState<TryMessengerPane>('customer')
+  const wide = useMediaQuery('(min-width: 1024px)')
+  // The other side has something waiting: a message to answer, or a reply to read.
+  const fresh: Record<TryMessengerPane, boolean> = {
+    inbox: pane !== 'inbox' && steps.sent && !steps.replied,
+    customer: pane !== 'customer' && steps.replied && !steps.seen,
+  }
 
   useConversationStream({
     enabled: true,
@@ -147,18 +180,84 @@ function TryMessengerBody({
           }),
         }
 
+  const tabLabel = (key: TryMessengerPane) =>
+    key === 'customer'
+      ? intl.formatMessage({ id: 'onboarding.test.tab.customer', defaultMessage: 'Customer' })
+      : intl.formatMessage({ id: 'onboarding.test.tab.inbox', defaultMessage: 'Inbox' })
+  const paneProps = (key: TryMessengerPane) =>
+    wide
+      ? { id: `try-messenger-${key}` }
+      : {
+          id: `try-messenger-${key}`,
+          role: 'tabpanel',
+          'aria-labelledby': `try-messenger-${key}-tab`,
+        }
+
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid-cols-[380px_minmax(0,1fr)_300px] lg:overflow-hidden">
-      <section className="flex min-h-0 flex-col border-b bg-muted/40 p-4 lg:border-r lg:border-b-0">
+    <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[380px_minmax(0,1fr)_300px] lg:overflow-hidden">
+      <div
+        role="tablist"
+        aria-label={intl.formatMessage({
+          id: 'onboarding.test.tabs',
+          defaultMessage: 'Side of the conversation',
+        })}
+        className="mx-4 mt-3 grid shrink-0 grid-cols-2 rounded-xl bg-muted p-1 lg:hidden"
+      >
+        {PANES.map((key) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            id={`try-messenger-${key}-tab`}
+            aria-selected={pane === key}
+            aria-controls={`try-messenger-${key}`}
+            tabIndex={pane === key ? 0 : -1}
+            onClick={() => setPane(key)}
+            onKeyDown={(event) => {
+              if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+              event.preventDefault()
+              const next = PANES[(PANES.indexOf(key) + 1) % PANES.length]
+              setPane(next)
+              document.getElementById(`try-messenger-${next}-tab`)?.focus()
+            }}
+            className={cn(
+              'flex h-10 items-center justify-center gap-1.5 rounded-lg text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground/50',
+              pane === key ? 'bg-background shadow-sm' : 'text-muted-foreground'
+            )}
+          >
+            {tabLabel(key)}
+            {fresh[key] && (
+              <>
+                <span aria-hidden className="size-1.5 rounded-full bg-amber-500" />
+                <span className="sr-only">
+                  {intl.formatMessage({ id: 'onboarding.test.tab.new', defaultMessage: ', new' })}
+                </span>
+              </>
+            )}
+          </button>
+        ))}
+      </div>
+
+      <section
+        {...paneProps('customer')}
+        className={cn(
+          'flex min-h-0 flex-1 flex-col p-4 lg:border-r lg:bg-muted/40',
+          pane !== 'customer' && 'max-lg:hidden'
+        )}
+      >
         <p className="mb-3 text-xs font-medium text-muted-foreground">
-          <FormattedMessage id="onboarding.test.customerSide" defaultMessage="Your customer" />
+          <FormattedMessage
+            id="onboarding.test.customerSide"
+            defaultMessage="Your Messenger, as a test customer"
+          />
         </p>
-        <div className="relative min-h-[520px] flex-1 overflow-hidden rounded-[28px] border bg-background shadow-sm">
+        <div className="relative min-h-0 flex-1 overflow-hidden rounded-[28px] border bg-background shadow-sm lg:min-h-[520px]">
           <TestCustomerFrame
             key={frameKey}
             getToken={getToken}
             open={frameOpen}
             onStatusChange={setStatus}
+            onClose={onClose}
             onEvent={(name, payload) => {
               const id = (payload as { id?: unknown } | null)?.id
               if (typeof id !== 'string') return
@@ -186,10 +285,19 @@ function TryMessengerBody({
         </div>
       </section>
 
-      <section className="flex min-h-0 flex-col border-b lg:border-r lg:border-b-0">
+      <section
+        {...paneProps('inbox')}
+        className={cn(
+          'flex min-h-0 flex-1 flex-col lg:border-r',
+          pane !== 'inbox' && 'max-lg:hidden'
+        )}
+      >
         <div className="flex items-center justify-between gap-2 border-b px-5 py-3">
           <p className="text-xs font-medium text-muted-foreground">
-            <FormattedMessage id="onboarding.test.inboxSide" defaultMessage="Your inbox" />
+            <FormattedMessage
+              id="onboarding.test.inboxSide"
+              defaultMessage="The same conversation in your inbox"
+            />
           </p>
           {conversationId && (
             <Link
@@ -201,6 +309,14 @@ function TryMessengerBody({
             </Link>
           )}
         </div>
+        {conversationId && quinnAnsweredFirst(thread) && !steps.replied && (
+          <p className="border-b px-5 py-2 text-xs text-muted-foreground">
+            <FormattedMessage
+              id="onboarding.test.quinnFirst"
+              defaultMessage="Quinn answered first. Your reply still counts."
+            />
+          </p>
+        )}
         {conversationId ? (
           <div className="flex min-h-0 flex-1 flex-col">
             <AgentConversationThread
@@ -208,11 +324,13 @@ function TryMessengerBody({
               item={{ kind: 'conversation', id: conversationId }}
               targetMessageId={null}
               onChanged={() => {}}
-              onBack={() => {}}
+              // Its back arrow shows only where one side fits: go back to the customer.
+              onBack={() => setPane('customer')}
               onSelectItem={() => {}}
               onOpenPost={() => {}}
               isVisitorTyping={false}
               isOtherAgentTyping={false}
+              replyFirst
             />
           </div>
         ) : (
@@ -232,7 +350,7 @@ function TryMessengerBody({
               ) : (
                 <FormattedMessage
                   id="onboarding.test.waiting"
-                  defaultMessage="Send the message on the left. It lands here."
+                  defaultMessage="Send a message as your customer. It lands here."
                 />
               )}
             </p>
@@ -240,7 +358,10 @@ function TryMessengerBody({
         )}
       </section>
 
-      <aside className="flex min-h-0 flex-col gap-6 overflow-y-auto p-5">
+      <aside className="flex max-h-[40dvh] shrink-0 flex-col gap-6 overflow-y-auto border-t p-5 lg:max-h-none lg:min-h-0 lg:border-t-0">
+        <p role="status" className="sr-only" data-testid="round-trip-live">
+          {roundTripAnnouncement(steps, intl)}
+        </p>
         {steps.seen ? (
           <div className="space-y-3 rounded-xl border bg-card p-4" data-testid="round-trip-done">
             <div className="flex items-center gap-2">
@@ -289,7 +410,10 @@ function TryMessengerBody({
           </ol>
         )}
 
-        <PhoneCode locale={locale} />
+        {/* A phone is already the second device: no code to scan there. */}
+        <div className="max-sm:hidden">
+          <PhoneCode locale={locale} />
+        </div>
 
         {overview.data?.testEmailAddress && (
           <EmailAddress address={overview.data.testEmailAddress} />
@@ -297,6 +421,23 @@ function TryMessengerBody({
       </aside>
     </div>
   )
+}
+
+/** What a screen reader hears as the round trip moves on. */
+function roundTripAnnouncement(steps: ReturnType<typeof roundTripSteps>, intl: IntlShape): string {
+  if (steps.seen)
+    return intl.formatMessage({ id: 'onboarding.test.done', defaultMessage: "That's the round trip" })
+  const done = steps.replied ? 2 : steps.sent ? 1 : 0
+  if (done === 0) return ''
+  return intl.formatMessage(
+    { id: 'onboarding.test.stepDone', defaultMessage: 'Step {step} of 3 done.' },
+    { step: done }
+  )
+}
+
+/** Quinn replied before any teammate did. */
+export function quinnAnsweredFirst(thread: AgentThreadCache | undefined): boolean {
+  return !!thread?.messages.some((m) => m.senderType === 'agent' && m.isAssistant)
 }
 
 /** The round trip, read from the live thread: customer sent, a person replied, the customer read it. */
@@ -342,13 +483,31 @@ export function RoundTripStep({
   )
 }
 
+/** How often a shown phone code checks whether it was scanned or ran out. */
+export const PHONE_CODE_POLL_MS = 3000
+
 function PhoneCode({ locale }: { locale: SupportedLocale }) {
   const mint = useMutation({
     mutationFn: async () => {
-      const { url } = await mintTestCustomerPhoneLinkFn({ data: { locale } })
-      return QRCode.toDataURL(url, { margin: 1, width: 192 })
+      const { url, token } = await mintTestCustomerPhoneLinkFn({ data: { locale } })
+      return { token, src: await QRCode.toDataURL(url, { margin: 1, width: 192 }) }
     },
   })
+  const token = mint.data?.token ?? null
+  // A code works once and for ten minutes: when the phone has used it, or it
+  // ran out, the next one replaces it here.
+  const status = useQuery({
+    queryKey: ['onboarding', 'phone-code', token],
+    queryFn: () => getTestCustomerPhoneLinkStatusFn({ data: { token: token! } }),
+    enabled: !!token,
+    refetchInterval: PHONE_CODE_POLL_MS,
+  })
+  const spent = status.data?.pending === false
+  const { mutate, isPending, isError } = mint
+  useEffect(() => {
+    if (spent && !isPending && !isError) mutate()
+  }, [spent, isPending, isError, mutate])
+
   return (
     <div className="space-y-3">
       <p className="text-sm font-medium">
@@ -357,20 +516,17 @@ function PhoneCode({ locale }: { locale: SupportedLocale }) {
       {mint.data ? (
         <>
           <img
-            src={mint.data}
+            src={mint.data.src}
             alt=""
-            className="size-48 rounded-lg border bg-white p-2"
+            className={cn('size-48 rounded-lg border bg-white p-2', spent && 'opacity-30')}
             data-testid="try-messenger-qr"
           />
           <p className="text-xs text-muted-foreground">
             <FormattedMessage
               id="onboarding.test.phoneHint"
-              defaultMessage="Single use. Expires in 10 minutes."
+              defaultMessage="One use, valid 10 minutes. A new code appears here once it is used."
             />
           </p>
-          <Button size="sm" variant="ghost" onClick={() => mint.mutate()} disabled={mint.isPending}>
-            <FormattedMessage id="onboarding.test.phoneNew" defaultMessage="New code" />
-          </Button>
         </>
       ) : (
         <Button size="sm" variant="outline" onClick={() => mint.mutate()} disabled={mint.isPending}>

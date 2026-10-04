@@ -93,23 +93,20 @@ describe.skipIf(!fixture.available)('setup emails (real DB)', () => {
   afterEach(fixture.rollback)
   afterAll(fixture.close)
 
-  it('welcomes a new owner with their goal path, once', async () => {
+  it('sends the one ready email, naming the next step on their goal path, once', async () => {
     expect(await sendOnboardingEmail('welcome', owner)).toEqual({ sent: true })
     expect(mail.welcome).toHaveBeenCalledTimes(1)
     const params = mail.welcome.mock.calls[0][0] as {
-      name: string
-      steps: { title: string; url: string }[]
+      subject: string
+      lang: string
+      paragraphs: string[]
+      cta: { url: string }
       unsubscribeUrl: string
     }
-    expect(params.name).toBe('Sam')
-    // The launch plan's path, the same three steps Home counts.
-    expect(params.steps.map((step) => step.title)).toEqual([
-      'Messenger is ready',
-      'Put Messenger on your site',
-      'A customer starts a conversation',
-    ])
-    expect(params.steps[1]?.url).toBe('https://acme.quackback.test/admin?open=install-messenger')
-    expect(params.steps[2]?.url).toBe('https://acme.quackback.test/admin?try=message')
+    expect(params.subject).toBe('Acme is ready, Sam')
+    expect(params.lang).toBe('en')
+    expect(params.paragraphs).toContain('Your next step: Put Messenger on your site.')
+    expect(params.cta.url).toBe('https://acme.quackback.test/admin')
     expect(params.unsubscribeUrl).toMatch(/^https:\/\/acme\.quackback\.test\/unsubscribe\?token=/)
 
     expect(await sendOnboardingEmail('welcome', owner)).toEqual({
@@ -166,8 +163,12 @@ describe.skipIf(!fixture.available)('setup emails (real DB)', () => {
   it('nudges once on day two with a test link, unless the first result has happened', async () => {
     expect(await sendOnboardingEmail('nudge', owner)).toEqual({ sent: true })
     expect(mail.nudge.mock.calls[0][0]).toMatchObject({
-      nextStep: { title: 'Put Messenger on your site' },
-      test: {
+      subject: 'Your next step in Acme',
+      cta: {
+        label: 'Put Messenger on your site',
+        url: 'https://acme.quackback.test/admin?open=install-messenger',
+      },
+      secondary: {
         label: 'Send a test message',
         url: 'https://acme.quackback.test/admin?try=message',
       },
@@ -208,10 +209,7 @@ describe.skipIf(!fixture.available)('setup emails (real DB)', () => {
     })
     expect(await sendOnboardingEmail('nudge', owner)).toEqual({ sent: true })
     expect(mail.nudge.mock.calls[0][0]).toMatchObject({
-      nextStep: {
-        title: 'A customer posts an idea',
-        url: 'https://acme.quackback.test/admin?try=idea',
-      },
+      cta: { label: 'A customer posts an idea', url: 'https://acme.quackback.test/admin?try=idea' },
     })
   })
 
@@ -235,30 +233,41 @@ describe.skipIf(!fixture.available)('setup emails (real DB)', () => {
     )
   })
 
-  it('marks the live page done and leads the feedback path with sharing the board', async () => {
+  it('skips what is done: with a board, the feedback ready email asks to share the link', async () => {
     await seedWorkspace({ goals: ['product_feedback', 'customer_support'] })
     await testDb.insert(boards).values({ name: 'Ideas', slug: createId('board') })
     expect(await sendOnboardingEmail('welcome', owner)).toEqual({ sent: true })
-    const { steps } = mail.welcome.mock.calls[0][0] as {
-      steps: { title: string; outcome: string; done?: boolean }[]
+    const params = mail.welcome.mock.calls[0][0] as {
+      paragraphs: string[]
+      share: { url: string; text: string } | null
     }
-    expect(steps.map((step) => [step.title, step.done === true])).toEqual([
-      ['Your board is live', true],
-      ['Share your board link', false],
-      ['A customer posts an idea', false],
-    ])
+    expect(params.paragraphs).toContain(
+      'One step gets you to your first customer idea: share the link.'
+    )
+    expect(params.share).toMatchObject({
+      url: 'https://acme.quackback.test/',
+      text: 'acme.quackback.test',
+    })
   })
 
-  it('says what a step gets, as the plan does, not what was detected', async () => {
-    await testDb
-      .update(settings)
-      .set({ widgetInstalledFirstSeenAt: new Date(), widgetInstalledOriginHost: 'www.acme.com' })
-    expect(await sendOnboardingEmail('welcome', owner)).toEqual({ sent: true })
-    const { steps } = mail.welcome.mock.calls[0][0] as {
-      steps: { title: string; outcome: string }[]
-    }
-    const messenger = steps.find((step) => step.title === 'Put Messenger on your site')
-    expect(messenger?.outcome).toBe('Customers reach you from your site')
-    expect(steps.some((step) => /found on/i.test(step.outcome))).toBe(false)
+  it('writes in the language the owner chose, else the one their browser asked for', async () => {
+    expect(await sendOnboardingEmail('welcome', owner, new Date(), 'ar')).toEqual({ sent: true })
+    expect(mail.welcome.mock.calls[0][0]).toMatchObject({ lang: 'ar', dir: 'rtl' })
+
+    await testDb.delete(onboardingEmails)
+    const [row] = await testDb.select().from(principal).where(eq(principal.id, owner))
+    await testDb.update(user).set({ preferredLanguage: 'de' }).where(eq(user.id, row.userId!))
+    expect(await sendOnboardingEmail('welcome', owner, new Date(), 'ar')).toEqual({ sent: true })
+    const german = mail.welcome.mock.calls[1][0] as { lang: string; subject: string }
+    expect(german.lang).toBe('de')
+    expect(german.subject).not.toBe('Acme is ready, Sam')
+  })
+
+  it('carries the browser language from the first landing into the queued jobs', async () => {
+    await scheduleOnboardingEmails(owner, new Date(), 'fr')
+    const jobs = (await testDb.execute(
+      sql`select payload from job_queue where queue = ${ONBOARDING_EMAIL_QUEUE} and payload->>'principalId' = ${owner}`
+    )) as unknown as { payload: { locale?: string } }[]
+    expect(jobs.map((job) => job.payload.locale)).toEqual(['fr', 'fr'])
   })
 })

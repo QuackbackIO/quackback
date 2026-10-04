@@ -160,6 +160,32 @@ export async function consumeTestCustomerToken(token: string) {
   })
 }
 
+/**
+ * Whether a code the owner minted is still waiting to be scanned: not yet
+ * redeemed, not expired. Lets the owner's computer swap in a fresh code once a
+ * phone has used this one.
+ */
+export async function isTestCustomerTokenPending(
+  ownerPrincipalId: PrincipalId,
+  token: string
+): Promise<boolean> {
+  if (!token.startsWith('customer-') || token.length > 100) return false
+  const [row] = await db
+    .select({ id: verification.id })
+    .from(verification)
+    .innerJoin(session, eq(session.token, verification.value))
+    .innerJoin(principal, eq(principal.userId, session.userId))
+    .where(
+      and(
+        eq(verification.identifier, `${TEST_CUSTOMER_VERIFICATION_PREFIX}${token}`),
+        gt(verification.expiresAt, new Date()),
+        eq(principal.testOwnerPrincipalId, ownerPrincipalId)
+      )
+    )
+    .limit(1)
+  return !!row
+}
+
 /** The owner's most recently active test conversation, if any. */
 export async function latestTestConversationId(ownerPrincipalId: PrincipalId) {
   const [row] = await db

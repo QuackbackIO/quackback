@@ -31,6 +31,7 @@ const shell = vi.hoisted(() => ({
   widgetRenders: 0,
   avatarUrl: 'https://cdn.example.com/a.png',
   sidebarAvatar: null as string | null,
+  guardCalls: [] as unknown[],
   guard: null as null | {
     user: { id: string; name: string; email: string; image: null }
     principal: { id: string; role: string; chatAvailability: 'online' }
@@ -53,7 +54,10 @@ vi.mock('@/components/shared/cloud-quackback-widget', () => ({
 }))
 vi.mock('@/lib/client/hooks/use-admin-presence', () => ({ useAdminPresence: () => {} }))
 vi.mock('@/lib/server/functions/workspace-utils', () => ({
-  requireWorkspaceRole: async () => shell.guard,
+  requireWorkspaceRole: async (args: unknown) => {
+    shell.guardCalls.push(args)
+    return shell.guard
+  },
 }))
 vi.mock('@/lib/server/functions/portal', () => ({
   fetchUserAvatar: async () => ({ avatarUrl: shell.avatarUrl }),
@@ -107,7 +111,7 @@ function grant(permissions: PermissionKey[]) {
   }
 }
 
-function buildRouter(queryClient: QueryClient) {
+function buildRouter(queryClient: QueryClient, initialEntry = '/admin/inbox') {
   const rootRoute = createRootRouteWithContext<object>()({
     beforeLoad: () => rootAnswer,
     component: () => <Outlet />,
@@ -131,16 +135,16 @@ function buildRouter(queryClient: QueryClient) {
   })
   return createRouter({
     routeTree: rootRoute.addChildren([adminRoute.addChildren([inbox, roadmap])]),
-    history: createMemoryHistory({ initialEntries: ['/admin/inbox'] }),
+    history: createMemoryHistory({ initialEntries: [initialEntry] }),
     context: { queryClient },
   })
 }
 
-async function mount() {
+async function mount(initialEntry?: string) {
   shell.sidebarRenders = 0
   shell.widgetRenders = 0
   const queryClient = new QueryClient()
-  const router = buildRouter(queryClient)
+  const router = buildRouter(queryClient, initialEntry)
   render(
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router as never} />
@@ -185,5 +189,16 @@ describe('admin layout renders', () => {
     await act(() => router.invalidate())
 
     expect(shell.sidebarAvatar).toBe('https://cdn.example.com/b.png')
+  })
+
+  it('hands the role guard the full page being opened, so sign-in can return to it', async () => {
+    grant([])
+    expireRouteContext()
+    shell.guardCalls = []
+    await mount('/admin/inbox?i=conv_1#m2')
+
+    expect(shell.guardCalls[0]).toEqual({
+      data: { allowedRoles: ['admin', 'member'], callbackUrl: '/admin/inbox?i=conv_1#m2' },
+    })
   })
 })

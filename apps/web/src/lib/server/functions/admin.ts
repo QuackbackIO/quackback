@@ -14,15 +14,7 @@ import type { TiptapContent } from '@/lib/shared/schemas/posts'
 import { requireAuth } from './auth-helpers'
 import { getSession } from '@/lib/server/auth/session'
 import { getSettings } from './workspace'
-import {
-  db,
-  invitation,
-  principal,
-  user,
-  eq,
-  and,
-  gt,
-} from '@/lib/server/db'
+import { db, invitation, principal, user, eq, and, gt } from '@/lib/server/db'
 import {
   findHumanAdmin,
   isOpenToBootstrapClaim,
@@ -74,6 +66,29 @@ import { logger } from '@/lib/server/logger'
  */
 
 const log = logger.child({ component: 'admin' })
+
+/**
+ * The invitation in the inviting teammate's language: the invitee has no
+ * account yet, so the team's own language is the best guess at theirs.
+ */
+async function invitationCopy(
+  inviterName: string | null | undefined,
+  inviteeName: string | null | undefined,
+  workspaceName: string
+) {
+  const { getRequestHeaders } = await import('@tanstack/react-start/server')
+  const { invitationEmailCopy } =
+    await import('@/lib/server/domains/onboarding/onboarding-email-copy')
+  let acceptLanguage: string | null = null
+  try {
+    acceptLanguage = getRequestHeaders().get('accept-language')
+  } catch {
+    acceptLanguage = null
+  }
+  const { resolveLocale } = await import('@/lib/shared/i18n')
+  const locale = resolveLocale(acceptLanguage)
+  return invitationEmailCopy({ locale, inviterName, inviteeName, workspaceName })
+}
 
 // Schemas for GET request parameters
 const inboxPostListSchema = z.object({
@@ -1051,6 +1066,7 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
       workspaceName: auth.settings.name,
       inviteLink,
       logoUrl,
+      copy: await invitationCopy(auth.user.name, data.name, auth.settings.name),
     })
 
     log.info({ invitation_id: invitationId, sent: result.sent }, 'invitation sent')
@@ -1194,6 +1210,7 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
         workspaceName: auth.settings.name,
         inviteLink,
         logoUrl,
+        copy: await invitationCopy(auth.user.name, invitationRecord.name, auth.settings.name),
       })
     } catch (sendError) {
       // The new link never went out — drop it from the set and revoke it.

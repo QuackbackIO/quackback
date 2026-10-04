@@ -1,10 +1,11 @@
 /**
- * The two setup emails: a welcome when a new workspace's owner first lands,
- * listing their goal path, and one nudge on day two if the first real result
- * has not happened. Both go only inside the launch window, never to an
- * established workspace after an upgrade, never to someone who muted email or
- * stopped setup tips, and never twice: the `onboarding_emails` row is claimed
- * before sending.
+ * The two setup emails: the one "workspace is ready" email when a new
+ * workspace's owner first lands, naming the link to share and the next step on
+ * their goal path, and one nudge on day two if the first real result has not
+ * happened. Both are written in the owner's language, go only inside the
+ * launch window, never to an established workspace after an upgrade, never to
+ * someone who muted email or stopped setup tips, and never twice: the
+ * `onboarding_emails` row is claimed before sending.
  */
 import { randomUUID } from 'crypto'
 import type { PrincipalId } from '@quackback/ids'
@@ -22,7 +23,6 @@ import {
 import { getSetupState } from '@/lib/shared/db-types'
 import { isLaunchWindowOpen, launchWindowFor } from '@/lib/shared/launch-window'
 import {
-  LAUNCH_LIVE_STEP,
   launchPath,
   type LaunchPath,
   type LaunchStatus,
@@ -38,12 +38,15 @@ import { loadLaunchStatus } from './launch-status'
 import { permissionsForLegacyRole } from '@/lib/server/policy/permissions'
 import type { Role } from '@/lib/shared/roles'
 import { detectFirstWin } from '@/lib/server/activation-wins'
+import { sendOnboardingNudgeEmail, sendOnboardingWelcomeEmail } from '@quackback/email'
+import type { SupportedLocale } from '@/lib/shared/i18n'
+import type { OnboardingOutcome } from '@/lib/shared/db-types'
 import {
-  sendOnboardingNudgeEmail,
-  sendOnboardingWelcomeEmail,
-  type OnboardingEmailStep,
-} from '@quackback/email'
-import { launchTaskOutcome } from '@/lib/shared/launch-outcomes'
+  nudgeEmailCopy,
+  readyEmailCopy,
+  recipientLocale,
+  type EmailStep,
+} from './onboarding-email-copy'
 
 const log = logger.child({ component: 'onboarding-emails' })
 
@@ -62,10 +65,15 @@ export type OnboardingEmailSkip =
   | 'already-sent'
   | 'first-result-reached'
 
-/** Queue the welcome now and the nudge for day two; the job decides at run time. */
+/**
+ * Queue the welcome now and the nudge for day two; the job decides at run time.
+ * `locale` is the language the owner's browser asked for when they landed,
+ * used when they have not chosen one of their own.
+ */
 export async function scheduleOnboardingEmails(
   ownerPrincipalId: PrincipalId,
-  now = new Date()
+  now = new Date(),
+  locale?: SupportedLocale
 ): Promise<void> {
   for (const [kind, runAt] of [
     ['welcome', now],
@@ -73,7 +81,7 @@ export async function scheduleOnboardingEmails(
   ] as const) {
     await enqueueJob({
       queue: ONBOARDING_EMAIL_QUEUE,
-      payload: { kind, principalId: ownerPrincipalId },
+      payload: { kind, principalId: ownerPrincipalId, ...(locale ? { locale } : {}) },
       dedupeKey: `${ONBOARDING_EMAIL_QUEUE}:${kind}:${ownerPrincipalId}`,
       runAt,
       maxAttempts: 3,
@@ -83,7 +91,10 @@ export async function scheduleOnboardingEmails(
 
 interface EmailContext {
   to: string
-  name: string
+  /** First name, or null when the person has not given one. */
+  name: string | null
+  /** The language the email is written in. */
+  locale: SupportedLocale
   workspaceName: string
   status: LaunchStatus
   /** The launch plan's one path, the same three steps Home shows. */
@@ -98,7 +109,8 @@ interface EmailContext {
 export async function onboardingEmailContext(
   kind: OnboardingEmailKind,
   principalId: PrincipalId,
-  now = new Date()
+  now = new Date(),
+  requestLocale?: string
 ): Promise<{ ok: true; context: EmailContext } | { ok: false; reason: OnboardingEmailSkip }> {
   const [org] = await db.select().from(settings).limit(1)
   if (!org) return { ok: false, reason: 'no-workspace' }
@@ -113,6 +125,8 @@ export async function onboardingEmailContext(
       displayName: principal.displayName,
       email: user.email,
       userName: user.name,
+      preferredLanguage: user.preferredLanguage,
+      accountLocale: user.locale,
     })
     .from(principal)
     .innerJoin(user, eq(user.id, principal.userId))
@@ -153,16 +167,20 @@ export async function onboardingEmailContext(
   // has done every chore still gets the nudge toward its first customer.
   const path = launchPath(status)
   if (path.complete) return { ok: false, reason: 'first-result-reached' }
-  const name = (person.userName || person.displayName || '').split(' ')[0] || 'there'
+  const name = (person.userName || person.displayName || '').trim().split(/\s+/)[0] || null
+  // Their own choice first, then their sign-in provider's, then their browser's.
+  const locale = recipientLocale(person.preferredLanguage, person.accountLocale, requestLocale)
   return {
     ok: true,
     context: {
       to,
       name,
+      locale,
       workspaceName: org.name,
       status,
       path,
       done: path.steps.filter((task) => task.isCompleted || task.isReady),
+      // The next step first: the ready email and the nudge lead with it.
       tasks: [
         ...(path.next ? [path.next] : []),
         ...path.steps.filter((task) => task !== path.next && !task.isCompleted && !task.isReady),
@@ -171,40 +189,13 @@ export async function onboardingEmailContext(
   }
 }
 
-function emailStep(
-  task: LaunchTask,
-  status: LaunchStatus,
-  base: string,
-  done: boolean
-): OnboardingEmailStep {
+function emailStep(task: LaunchTask, base: string, status?: LaunchStatus): EmailStep {
   return {
+    id: task.id,
+    variant: task.variant,
     title: task.title,
-    outcome: launchTaskOutcome(task)?.defaultMessage?.toString() ?? '',
     url: stepUrl(task, base, status),
-    done,
   }
-}
-
-/**
- * The path's three steps for an email, in order: the live page (done), the
- * goal step and the first win. The same list and count Home shows.
- */
-export function emailPathSteps(
-  path: LaunchPath,
-  status: LaunchStatus,
-  base: string
-): OnboardingEmailStep[] {
-  const [goalStep, win] = path.steps
-  return [
-    {
-      title: LAUNCH_LIVE_STEP[path.goal].defaultMessage,
-      outcome: '',
-      url: `${base.replace(/\/$/, '')}/admin/getting-started`,
-      done: true,
-    },
-    emailStep(goalStep, status, base, goalStep.isCompleted || goalStep.isReady),
-    emailStep(win, status, base, win.isCompleted),
-  ]
 }
 
 /**
@@ -225,16 +216,33 @@ export function stepUrl(task: LaunchTask, base: string, status?: LaunchStatus): 
 export function testLink(
   status: LaunchStatus,
   base: string
-): { label: string; url: string } | null {
+): { kind: 'message' | 'idea'; label: string; url: string } | null {
   const root = base.replace(/\/$/, '')
-  const primary = status.goals?.[0] ?? status.useCase
+  const primary = primaryGoal(status)
   if (primary === 'customer_support' && status.features?.supportInbox) {
-    return { label: 'Send a test message', url: `${root}/admin?try=message` }
+    return { kind: 'message', label: 'Send a test message', url: `${root}/admin?try=message` }
   }
   if (primary === 'product_feedback' || primary === 'internal') {
-    return { label: 'Post a test idea', url: `${root}/admin?try=idea` }
+    return { kind: 'idea', label: 'Post a test idea', url: `${root}/admin?try=idea` }
   }
   return null
+}
+
+function primaryGoal(status: LaunchStatus): OnboardingOutcome | null {
+  return (status.goals?.[0] ?? status.useCase ?? null) as OnboardingOutcome | null
+}
+
+/** The running trial as the ready email states it, or null without one. */
+async function runningTrial(): Promise<{ days: number; planName: string } | null> {
+  const { getCloudConfig } = await import('@/lib/server/domains/settings/cloud/cloud.service')
+  const { PLAN_CATALOGUE } = await import('@/lib/server/domains/settings/cloud/cloud.types')
+  const config = await getCloudConfig()
+  if (!config.enabled || !config.trialActive || !config.plan) return null
+  if (!config.trialStartedAt || !config.trialExpiresAt) return null
+  const length = Date.parse(config.trialExpiresAt) - Date.parse(config.trialStartedAt)
+  const days = Math.round(length / (24 * 60 * 60 * 1000))
+  if (!Number.isFinite(days) || days <= 0) return null
+  return { days, planName: PLAN_CATALOGUE[config.plan].name }
 }
 
 async function unsubscribeUrl(principalId: PrincipalId, base: string): Promise<string> {
@@ -253,9 +261,10 @@ async function unsubscribeUrl(principalId: PrincipalId, base: string): Promise<s
 export async function sendOnboardingEmail(
   kind: OnboardingEmailKind,
   principalId: PrincipalId,
-  now = new Date()
+  now = new Date(),
+  requestLocale?: string
 ): Promise<{ sent: true } | { sent: false; reason: OnboardingEmailSkip }> {
-  const result = await onboardingEmailContext(kind, principalId, now)
+  const result = await onboardingEmailContext(kind, principalId, now, requestLocale)
   if (!result.ok) {
     log.info({ kind, principal_id: principalId, reason: result.reason }, 'onboarding email skipped')
     return { sent: false, reason: result.reason }
@@ -290,24 +299,40 @@ async function deliver(
   base: string,
   unsubscribe: string
 ): Promise<void> {
+  const root = base.replace(/\/$/, '')
+  const next = context.tasks[0]
+  const common = {
+    locale: context.locale,
+    name: context.name,
+    workspaceName: context.workspaceName,
+    goal: primaryGoal(context.status),
+    base,
+  }
   if (kind === 'welcome') {
+    const copy = await readyEmailCopy({
+      ...common,
+      nextStep: next ? emailStep(next, base, context.status) : null,
+      homeUrl: `${root}/admin`,
+      trial: await runningTrial(),
+    })
     await sendOnboardingWelcomeEmail({
       to: context.to,
-      name: context.name,
       workspaceName: context.workspaceName,
-      steps: emailPathSteps(context.path, context.status, base),
-      homeUrl: `${base.replace(/\/$/, '')}/admin`,
       unsubscribeUrl: unsubscribe,
+      ...copy,
     })
   } else {
-    const next = context.tasks[0] ?? context.path.steps[1]
+    const test = testLink(context.status, base)
+    const copy = await nudgeEmailCopy({
+      ...common,
+      nextStep: emailStep(next ?? context.path.steps[1], base, context.status),
+      test: test ? { kind: test.kind, url: test.url } : null,
+    })
     await sendOnboardingNudgeEmail({
       to: context.to,
-      name: context.name,
       workspaceName: context.workspaceName,
-      nextStep: { title: next.title, url: stepUrl(next, base, context.status) },
-      test: testLink(context.status, base),
       unsubscribeUrl: unsubscribe,
+      ...copy,
     })
   }
 }
@@ -318,6 +343,7 @@ export async function runOnboardingEmailJob(job: {
 }): Promise<void> {
   const kind = job.payload.kind
   const principalId = job.payload.principalId
+  const locale = typeof job.payload.locale === 'string' ? job.payload.locale : undefined
   if ((kind !== 'welcome' && kind !== 'nudge') || typeof principalId !== 'string') return
-  await sendOnboardingEmail(kind, principalId as PrincipalId)
+  await sendOnboardingEmail(kind, principalId as PrincipalId, new Date(), locale)
 }

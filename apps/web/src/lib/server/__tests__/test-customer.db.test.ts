@@ -24,6 +24,7 @@ import {
   getOrCreateTestCustomer,
   mintTestCustomerToken,
   consumeTestCustomerToken,
+  isTestCustomerTokenPending,
 } from '../test-customer'
 import { notTestPrincipal } from '../test-data'
 import { removePortalUser } from '../domains/users/user.service'
@@ -108,6 +109,32 @@ it('rejects expired tokens and ordinary credentials', async () => {
     .where(eq(verification.identifier, `test-customer-token:${issued.token}`))
   expect(await consumeTestCustomerToken(issued.token)).toBeNull()
   expect(await consumeTestCustomerToken('ordinary-session-token')).toBeNull()
+})
+
+it("tells the owner's computer whether its phone code is still waiting to be scanned", async () => {
+  const issued = await mintTestCustomerToken(owner, 'en')
+  expect(await isTestCustomerTokenPending(owner, issued.token)).toBe(true)
+  await consumeTestCustomerToken(issued.token)
+  expect(await isTestCustomerTokenPending(owner, issued.token)).toBe(false)
+
+  const expiring = await mintTestCustomerToken(owner, 'en')
+  await testDb
+    .update(verification)
+    .set({ expiresAt: new Date(Date.now() - 1000) })
+    .where(eq(verification.identifier, `test-customer-token:${expiring.token}`))
+  expect(await isTestCustomerTokenPending(owner, expiring.token)).toBe(false)
+})
+
+it("never reports on another teammate's phone code", async () => {
+  const uid = createId('user'),
+    other = createId('principal')
+  await testDb.insert(user).values({ id: uid, name: 'Acme', email: 'other@example.com' })
+  await testDb
+    .insert(principal)
+    .values({ id: other, userId: uid, role: 'member', type: 'user', createdAt: new Date() })
+  const issued = await mintTestCustomerToken(owner, 'en')
+  expect(await isTestCustomerTokenPending(other, issued.token)).toBe(false)
+  expect(await isTestCustomerTokenPending(owner, 'ordinary-session-token')).toBe(false)
 })
 
 it('keeps test tokens outside Better Auth cookie handoffs', async () => {

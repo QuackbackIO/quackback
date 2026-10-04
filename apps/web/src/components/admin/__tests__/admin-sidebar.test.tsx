@@ -95,6 +95,8 @@ function renderSidebar(
     permissions?: string[]
     cloudEnabled?: boolean
     planNotice?: import('@/lib/server/domains/settings/tier-limits.types').PlanNotice
+    locale?: string
+    messages?: Record<string, string>
   } = {}
 ) {
   mockRole.current = userRole
@@ -110,7 +112,7 @@ function renderSidebar(
     billingEnabled: mockBillingEnabled.current,
   })
   return render(
-    <IntlProvider locale="en" messages={{}}>
+    <IntlProvider locale={opts.locale ?? 'en'} messages={opts.messages ?? {}}>
       <TooltipProvider>
         <SearchPaletteContext.Provider value={searchContext}>
           <AdminSidebar planNotice={opts.planNotice ?? null} />
@@ -429,5 +431,21 @@ describe('AdminSidebar: help and the phone menu', () => {
     )
     expect(within(menu).getByText(/Pro trial/)).toBeTruthy()
     expect(within(menu).getAllByText('Changelog')).toHaveLength(1)
+  })
+})
+
+describe('AdminSidebar: language', () => {
+  afterEach(() => cleanup())
+
+  it('names the rail items in the workspace language', async () => {
+    const de = (await import('@/locales/de.json')).default as Record<string, string>
+    renderSidebar('admin', { flags: ALL_ON, locale: 'de', messages: de })
+    const rail = document.querySelector('aside nav[data-tour="products"]') as HTMLElement
+    expect(rail.textContent).toContain(de['admin.nav.home'])
+    expect(rail.textContent).toContain(de['admin.nav.helpCenter'])
+    expect(rail.textContent).not.toContain('Help Center')
+    expect(document.querySelector('aside')?.textContent).toContain(de['admin.nav.settings'])
+    expect(document.querySelector('aside')?.textContent).not.toContain('View portal')
+    expect(document.querySelector('aside')?.getAttribute('lang')).toBe('de')
   })
 })

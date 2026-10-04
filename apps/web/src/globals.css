@@ -59,7 +59,8 @@
     --warning-foreground: oklch(0.985 0 0);
     --border: #d4d4d4;
     --input: #d4d4d4;
-    --ring: var(--accent-ink);
+    /* Focus is neutral: a brand-coloured outline reads as an error or a selection. */
+    --ring: var(--muted-foreground);
     --chart-1: oklch(0.646 0.222 41);
     --chart-2: oklch(0.6 0.118 184);
     --chart-3: oklch(0.398 0.07 227);
@@ -134,7 +135,7 @@
     --chrome-active-text: #09090b;
     --chrome-active-icon: #9a6c00;
     --chrome-pane-active-background: #f4f4f5;
-    --chrome-focus: #9a6c00;
+    --chrome-focus: var(--chrome-label);
   }
 
   .dark {
@@ -164,7 +165,7 @@
     --warning-foreground: oklch(0.145 0 0);
     --border: #262626;
     --input: #262626;
-    --ring: oklch(0.886 0.176 86);
+    --ring: var(--muted-foreground);
     --chart-1: oklch(0.488 0.243 264);
     --chart-2: oklch(0.696 0.17 162);
     --chart-3: oklch(0.769 0.188 70);
@@ -230,7 +231,7 @@
     --chrome-active-text: #fafafa;
     --chrome-active-icon: #ffcf20;
     --chrome-pane-active-background: #1f1f23;
-    --chrome-focus: #ffcf20;
+    --chrome-focus: var(--chrome-label);
   }
 
   @theme inline {

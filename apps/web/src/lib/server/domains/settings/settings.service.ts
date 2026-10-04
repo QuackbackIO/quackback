@@ -1099,7 +1099,16 @@ export async function updateFeatureFlags(
   return flags
 }
 
-function featureFlagsWrite(org: SettingsRecord, input: Partial<FeatureFlags>) {
+/**
+ * The settings columns one flag change writes. Exported so setup applies its
+ * goals through the same side effects as Settings > General: Status ON
+ * publishes the page, Support ON opens the Messenger and portal surfaces,
+ * Help center ON adds the Messenger help tab.
+ */
+export function featureFlagsWrite(
+  org: Pick<SettingsRecord, 'id' | 'featureFlags' | 'metadata' | 'widgetConfig' | 'portalConfig'>,
+  input: Partial<FeatureFlags>
+) {
   // Unknown stored keys (retired Labs flags) drop here; the next write
   // persists a clean shape.
   const current = resolveFeatureFlags(org.featureFlags)

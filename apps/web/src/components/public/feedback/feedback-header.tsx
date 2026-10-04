@@ -29,7 +29,7 @@ function FeedbackHeaderFallback() {
             id: 'portal.feedback.header.titleLabel',
             defaultMessage: 'Feedback title',
           })}
-          className="flex-1 bg-transparent border-0 outline-none text-foreground font-semibold placeholder:text-muted-foreground/60 placeholder:font-normal focus-visible:ring-2 focus-visible:ring-ring/50"
+          className="flex-1 bg-transparent border-0 outline-none text-foreground font-semibold placeholder:text-muted-foreground/60 placeholder:font-normal"
         />
       </div>
     </div>

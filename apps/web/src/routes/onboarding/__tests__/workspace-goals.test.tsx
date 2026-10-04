@@ -28,7 +28,6 @@ import { WorkspaceStep } from '../-workspace-step'
 function renderStep(props: {
   managedFieldPaths: string[]
   goals?: ('product_feedback' | 'customer_support' | 'help_center' | 'status_page')[]
-  feedbackPrivate?: boolean
 }) {
   return render(
     <IntlProvider locale="en" messages={en}>
@@ -37,7 +36,7 @@ function renderStep(props: {
         cloudIdentity={null}
         existingWorkspaceName="Acme"
         managedFieldPaths={props.managedFieldPaths}
-        setupGoals={{ goals: props.goals, feedbackPrivate: props.feedbackPrivate }}
+        setupGoals={{ goals: props.goals }}
       />
     </IntlProvider>
   )
@@ -56,7 +55,6 @@ describe('self-hosted workspace step goals', () => {
     renderStep({
       managedFieldPaths: ['workspace.useCase'],
       goals: ['customer_support', 'help_center'],
-      feedbackPrivate: false,
     })
 
     expect(screen.getByText('Set by your config file')).toBeVisible()
@@ -79,7 +77,6 @@ describe('self-hosted workspace step goals', () => {
     renderStep({
       managedFieldPaths: [],
       goals: ['status_page', 'customer_support'],
-      feedbackPrivate: false,
     })
 
     expect(screen.getByText('Pick any')).toBeVisible()
@@ -97,7 +94,6 @@ describe('self-hosted workspace step goals', () => {
       data: {
         workspaceName: 'Acme',
         goals: ['status_page', 'customer_support'],
-        feedbackPrivate: false,
       },
     })
   })
@@ -111,7 +107,7 @@ describe('self-hosted workspace step goals', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open workspace' }))
     await waitFor(() =>
       expect(hoisted.save).toHaveBeenCalledWith({
-        data: { workspaceName: 'Acme', goals: ['product_feedback'], feedbackPrivate: false },
+        data: { workspaceName: 'Acme', goals: ['product_feedback'] },
       })
     )
   })

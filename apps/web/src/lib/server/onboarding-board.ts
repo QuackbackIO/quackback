@@ -1,11 +1,24 @@
-import { boards, eq, isNull, settings, type SetupState, type Transaction } from '@/lib/server/db'
+import {
+  boards,
+  eq,
+  isNull,
+  settings,
+  statusComponents,
+  type SetupState,
+  type Transaction,
+} from '@/lib/server/db'
 import {
   flagsForGoals,
   resolveFeatureFlags,
   withNewWorkspaceFlags,
+  type FeatureFlags,
 } from '@/lib/server/domains/settings/settings.types'
+import { featureFlagsWrite } from '@/lib/server/domains/settings/settings.service'
+import { parseWidgetConfig } from '@/lib/server/domains/settings/settings.helpers'
+import { ensureDefaultHelpCategory } from '@/lib/server/domains/help-center/help-center.default-category'
 import { LAUNCH_WINDOW_DAYS } from '@/lib/shared/launch-window'
 import { accessForPreset } from '@/lib/shared/schemas/boards'
+import type { BoardAccess } from '@/lib/shared/db-types'
 
 /** The goals a setup state stands for, falling back to its single legacy goal. */
 export function setupGoals(state: SetupState): NonNullable<SetupState['goals']> {
@@ -18,35 +31,134 @@ function isNewWorkspace(createdAt: Date | string | null | undefined, now = Date.
   return !Number.isNaN(created) && now - created <= LAUNCH_WINDOW_DAYS * 86_400_000
 }
 
+/** Whether the workspace ever stored its status page settings (publish choice included). */
+function hasStoredStatusSettings(metadata: string | null): boolean {
+  if (!metadata) return false
+  try {
+    const bag = JSON.parse(metadata) as Record<string, unknown>
+    return bag.statusSettings != null
+  } catch {
+    return false
+  }
+}
+
+/** The flags a goal pass changes, as the partial a flag write takes. */
+function changedFlags(before: FeatureFlags, after: FeatureFlags): Partial<FeatureFlags> {
+  const changed: Partial<FeatureFlags> = {}
+  for (const key of Object.keys(after) as Array<keyof FeatureFlags>) {
+    if (after[key] !== before[key]) changed[key] = after[key]
+  }
+  return changed
+}
+
+type GoalRow = Pick<
+  typeof settings.$inferSelect,
+  'id' | 'name' | 'featureFlags' | 'createdAt' | 'metadata' | 'widgetConfig' | 'portalConfig'
+>
+
 /**
  * Apply every chosen goal at the end of setup: turn on each goal's modules
- * (never turning any off) and prepare the feedback board for its audience.
+ * (never turning any off), give each goal a live page and prepare the
+ * feedback board. Flags go through the same write as Settings > General, so
+ * choosing Status publishes the page and choosing Support opens Messenger.
  * A new workspace whose row was created without flags (an operator
  * provisioned it) also gets the flags new workspaces start with; an
  * established workspace never does.
  */
 export async function applyOnboardingGoals(
   tx: Transaction,
-  row: Pick<typeof settings.$inferSelect, 'id' | 'featureFlags' | 'createdAt'>,
+  row: GoalRow,
   state: SetupState
 ): Promise<{ modulesChanged: boolean }> {
+  const goals = setupGoals(state)
   const before = resolveFeatureFlags(row.featureFlags)
-  const base = isNewWorkspace(row.createdAt)
-    ? withNewWorkspaceFlags(row.featureFlags, before)
-    : before
-  const { flags } = flagsForGoals(base, setupGoals(state))
+  const isNew = isNewWorkspace(row.createdAt)
+  const base = isNew ? withNewWorkspaceFlags(row.featureFlags, before, goals) : before
+  const { flags } = flagsForGoals(base, goals)
   const modulesChanged = JSON.stringify(flags) !== JSON.stringify(before)
-  if (modulesChanged) {
-    await tx
-      .update(settings)
-      .set({ featureFlags: JSON.stringify(flags) })
-      .where(eq(settings.id, row.id))
+  // A new workspace may have been provisioned with its goal modules already
+  // on but without what turning them on does (Messenger, the portal support
+  // surface, the help tab), so for it those modules count as turning on now.
+  const from: FeatureFlags = isNew
+    ? {
+        ...flags,
+        ...(goals.includes('customer_support') && { supportInbox: false, supportTickets: false }),
+        ...(goals.includes('help_center') && { helpCenter: false }),
+        statusPage: before.statusPage,
+      }
+    : before
+  const input = changedFlags(from, flags)
+  // A status page provisioned with its flag already on was never published:
+  // publish it unless the workspace has stored a choice of its own.
+  if (goals.includes('status_page') && flags.statusPage && !hasStoredStatusSettings(row.metadata)) {
+    input.statusPage = true
   }
-  await prepareOnboardingBoard(tx, { ...state, goals: setupGoals(state) })
+  if (modulesChanged || Object.keys(input).length > 0 || isNew) {
+    const patch: Record<string, string> = featureFlagsWrite(
+      { ...row, featureFlags: JSON.stringify(from) },
+      input
+    ).patch
+    // A new workspace without the Feedback goal has no board to send
+    // Messenger visitors to, so it starts without the idea tab.
+    if (isNew && !goals.includes('product_feedback')) {
+      const widget = parseWidgetConfig(patch.widgetConfig ?? row.widgetConfig)
+      if (widget.tabs?.feedback !== false) {
+        patch.widgetConfig = JSON.stringify({ ...widget, tabs: { ...widget.tabs, feedback: false } })
+      }
+    }
+    await tx.update(settings).set(patch).where(eq(settings.id, row.id))
+  }
+  await prepareOnboardingBoard(tx, { ...state, goals })
+  await seedGoalPages(tx, row.name, goals)
   return { modulesChanged }
 }
 
-/** Seed an empty feedback board with the audience selected during setup. */
+/**
+ * Give the help center and status goals something live at minute one: a
+ * General category so the first article saves, and one operational service
+ * named after the workspace so the status page is not empty. Only into an
+ * empty module; a workspace that already has categories or services keeps
+ * its own.
+ */
+async function seedGoalPages(
+  tx: Transaction,
+  workspaceName: string,
+  goals: NonNullable<SetupState['goals']>
+): Promise<void> {
+  if (goals.includes('help_center')) {
+    const anyCategory = await tx.query.helpCenterCategories.findFirst({
+      where: (category, { isNull }) => isNull(category.deletedAt),
+      columns: { id: true },
+    })
+    if (!anyCategory) await ensureDefaultHelpCategory(tx)
+  }
+  if (goals.includes('status_page')) {
+    const anyService = await tx.query.statusComponents.findFirst({
+      where: isNull(statusComponents.deletedAt),
+      columns: { id: true },
+    })
+    if (!anyService) await tx.insert(statusComponents).values({ name: workspaceName })
+  }
+}
+
+/**
+ * The board a new workspace starts with: public, and open to visitors
+ * without an account for ideas, votes and comments. Anonymous ideas are
+ * rate limited per address on the way in.
+ */
+export function onboardingBoardAccess(): BoardAccess {
+  return {
+    ...accessForPreset('public'),
+    vote: 'anonymous',
+    comment: 'anonymous',
+    submit: 'anonymous',
+  }
+}
+
+/**
+ * Seed an empty feedback board. Setup no longer offers a private board;
+ * a workspace that chose one before keeps it.
+ */
 export async function prepareOnboardingBoard(tx: Transaction, state: SetupState): Promise<void> {
   if (!(state.goals ?? [state.useCase]).includes('product_feedback')) return
   const existing = await tx.query.boards.findMany({
@@ -63,7 +175,7 @@ export async function prepareOnboardingBoard(tx: Transaction, state: SetupState)
     await tx.insert(boards).values({
       name: 'Feedback',
       slug: 'feedback',
-      access: accessForPreset(state.feedbackPrivate ? 'private' : 'public'),
+      access: state.feedbackPrivate ? accessForPreset('private') : onboardingBoardAccess(),
     })
   }
 }

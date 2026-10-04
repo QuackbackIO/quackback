@@ -25,7 +25,18 @@ export const mintTestCustomerPhoneLinkFn = createServerFn({ method: 'POST' })
     const { token, expiresAt } = await mintTestCustomerToken(auth.principal.id, data.locale)
     const url = new URL('/try-messenger', getBaseUrl())
     url.searchParams.set('ott', token)
-    return { url: url.toString(), expiresAt }
+    // Not a secret: lets the phone tell an expired code from a used one.
+    url.searchParams.set('exp', String(Date.parse(expiresAt)))
+    return { url: url.toString(), token, expiresAt }
+  })
+
+/** Whether the phone code on screen still waits to be scanned; once not, the sheet shows a new one. */
+export const getTestCustomerPhoneLinkStatusFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ token: z.string().max(100) }))
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    const { isTestCustomerTokenPending } = await import('@/lib/server/test-customer')
+    return { pending: await isTestCustomerTokenPending(auth.principal.id, data.token) }
   })
 
 /** What the "Try Messenger" sheet shows beside the frame. */

@@ -11,24 +11,20 @@ afterEach(cleanup)
 
 function Picker() {
   const [goals, setGoals] = useState<OnboardingOutcome[]>(['product_feedback'])
-  const [feedbackPrivate, setFeedbackPrivate] = useState(false)
-  return (
-    <GoalSelector
-      goals={goals}
-      onGoalsChange={setGoals}
-      feedbackPrivate={feedbackPrivate}
-      onPrivateChange={setFeedbackPrivate}
-    />
-  )
+  return <GoalSelector goals={goals} onGoalsChange={setGoals} />
 }
 
-it('selects multiple products with the keyboard and retains the private choice', async () => {
-  const user = userEvent.setup()
-  render(
+function renderPicker() {
+  return render(
     <IntlProvider locale="en">
       <Picker />
     </IntlProvider>
   )
+}
+
+it('selects multiple products with the keyboard and offers no private choice', async () => {
+  const user = userEvent.setup()
+  renderPicker()
   const support = screen.getByRole('button', { name: 'Support inbox' })
   support.focus()
   await user.keyboard(' ')
@@ -38,9 +34,20 @@ it('selects multiple products with the keyboard and retains the private choice',
     'aria-pressed',
     'true'
   )
-  await user.click(screen.getByRole('checkbox'))
-  await user.click(screen.getByRole('button', { name: 'Feedback & roadmap' }))
+  expect(screen.getByRole('button', { name: 'Feedback & roadmap' })).toHaveAttribute(
+    'aria-pressed',
+    'true'
+  )
   expect(screen.queryByRole('checkbox')).toBeNull()
+  expect(screen.queryByText(/private/i)).toBeNull()
+})
+
+it('says to pick at least one when the last goal is removed', async () => {
+  const user = userEvent.setup()
+  renderPicker()
+  expect(screen.queryByText('Pick at least one')).toBeNull()
   await user.click(screen.getByRole('button', { name: 'Feedback & roadmap' }))
-  expect(screen.getByRole('checkbox')).toBeChecked()
+  expect(screen.getByText('Pick at least one')).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Status page' }))
+  expect(screen.queryByText('Pick at least one')).toBeNull()
 })

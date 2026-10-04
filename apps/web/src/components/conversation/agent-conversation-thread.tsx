@@ -420,6 +420,7 @@ export function AgentConversationThread({
   openCopilotToken,
   composerRef,
   detailPanelShown = false,
+  replyFirst = false,
 }: {
   /** The open item, discriminated by kind — drives both the data adapter and
    *  the derived `ThreadCapabilities`. */
@@ -457,6 +458,9 @@ export function AgentConversationThread({
    *  the header's copies of the panel's triage controls, hidden there by CSS,
    *  are not rendered, and the panel loads its own reads. */
   detailPanelShown?: boolean
+  /** A first reply is the point (the Try Messenger sheet): the send button
+   *  carries a label and the primary fill, and Close steps back to outline. */
+  replyFirst?: boolean
 }) {
   const queryClient = useQueryClient()
   const isTicket = item.kind === 'ticket'
@@ -2068,7 +2072,13 @@ export function AgentConversationThread({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <Button type="button" size="sm" onClick={runPrimaryAction} disabled={primaryActionPending}>
+      <Button
+        type="button"
+        size="sm"
+        variant={replyFirst ? 'outline' : 'default'}
+        onClick={runPrimaryAction}
+        disabled={primaryActionPending}
+      >
         <CheckIcon className="h-4 w-4" />
         {isTicket
           ? 'Resolve'
@@ -2219,8 +2229,8 @@ export function AgentConversationThread({
             className={cn(
               'rounded-lg border px-3 py-2 transition-colors',
               noteMode || !capabilities.reply
-                ? 'border-amber-400/50 bg-amber-400/5 focus-within:border-amber-400'
-                : 'border-border bg-background focus-within:border-primary/60'
+                ? 'border-amber-400/50 bg-amber-400/5'
+                : 'border-border bg-background focus-within:border-ring/60'
             )}
             onPaste={handleComposerPaste}
             onDrop={handleComposerDrop}
@@ -2388,13 +2398,18 @@ export function AgentConversationThread({
                 onClick={onSend}
                 disabled={sendDisabled}
                 className={cn(
-                  'flex size-8 shrink-0 items-center justify-center rounded-md text-primary-foreground disabled:opacity-40 transition-opacity',
-                  noteMode || !capabilities.reply ? 'bg-amber-500 text-white' : 'bg-primary'
+                  'flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md text-primary-foreground disabled:opacity-40 transition-opacity',
+                  noteMode || !capabilities.reply ? 'bg-amber-500 text-white' : 'bg-primary',
+                  replyFirst && !noteMode && capabilities.reply
+                    ? 'rounded-full px-4 text-[13px] font-medium'
+                    : 'w-8'
                 )}
                 aria-label={noteMode || !capabilities.reply ? 'Add note' : 'Send reply'}
               >
                 {noteMode || !capabilities.reply ? (
                   <PencilSquareIcon className="h-4 w-4" />
+                ) : replyFirst ? (
+                  'Send'
                 ) : (
                   <PaperAirplaneIcon className="h-4 w-4" />
                 )}

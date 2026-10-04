@@ -11,16 +11,21 @@ function InputOTP({
 }: React.ComponentProps<typeof OTPInput> & {
   containerClassName?: string
 }) {
+  // A code reads left to right in every language: without this, right-to-left
+  // copy lays the six digits out mirrored.
   return (
-    <OTPInput
-      data-slot="input-otp"
-      containerClassName={cn(
-        'flex items-center gap-2 has-[:disabled]:opacity-50',
-        containerClassName
-      )}
-      className={cn('disabled:cursor-not-allowed', className)}
-      {...props}
-    />
+    <div dir="ltr" className="contents">
+      <OTPInput
+        data-slot="input-otp"
+        dir="ltr"
+        containerClassName={cn(
+          'flex items-center gap-2 has-[:disabled]:opacity-50',
+          containerClassName
+        )}
+        className={cn('disabled:cursor-not-allowed', className)}
+        {...props}
+      />
+    </div>
   )
 }
 

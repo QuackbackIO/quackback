@@ -8,8 +8,12 @@ import {
   TestCustomerFrame,
   type TestCustomerFrameStatus,
 } from '@/components/onboarding/test-customer-frame'
+import { phoneCodeProblem } from '@/lib/shared/test-customer'
 
-const searchSchema = z.object({ ott: z.string().max(100).optional() })
+const searchSchema = z.object({
+  ott: z.string().max(100).optional(),
+  exp: z.coerce.number().int().positive().optional(),
+})
 
 /**
  * "Try it on your phone": a teammate scans a code and lands here with a
@@ -43,8 +47,10 @@ function TryMessengerRoot() {
 function TryMessengerPage() {
   const intl = useIntl()
   const navigate = useNavigate()
-  const { ott } = Route.useSearch()
+  const { ott, exp } = Route.useSearch()
   const tokenRef = useRef(ott ?? null)
+  // Kept past the URL clean-up below, to explain a refused code.
+  const [code] = useState(() => ({ hadCode: !!ott, expiresAt: exp ?? null }))
   const [status, setStatus] = useState<TestCustomerFrameStatus>(ott ? 'connecting' : 'expired')
 
   useEffect(() => {
@@ -59,13 +65,26 @@ function TryMessengerPage() {
   }, [])
 
   if (status === 'expired') {
+    const problem = phoneCodeProblem(code)
     return (
       <main className="flex min-h-dvh items-center justify-center bg-background px-6 text-center">
-        <p className="text-sm text-muted-foreground">
-          <FormattedMessage
-            id="widget.test.phoneExpired"
-            defaultMessage="This link was already used. Scan the code again."
-          />
+        <p className="text-sm text-muted-foreground" data-problem={problem}>
+          {problem === 'used' ? (
+            <FormattedMessage
+              id="widget.test.phoneUsed"
+              defaultMessage="That code was already used. Scan the new one on your computer."
+            />
+          ) : problem === 'expired' ? (
+            <FormattedMessage
+              id="widget.test.phoneExpired"
+              defaultMessage="That code expired. Scan the new one on your computer."
+            />
+          ) : (
+            <FormattedMessage
+              id="widget.test.phoneMissing"
+              defaultMessage="Scan the code in Try Messenger on your computer."
+            />
+          )}
         </p>
       </main>
     )
