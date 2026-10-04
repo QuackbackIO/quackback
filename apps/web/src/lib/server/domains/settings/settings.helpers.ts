@@ -17,6 +17,7 @@ import {
   type PortalConfig,
   type PortalWelcomeCard,
   type WidgetConfig,
+  workspaceAllowsAnonymous,
 } from './settings.types'
 import type { TiptapContent } from '@/lib/shared/db-types'
 
@@ -312,7 +313,14 @@ export function resolveWelcomeCard(
  */
 export function parsePortalConfig(json: string | null): PortalConfig {
   const parsed = parseStoredConfig(json, DEFAULT_PORTAL_CONFIG, LEGACY_PORTAL_CONFIG)
-  return { ...parsed, welcomeCard: resolveWelcomeCard(parsed.welcomeCard) }
+  return {
+    ...parsed,
+    // The anonymous switch reads the way the server gates it: on only when
+    // stored as on. Merging in the default would show it on (and write it on
+    // with the next unrelated save) while every gate denies.
+    features: { ...parsed.features, allowAnonymous: workspaceAllowsAnonymous(json) },
+    welcomeCard: resolveWelcomeCard(parsed.welcomeCard),
+  }
 }
 
 /**

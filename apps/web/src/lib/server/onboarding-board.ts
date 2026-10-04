@@ -106,11 +106,39 @@ export async function applyOnboardingGoals(
         patch.widgetConfig = JSON.stringify({ ...widget, tabs: { ...widget.tabs, feedback: false } })
       }
     }
+    if (isNew && goals.includes('product_feedback')) {
+      const portal = openToVisitors(patch.portalConfig ?? row.portalConfig)
+      if (portal) patch.portalConfig = portal
+    }
     await tx.update(settings).set(patch).where(eq(settings.id, row.id))
   }
   await prepareOnboardingBoard(tx, { ...state, goals })
   await seedGoalPages(tx, row.name, goals)
   return { modulesChanged }
+}
+
+/**
+ * The stored portal config with visitors without an account allowed, so the
+ * new feedback board takes ideas, votes and comments from anyone. Null when
+ * the config already holds a choice (on or off) or cannot be read.
+ */
+function openToVisitors(portalConfig: string | null): string | null {
+  let stored: Record<string, unknown> = {}
+  if (portalConfig?.trim()) {
+    try {
+      const parsed: unknown = JSON.parse(portalConfig)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        stored = parsed as Record<string, unknown>
+      } else if (parsed !== null) {
+        return null
+      }
+    } catch {
+      return null
+    }
+  }
+  const features = (stored.features ?? {}) as Record<string, unknown>
+  if (typeof features.allowAnonymous === 'boolean') return null
+  return JSON.stringify({ ...stored, features: { ...features, allowAnonymous: true } })
 }
 
 /**

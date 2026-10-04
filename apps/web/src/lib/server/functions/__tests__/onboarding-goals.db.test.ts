@@ -11,7 +11,10 @@ import {
   statusComponents,
   user,
 } from '@/lib/server/db'
-import { DEFAULT_FEATURE_FLAGS } from '@/lib/server/domains/settings/settings.types'
+import {
+  DEFAULT_FEATURE_FLAGS,
+  workspaceAllowsAnonymous,
+} from '@/lib/server/domains/settings/settings.types'
 import { resolveStatusSettings } from '@/lib/server/domains/settings/settings.status'
 import { isStatusPagePublished } from '@/lib/shared/status-settings'
 
@@ -294,6 +297,54 @@ describe('wizard goals read and write', () => {
     await ensureOnboardingHomeReadyFn()
     row = await testDb.query.settings.findFirst()
     expect(JSON.parse(row!.featureFlags!).copilotHome).toBe(false)
+  })
+
+  // A provisioner stores only its own auth keys; the anonymous switch is unset.
+  const provisionedPortal = JSON.stringify({ oauth: { email: true }, openSignup: true })
+  const operatorRowWith = (createdAt: Date, portalConfig: string, goals = ['product_feedback']) => ({
+    ...operatorRow(createdAt),
+    portalConfig,
+    setupState: JSON.stringify({
+      version: 2,
+      steps: { core: true, workspace: true, startingPoint: null },
+      goals,
+    }),
+  })
+
+  it('opens the workspace to visitors without an account for a new Feedback workspace', async () => {
+    await testDb.insert(settings).values(operatorRowWith(new Date(), provisionedPortal))
+    await ensureOnboardingHomeReadyFn()
+    const row = await testDb.query.settings.findFirst()
+    expect(workspaceAllowsAnonymous(row!.portalConfig)).toBe(true)
+    // The provisioner's own keys survive.
+    expect(JSON.parse(row!.portalConfig!)).toMatchObject({
+      oauth: { email: true },
+      openSignup: true,
+    })
+  })
+
+  it('keeps a stored choice to turn visitors without an account off', async () => {
+    const closed = JSON.stringify({ openSignup: true, features: { allowAnonymous: false } })
+    await testDb.insert(settings).values(operatorRowWith(new Date(), closed))
+    await ensureOnboardingHomeReadyFn()
+    const row = await testDb.query.settings.findFirst()
+    expect(workspaceAllowsAnonymous(row!.portalConfig)).toBe(false)
+  })
+
+  it('never opens an established workspace or one without the Feedback goal', async () => {
+    const yearAgo = new Date(Date.now() - 365 * 86_400_000)
+    await testDb.insert(settings).values(operatorRowWith(yearAgo, provisionedPortal))
+    await ensureOnboardingHomeReadyFn()
+    let row = await testDb.query.settings.findFirst()
+    expect(workspaceAllowsAnonymous(row!.portalConfig)).toBe(false)
+
+    await testDb.delete(settings)
+    await testDb
+      .insert(settings)
+      .values(operatorRowWith(new Date(), provisionedPortal, ['customer_support']))
+    await ensureOnboardingHomeReadyFn()
+    row = await testDb.query.settings.findFirst()
+    expect(workspaceAllowsAnonymous(row!.portalConfig)).toBe(false)
   })
 
   it('keeps config-managed goals when the wizard saves without them and refuses a change', async () => {
