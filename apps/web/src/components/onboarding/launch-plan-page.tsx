@@ -193,7 +193,7 @@ function LaunchPlanRow({
 
   const note = task.isSkipped ? (
     <FormattedMessage id="onboarding.launch.skipped" defaultMessage="Skipped" />
-  ) : blocked ? (
+  ) : blocked && task.blocked?.kind === 'permission' ? (
     <FormattedMessage
       id="onboarding.launch.adminNeeded"
       defaultMessage="Ask a workspace admin to complete this step."

@@ -160,4 +160,26 @@ describe('Launch plan page', () => {
     expect(screen.queryByRole('button', { name: /^Skip/ })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Undo skip' })).toBeNull()
   })
+
+  it('asks for a workspace admin only when the viewer lacks permission', () => {
+    hoisted.status = { ...status, hasBoards: false, boardCount: 1, maxBoards: 1 }
+    mount()
+    expect(within(row('Create a feedback board')).queryByText(/Ask a workspace admin/)).toBeNull()
+    cleanup()
+    hoisted.status = {
+      ...status,
+      hasBoards: false,
+      permissions: {
+        settingsManage: true,
+        boardManage: false,
+        memberManage: true,
+        brandingManage: true,
+        integrationManage: true,
+        helpCenterManage: true,
+        assistantManage: true,
+      },
+    }
+    mount()
+    expect(within(row('Create a feedback board')).getByText(/Ask a workspace admin/)).toBeVisible()
+  })
 })
