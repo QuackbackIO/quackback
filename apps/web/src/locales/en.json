@@ -1760,5 +1760,10 @@
   "notifications.dropdown.failed": "Failed to load",
   "notifications.dropdown.empty": "No notifications yet",
   "notifications.dropdown.viewAll": "View all",
-  "admin.nav.openMenu": "Open menu"
+  "admin.nav.openMenu": "Open menu",
+  "onboarding.test.ideaSide": "Your Feedback",
+  "onboarding.test.ideaWaiting": "Post an idea as your customer. It lands in Feedback.",
+  "onboarding.test.ideaDone": "Your test idea is in Feedback.",
+  "onboarding.test.step.postIdea": "Post an idea as your customer.",
+  "onboarding.test.step.openIdea": "Open it in Feedback to reply or set a status."
 }

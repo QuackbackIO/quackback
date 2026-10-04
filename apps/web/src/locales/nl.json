@@ -1760,5 +1760,10 @@
   "notifications.dropdown.failed": "Laden mislukt",
   "notifications.dropdown.empty": "Nog geen meldingen",
   "notifications.dropdown.viewAll": "Alles bekijken",
-  "admin.nav.openMenu": "Menu openen"
+  "admin.nav.openMenu": "Menu openen",
+  "onboarding.test.ideaSide": "Je Feedback",
+  "onboarding.test.ideaWaiting": "Plaats een idee als je klant. Het komt in Feedback binnen.",
+  "onboarding.test.ideaDone": "Je testidee staat in Feedback.",
+  "onboarding.test.step.postIdea": "Plaats een idee als je klant.",
+  "onboarding.test.step.openIdea": "Open het in Feedback om te reageren of een status te kiezen."
 }

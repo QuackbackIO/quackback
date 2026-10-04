@@ -1760,5 +1760,10 @@
   "notifications.dropdown.failed": "تعذر التحميل",
   "notifications.dropdown.empty": "لا توجد إشعارات بعد",
   "notifications.dropdown.viewAll": "عرض الكل",
-  "admin.nav.openMenu": "فتح القائمة"
+  "admin.nav.openMenu": "فتح القائمة",
+  "onboarding.test.ideaSide": "ملاحظاتك",
+  "onboarding.test.ideaWaiting": "انشر فكرة بصفتك عميلك. ستصل إلى الملاحظات.",
+  "onboarding.test.ideaDone": "فكرتك التجريبية في الملاحظات.",
+  "onboarding.test.step.postIdea": "انشر فكرة بصفتك عميلك.",
+  "onboarding.test.step.openIdea": "افتحها في الملاحظات للرد أو تعيين حالة."
 }

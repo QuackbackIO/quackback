@@ -1760,5 +1760,10 @@
   "notifications.dropdown.failed": "Laden fehlgeschlagen",
   "notifications.dropdown.empty": "Noch keine Benachrichtigungen",
   "notifications.dropdown.viewAll": "Alle ansehen",
-  "admin.nav.openMenu": "Menü öffnen"
+  "admin.nav.openMenu": "Menü öffnen",
+  "onboarding.test.ideaSide": "Dein Feedback",
+  "onboarding.test.ideaWaiting": "Poste eine Idee als dein Kunde. Sie landet im Feedback.",
+  "onboarding.test.ideaDone": "Deine Testidee ist im Feedback.",
+  "onboarding.test.step.postIdea": "Poste eine Idee als dein Kunde.",
+  "onboarding.test.step.openIdea": "Öffne sie im Feedback, um zu antworten oder einen Status zu setzen."
 }

@@ -1760,5 +1760,10 @@
   "notifications.dropdown.failed": "加载失败",
   "notifications.dropdown.empty": "暂无通知",
   "notifications.dropdown.viewAll": "查看全部",
-  "admin.nav.openMenu": "打开菜单"
+  "admin.nav.openMenu": "打开菜单",
+  "onboarding.test.ideaSide": "你的反馈",
+  "onboarding.test.ideaWaiting": "以客户身份发布一个想法。它会出现在反馈中。",
+  "onboarding.test.ideaDone": "你的测试想法在反馈中。",
+  "onboarding.test.step.postIdea": "以客户身份发布一个想法。",
+  "onboarding.test.step.openIdea": "在反馈中打开它，回复或设置状态。"
 }

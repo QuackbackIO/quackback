@@ -1760,5 +1760,10 @@
   "notifications.dropdown.failed": "Échec du chargement",
   "notifications.dropdown.empty": "Pas encore de notifications",
   "notifications.dropdown.viewAll": "Tout voir",
-  "admin.nav.openMenu": "Ouvrir le menu"
+  "admin.nav.openMenu": "Ouvrir le menu",
+  "onboarding.test.ideaSide": "Votre Feedback",
+  "onboarding.test.ideaWaiting": "Publiez une idée en tant que client. Elle arrive dans Feedback.",
+  "onboarding.test.ideaDone": "Votre idée de test est dans Feedback.",
+  "onboarding.test.step.postIdea": "Publiez une idée en tant que client.",
+  "onboarding.test.step.openIdea": "Ouvrez-la dans Feedback pour répondre ou définir un statut."
 }

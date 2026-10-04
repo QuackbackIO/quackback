@@ -1760,5 +1760,10 @@
   "notifications.dropdown.failed": "Nie udało się wczytać",
   "notifications.dropdown.empty": "Brak powiadomień",
   "notifications.dropdown.viewAll": "Zobacz wszystkie",
-  "admin.nav.openMenu": "Otwórz menu"
+  "admin.nav.openMenu": "Otwórz menu",
+  "onboarding.test.ideaSide": "Twój Feedback",
+  "onboarding.test.ideaWaiting": "Opublikuj pomysł jako klient. Trafi do Feedbacku.",
+  "onboarding.test.ideaDone": "Twój testowy pomysł jest w Feedbacku.",
+  "onboarding.test.step.postIdea": "Opublikuj pomysł jako klient.",
+  "onboarding.test.step.openIdea": "Otwórz go w Feedbacku, aby odpowiedzieć lub ustawić status."
 }

@@ -62,11 +62,15 @@ function seedThread(client: QueryClient, id: string, messages: Msg[], readAt: st
   })
 }
 
-function renderSheet(client = new QueryClient(), onOpenChange = vi.fn()) {
+function renderSheet(
+  client = new QueryClient(),
+  onOpenChange = vi.fn(),
+  start: 'message' | 'idea' = 'message'
+) {
   render(
     <QueryClientProvider client={client}>
       <IntlProvider locale="en">
-        <TryMessengerSheet open onOpenChange={onOpenChange} />
+        <TryMessengerSheet open onOpenChange={onOpenChange} start={start} />
       </IntlProvider>
     </QueryClientProvider>
   )
@@ -74,6 +78,44 @@ function renderSheet(client = new QueryClient(), onOpenChange = vi.fn()) {
 }
 
 describe('TryMessengerSheet', () => {
+  it('starts the first message with a draft, and a later one empty', async () => {
+    fns.overview.mockResolvedValue({ conversationId: null, testEmailAddress: null })
+    renderSheet()
+    await waitFor(() =>
+      expect(frame.props?.open).toEqual({ view: 'chat', body: 'Hi! Is anyone there?' })
+    )
+    cleanup()
+    frame.props = null
+    fns.overview.mockResolvedValue({ conversationId: 'conversation_t', testEmailAddress: null })
+    renderSheet()
+    await waitFor(() => expect(fns.overview).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(frame.props?.open).toEqual({ view: 'chat' }))
+  })
+
+  it('talks about ideas when it opens on the idea form', async () => {
+    // An earlier test conversation is not what this run is about.
+    fns.overview.mockResolvedValue({ conversationId: 'conversation_t', testEmailAddress: null })
+    const client = new QueryClient()
+    seedThread(
+      client,
+      'conversation_t',
+      [{ senderType: 'visitor', at: '2026-10-04T10:00:00Z' }],
+      null
+    )
+    renderSheet(client, vi.fn(), 'idea')
+    expect(
+      await screen.findByText('Post an idea as your customer. It lands in Feedback.')
+    ).toBeTruthy()
+    expect(screen.queryByTestId('thread')).toBeNull()
+    expect(screen.queryByText('Send a message as your customer.')).toBeNull()
+    expect(screen.getByText('Post an idea as your customer.')).toBeTruthy()
+    act(() =>
+      (frame.props!.onEvent as (n: string, p: unknown) => void)('post:created', { id: 'post_1' })
+    )
+    expect(await screen.findByText('Your test idea is in Feedback. Open it.')).toBeTruthy()
+    expect(screen.getByTestId('round-trip-live').textContent).toBe('Your test idea is in Feedback.')
+  })
+
   it('closes when Escape is pressed inside the Messenger frame', async () => {
     fns.overview.mockResolvedValue({ conversationId: null, testEmailAddress: null })
     const { onOpenChange } = renderSheet()
@@ -132,7 +174,12 @@ describe('TryMessengerSheet', () => {
   it('announces each finished step to screen readers', async () => {
     fns.overview.mockResolvedValue({ conversationId: 'conversation_t', testEmailAddress: null })
     const client = new QueryClient()
-    seedThread(client, 'conversation_t', [{ senderType: 'visitor', at: '2026-10-04T10:00:00Z' }], null)
+    seedThread(
+      client,
+      'conversation_t',
+      [{ senderType: 'visitor', at: '2026-10-04T10:00:00Z' }],
+      null
+    )
     renderSheet(client)
     const live = await screen.findByTestId('round-trip-live')
     expect(live.getAttribute('role')).toBe('status')
@@ -166,13 +213,23 @@ describe('TryMessengerSheet', () => {
   it('swaps in a fresh phone code once the shown one is used or expires', async () => {
     fns.overview.mockResolvedValue({ conversationId: null, testEmailAddress: null })
     fns.mintPhone
-      .mockResolvedValueOnce({ url: 'https://acme.test/try-messenger?ott=one', token: 'one', expiresAt: '' })
-      .mockResolvedValueOnce({ url: 'https://acme.test/try-messenger?ott=two', token: 'two', expiresAt: '' })
+      .mockResolvedValueOnce({
+        url: 'https://acme.test/try-messenger?ott=one',
+        token: 'one',
+        expiresAt: '',
+      })
+      .mockResolvedValueOnce({
+        url: 'https://acme.test/try-messenger?ott=two',
+        token: 'two',
+        expiresAt: '',
+      })
     fns.phoneStatus.mockResolvedValue({ pending: true })
     const { client } = renderSheet()
     fireEvent.click(await screen.findByRole('button', { name: 'Show code' }))
     const qr = await screen.findByTestId('try-messenger-qr')
-    await waitFor(() => expect(qr.getAttribute('src')).toBe('data:qr,https://acme.test/try-messenger?ott=one'))
+    await waitFor(() =>
+      expect(qr.getAttribute('src')).toBe('data:qr,https://acme.test/try-messenger?ott=one')
+    )
     await waitFor(() => expect(fns.phoneStatus).toHaveBeenCalledWith({ data: { token: 'one' } }))
     expect(fns.mintPhone).toHaveBeenCalledTimes(1)
 
@@ -184,6 +241,8 @@ describe('TryMessengerSheet', () => {
       )
     )
     expect(fns.mintPhone).toHaveBeenCalledTimes(2)
-    expect(screen.getByText('One use, valid 10 minutes. A new code appears here once it is used.')).toBeTruthy()
+    expect(
+      screen.getByText('One use, valid 10 minutes. A new code appears here once it is used.')
+    ).toBeTruthy()
   })
 })

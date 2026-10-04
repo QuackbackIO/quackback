@@ -1760,5 +1760,10 @@
   "notifications.dropdown.failed": "Не удалось загрузить",
   "notifications.dropdown.empty": "Уведомлений пока нет",
   "notifications.dropdown.viewAll": "Показать все",
-  "admin.nav.openMenu": "Открыть меню"
+  "admin.nav.openMenu": "Открыть меню",
+  "onboarding.test.ideaSide": "Ваши отзывы",
+  "onboarding.test.ideaWaiting": "Опубликуйте идею как клиент. Она появится в разделе отзывов.",
+  "onboarding.test.ideaDone": "Ваша тестовая идея в разделе отзывов.",
+  "onboarding.test.step.postIdea": "Опубликуйте идею как клиент.",
+  "onboarding.test.step.openIdea": "Откройте её в разделе отзывов, чтобы ответить или задать статус."
 }

@@ -118,8 +118,10 @@ function TryMessengerBody({
   const [startedId, setStartedId] = useState<ConversationId | null>(null)
 
   const overview = useQuery({ queryKey: OVERVIEW_KEY, queryFn: () => getTestCustomerOverviewFn() })
+  const idea = start === 'idea'
+  // On the idea form an earlier test conversation is not this run's business.
   const conversationId =
-    startedId ?? ((overview.data?.conversationId ?? null) as ConversationId | null)
+    startedId ?? (idea ? null : ((overview.data?.conversationId ?? null) as ConversationId | null))
 
   const { data: thread } = useQuery<AgentThreadCache>({
     queryKey: conversationKeys.agentThread(conversationId ?? ('' as ConversationId)),
@@ -127,6 +129,7 @@ function TryMessengerBody({
     enabled: !!conversationId,
   })
   const steps = roundTripSteps(conversationId, thread)
+  const ideaPosted = idea && !!postId
   // Below lg the sheet shows one side at a time; both stay mounted so the
   // customer's frame keeps its session while the inbox is in view.
   const [pane, setPane] = useState<TryMessengerPane>('customer')
@@ -169,16 +172,20 @@ function TryMessengerBody({
     () => mintTestCustomerTokenFn({ data: { locale } }).then((r) => r.token),
     [locale]
   )
-  const frameOpen: TestCustomerFrameOpen =
-    start === 'idea'
-      ? { view: 'new-post' }
-      : {
+  // Only the first test message starts with a draft: once a thread exists the
+  // composer opens empty, so typing never lands after the old greeting.
+  const firstMessage = overview.isSuccess && !conversationId
+  const frameOpen: TestCustomerFrameOpen = idea
+    ? { view: 'new-post' }
+    : firstMessage
+      ? {
           view: 'chat',
           body: intl.formatMessage({
             id: 'onboarding.test.draft',
             defaultMessage: 'Hi! Is anyone there?',
           }),
         }
+      : { view: 'chat' }
 
   const tabLabel = (key: TryMessengerPane) =>
     key === 'customer'
@@ -294,10 +301,14 @@ function TryMessengerBody({
       >
         <div className="flex items-center justify-between gap-2 border-b px-5 py-3">
           <p className="text-xs font-medium text-muted-foreground">
-            <FormattedMessage
-              id="onboarding.test.inboxSide"
-              defaultMessage="The same conversation in your inbox"
-            />
+            {idea ? (
+              <FormattedMessage id="onboarding.test.ideaSide" defaultMessage="Your Feedback" />
+            ) : (
+              <FormattedMessage
+                id="onboarding.test.inboxSide"
+                defaultMessage="The same conversation in your inbox"
+              />
+            )}
           </p>
           {conversationId && (
             <Link
@@ -336,7 +347,7 @@ function TryMessengerBody({
         ) : (
           <div className="flex flex-1 items-center justify-center p-8 text-center">
             <p className="text-sm text-muted-foreground">
-              {start === 'idea' && postId ? (
+              {ideaPosted ? (
                 <Link
                   to="/admin/feedback"
                   search={{ post: postId }}
@@ -347,6 +358,11 @@ function TryMessengerBody({
                     defaultMessage="Your test idea is in Feedback. Open it."
                   />
                 </Link>
+              ) : idea ? (
+                <FormattedMessage
+                  id="onboarding.test.ideaWaiting"
+                  defaultMessage="Post an idea as your customer. It lands in Feedback."
+                />
               ) : (
                 <FormattedMessage
                   id="onboarding.test.waiting"
@@ -360,9 +376,31 @@ function TryMessengerBody({
 
       <aside className="flex max-h-[40dvh] shrink-0 flex-col gap-6 overflow-y-auto border-t p-5 lg:max-h-none lg:min-h-0 lg:border-t-0">
         <p role="status" className="sr-only" data-testid="round-trip-live">
-          {roundTripAnnouncement(steps, intl)}
+          {idea && !conversationId
+            ? ideaPosted
+              ? intl.formatMessage({
+                  id: 'onboarding.test.ideaDone',
+                  defaultMessage: 'Your test idea is in Feedback.',
+                })
+              : ''
+            : roundTripAnnouncement(steps, intl)}
         </p>
-        {steps.seen ? (
+        {idea && !conversationId ? (
+          <ol className="space-y-3">
+            <RoundTripStep done={ideaPosted} index={1}>
+              <FormattedMessage
+                id="onboarding.test.step.postIdea"
+                defaultMessage="Post an idea as your customer."
+              />
+            </RoundTripStep>
+            <RoundTripStep done={false} index={2}>
+              <FormattedMessage
+                id="onboarding.test.step.openIdea"
+                defaultMessage="Open it in Feedback to reply or set a status."
+              />
+            </RoundTripStep>
+          </ol>
+        ) : steps.seen ? (
           <div className="space-y-3 rounded-xl border bg-card p-4" data-testid="round-trip-done">
             <div className="flex items-center gap-2">
               <CheckCircleIcon
@@ -415,7 +453,7 @@ function TryMessengerBody({
           <PhoneCode locale={locale} />
         </div>
 
-        {overview.data?.testEmailAddress && (
+        {!idea && overview.data?.testEmailAddress && (
           <EmailAddress address={overview.data.testEmailAddress} />
         )}
       </aside>
@@ -426,7 +464,10 @@ function TryMessengerBody({
 /** What a screen reader hears as the round trip moves on. */
 function roundTripAnnouncement(steps: ReturnType<typeof roundTripSteps>, intl: IntlShape): string {
   if (steps.seen)
-    return intl.formatMessage({ id: 'onboarding.test.done', defaultMessage: "That's the round trip" })
+    return intl.formatMessage({
+      id: 'onboarding.test.done',
+      defaultMessage: "That's the round trip",
+    })
   const done = steps.replied ? 2 : steps.sent ? 1 : 0
   if (done === 0) return ''
   return intl.formatMessage(

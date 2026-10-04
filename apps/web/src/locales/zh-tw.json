@@ -1760,5 +1760,10 @@
   "notifications.dropdown.failed": "載入失敗",
   "notifications.dropdown.empty": "尚無通知",
   "notifications.dropdown.viewAll": "查看全部",
-  "admin.nav.openMenu": "開啟選單"
+  "admin.nav.openMenu": "開啟選單",
+  "onboarding.test.ideaSide": "你的意見回饋",
+  "onboarding.test.ideaWaiting": "以客戶身分發布一個想法。它會出現在意見回饋中。",
+  "onboarding.test.ideaDone": "你的測試想法在意見回饋中。",
+  "onboarding.test.step.postIdea": "以客戶身分發布一個想法。",
+  "onboarding.test.step.openIdea": "在意見回饋中打開它，回覆或設定狀態。"
 }
