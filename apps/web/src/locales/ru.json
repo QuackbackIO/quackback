@@ -1203,7 +1203,7 @@
   "onboarding.goals.customer_support": "Входящие поддержки",
   "onboarding.goals.help_center": "Справочный центр",
   "onboarding.goals.status_page": "Страница статуса",
-  "onboarding.goals.private": "Оставить обратную связь доступной только моей команде",
+  "onboarding.goals.pickOne": "Выберите хотя бы один вариант",
   "onboarding.tour.replay": "Повторить обзор",
   "onboarding.tour.back": "Назад",
   "onboarding.tour.finish": "Завершить",

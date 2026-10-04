@@ -1203,7 +1203,7 @@
   "onboarding.goals.customer_support": "Caixa de entrada do suporte",
   "onboarding.goals.help_center": "Central de ajuda",
   "onboarding.goals.status_page": "Página de status",
-  "onboarding.goals.private": "Manter o feedback privado para minha equipe",
+  "onboarding.goals.pickOne": "Escolha pelo menos um",
   "onboarding.tour.replay": "Repetir o tour",
   "onboarding.tour.back": "Voltar",
   "onboarding.tour.finish": "Concluir",

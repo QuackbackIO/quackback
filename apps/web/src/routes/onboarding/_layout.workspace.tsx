@@ -32,7 +32,6 @@ export const Route = createFileRoute('/onboarding/_layout/workspace')({
       // config file or an earlier save chose come from the server here.
       setupGoals: {
         goals: state.setupState?.goals,
-        feedbackPrivate: state.setupState?.feedbackPrivate,
       },
     }
   },

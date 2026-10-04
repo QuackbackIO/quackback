@@ -1203,7 +1203,7 @@
   "onboarding.goals.customer_support": "支援收件匣",
   "onboarding.goals.help_center": "說明中心",
   "onboarding.goals.status_page": "狀態頁面",
-  "onboarding.goals.private": "僅向我的團隊開放回饋",
+  "onboarding.goals.pickOne": "請至少選擇一項",
   "onboarding.tour.replay": "重播導覽",
   "onboarding.tour.back": "返回",
   "onboarding.tour.finish": "完成",

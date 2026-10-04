@@ -1203,7 +1203,7 @@
   "onboarding.goals.customer_support": "Support inbox",
   "onboarding.goals.help_center": "Help center",
   "onboarding.goals.status_page": "Status page",
-  "onboarding.goals.private": "Keep feedback private to my team",
+  "onboarding.goals.pickOne": "Pick at least one",
   "onboarding.tour.replay": "Replay the tour",
   "onboarding.tour.back": "Back",
   "onboarding.tour.finish": "Finish",

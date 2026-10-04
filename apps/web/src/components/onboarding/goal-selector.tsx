@@ -1,7 +1,6 @@
 import { FormattedMessage } from 'react-intl'
 import type { SVGProps } from 'react'
 import { LightBulbIcon, ChatBubbleLeftRightIcon, BookOpenIcon } from '@heroicons/react/24/outline'
-import { CheckIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import type { OnboardingOutcome } from '@/lib/shared/db-types'
 import { cn } from '@/lib/shared/utils'
@@ -43,15 +42,11 @@ const options = [
 export function GoalSelector({
   goals,
   onGoalsChange,
-  feedbackPrivate,
-  onPrivateChange,
   disabled,
   managed = false,
 }: {
   goals: OnboardingOutcome[]
   onGoalsChange: (goals: OnboardingOutcome[]) => void
-  feedbackPrivate: boolean
-  onPrivateChange: (value: boolean) => void
   disabled?: boolean
   /** A config file sets the goals: show its picks, read-only. */
   managed?: boolean
@@ -64,12 +59,18 @@ export function GoalSelector({
           id="onboarding.goals.title"
           defaultMessage="What do you want to run first?"
         />
-        <span className="ms-2 text-xs font-normal text-muted-foreground">
+        {/* Polite live region: the hint turns into "Pick at least one" when
+            the last goal is removed, and the step cannot continue without one. */}
+        <span aria-live="polite" className="ms-2 text-xs font-normal text-muted-foreground">
           {managed ? (
             <FormattedMessage
               id="onboarding.goals.managed"
               defaultMessage="Set by your config file"
             />
+          ) : goals.length === 0 ? (
+            <span className="text-foreground">
+              <FormattedMessage id="onboarding.goals.pickOne" defaultMessage="Pick at least one" />
+            </span>
           ) : (
             <FormattedMessage id="onboarding.goals.pickAny" defaultMessage="Pick any" />
           )}
@@ -99,33 +100,6 @@ export function GoalSelector({
           </Button>
         ))}
       </div>
-      {goals.includes('product_feedback') && (
-        <div className="flex items-center gap-2 pt-1">
-          {/* Drawn like the shared Checkbox. That component's transition helpers
-              share a chunk with the menus and popovers every page loads;
-              reaching it from this route alone would split them out and add
-              requests to those pages. */}
-          <button
-            type="button"
-            role="checkbox"
-            id="feedback-private"
-            aria-checked={feedbackPrivate}
-            data-slot="checkbox"
-            data-checked={feedbackPrivate ? '' : undefined}
-            disabled={locked}
-            onClick={() => onPrivateChange(!feedbackPrivate)}
-            className="peer grid size-4 shrink-0 place-content-center rounded-[4px] border border-input shadow-xs outline-none transition-shadow focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 data-checked:border-primary data-checked:bg-primary data-checked:text-primary-foreground dark:bg-input/30 dark:data-checked:bg-primary"
-          >
-            {feedbackPrivate && <CheckIcon className="size-3.5" />}
-          </button>
-          <label htmlFor="feedback-private" className="text-sm">
-            <FormattedMessage
-              id="onboarding.goals.private"
-              defaultMessage="Keep feedback private to my team"
-            />
-          </label>
-        </div>
-      )}
     </fieldset>
   )
 }

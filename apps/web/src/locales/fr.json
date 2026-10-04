@@ -1203,7 +1203,7 @@
   "onboarding.goals.customer_support": "Boîte de réception du support",
   "onboarding.goals.help_center": "Centre d’aide",
   "onboarding.goals.status_page": "Page de statut",
-  "onboarding.goals.private": "Garder les retours privés pour mon équipe",
+  "onboarding.goals.pickOne": "Choisissez-en au moins un",
   "onboarding.tour.replay": "Rejouer la visite",
   "onboarding.tour.back": "Retour",
   "onboarding.tour.finish": "Terminer",

@@ -1203,7 +1203,7 @@
   "onboarding.goals.customer_support": "支持收件箱",
   "onboarding.goals.help_center": "帮助中心",
   "onboarding.goals.status_page": "状态页面",
-  "onboarding.goals.private": "仅向我的团队开放反馈",
+  "onboarding.goals.pickOne": "请至少选择一项",
   "onboarding.tour.replay": "重播导览",
   "onboarding.tour.back": "返回",
   "onboarding.tour.finish": "完成",
