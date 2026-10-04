@@ -35,7 +35,7 @@ export function HelpCenterPopularArticles({ articles }: HelpCenterPopularArticle
                 slug: article.slug,
               }) as '/hc'
             }
-            className="group flex items-center gap-4 px-6 py-5 transition-colors hover:bg-primary/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+            className="group flex items-center gap-4 px-6 py-5 transition-colors hover:bg-primary/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
           >
             <DocumentTextIcon className="size-5 shrink-0 text-primary" />
             <span className="flex-1 text-base font-medium text-foreground">{article.title}</span>
