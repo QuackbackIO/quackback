@@ -1505,5 +1505,6 @@
   "onboarding.tour.stop.try.idea": "انشر فكرة تجريبية",
   "onboarding.tour.stop.try.message": "أرسل رسالة تجريبية",
   "onboarding.tour.stop.try.article": "اكتب أول مقال",
-  "onboarding.tour.stop.try.service": "إضافة خدمة"
+  "onboarding.tour.stop.try.service": "إضافة خدمة",
+  "onboarding.home.greetingPlain": "مرحبًا"
 }

@@ -1505,5 +1505,6 @@
   "onboarding.tour.stop.try.idea": "Post a test idea",
   "onboarding.tour.stop.try.message": "Send a test message",
   "onboarding.tour.stop.try.article": "Write your first article",
-  "onboarding.tour.stop.try.service": "Add a service"
+  "onboarding.tour.stop.try.service": "Add a service",
+  "onboarding.home.greetingPlain": "Welcome"
 }

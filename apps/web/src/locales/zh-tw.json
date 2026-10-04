@@ -1505,5 +1505,6 @@
   "onboarding.tour.stop.try.idea": "發布測試想法",
   "onboarding.tour.stop.try.message": "傳送測試訊息",
   "onboarding.tour.stop.try.article": "撰寫第一篇文章",
-  "onboarding.tour.stop.try.service": "新增服務"
+  "onboarding.tour.stop.try.service": "新增服務",
+  "onboarding.home.greetingPlain": "歡迎"
 }

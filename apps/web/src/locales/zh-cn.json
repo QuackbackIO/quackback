@@ -1505,5 +1505,6 @@
   "onboarding.tour.stop.try.idea": "发布测试想法",
   "onboarding.tour.stop.try.message": "发送测试消息",
   "onboarding.tour.stop.try.article": "撰写第一篇文章",
-  "onboarding.tour.stop.try.service": "添加服务"
+  "onboarding.tour.stop.try.service": "添加服务",
+  "onboarding.home.greetingPlain": "欢迎"
 }

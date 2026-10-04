@@ -1505,5 +1505,6 @@
   "onboarding.tour.stop.try.idea": "Testidee plaatsen",
   "onboarding.tour.stop.try.message": "Testbericht sturen",
   "onboarding.tour.stop.try.article": "Je eerste artikel schrijven",
-  "onboarding.tour.stop.try.service": "Een dienst toevoegen"
+  "onboarding.tour.stop.try.service": "Een dienst toevoegen",
+  "onboarding.home.greetingPlain": "Welkom"
 }

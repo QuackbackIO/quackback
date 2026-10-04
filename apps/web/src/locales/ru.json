@@ -1505,5 +1505,6 @@
   "onboarding.tour.stop.try.idea": "Опубликовать тестовую идею",
   "onboarding.tour.stop.try.message": "Отправить тестовое сообщение",
   "onboarding.tour.stop.try.article": "Написать первую статью",
-  "onboarding.tour.stop.try.service": "Добавить сервис"
+  "onboarding.tour.stop.try.service": "Добавить сервис",
+  "onboarding.home.greetingPlain": "Добро пожаловать"
 }

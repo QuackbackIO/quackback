@@ -1505,5 +1505,6 @@
   "onboarding.tour.stop.try.idea": "Testidee posten",
   "onboarding.tour.stop.try.message": "Testnachricht senden",
   "onboarding.tour.stop.try.article": "Ersten Artikel schreiben",
-  "onboarding.tour.stop.try.service": "Dienst hinzufügen"
+  "onboarding.tour.stop.try.service": "Dienst hinzufügen",
+  "onboarding.home.greetingPlain": "Willkommen"
 }
