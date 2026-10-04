@@ -82,7 +82,7 @@ function AdminOverviewPage() {
   // The launch plan, then the tour and try-it cards, in the launch window only.
   const plan = admin ? (
     <Suspense fallback={null}>
-      <HomeLaunchArea portalUrl={baseUrl} flags={flags} />
+      <HomeLaunchArea portalUrl={baseUrl} />
     </Suspense>
   ) : null
 

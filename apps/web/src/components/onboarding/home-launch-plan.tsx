@@ -1,14 +1,15 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { FormattedMessage } from 'react-intl'
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
+import { HomeNextStep } from './home-next-step'
+import { HomeTourPrompt } from './home-tour-prompt'
 import { useProductTour } from '@/components/onboarding/product-tour'
 import {
   getOnboardingProgressFn,
   claimFirstWinMomentFn,
   dismissTourOfferFn,
 } from '@/lib/server/functions/onboarding-progress'
-import { GettingStartedCard } from '@/components/admin/getting-started-card'
 import { CreateBoardDialog } from '@/components/admin/settings/boards/create-board-dialog'
 import { AutomaticBrandingNotice } from '@/components/admin/branding/automatic-branding-notice'
 import { useAutomaticWebsiteBranding } from '@/components/admin/branding/use-automatic-website-branding'
@@ -18,15 +19,8 @@ import { launchStatusQuery, useLaunchTaskResolution } from './use-launch-plan'
 const PROGRESS_KEY = ['onboarding', 'progress'] as const
 type Progress = Awaited<ReturnType<typeof getOnboardingProgressFn>>
 
-/** Home's first-run area: the celebration, the launch tiles, the tour offer and the try-it slot. */
-export function HomeGettingStarted({
-  portalUrl,
-  tryIt,
-}: {
-  portalUrl?: string
-  /** The "Try it yourself" card. Shown beside the tour offer, in the launch window only. */
-  tryIt?: ReactNode
-}) {
+/** Home's first-run area: the celebration, the next step and its path, and the tour prompt. */
+export function HomeGettingStarted({ portalUrl }: { portalUrl?: string }) {
   const tour = useProductTour()
   const progress = useQuery({
     queryKey: PROGRESS_KEY,
@@ -69,7 +63,6 @@ export function HomeGettingStarted({
     Boolean(progress.data) &&
     !progress.data?.tourSeenAt &&
     !progress.data?.tourDismissedAt
-  const showTryIt = inWindow && Boolean(tryIt)
   const planShown = inWindow && isLaunchPlanActive(launchChecklistSummary(statusQuery.data))
   // The lookup starts only while its notice has a live launch plan to sit in.
   const branding = useAutomaticWebsiteBranding({ enabled: planShown })
@@ -103,44 +96,20 @@ export function HomeGettingStarted({
         </section>
       )}
       {planShown ? (
-        <GettingStartedCard
+        <HomeNextStep
+          status={statusQuery.data}
           portalUrl={portalUrl}
           brandingNotice={brandingNotice}
-          status={statusQuery.data}
           pending={resolutionMutation.isPending}
-          onSkip={(taskId) => resolutionMutation.mutate({ taskId, resolution: 'dismissed' })}
           onCreateBoard={() => setCreateBoardOpen(true)}
         />
       ) : null}
-      {(showTourOffer || showTryIt) && (
-        <div
-          className={
-            showTourOffer && showTryIt ? 'mt-4 grid gap-3 md:grid-cols-2' : 'mt-4 grid gap-3'
-          }
-        >
-          {showTourOffer && (
-            <section className="[--ring:var(--muted-foreground)] flex items-center gap-2 rounded-xl border bg-card py-2.5 shadow-raise ps-4 pe-2.5">
-              <h2 className="min-w-0 flex-1 text-sm font-medium">
-                <FormattedMessage
-                  id="onboarding.tour.offer"
-                  defaultMessage="Take the 60-second tour"
-                />
-              </h2>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={dismissTour.isPending}
-                onClick={() => dismissTour.mutate()}
-              >
-                <FormattedMessage id="onboarding.tour.notNow" defaultMessage="Not now" />
-              </Button>
-              <Button size="sm" onClick={() => tour?.start()}>
-                <FormattedMessage id="onboarding.launch.start" defaultMessage="Start" />
-              </Button>
-            </section>
-          )}
-          {showTryIt ? tryIt : null}
-        </div>
+      {showTourOffer && (
+        <HomeTourPrompt
+          pending={dismissTour.isPending}
+          onDismiss={() => dismissTour.mutate()}
+          onStart={() => tour?.start()}
+        />
       )}
       <CreateBoardDialog
         open={createBoardOpen}
