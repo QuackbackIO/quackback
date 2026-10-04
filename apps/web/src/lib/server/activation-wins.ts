@@ -7,30 +7,40 @@ import {
   conversationMessages,
   conversations,
   eq,
+  helpCenterArticleFeedback,
   helpCenterArticles,
   inArray,
   isNotNull,
   isNull,
-  lte,
+  ne,
   or,
   posts,
   postVotes,
   principal,
   sql,
-  statusComponents,
+  statusSubscriptions,
   type OnboardingOutcome,
   type SetupState,
 } from '@/lib/server/db'
 import { notTestPrincipal } from '@/lib/server/test-data'
 
+/**
+ * Evidence for a first win. Every win is something a person outside the
+ * team did; what the team sets up itself (a service, an article, an idea of
+ * the owner's own) never counts.
+ */
 export interface FirstWinFacts {
   customerOriginatedConversation?: boolean
-  serviceAdded?: boolean
-  publishedArticle?: boolean
+  /** Someone outside the team subscribed to status updates themselves. */
+  visitorSubscribed?: boolean
+  /** Someone outside the team marked an article helpful. */
+  visitorFoundHelpful?: boolean
   deleted?: boolean
   externalPost?: boolean
   externalVote?: boolean
   onInternalBoard?: boolean
+  /** The idea is the owner's own. */
+  byOwner?: boolean
   onboardingGenerated?: boolean
   testRecord?: boolean
 }
@@ -42,11 +52,12 @@ export function qualifiesAsFirstWin(outcome: OnboardingOutcome, facts: FirstWinF
     case 'customer_support':
       return facts.customerOriginatedConversation === true
     case 'status_page':
-      return facts.serviceAdded === true
+      return facts.visitorSubscribed === true
     case 'help_center':
-      return facts.publishedArticle === true
+      return facts.visitorFoundHelpful === true
     case 'internal':
-      return facts.onInternalBoard === true
+      // A private board has no customers: its win is a teammate who is not the owner.
+      return facts.onInternalBoard === true && facts.byOwner !== true
     case 'product_feedback':
     default:
       return facts.externalPost === true || facts.externalVote === true
@@ -102,29 +113,44 @@ export async function detectFirstWin(state: SetupState | null): Promise<FirstWin
   }
 
   if (outcome === 'status_page') {
+    // A customer subscribing themselves; services the team adds do not count.
     const [row] = await db
-      .select({ reachedAt: statusComponents.createdAt })
-      .from(statusComponents)
-      .where(isNull(statusComponents.deletedAt))
-      .orderBy(asc(statusComponents.createdAt))
+      .select({ reachedAt: statusSubscriptions.createdAt })
+      .from(statusSubscriptions)
+      .innerJoin(principal, eq(principal.id, statusSubscriptions.principalId))
+      .where(
+        and(
+          eq(statusSubscriptions.source, 'self_serve'),
+          isNull(statusSubscriptions.unsubscribedAt),
+          externalPrincipal
+        )
+      )
+      .orderBy(asc(statusSubscriptions.createdAt))
       .limit(1)
     return { reached: Boolean(row), reachedAt: row?.reachedAt.toISOString() ?? null }
   }
 
   if (outcome === 'help_center') {
+    // A visitor finding an article helpful; publishing one is the team's own
+    // act. A signed-out visitor's vote carries no principal and still counts.
     const [row] = await db
-      .select({ reachedAt: helpCenterArticles.publishedAt })
-      .from(helpCenterArticles)
+      .select({ reachedAt: helpCenterArticleFeedback.createdAt })
+      .from(helpCenterArticleFeedback)
+      .innerJoin(
+        helpCenterArticles,
+        eq(helpCenterArticles.id, helpCenterArticleFeedback.articleId)
+      )
+      .leftJoin(principal, eq(principal.id, helpCenterArticleFeedback.principalId))
       .where(
         and(
+          eq(helpCenterArticleFeedback.helpful, true),
           isNull(helpCenterArticles.deletedAt),
-          isNotNull(helpCenterArticles.publishedAt),
-          lte(helpCenterArticles.publishedAt, new Date())
+          or(isNull(helpCenterArticleFeedback.principalId), externalPrincipal)
         )
       )
-      .orderBy(asc(helpCenterArticles.publishedAt))
+      .orderBy(asc(helpCenterArticleFeedback.createdAt))
       .limit(1)
-    return { reached: Boolean(row), reachedAt: row?.reachedAt?.toISOString() ?? null }
+    return { reached: Boolean(row), reachedAt: row?.reachedAt.toISOString() ?? null }
   }
 
   if (outcome === 'internal') {
@@ -143,6 +169,13 @@ export async function detectFirstWin(state: SetupState | null): Promise<FirstWin
         columns: { id: true },
       }))
     if (!internalBoard) return { reached: false, reachedAt: null }
+    // The owner is the first human admin; their own ideas do not count.
+    const [owner] = await db
+      .select({ id: principal.id })
+      .from(principal)
+      .where(and(eq(principal.role, 'admin'), eq(principal.type, 'user')))
+      .orderBy(asc(principal.createdAt))
+      .limit(1)
     const [row] = await db
       .select({ reachedAt: posts.createdAt })
       .from(posts)
@@ -150,7 +183,8 @@ export async function detectFirstWin(state: SetupState | null): Promise<FirstWin
         and(
           eq(posts.boardId, internalBoard.id as BoardId),
           isNull(posts.deletedAt),
-          notGeneratedPost
+          notGeneratedPost,
+          owner ? ne(posts.principalId, owner.id) : undefined
         )
       )
       .orderBy(asc(posts.createdAt))
