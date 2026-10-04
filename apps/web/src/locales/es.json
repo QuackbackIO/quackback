@@ -1420,6 +1420,7 @@
   "ask.chat.stop": "Detener",
   "ask.search.row": "Buscar",
   "ask.chat.newChat": "Nuevo chat",
+  "ask.chat.back": "Atrás",
   "ask.chat.continue": "Continuar: {title}",
   "ask.connector.sends": "Envía esta solicitud a {name}",
   "ask.connector.skipped": "Se omitió {name}. No se envió nada.",

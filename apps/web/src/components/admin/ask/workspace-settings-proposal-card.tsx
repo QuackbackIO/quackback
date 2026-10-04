@@ -200,7 +200,7 @@ export function SettingsChangeCard({
             })
           : intl.formatMessage({ id: 'ask.settings.proposed', defaultMessage: 'Proposed changes' })
   return (
-    <div className="space-y-3 rounded-xl border border-border bg-background p-4">
+    <div className="space-y-3 rounded-xl border border-border bg-card p-4 shadow-raise">
       <p className="text-sm font-medium">{title}</p>
       {changes.map((change) => {
         const area = intl.formatMessage({
