@@ -263,4 +263,46 @@ describe('tools and response_format must not share a request', () => {
     // the loop prose (unparseable as the envelope) emits nothing.
     expect(deltas.join('')).toBe('The answer.')
   })
+
+  it('never streams the answer twice when the loop already wrote it as the envelope', async () => {
+    // The loop's last step wrote the JSON envelope itself, so its text already
+    // streamed; the finalization then writes a reworded copy. The caller joins
+    // the deltas, so a restart would show both answers run together.
+    mockChat.mockReturnValueOnce(
+      streamOf([
+        { type: 'RUN_STARTED' },
+        { type: 'TEXT_MESSAGE_CONTENT', delta: '{"text":"The new card applies next."}' },
+        { type: 'CUSTOM', name: 'structured-output.start', value: { messageId: 'm2' } },
+        { type: 'TEXT_MESSAGE_CONTENT', delta: '{"text":"The new card applies next. ' },
+        { type: 'TEXT_MESSAGE_CONTENT', delta: 'See billing."}' },
+        {
+          type: 'CUSTOM',
+          name: 'structured-output.complete',
+          value: { object: { text: 'The new card applies next. See billing.' } },
+        },
+        { type: 'RUN_FINISHED' },
+      ])
+    )
+    const deltas: string[] = []
+    await settle(runSynthesis(baseOptions({ tools, onTextDelta: (d) => deltas.push(d) })))
+    expect(deltas.join('')).toBe('The new card applies next. See billing.')
+
+    mockChat.mockReturnValueOnce(
+      streamOf([
+        { type: 'RUN_STARTED' },
+        { type: 'TEXT_MESSAGE_CONTENT', delta: '{"text":"The new card applies next."}' },
+        { type: 'CUSTOM', name: 'structured-output.start', value: { messageId: 'm2' } },
+        { type: 'TEXT_MESSAGE_CONTENT', delta: '{"text":"The change applies next."}' },
+        {
+          type: 'CUSTOM',
+          name: 'structured-output.complete',
+          value: { object: { text: 'The change applies next.' } },
+        },
+        { type: 'RUN_FINISHED' },
+      ])
+    )
+    const reworded: string[] = []
+    await settle(runSynthesis(baseOptions({ tools, onTextDelta: (d) => reworded.push(d) })))
+    expect(reworded.join('')).toBe('The new card applies next.')
+  })
 })
