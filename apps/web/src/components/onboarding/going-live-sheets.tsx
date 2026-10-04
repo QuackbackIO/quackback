@@ -10,7 +10,7 @@ const InviteTeamSheet = lazy(() =>
 )
 
 /** The Try Messenger sheet's open event (see `try-messenger-button`). */
-const OPEN_TRY_MESSENGER_EVENT = 'quackback:open-try-messenger'
+export const OPEN_TRY_MESSENGER_EVENT = 'quackback:open-try-messenger'
 
 /** Read and strip an email deep link's `open` / `try` parameters. */
 export function consumeSetupLink(href: string): {
@@ -45,10 +45,16 @@ export function GoingLiveSheets() {
     if (link) {
       window.history.replaceState(window.history.state, '', link.rest)
       if (link.open) setState({ sheet: link.open, open: true })
-      if (link.test) {
-        window.dispatchEvent(new CustomEvent(OPEN_TRY_MESSENGER_EVENT, { detail: link.test }))
+      // After this commit: the Try Messenger host wraps the page and
+      // registers its listener in an effect that runs after this one.
+      const test = link.test
+      if (test) {
+        window.setTimeout(() =>
+          window.dispatchEvent(new CustomEvent(OPEN_TRY_MESSENGER_EVENT, { detail: test }))
+        )
       }
     }
+    // The link is consumed once, so a re-run (Strict Mode) must not cancel it.
     return () => window.removeEventListener(OPEN_GOING_LIVE_EVENT, onOpen)
   }, [])
   if (!state) return null
