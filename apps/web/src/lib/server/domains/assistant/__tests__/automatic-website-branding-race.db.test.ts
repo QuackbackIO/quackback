@@ -97,6 +97,12 @@ async function seed(): Promise<[Actor, Actor]> {
     name: 'Acme',
     slug: 'acme-race',
     createdAt: new Date(),
+    // Set up just now: automatic branding runs only in the launch window.
+    setupState: JSON.stringify({
+      version: 2,
+      steps: { core: true, workspace: true, startingPoint: null },
+      completedAt: new Date().toISOString(),
+    }),
     metadata: JSON.stringify({ sibling: 'keep' }),
   })
   const people: Actor[] = []

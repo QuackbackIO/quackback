@@ -40,9 +40,12 @@ import {
 /** An explicit appearance or custom CSS keeps the administrator's chosen theme. */
 function hasDefaultTheme(row: SettingsRecord): boolean {
   if (row.customCss?.trim()) return false
-  // The page stores what its editor produces, so read the config as stored.
+  // The page stores what its editor produces; a shape this reader does not
+  // know is a choice to keep, never read as the default.
   const config = row.brandingConfig === null ? {} : parseJsonOrNull<ThemeConfig>(row.brandingConfig)
   if (!config || typeof config !== 'object' || Array.isArray(config)) return false
+  const known = new Set(['preset', 'themeMode', 'light', 'dark'])
+  if (Object.keys(config).some((key) => !known.has(key))) return false
   return generateThemeCSS(config) === generateThemeCSS({})
 }
 
