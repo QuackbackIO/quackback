@@ -431,7 +431,10 @@ function buildOutcomeTasks(
   if (features.supportInbox && features.assistant) inputs.push(setUpQuinn)
   if (features.helpCenter) inputs.push(helpDraft)
   if (features.statusPage) inputs.push(addStatusService)
-  inputs.push(invite, branding, integration, firstWin)
+  inputs.push(invite, branding)
+  // A step the plan does not include is not part of the plan.
+  if (features.integrations) inputs.push(integration)
+  inputs.push(firstWin)
 
   return inputs.map((task) => materializeTask(task, resolutions))
 }
