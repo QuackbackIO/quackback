@@ -1615,5 +1615,7 @@
   "admin.help.contact": "تواصل معنا",
   "admin.help.whatsNew": "ما الجديد",
   "onboarding.launch.writeArticle": "اكتب مقالة",
-  "onboarding.launch.visibility": "من يمكنه رؤيتها"
+  "onboarding.launch.visibility": "من يمكنه رؤيتها",
+  "admin.help.label": "المساعدة",
+  "admin.help.docs": "التوثيق"
 }

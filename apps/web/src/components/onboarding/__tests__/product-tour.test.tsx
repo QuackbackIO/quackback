@@ -211,6 +211,23 @@ describe('guided tour', () => {
     expect(start).toHaveFocus()
   })
 
+  it('moves focus to the page, never to nothing, when the starting control is gone', async () => {
+    mount()
+    const main = document.createElement('main')
+    const opener = document.createElement('button')
+    document.body.append(main, opener)
+    opener.focus()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Start tour' }))
+    })
+    await waitFor(() => expect(dialog()).toHaveTextContent(/1 of \d/), { timeout: 5000 })
+    opener.remove()
+    await press('Escape')
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(document.activeElement).toBe(main)
+    main.remove()
+  })
+
   it('keeps Tab inside the coachmark', async () => {
     mount()
     await startTour()

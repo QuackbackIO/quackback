@@ -1615,5 +1615,7 @@
   "admin.help.contact": "Kontakt",
   "admin.help.whatsNew": "Neuigkeiten",
   "onboarding.launch.writeArticle": "Artikel schreiben",
-  "onboarding.launch.visibility": "Wer es sehen kann"
+  "onboarding.launch.visibility": "Wer es sehen kann",
+  "admin.help.label": "Hilfe",
+  "admin.help.docs": "Dokumentation"
 }

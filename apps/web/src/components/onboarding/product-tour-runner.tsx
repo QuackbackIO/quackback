@@ -110,9 +110,18 @@ export function ProductTourRunner({
     [router]
   )
 
+  // Focus goes back where the tour started; when that control is gone (the
+  // tour moved pages), to the page's main region, never to nothing.
   const restoreFocus = useCallback(() => {
     const previous = priorFocus.current
-    if (previous?.isConnected) previous.focus()
+    if (previous?.isConnected && previous !== document.body) {
+      previous.focus()
+      return
+    }
+    const main = document.querySelector<HTMLElement>('main')
+    if (!main) return
+    if (!main.hasAttribute('tabindex')) main.setAttribute('tabindex', '-1')
+    main.focus()
   }, [])
 
   const close = useCallback(() => {

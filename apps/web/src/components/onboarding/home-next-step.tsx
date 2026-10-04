@@ -160,7 +160,7 @@ export function HomeNextStep({
   const page = livePage(path.goal, status, portalUrl)
 
   return (
-    <div className="space-y-4 [--ring:var(--muted-foreground)]">
+    <div lang={intl.locale} className="space-y-4 [--ring:var(--muted-foreground)]">
       <section
         aria-labelledby="home-next-step"
         className="flex flex-wrap items-center gap-5 rounded-2xl border bg-card p-5 shadow-raise"

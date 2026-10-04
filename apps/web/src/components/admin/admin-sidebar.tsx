@@ -430,7 +430,9 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
                 <DropdownMenuTrigger asChild>
                   <button data-admin-rail-item="" className={railControlClass()}>
                     <QuestionMarkCircleIcon className="size-5 shrink-0" />
-                    <span className="min-w-0 flex-1 truncate text-left">Help</span>
+                    <span className="min-w-0 flex-1 truncate text-left">
+                      <FormattedMessage id="admin.help.label" defaultMessage="Help" />
+                    </span>
                     {latestVersion && (
                       <span className="size-2 rounded-full bg-primary" aria-hidden="true" />
                     )}
@@ -456,7 +458,7 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
                       rel="noopener noreferrer"
                     >
                       <BookOpenIcon className="mr-2 h-4 w-4" />
-                      Documentation
+                      <FormattedMessage id="admin.help.docs" defaultMessage="Documentation" />
                     </a>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
@@ -627,7 +629,7 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
                 className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-muted-foreground/80 hover:text-foreground hover:bg-muted/50 transition-colors"
               >
                 <BookOpenIcon className="h-5 w-5" />
-                Documentation
+                <FormattedMessage id="admin.help.docs" defaultMessage="Documentation" />
               </a>
               <a
                 href="https://feedback.quackback.io/changelog"

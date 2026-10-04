@@ -189,5 +189,7 @@ describe("Home's next step", () => {
     )
     // German keeps its capitals and joins with "und".
     expect(screen.getByText(/^Später:/).textContent).toMatch(/ und Logo hinzufügen$/)
+    // The region says which language it is in; the admin document stays English.
+    expect(screen.getByText(/^Später:/).closest('[lang]')).toHaveAttribute('lang', 'de')
   })
 })

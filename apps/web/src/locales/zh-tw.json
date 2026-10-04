@@ -1615,5 +1615,7 @@
   "admin.help.contact": "聯絡我們",
   "admin.help.whatsNew": "新功能",
   "onboarding.launch.writeArticle": "撰寫文章",
-  "onboarding.launch.visibility": "誰可以查看"
+  "onboarding.launch.visibility": "誰可以查看",
+  "admin.help.label": "說明",
+  "admin.help.docs": "說明文件"
 }

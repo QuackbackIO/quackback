@@ -47,6 +47,7 @@ export function LaunchPlanPage({
   /** An action for the automatic first-win step, such as sending a test message. */
   firstWinAction?: ReactNode
 }) {
+  const intl = useIntl()
   const tour = useProductTour()
   const queryClient = useQueryClient()
   const baseUrl = useBaseUrl()
@@ -75,7 +76,10 @@ export function LaunchPlanPage({
   )
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-7 px-4 pb-14 pt-8 [--ring:var(--muted-foreground)] sm:px-6 sm:pt-10">
+    <div
+      lang={intl.locale}
+      className="mx-auto w-full max-w-3xl space-y-7 px-4 pb-14 pt-8 [--ring:var(--muted-foreground)] sm:px-6 sm:pt-10"
+    >
       <header className="flex flex-wrap items-end gap-3">
         <div className="min-w-[min(16rem,100%)] flex-1 space-y-2.5">
           <h1 className="text-2xl font-semibold">

@@ -89,6 +89,7 @@ export function HomeFirstWin({
     : ''
   return (
     <section
+      lang={intl.locale}
       aria-label={intl.formatMessage({ id: 'onboarding.win.region', defaultMessage: 'First win' })}
       className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-2xl border bg-card p-4 shadow-raise [--ring:var(--muted-foreground)]"
     >

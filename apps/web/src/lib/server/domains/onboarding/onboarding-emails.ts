@@ -88,6 +88,10 @@ interface EmailContext {
   status: LaunchStatus
   /** The launch plan's one path, the same three steps Home shows. */
   path: LaunchPath
+  /** Path steps already done (the goal step once it is), in order. */
+  done: LaunchTask[]
+  /** Path steps still to do, the next one first. */
+  tasks: LaunchTask[]
 }
 
 /** Why this email should not go out, or what it needs when it should. */
@@ -152,7 +156,18 @@ export async function onboardingEmailContext(
   const name = (person.userName || person.displayName || '').split(' ')[0] || 'there'
   return {
     ok: true,
-    context: { to, name, workspaceName: org.name, status, path },
+    context: {
+      to,
+      name,
+      workspaceName: org.name,
+      status,
+      path,
+      done: path.steps.filter((task) => task.isCompleted || task.isReady),
+      tasks: [
+        ...(path.next ? [path.next] : []),
+        ...path.steps.filter((task) => task !== path.next && !task.isCompleted && !task.isReady),
+      ],
+    },
   }
 }
 
@@ -285,7 +300,7 @@ async function deliver(
       unsubscribeUrl: unsubscribe,
     })
   } else {
-    const next = context.path.next ?? context.path.steps[1]
+    const next = context.tasks[0] ?? context.path.steps[1]
     await sendOnboardingNudgeEmail({
       to: context.to,
       name: context.name,
