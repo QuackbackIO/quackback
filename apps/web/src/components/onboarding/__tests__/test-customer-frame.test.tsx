@@ -7,11 +7,13 @@ import { TestCustomerFrame } from '../test-customer-frame'
 function setup(getToken: () => Promise<string | null>) {
   const onStatusChange = vi.fn()
   const onEvent = vi.fn()
+  const onClose = vi.fn()
   render(
     <TestCustomerFrame
       getToken={getToken}
       open={{ view: 'chat', body: 'Hi! Is anyone there?' }}
       onEvent={onEvent}
+      onClose={onClose}
       onStatusChange={onStatusChange}
       title="Messenger as a test customer"
     />
@@ -23,7 +25,7 @@ function setup(getToken: () => Promise<string | null>) {
     act(() => {
       window.dispatchEvent(new MessageEvent('message', { data, source, origin }))
     })
-  return { frame, postMessage, fromFrame, onStatusChange, onEvent }
+  return { frame, postMessage, fromFrame, onStatusChange, onEvent, onClose }
 }
 
 describe('TestCustomerFrame', () => {
@@ -53,6 +55,19 @@ describe('TestCustomerFrame', () => {
     const { fromFrame, onEvent } = setup(async () => 'customer-abc')
     fromFrame({ type: 'quackback:event', name: 'post:created', payload: { id: 'post_1' } })
     expect(onEvent).toHaveBeenCalledWith('post:created', { id: 'post_1' })
+  })
+
+  it('closes its host when Escape is pressed inside the frame', () => {
+    const { fromFrame, onClose } = setup(async () => 'customer-abc')
+    fromFrame({ type: 'quackback:close' })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores a close request from any other window or origin', () => {
+    const { fromFrame, onClose, frame } = setup(async () => 'customer-abc')
+    fromFrame({ type: 'quackback:close' }, window)
+    fromFrame({ type: 'quackback:close' }, frame.contentWindow!, 'https://elsewhere.example.com')
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   it('ignores messages from any other window or origin', async () => {

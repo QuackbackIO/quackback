@@ -17,6 +17,8 @@ interface TestCustomerFrameProps {
   onStatusChange?: (status: TestCustomerFrameStatus) => void
   /** The widget's own SDK events (`post:created` and friends). */
   onEvent?: (name: string, payload: unknown) => void
+  /** Escape pressed inside the frame: focus there never reaches the host's own key handling. */
+  onClose?: () => void
   title: string
   className?: string
 }
@@ -31,12 +33,13 @@ export function TestCustomerFrame({
   open,
   onStatusChange,
   onEvent,
+  onClose,
   title,
   className,
 }: TestCustomerFrameProps) {
   const frameRef = useRef<HTMLIFrameElement>(null)
-  const latest = useRef({ getToken, open, onStatusChange, onEvent })
-  latest.current = { getToken, open, onStatusChange, onEvent }
+  const latest = useRef({ getToken, open, onStatusChange, onEvent, onClose })
+  latest.current = { getToken, open, onStatusChange, onEvent, onClose }
 
   useEffect(() => {
     const origin = window.location.origin
@@ -87,6 +90,10 @@ export function TestCustomerFrame({
         }
         post('quackback:open', latest.current.open)
         latest.current.onStatusChange?.('ready')
+        return
+      }
+      if (msg?.type === 'quackback:close') {
+        latest.current.onClose?.()
         return
       }
       if (msg?.type === 'quackback:event' && typeof msg.name === 'string') {
