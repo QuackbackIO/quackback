@@ -1313,7 +1313,6 @@
   "onboarding.launch.group.support": "Поддержка",
   "onboarding.launch.group.helpCenter": "Справочный центр",
   "onboarding.launch.group.status": "Статус",
-  "onboarding.launch.group.polish": "Доработка",
   "onboarding.task.create-board.private": "Создать закрытую доску команды",
   "onboarding.task.first-win.feedback": "Получить первую идею",
   "onboarding.task.first-win.support": "Получить первый разговор",
@@ -1522,5 +1521,7 @@
   "onboarding.task.first-win.feedback.outcome": "Приходит первая идея",
   "onboarding.task.first-win.support.outcome": "Клиент начинает разговор",
   "onboarding.task.first-win.helpCenter.outcome": "Первый ответ опубликован",
-  "onboarding.task.first-win.status.outcome": "Клиенты видят ваш статус"
+  "onboarding.task.first-win.status.outcome": "Клиенты видят ваш статус",
+  "onboarding.launch.later": "Позже",
+  "onboarding.launch.ready": "Готово"
 }

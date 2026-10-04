@@ -1313,7 +1313,6 @@
   "onboarding.launch.group.support": "Support",
   "onboarding.launch.group.helpCenter": "Helpcentrum",
   "onboarding.launch.group.status": "Status",
-  "onboarding.launch.group.polish": "Afwerking",
   "onboarding.task.create-board.private": "Een privé teambord maken",
   "onboarding.task.first-win.feedback": "Je eerste idee ontvangen",
   "onboarding.task.first-win.support": "Je eerste gesprek ontvangen",
@@ -1522,5 +1521,7 @@
   "onboarding.task.first-win.feedback.outcome": "Je eerste idee komt binnen",
   "onboarding.task.first-win.support.outcome": "Een klant start een gesprek",
   "onboarding.task.first-win.helpCenter.outcome": "Je eerste antwoord staat live",
-  "onboarding.task.first-win.status.outcome": "Klanten zien je status"
+  "onboarding.task.first-win.status.outcome": "Klanten zien je status",
+  "onboarding.launch.later": "Later",
+  "onboarding.launch.ready": "Klaar voor gebruik"
 }

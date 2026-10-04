@@ -1313,7 +1313,6 @@
   "onboarding.launch.group.support": "الدعم",
   "onboarding.launch.group.helpCenter": "مركز المساعدة",
   "onboarding.launch.group.status": "الحالة",
-  "onboarding.launch.group.polish": "لمسات أخيرة",
   "onboarding.task.create-board.private": "إنشاء لوحة خاصة بالفريق",
   "onboarding.task.first-win.feedback": "الحصول على أول فكرة",
   "onboarding.task.first-win.support": "الحصول على أول محادثة",
@@ -1522,5 +1521,7 @@
   "onboarding.task.first-win.feedback.outcome": "تصل أول فكرة",
   "onboarding.task.first-win.support.outcome": "يبدأ عميل محادثة",
   "onboarding.task.first-win.helpCenter.outcome": "تُنشر أول إجابة",
-  "onboarding.task.first-win.status.outcome": "يمكن للعملاء متابعة حالتك"
+  "onboarding.task.first-win.status.outcome": "يمكن للعملاء متابعة حالتك",
+  "onboarding.launch.later": "لاحقًا",
+  "onboarding.launch.ready": "جاهز"
 }

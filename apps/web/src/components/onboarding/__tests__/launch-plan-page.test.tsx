@@ -87,18 +87,42 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('Launch plan page', () => {
-  it('groups the plan by goal, then Polish, with progress', () => {
+  it('leads with the live portal and the goal paths, with polish under a collapsed Later', () => {
     mount()
     expect(screen.getByRole('heading', { level: 1, name: 'Launch plan' })).toBeVisible()
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
       'Feedback',
       'Support',
-      'Polish',
     ])
-    // Board and logo are done, the integration is skipped: 3 of 6.
+    expect(within(row('Portal is live')).getByText('Done')).toBeTruthy()
+    const later = screen.getByRole('button', { name: 'Later' })
+    expect(later).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('Add your logo')).toBeNull()
+    fireEvent.click(later)
+    expect(later).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('Add your logo')).toBeVisible()
+    // Portal and logo are done and the integration is skipped; the seeded
+    // board is Ready and left out: 3 of 6.
     expect(screen.getByText('3 of 6 done')).toBeVisible()
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '3')
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuemax', '6')
+  })
+
+  it('shows a step setup did itself as Ready, not as done by the person', () => {
+    mount()
+    const board = row('Create a feedback board')
+    expect(within(board).getByText('Ready')).toBeVisible()
+    expect(within(board).queryByText('Done')).toBeNull()
+    expect(within(board).queryByRole('button')).toBeNull()
+  })
+
+  it('gives every step a short outcome line and never strikes a step through', () => {
+    mount()
+    expect(
+      within(row('Connect Messenger')).getByText('Customers reach you from your site')
+    ).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Later' }))
+    expect(document.querySelector('.line-through')).toBeNull()
   })
 
   it('says automatic steps complete themselves and offers no skip for them', () => {
@@ -126,6 +150,7 @@ describe('Launch plan page', () => {
 
   it('shows a skipped step as skipped and undoes the skip', async () => {
     mount()
+    fireEvent.click(screen.getByRole('button', { name: 'Later' }))
     const integration = row('Connect an integration')
     expect(within(integration).getByText('Skipped')).toBeVisible()
     expect(within(integration).queryByRole('link')).toBeNull()
@@ -144,6 +169,7 @@ describe('Launch plan page', () => {
   })
 
   it('offers no skip to someone who cannot change the plan', () => {
+    // Later is closed by default; skips there are checked once it is open.
     hoisted.status = {
       ...status,
       permissions: {
@@ -157,6 +183,7 @@ describe('Launch plan page', () => {
       },
     }
     mount()
+    fireEvent.click(screen.getByRole('button', { name: 'Later' }))
     expect(screen.queryByRole('button', { name: /^Skip/ })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Undo skip' })).toBeNull()
   })

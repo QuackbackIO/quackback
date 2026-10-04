@@ -1313,7 +1313,6 @@
   "onboarding.launch.group.support": "Wsparcie",
   "onboarding.launch.group.helpCenter": "Centrum pomocy",
   "onboarding.launch.group.status": "Status",
-  "onboarding.launch.group.polish": "Dopracowanie",
   "onboarding.task.create-board.private": "Utwórz prywatną tablicę zespołu",
   "onboarding.task.first-win.feedback": "Zdobądź pierwszy pomysł",
   "onboarding.task.first-win.support": "Zdobądź pierwszą rozmowę",
@@ -1522,5 +1521,7 @@
   "onboarding.task.first-win.feedback.outcome": "Przychodzi pierwszy pomysł",
   "onboarding.task.first-win.support.outcome": "Klient zaczyna rozmowę",
   "onboarding.task.first-win.helpCenter.outcome": "Pierwsza odpowiedź jest dostępna",
-  "onboarding.task.first-win.status.outcome": "Klienci sprawdzą Twój status"
+  "onboarding.task.first-win.status.outcome": "Klienci sprawdzą Twój status",
+  "onboarding.launch.later": "Później",
+  "onboarding.launch.ready": "Gotowe"
 }
