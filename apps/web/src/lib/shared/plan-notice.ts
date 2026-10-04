@@ -5,6 +5,7 @@ import type { PlanNotice } from '@/lib/server/domains/settings/tier-limits.types
 
 export interface PlanNoticeView {
   label: string
+  trialPlan?: string
   message?: string
   /** Whole days until expiry (ceil), clamped to >= 0. Null when the
    *  notice has no (valid) expiresAt. */
@@ -36,6 +37,7 @@ export function presentPlanNotice(
   }
   return {
     label: notice.label,
+    ...(notice.trialPlan ? { trialPlan: notice.trialPlan } : {}),
     message: notice.message,
     daysLeft,
     urgent: daysLeft !== null && daysLeft <= 3,

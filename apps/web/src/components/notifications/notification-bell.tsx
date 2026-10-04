@@ -8,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { useUnreadCount } from '@/lib/client/hooks/use-notifications-queries'
 import { NotificationDropdown } from './notification-dropdown'
 import { cn } from '@/lib/shared/utils'
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 
 interface NotificationBellProps {
   className?: string
@@ -25,6 +26,11 @@ export function NotificationBell({
   labeled = false,
   active = false,
 }: NotificationBellProps) {
+  const intl = useOptionalIntl()
+  const title = intl.formatMessage({
+    id: 'portal.notifications.title',
+    defaultMessage: 'Notifications',
+  })
   const [open, setOpen] = useState(false)
   const { data: unreadCount = 0 } = useUnreadCount()
   const [shouldPulse, setShouldPulse] = useState(false)
@@ -57,10 +63,20 @@ export function NotificationBell({
               ),
           className
         )}
-        aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
+        aria-label={
+          unreadCount > 0
+            ? intl.formatMessage(
+                {
+                  id: 'notifications.bell.unreadLabel',
+                  defaultMessage: 'Notifications ({count} unread)',
+                },
+                { count: unreadCount }
+              )
+            : title
+        }
       >
         <BellIcon className="h-5 w-5 shrink-0" />
-        {labeled ? <span className="min-w-0 flex-1 truncate text-left">Notifications</span> : null}
+        {labeled ? <span className="min-w-0 flex-1 truncate text-left">{title}</span> : null}
         {unreadCount > 0 && (
           <span
             className={cn(
@@ -86,7 +102,7 @@ export function NotificationBell({
         <Tooltip>
           <TooltipTrigger asChild>{trigger}</TooltipTrigger>
           <TooltipContent side={isBottomAligned ? 'bottom' : 'right'} sideOffset={8}>
-            Notifications
+            {title}
           </TooltipContent>
         </Tooltip>
       )}

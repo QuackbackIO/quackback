@@ -552,10 +552,17 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
                     <AvailabilityMenuItems availability={availability} onSet={setAvail} />
                   )}
                   <DropdownMenuItem asChild>
-                    <Link to="/settings">Settings</Link>
+                    <Link to="/settings">
+                      <FormattedMessage
+                        id="portal.header.auth.settings"
+                        defaultMessage="Settings"
+                      />
+                    </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleSignOut}>Sign out</DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleSignOut}>
+                    <FormattedMessage id="portal.header.auth.signOut" defaultMessage="Sign out" />
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -567,7 +574,15 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
       <header className="sm:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between h-14 px-4 border-b border-border/60 bg-card/95 backdrop-blur-sm">
         <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
           <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="Open menu">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9"
+              aria-label={intl.formatMessage({
+                id: 'admin.nav.openMenu',
+                defaultMessage: 'Open menu',
+              })}
+            >
               <Bars3Icon className="h-5 w-5" />
             </Button>
           </SheetTrigger>
@@ -751,10 +766,14 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
                 <AvailabilityMenuItems availability={availability} onSet={setAvail} />
               )}
               <DropdownMenuItem asChild>
-                <Link to="/settings">Settings</Link>
+                <Link to="/settings">
+                  <FormattedMessage id="portal.header.auth.settings" defaultMessage="Settings" />
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleSignOut}>Sign out</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleSignOut}>
+                <FormattedMessage id="portal.header.auth.signOut" defaultMessage="Sign out" />
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

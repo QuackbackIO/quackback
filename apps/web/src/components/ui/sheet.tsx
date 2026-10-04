@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useOptionalIntl } from './use-optional-intl'
 import { Dialog as SheetPrimitive } from '@base-ui/react/dialog'
 import { XMarkIcon } from '@heroicons/react/24/solid'
 
@@ -70,6 +71,7 @@ function SheetContent({
 }) {
   // Nothing to portal until the sheet first opens.
   const opened = useOverlayOpened()
+  const intl = useOptionalIntl()
   if (!opened) return null
   return (
     <SheetPrimitive.Portal data-slot="sheet-portal">
@@ -102,7 +104,9 @@ function SheetContent({
           )}
         >
           <XMarkIcon className="size-4" />
-          <span className="sr-only">Close</span>
+          <span className="sr-only">
+            {intl.formatMessage({ id: 'ui.close', defaultMessage: 'Close' })}
+          </span>
         </SheetPrimitive.Close>
       </SheetPrimitive.Popup>
     </SheetPrimitive.Portal>

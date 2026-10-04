@@ -178,7 +178,7 @@ function InstallMessengerBody({ onDone }: { onDone: () => void }) {
         <p className="text-xs text-muted-foreground">
           <FormattedMessage
             id="onboarding.live.install.turnsOn"
-            defaultMessage="Copying or sending also turns on Show on your website."
+            defaultMessage="Copying or sending also turns Messenger on for your website."
           />
         </p>
 

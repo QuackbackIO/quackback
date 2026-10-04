@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useOptionalIntl } from './use-optional-intl'
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
 import { XMarkIcon } from '@heroicons/react/24/solid'
 
@@ -94,6 +95,7 @@ function DialogContent({
 }) {
   // Nothing to portal until the dialog first opens.
   const opened = useOverlayOpened()
+  const intl = useOptionalIntl()
   if (!opened) return null
   return (
     <DialogPrimitive.Portal data-slot="dialog-portal">
@@ -116,7 +118,9 @@ function DialogContent({
             className="ring-offset-background focus:ring-ring data-open:bg-accent data-open:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
           >
             <XMarkIcon />
-            <span className="sr-only">Close</span>
+            <span className="sr-only">
+              {intl.formatMessage({ id: 'ui.close', defaultMessage: 'Close' })}
+            </span>
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Popup>

@@ -74,7 +74,13 @@ export function PlanNoticeBanner({ notice }: PlanNoticeBannerProps) {
 export function PlanNoticeQuiet({ notice }: PlanNoticeBannerProps) {
   const view = presentPlanNotice(notice)
   if (!view || !isQuietTrial(view)) return null
-  const text = (
+  const text = view.trialPlan ? (
+    <FormattedMessage
+      id="onboarding.trial.quietPlan"
+      defaultMessage="{plan} trial · {days, plural, one {# day} other {# days}}"
+      values={{ plan: view.trialPlan, days: view.daysLeft }}
+    />
+  ) : (
     <FormattedMessage
       id="onboarding.trial.quiet"
       defaultMessage="{label} · {days, plural, one {# day} other {# days}}"
