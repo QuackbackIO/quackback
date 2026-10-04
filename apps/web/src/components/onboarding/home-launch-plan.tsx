@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { FormattedMessage } from 'react-intl'
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
+import { useCopilotOnHome } from '@/components/admin/ask/copilot-on-home'
 import { HomeNextStep } from './home-next-step'
 import { HomeTourPrompt } from './home-tour-prompt'
 import { useProductTour } from '@/components/onboarding/product-tour'
@@ -58,7 +59,15 @@ export function HomeGettingStarted({ portalUrl }: { portalUrl?: string }) {
     gcTime: 0,
   })
   const showWin = moment.data?.show && !winDismissed
+  // On a phone the module stops are behind the menu drawer; with no Copilot
+  // stop either, the tour would have nothing to show.
+  const copilotOnHome = useCopilotOnHome()
+  const [narrow, setNarrow] = useState(false)
+  useEffect(() => {
+    setNarrow(window.matchMedia?.('(max-width: 639px)').matches ?? false)
+  }, [])
   const showTourOffer =
+    (!narrow || copilotOnHome) &&
     inWindow &&
     Boolean(progress.data) &&
     !progress.data?.tourSeenAt &&

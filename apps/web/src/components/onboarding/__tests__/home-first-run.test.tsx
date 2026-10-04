@@ -30,6 +30,10 @@ vi.mock('@/lib/client/hooks/use-root-context', () => ({
   useWorkspaceSettings: () => ({ name: 'Acme' }),
 }))
 vi.mock('@/lib/client/hooks/use-permission', () => ({ usePermission: () => true }))
+const tourView = vi.hoisted(() => ({ narrow: false, copilot: false }))
+vi.mock('@/components/admin/ask/copilot-on-home', () => ({
+  useCopilotOnHome: () => tourView.copilot,
+}))
 vi.mock('@/lib/server/functions/activation', () => ({ markPublicBoardLinkCopiedFn: vi.fn() }))
 vi.mock('@/lib/client/plg-events', () => ({ recordPlgEvent: vi.fn() }))
 vi.mock('@tanstack/react-router', () => ({
@@ -96,6 +100,14 @@ function mount() {
 }
 
 beforeEach(() => {
+  tourView.narrow = false
+  tourView.copilot = false
+  window.matchMedia = ((query: string) => ({
+    matches: tourView.narrow && query.includes('max-width'),
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  })) as unknown as typeof window.matchMedia
   hoisted.progress = {}
   hoisted.claim.mockReset()
   hoisted.dismiss.mockReset()
@@ -168,5 +180,18 @@ describe('Home first-run cards', () => {
     const { client } = mount()
     await waitFor(() => expect(client.getQueryData(['onboarding', 'progress'])).toBeDefined())
     expect(hoisted.claim).not.toHaveBeenCalled()
+  })
+
+  it('offers no tour on a phone when no stop could show', async () => {
+    hoisted.status = status()
+    tourView.narrow = true
+    const { client } = mount()
+    await waitFor(() => expect(client.getQueryData(['onboarding', 'progress'])).toBeDefined())
+    await screen.findByText('Next step · 2 of 3')
+    expect(screen.queryByText('New here? Take the 60-second tour')).toBeNull()
+    cleanup()
+    tourView.copilot = true
+    mount()
+    expect(await screen.findByText('New here? Take the 60-second tour')).toBeVisible()
   })
 })
