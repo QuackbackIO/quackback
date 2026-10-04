@@ -393,8 +393,10 @@ async function streamOnce<TContext>(
             // UNCONSTRAINED prose, not the structured JSON. Reset the
             // delta-diffing state so the finalization stream parses cleanly —
             // without this, prose + JSON concatenate and no delta ever parses.
+            // `emitted` stays: callers join the deltas, so when the loop already
+            // wrote the envelope (and its text streamed) the finalization only
+            // adds what extends it; a reworded copy is left to the final reply.
             raw = ''
-            emitted = ''
           } else if (chunk.name === 'structured-output.complete') {
             // The decoded structured answer: a meaningful commit.
             committed = true

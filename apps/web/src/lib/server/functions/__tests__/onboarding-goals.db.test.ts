@@ -136,6 +136,42 @@ describe('wizard goals read and write', () => {
     )
   })
 
+  // An operator creates the row bare (no flags) and stamps the goals; no wizard runs.
+  const operatorRow = (createdAt: Date, featureFlags?: string) => ({
+    name: 'Acme',
+    slug: 'acme',
+    createdAt,
+    featureFlags,
+    setupState: JSON.stringify({
+      version: 2,
+      steps: { core: true, workspace: true, startingPoint: null },
+      goals: ['product_feedback'],
+    }),
+  })
+
+  it('turns Copilot on Home on for a new workspace an operator provisioned', async () => {
+    await testDb.insert(settings).values(operatorRow(new Date()))
+    await ensureOnboardingHomeReadyFn()
+    const row = await testDb.query.settings.findFirst()
+    expect(JSON.parse(row!.featureFlags!)).toMatchObject({ copilotHome: true })
+  })
+
+  it('never turns Copilot on Home on for an established workspace or over a saved choice', async () => {
+    const yearAgo = new Date(Date.now() - 365 * 86_400_000)
+    await testDb.insert(settings).values(operatorRow(yearAgo))
+    await ensureOnboardingHomeReadyFn()
+    let row = await testDb.query.settings.findFirst()
+    expect(JSON.parse(row!.featureFlags ?? '{}').copilotHome ?? false).toBe(false)
+
+    await testDb.delete(settings)
+    await testDb
+      .insert(settings)
+      .values(operatorRow(new Date(), JSON.stringify({ copilotHome: false })))
+    await ensureOnboardingHomeReadyFn()
+    row = await testDb.query.settings.findFirst()
+    expect(JSON.parse(row!.featureFlags!).copilotHome).toBe(false)
+  })
+
   it('keeps config-managed goals when the wizard saves without them and refuses a change', async () => {
     await testDb.insert(settings).values({
       name: 'Acme',
