@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useIntl } from 'react-intl'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { toast } from 'sonner'
 import { BellIcon } from '@heroicons/react/24/outline'
 import { BellIcon as BellIconSolid } from '@heroicons/react/24/solid'
@@ -17,6 +17,7 @@ import {
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
+import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 import {
   publicStatusPageQueries,
   publicStatusSubscriptionQueries,
@@ -45,6 +46,8 @@ export function StatusSubscribeButton({ className }: StatusSubscribeButtonProps)
   const intl = useIntl()
   const queryClient = useQueryClient()
   const authPopover = useAuthPopoverSafe()
+  const session = useSessionContext()
+  const signedIn = !!session?.user && session.user.principalType !== 'anonymous'
   const [open, setOpen] = useState(false)
   const [scope, setScope] = useState<'page' | 'components'>('page')
   const [selectedIds, setSelectedIds] = useState<StatusComponentId[]>([])
@@ -165,6 +168,27 @@ export function StatusSubscribeButton({ className }: StatusSubscribeButtonProps)
                 defaultMessage: "We'll email you when incidents and maintenance are posted.",
               })}
             </DialogDescription>
+            {/* Said before the visitor picks a scope, not after Subscribe. */}
+            {!signedIn && (
+              <p className="text-xs text-muted-foreground">
+                <FormattedMessage
+                  id="portal.status.subscribeDialog.accountNote"
+                  defaultMessage="Email updates need a free portal account. Or follow the <rss>RSS feed</rss>."
+                  values={{
+                    rss: (chunks) => (
+                      <a
+                        href="/status/feed"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline underline-offset-2 hover:text-foreground"
+                      >
+                        {chunks}
+                      </a>
+                    ),
+                  }}
+                />
+              </p>
+            )}
           </DialogHeader>
 
           <RadioGroup

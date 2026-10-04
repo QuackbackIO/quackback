@@ -67,6 +67,7 @@ vi.mock('@/lib/server/functions/portal-access', () => ({
 
 const mockVoteOnPost = vi.fn()
 const mockCheckAnonVoteRateLimit = vi.fn().mockResolvedValue(true)
+const mockCheckAnonPostRateLimit = vi.fn().mockResolvedValue(true)
 
 vi.mock('@/lib/server/domains/posts/post.voting', () => ({
   voteOnPost: (...args: unknown[]) => mockVoteOnPost(...args),
@@ -82,6 +83,7 @@ vi.mock('@/lib/server/domains/posts/post.access', () => ({
 
 vi.mock('@/lib/server/utils/anon-rate-limit', () => ({
   checkAnonVoteRateLimit: (...args: unknown[]) => mockCheckAnonVoteRateLimit(...args),
+  checkAnonPostRateLimit: (...args: unknown[]) => mockCheckAnonPostRateLimit(...args),
 }))
 
 vi.mock('@tanstack/react-start/server', () => ({
@@ -194,6 +196,7 @@ let createCommentHandler: AnyHandler
 beforeEach(async () => {
   vi.clearAllMocks()
   mockCheckAnonVoteRateLimit.mockResolvedValue(true)
+  mockCheckAnonPostRateLimit.mockResolvedValue(true)
 
   if (publicPostsHandlers.length === 0) {
     currentHandlerTarget = publicPostsHandlers
@@ -357,6 +360,19 @@ describe('createPublicPostFn anonymous feature flag', () => {
     const result = (await createPublicPostHandler({ data: POST_DATA })) as Record<string, unknown>
 
     expect(result).toHaveProperty('id', 'post_new')
+    expect(mockCheckAnonPostRateLimit).not.toHaveBeenCalled()
+  })
+
+  it('refuses an anonymous idea once the address has posted too many this hour', async () => {
+    mockRequireAuth.mockResolvedValue(ANON_AUTH)
+    setupPostMocks({ features: { allowAnonymous: true } })
+    mockCheckAnonPostRateLimit.mockImplementation(async (ip: string) => ip !== '1.2.3.4')
+
+    await expect(createPublicPostHandler({ data: POST_DATA })).rejects.toThrow(
+      'Too many ideas, please try again later'
+    )
+    expect(mockCheckAnonPostRateLimit).toHaveBeenCalledWith('1.2.3.4')
+    expect(mockCreatePost).not.toHaveBeenCalled()
   })
 })
 

@@ -217,7 +217,7 @@ it('keeps hourly feedback rollups unchanged for test ideas and counts real work'
   expect(after.boards[boardId]).toBe(1)
 })
 
-it('waits for a real idea for the private-feedback first win', async () => {
+it('waits for a real idea from someone other than the owner for the private-feedback first win', async () => {
   const state: SetupState = {
     version: 2,
     goals: ['product_feedback'],
@@ -241,9 +241,16 @@ it('waits for a real idea for the private-feedback first win', async () => {
     { skipDispatch: true }
   )
   expect(await detectFirstWin(state)).toEqual({ reached: false, reachedAt: null })
+  // The owner's own idea is setup, not a win.
+  await createPost(
+    { boardId, title: 'My own idea', content: '' },
+    { principalId: owner, actor: actor(owner) },
+    { skipDispatch: true }
+  )
+  expect(await detectFirstWin(state)).toEqual({ reached: false, reachedAt: null })
   const real = await createPost(
     { boardId, title: 'A real idea', content: '' },
-    { principalId: owner, actor: actor(owner) },
+    { principalId: ordinary, actor: actor(ordinary) },
     { skipDispatch: true }
   )
   expect(await detectFirstWin(state)).toEqual({

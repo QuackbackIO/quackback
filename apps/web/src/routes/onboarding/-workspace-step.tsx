@@ -23,7 +23,6 @@ type CloudIdentity = NonNullable<Awaited<ReturnType<typeof getCloudIdentityFn>>>
 /** The goals already in setup state: a config file's, or an earlier save's. */
 export interface WorkspaceSetupGoals {
   goals?: OnboardingOutcome[]
-  feedbackPrivate?: boolean
 }
 
 export interface WorkspaceStepProps {
@@ -220,7 +219,6 @@ function WorkspaceNameStep({
   const [goals, setGoals] = useState<OnboardingOutcome[]>(
     setupGoals?.goals?.length || goalsManaged ? (setupGoals?.goals ?? []) : ['product_feedback']
   )
-  const [feedbackPrivate, setFeedbackPrivate] = useState(setupGoals?.feedbackPrivate ?? false)
   const navigate = useNavigate()
   const nameManaged = isPathManagedFromBootstrap(MANAGED_PATHS.WORKSPACE_NAME, managedFieldPaths)
 
@@ -234,14 +232,10 @@ function WorkspaceNameStep({
       const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) ?? 'null') as {
         workspaceName?: string
         goals?: OnboardingOutcome[]
-        feedbackPrivate?: boolean
       } | null
       if (!goalsManaged && draft?.goals) {
-        const normalized = getSetupState(
-          JSON.stringify({ version: 2, goals: draft.goals, feedbackPrivate: draft.feedbackPrivate })
-        )
+        const normalized = getSetupState(JSON.stringify({ version: 2, goals: draft.goals }))
         if (normalized?.goals?.length) setGoals(normalized.goals)
-        setFeedbackPrivate(normalized?.feedbackPrivate ?? false)
       }
       if (!nameManaged && typeof draft?.workspaceName === 'string') {
         setWorkspaceName(draft.workspaceName)
@@ -252,8 +246,8 @@ function WorkspaceNameStep({
   }, [nameManaged, goalsManaged])
 
   useEffect(() => {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify({ workspaceName, goals, feedbackPrivate }))
-  }, [workspaceName, goals, feedbackPrivate])
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ workspaceName, goals }))
+  }, [workspaceName, goals])
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
@@ -273,7 +267,7 @@ function WorkspaceNameStep({
       const result = await saveWorkspaceAndGoalFn({
         data: goalsManaged
           ? { workspaceName: workspaceName.trim() }
-          : { workspaceName: workspaceName.trim(), goals, feedbackPrivate },
+          : { workspaceName: workspaceName.trim(), goals },
       })
       toastEnabledModules(result.enabledModules)
       localStorage.removeItem(DRAFT_KEY)
@@ -334,8 +328,6 @@ function WorkspaceNameStep({
       <GoalSelector
         goals={goals}
         onGoalsChange={setGoals}
-        feedbackPrivate={feedbackPrivate}
-        onPrivateChange={setFeedbackPrivate}
         disabled={isLoading}
         managed={goalsManaged}
       />
