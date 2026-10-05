@@ -58,6 +58,7 @@ const threadProbe = vi.hoisted(() => ({
   gate: null as null | Promise<void>,
   linkFetches: 0,
   translationEnabled: [] as boolean[],
+  overAllowanceNotice: null as string | null,
   panelOnChanged: [] as unknown[],
   remeasure: () => {},
 }))
@@ -285,6 +286,7 @@ vi.mock('@/lib/client/hooks/use-inbox-translation', () => ({
       dismissSuggestion: vi.fn(),
       activateFromSuggestion: vi.fn(),
       detectedLanguageLabel: '',
+      overAllowanceNotice: threadProbe.overAllowanceNotice,
     }
   },
 }))
@@ -1102,6 +1104,22 @@ describe('AgentConversationThread: reads that ride with the thread', () => {
     await screen.findByTestId('editor')
     expect(threadProbe.translationEnabled.at(-1)).toBe(true)
     threadProbe.gate = null
+  })
+})
+
+describe('AgentConversationThread: inbox translation past the AI allowance', () => {
+  it('shows the notice above the composer, and nothing when there is none', async () => {
+    threadProbe.overAllowanceNotice = 'Your AI allowance is used up. Translation keeps working.'
+    renderThread({ kind: 'conversation', id: 'conversation_over_allowance' })
+    expect(
+      await screen.findByText('Your AI allowance is used up. Translation keeps working.')
+    ).toBeTruthy()
+    cleanup()
+
+    threadProbe.overAllowanceNotice = null
+    renderThread({ kind: 'conversation', id: 'conversation_within_allowance' })
+    await screen.findByTestId('editor')
+    expect(screen.queryByText(/AI allowance/)).toBeNull()
   })
 })
 

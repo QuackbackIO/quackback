@@ -11,6 +11,8 @@ import { parseTypeId } from '@/lib/server/domains/api/validation'
 import type { RoadmapId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
+  applyLegacyRoadmapIsPublic,
+  legacyRoadmapIsPublicSchema,
   roadmapBaseFilterSchema,
   roadmapFrequencySchema,
   roadmapTypeSchema,
@@ -29,17 +31,20 @@ const roadmapColumnSchema = z.object({
 })
 
 // Input validation schema
-const updateRoadmapSchema = z.object({
-  name: z.string().min(1).max(100).optional(),
-  description: z.string().max(500).optional(),
-  type: roadmapTypeSchema.optional(),
-  baseFilter: roadmapBaseFilterSchema.optional(),
-  dateSource: z.literal('eta').nullable().optional(),
-  frequency: roadmapFrequencySchema.nullable().optional(),
-  visibility: roadmapVisibilitySchema.optional(),
-  visibleSegmentIds: z.array(segmentIdInputSchema).nullable().optional(),
-  columns: z.array(roadmapColumnSchema).optional(),
-})
+const updateRoadmapSchema = z
+  .object({
+    name: z.string().min(1).max(100).optional(),
+    description: z.string().max(500).optional(),
+    type: roadmapTypeSchema.optional(),
+    baseFilter: roadmapBaseFilterSchema.optional(),
+    dateSource: z.literal('eta').nullable().optional(),
+    frequency: roadmapFrequencySchema.nullable().optional(),
+    visibility: roadmapVisibilitySchema.optional(),
+    isPublic: legacyRoadmapIsPublicSchema,
+    visibleSegmentIds: z.array(segmentIdInputSchema).nullable().optional(),
+    columns: z.array(roadmapColumnSchema).optional(),
+  })
+  .transform(applyLegacyRoadmapIsPublic)
 
 function serializeRoadmap(
   roadmap: Awaited<

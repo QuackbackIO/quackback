@@ -66,12 +66,29 @@ WHERE jsonb_typeof("s"."assistant_config"->'toolControls') = 'object'
   );
 --> statement-breakpoint
 
+-- Safe reader for the settings.feature_flags text column: the parsed object,
+-- or NULL for NULL, blank, unparseable or non-object content (the app reads
+-- all of those as default flags), so one corrupt blob is skipped instead of
+-- aborting the whole upgrade. Session-scoped; gone when the migration session
+-- ends.
+CREATE OR REPLACE FUNCTION pg_temp._m0197_feature_flags(raw text) RETURNS jsonb AS $$
+DECLARE
+  parsed jsonb;
+BEGIN
+  IF raw IS NULL OR btrim(raw) = '' THEN RETURN NULL; END IF;
+  parsed := raw::jsonb;
+  IF jsonb_typeof(parsed) <> 'object' THEN RETURN NULL; END IF;
+  RETURN parsed;
+EXCEPTION WHEN OTHERS THEN RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+--> statement-breakpoint
+
 -- Remove the retired pre-consolidation feature alias without changing the
 -- assistantTools umbrella used by built-in Writer actions.
 UPDATE "settings"
-SET "feature_flags" = ("feature_flags"::jsonb - 'dataConnectors')::text
-WHERE "feature_flags" IS NOT NULL
-  AND "feature_flags"::jsonb ? 'dataConnectors';
+SET "feature_flags" = (pg_temp._m0197_feature_flags("feature_flags") - 'dataConnectors')::text
+WHERE pg_temp._m0197_feature_flags("feature_flags") ? 'dataConnectors';
 --> statement-breakpoint
 
 -- Remove persisted grants before deleting the code-retired permission row.

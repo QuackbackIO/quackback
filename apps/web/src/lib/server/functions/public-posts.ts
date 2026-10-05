@@ -41,6 +41,7 @@ import {
 import { createPost } from '@/lib/server/domains/posts/post.service'
 import { voteOnPost } from '@/lib/server/domains/posts/post.voting'
 import { checkAnonVoteRateLimit } from '@/lib/server/utils/anon-rate-limit'
+import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import { getPostPermissions } from '@/lib/server/domains/posts/post.permissions'
 import { userEditPost, softDeletePost } from '@/lib/server/domains/posts/post.user-actions'
 import { getPublicBoardById } from '@/lib/server/domains/boards/board.public'
@@ -352,10 +353,9 @@ export const runToggleVote = createServerOnlyFn(async function runToggleVote(
       throw new Error('Anonymous interaction is not enabled')
     }
 
-    // Rate limit anonymous voters by IP
-    const headers = getRequestHeaders()
-    const ip =
-      headers.get('x-forwarded-for')?.split(',')[0]?.trim() || headers.get('x-real-ip') || '0.0.0.0'
+    // Rate limit anonymous voters by IP. Resolved the same way as the
+    // `ipAddress` Better Auth records on the anonymous sessions it counts.
+    const ip = getClientIp(getRequestHeaders())
     if (!(await checkAnonVoteRateLimit(ip))) {
       throw new Error('Too many votes, please try again later')
     }

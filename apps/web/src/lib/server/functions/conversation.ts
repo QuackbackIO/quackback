@@ -1686,10 +1686,14 @@ export const translateConversationMessagesFn = createServerFn({ method: 'GET' })
       data.conversationId as ConversationId,
       actor
     )
-    const { getInboxTranslationContext, translateIncomingMessage, TranslationUnavailableError } =
-      await import('@/lib/server/domains/conversation/conversation-translation.service')
+    const {
+      getInboxTranslationContext,
+      translateIncomingMessage,
+      inboxTranslationOverAllowance,
+      TranslationUnavailableError,
+    } = await import('@/lib/server/domains/conversation/conversation-translation.service')
     const context = await getInboxTranslationContext(conversation.id)
-    if (!context?.enabled) return {}
+    if (!context?.enabled) return { translations: {}, overAllowance: false }
 
     const {
       db: appDb,
@@ -1734,7 +1738,9 @@ export const translateConversationMessagesFn = createServerFn({ method: 'GET' })
         throw err
       }
     }
-    return results
+    // Past the AI allowance translation keeps running (and counting); the
+    // flag drives a one-line notice for the teammate.
+    return { translations: results, overAllowance: await inboxTranslationOverAllowance() }
   })
 
 /** Manual per-conversation activation toggle (ACTIVATION). */

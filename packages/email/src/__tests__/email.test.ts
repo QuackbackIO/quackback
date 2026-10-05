@@ -25,6 +25,7 @@ function withCleanEnv() {
     'EMAIL_SES_SECRET_ACCESS_KEY',
     'EMAIL_RESEND_API_KEY',
     'RESEND_API_KEY',
+    'EMAIL_INBOUND_PROVIDER',
     'EMAIL_FROM',
   ]
 
@@ -69,10 +70,12 @@ describe('isEmailConfigured', () => {
     expect(isEmailConfigured()).toBe(false)
   })
 
-  it('returns false for the inbound-only key, which carries no mail out', () => {
+  it('returns true for a Resend key under either name', () => {
     process.env.EMAIL_RESEND_API_KEY = 're_test_123'
+    expect(isEmailConfigured()).toBe(true)
+    delete process.env.EMAIL_RESEND_API_KEY
     process.env.RESEND_API_KEY = 're_test_123'
-    expect(isEmailConfigured()).toBe(false)
+    expect(isEmailConfigured()).toBe(true)
   })
 })
 

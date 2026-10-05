@@ -64,6 +64,10 @@ const { upsertSpy, mappingSpy, deleteSpy, credentialsSpy } = vi.hoisted(() => ({
   })),
 }))
 
+const { redirectStyleSpy } = vi.hoisted(() => ({
+  redirectStyleSpy: vi.fn(async (_args: { data: { id: string; style: string } }) => undefined),
+}))
+
 const { discoveryScopesSpy } = vi.hoisted(() => ({
   discoveryScopesSpy: vi.fn(async () => ({ scopesSupported: null as string[] | null })),
 }))
@@ -144,6 +148,7 @@ vi.mock('@/lib/server/functions/sso', () => ({
   saveIdentityProviderClaimMappingFn: mappingSpy,
   setProviderCredentialsFn: credentialsSpy,
   deleteIdentityProviderFn: deleteSpy,
+  setIdentityProviderRedirectStyleFn: redirectStyleSpy,
   addProviderDomainFn: vi.fn(),
   verifyProviderDomainFn: vi.fn(),
   fetchDiscoveryScopesFn: discoveryScopesSpy,
@@ -238,6 +243,7 @@ function makeProvider(over: Partial<IdentityProvider>): IdentityProvider {
     autoCreateUsers: true,
     autoProvisionRole: 'user',
     claimMapping: null,
+    redirectStyle: 'current',
     showButton: false,
     logoKey: null,
     logoUrl: null,
@@ -310,6 +316,7 @@ beforeEach(() => {
   mappingSpy.mockClear()
   deleteSpy.mockClear()
   credentialsSpy.mockClear()
+  redirectStyleSpy.mockClear()
   discoveryScopesSpy.mockClear()
   discoveryScopesSpy.mockResolvedValue({ scopesSupported: null })
   openTestSpy.mockClear()
@@ -594,6 +601,40 @@ describe('<ProviderDetailPage> connection', () => {
  * Connection options — scopes, prompt and client authentication — live in a
  * disclosure that is closed unless a value is off its default.
  */
+describe('<ProviderDetailPage> redirect URI', () => {
+  const uriShown = () => document.querySelector('code')?.textContent
+
+  it('shows the legacy redirect URI an existing provider still sends', () => {
+    renderPage(makeProvider({ registrationId: 'sso', redirectStyle: 'legacy' }))
+    editConnection()
+    expect(uriShown()).toBe('https://app.example.com/api/auth/oauth2/callback/sso')
+  })
+
+  it('switches a legacy provider to the new redirect URI after confirming', async () => {
+    renderPage(makeProvider({ registrationId: 'sso', redirectStyle: 'legacy' }))
+    editConnection()
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to new URI' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(
+      within(dialog).getByText('https://app.example.com/api/auth/callback/sso')
+    ).toBeInTheDocument()
+    expect(redirectStyleSpy).not.toHaveBeenCalled()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Switch' }))
+    await waitFor(() =>
+      expect(redirectStyleSpy).toHaveBeenCalledWith({
+        data: { id: 'idp_x', style: 'current' },
+      })
+    )
+  })
+
+  it('shows the current redirect URI and no switch for a current provider', () => {
+    renderPage(makeProvider({ registrationId: 'oidc_x', redirectStyle: 'current' }))
+    editConnection()
+    expect(uriShown()).toBe('https://app.example.com/api/auth/callback/oidc_x')
+    expect(screen.queryByRole('button', { name: 'Switch to new URI' })).not.toBeInTheDocument()
+  })
+})
+
 describe('<ProviderDetailPage> connection options', () => {
   it('collapses the options for a provider on the defaults', () => {
     renderPage(makeProvider({ scopes: null }))

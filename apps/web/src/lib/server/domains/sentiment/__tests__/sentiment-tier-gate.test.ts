@@ -5,8 +5,14 @@ vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
   getTierLimits: vi.fn(),
 }))
 
-vi.mock('@/lib/server/domains/ai/usage-counter', () => ({
-  aiTokensThisMonth: vi.fn(),
+vi.mock('@/lib/server/domains/ai/usage-counter', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/domains/ai/usage-counter')>()),
+  aiTokensInWindow: vi.fn(),
+}))
+
+vi.mock('@/lib/server/domains/settings/cloud/cloud.service', async () => ({
+  getCloudConfig: async () =>
+    (await import('@/lib/server/domains/settings/cloud/cloud.types')).DISABLED_CLOUD_CONFIG,
 }))
 
 const mockConfig = vi.hoisted(() => ({
@@ -46,7 +52,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 
 import { analyzeSentiment } from '../sentiment.service'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
-import { aiTokensThisMonth } from '@/lib/server/domains/ai/usage-counter'
+import { aiTokensInWindow } from '@/lib/server/domains/ai/usage-counter'
 import { OSS_TIER_LIMITS } from '@/lib/server/domains/settings/tier-limits.types'
 
 describe('analyzeSentiment — token budget gate', () => {
@@ -58,7 +64,7 @@ describe('analyzeSentiment — token budget gate', () => {
 
   it('throws TierLimitError when budget exceeded', async () => {
     vi.mocked(getTierLimits).mockResolvedValue({ ...OSS_TIER_LIMITS, aiTokensPerMonth: 100 })
-    vi.mocked(aiTokensThisMonth).mockResolvedValue(100)
+    vi.mocked(aiTokensInWindow).mockResolvedValue(100)
     await expect(analyzeSentiment('t', 'c')).rejects.toBeInstanceOf(TierLimitError)
   })
 

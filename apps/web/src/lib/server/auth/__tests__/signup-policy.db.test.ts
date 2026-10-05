@@ -36,7 +36,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
 import { createId, type PrincipalId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { settings, principal, user, invitation, sql } from '@/lib/server/db'
+import { settings, principal, user, invitation, sql, DEFAULT_SETUP_STATE } from '@/lib/server/db'
+import { finishIdentityOnboarding } from '@/lib/server/setup-state'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -60,12 +61,15 @@ const fixture = await createDbTestFixture({
   },
 })
 
-async function seedSettings(opts: { stamp?: string; metadataStamp?: string } = {}): Promise<void> {
+async function seedSettings(
+  opts: { stamp?: string; metadataStamp?: string; setupState?: string } = {}
+): Promise<void> {
   await testDb.insert(settings).values({
     id: createId('workspace'),
     name: 'Acme',
     slug: `acme-${Math.random().toString(36).slice(2, 8)}`,
     createdAt: new Date(),
+    setupState: opts.setupState ?? null,
     metadata: opts.metadataStamp
       ? JSON.stringify({ cloudTenant: { v: 1, workspaceKey: opts.metadataStamp, stampedAt: '' } })
       : null,
@@ -367,6 +371,29 @@ describe.skipIf(!fixture.available)('isAccountCreationAllowed', () => {
       })
 
       expect(await isAccountCreationAllowed('first@acme.example', 'portal')).toBe(true)
+    })
+
+    // A finished install whose human admins are gone is not waiting for a
+    // first user. Its closed setting stands, as the workspace step would
+    // refuse the claim anyway.
+    it('keeps sign-ups closed on a finished install with only a service admin', async () => {
+      await seedSettings({
+        setupState: JSON.stringify(
+          finishIdentityOnboarding(
+            { ...DEFAULT_SETUP_STATE, steps: { ...DEFAULT_SETUP_STATE.steps, workspace: true } },
+            'product_feedback'
+          )
+        ),
+      })
+      await testDb.insert(principal).values({
+        id: createId('principal') as PrincipalId,
+        userId: null,
+        role: 'admin',
+        type: 'service',
+        createdAt: new Date(),
+      })
+
+      expect(await isAccountCreationAllowed('stranger@evil.example', 'portal')).toBe(false)
     })
 
     it('lets an existing account sign in on a closed workspace', async () => {

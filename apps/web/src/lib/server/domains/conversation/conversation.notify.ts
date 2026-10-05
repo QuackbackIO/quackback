@@ -36,7 +36,9 @@ import {
   formatNamedSendingAddress,
   resolveConversationFrom,
 } from '@/lib/server/domains/channel-accounts/channel-account.service'
+import { randomUUID } from 'node:crypto'
 import { agentReplyDisplayName, assembleOutboundThreading } from '@quackback/email'
+import { withEmailIdempotencyKey } from '@quackback/email/idempotency'
 import type { EmailAttachment } from '@quackback/email'
 import { getChannelDescriptor } from '@/lib/shared/channels'
 import { requireChannelAdapter } from '@/lib/server/domains/channels'
@@ -460,29 +462,35 @@ export async function sendVisitorConversationEmail(opts: {
       : resolvedFrom
   const { sendConversationMessageEmail } = await import('@quackback/email')
   const resolvedBody = await resolvedMessageBody(opts.content, opts.contentJson, opts.attachments)
-  const result = await sendWithRetry(opts.conversationId, () =>
-    sendConversationMessageEmail({
-      to: opts.recipient,
-      direction: opts.direction,
-      senderName: opts.senderName,
-      // The truncated preview backs the subject/preheader; the full body is
-      // carried by bodyHtml so the recipient reads the whole reply inline.
-      messagePreview: previewOf(opts.content),
-      bodyHtml: resolvedBody.bodyHtml,
-      attachments: resolvedBody.attachments,
-      ctaUrl: opts.ctaUrl,
-      workspaceName: opts.ctx.workspaceName,
-      logoUrl: opts.ctx.logoUrl ?? undefined,
-      replyTo,
-      from,
-      fromDisplayName: from ? undefined : fromDisplayName,
-      channel,
-      conversationSubject: mailCtx.subject,
-      correspondence,
-      quotedPrevious,
-      conversationId: opts.conversationId,
-      ...threading,
-    })
+  // One key for every attempt of this send, opened outside the retry loop for
+  // the same reason the threading is minted there: a provider that accepted an
+  // attempt we saw fail then delivers the retry as the same message, not a
+  // second one.
+  const result = await withEmailIdempotencyKey(`conversation-email:${randomUUID()}`, () =>
+    sendWithRetry(opts.conversationId, () =>
+      sendConversationMessageEmail({
+        to: opts.recipient,
+        direction: opts.direction,
+        senderName: opts.senderName,
+        // The truncated preview backs the subject/preheader; the full body is
+        // carried by bodyHtml so the recipient reads the whole reply inline.
+        messagePreview: previewOf(opts.content),
+        bodyHtml: resolvedBody.bodyHtml,
+        attachments: resolvedBody.attachments,
+        ctaUrl: opts.ctaUrl,
+        workspaceName: opts.ctx.workspaceName,
+        logoUrl: opts.ctx.logoUrl ?? undefined,
+        replyTo,
+        from,
+        fromDisplayName: from ? undefined : fromDisplayName,
+        channel,
+        conversationSubject: mailCtx.subject,
+        correspondence,
+        quotedPrevious,
+        conversationId: opts.conversationId,
+        ...threading,
+      })
+    )
   )
   if (result && result.sent === false) {
     log.warn(

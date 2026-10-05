@@ -13,13 +13,18 @@
  * reason.
  */
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { toast } from 'sonner'
 import { CheckCircleIcon, ClockIcon, ExclamationTriangleIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
-import { setProviderCredentialsFn } from '@/lib/server/functions/sso'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import {
+  setIdentityProviderRedirectStyleFn,
+  setProviderCredentialsFn,
+} from '@/lib/server/functions/sso'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import { previewClaimMapping } from '@/lib/shared/sso-mapping-preview'
 import { diffClaimMappingOperations, mappingSaveRisks } from '@/lib/shared/sso-claim-mapping-edit'
@@ -32,8 +37,10 @@ import {
 } from './connection-form'
 import { TestDetails } from './outcome-preview-rail'
 import {
+  IDENTITY_PROVIDERS_KEY,
   getConnectionTestState,
   mergeClaimMapping,
+  redirectUriFor,
   reportMissingIdpFields,
   withAllowMissingEmail,
 } from './provider-shared'
@@ -241,6 +248,12 @@ function ConnectionEditor({
         draft={draft}
         onChange={setDraft}
         registrationId={provider.registrationId}
+        redirectStyle={provider.redirectStyle}
+        redirectAction={
+          provider.redirectStyle === 'legacy' ? (
+            <SwitchRedirectUri provider={provider} baseUrl={baseUrl} disabled={busy} />
+          ) : undefined
+        }
         baseUrl={baseUrl}
         disabled={busy}
         existing
@@ -258,6 +271,73 @@ function ConnectionEditor({
           Save and test
         </Button>
       </div>
+    </div>
+  )
+}
+
+/**
+ * A provider set up before the callback path moved keeps sending the redirect
+ * URI its IdP already has. This moves it to the current one, once the admin
+ * has registered that URI at the IdP; until then sign-in would be refused.
+ */
+function SwitchRedirectUri({
+  provider,
+  baseUrl,
+  disabled,
+}: {
+  provider: IdentityProvider
+  baseUrl: string | undefined
+  disabled: boolean
+}) {
+  const queryClient = useQueryClient()
+  const setStyle = useServerFn(setIdentityProviderRedirectStyleFn)
+  const [confirming, setConfirming] = useState(false)
+  const [switching, setSwitching] = useState(false)
+  const nextUri = redirectUriFor(baseUrl, provider.registrationId, 'current')
+
+  const handleSwitch = async () => {
+    setSwitching(true)
+    try {
+      await setStyle({ data: { id: provider.id, style: 'current' } })
+      await queryClient.invalidateQueries({ queryKey: IDENTITY_PROVIDERS_KEY })
+      setConfirming(false)
+      toast.success('Redirect URI switched. Test the connection again.')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not switch the redirect URI.')
+    } finally {
+      setSwitching(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+      <p>This is the older redirect URI. Switch once the new one is added at your provider.</p>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={disabled || switching}
+        onClick={() => setConfirming(true)}
+      >
+        Switch to new URI
+      </Button>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title="Switch redirect URI?"
+        description={
+          <>
+            <p>Sign-in will send this redirect URI:</p>
+            <code className="mt-2 block rounded-md border border-border/50 bg-muted/30 px-3 py-2 font-mono text-xs break-all">
+              {nextUri}
+            </code>
+            <p className="mt-2">Add it at your provider first, or sign-in will fail.</p>
+          </>
+        }
+        confirmLabel="Switch"
+        isPending={switching}
+        onConfirm={handleSwitch}
+      />
     </div>
   )
 }

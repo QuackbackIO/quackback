@@ -28,15 +28,16 @@ export function ssoTestResultKey(testId: string): string {
 export const SSO_TEST_POSTMESSAGE_SOURCE = 'quackback-sso-test' as const
 
 /**
- * Pre-1.7 generic OAuth callback. Sign-in and Test sign-in no longer send
- * this URL. The catch-all still intercepts it so a return to a previously
- * registered redirect URI can finish a test or be rewritten onto Better Auth.
+ * Legacy generic OAuth callback, still sent by providers on the `legacy`
+ * redirect style (see oidc-redirect.ts). The catch-all intercepts it so a
+ * return here can finish a test or be rewritten onto Better Auth.
  */
 export const SSO_OAUTH_CALLBACK_PREFIX = '/api/auth/oauth2/callback/' as const
 
 /**
- * Callback Better Auth 1.7 sends for social and generic OIDC providers.
- * Test sign-in uses the same prefix so one IdP registration covers both.
+ * Callback for social providers and OIDC providers on the `current`
+ * redirect style. Test sign-in sends whichever the provider uses, so one IdP
+ * registration covers both.
  */
 export const SSO_SOCIAL_CALLBACK_PREFIX = '/api/auth/callback/' as const
 

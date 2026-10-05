@@ -18,6 +18,7 @@ import type { TicketId } from '@quackback/ids'
 import type {
   HookHandler,
   HookResult,
+  HookRunContext,
   EmailTarget,
   EmailConfig,
   TicketEmailConfig,
@@ -32,6 +33,7 @@ import {
 } from '@/lib/server/domains/conversation/conversation.email-channel'
 import type { ConversationId } from '@quackback/ids'
 import { isRetryableError } from '../hook-utils'
+import { withEmailIdempotencyKey } from '@quackback/email/idempotency'
 import { permittedSendingIdentity } from '@/lib/server/domains/channel-accounts/outbound-identity'
 import { logger } from '@/lib/server/logger'
 
@@ -121,166 +123,182 @@ const BROADCAST_EMAIL_EVENTS = new Set([
 ])
 
 export const emailHook: HookHandler = {
-  async run(event: EventData, target: unknown, config: unknown): Promise<HookResult> {
-    const { email, unsubscribeUrl } = target as EmailTarget
-    const cfg = config as EmailConfig
+  async run(
+    event: EventData,
+    target: unknown,
+    config: unknown,
+    ctx?: HookRunContext
+  ): Promise<HookResult> {
+    // One hook job is one send, and its id is stable across the queue's
+    // retries, so it is the identity every attempt carries to the provider.
+    return withEmailIdempotencyKey(ctx?.jobId ? `hook:${ctx.jobId}` : undefined, () =>
+      deliverEmail(event, target, config)
+    )
+  },
+}
 
-    log.debug({ event_type: event.type }, 'sending email notification')
+async function deliverEmail(
+  event: EventData,
+  target: unknown,
+  config: unknown
+): Promise<HookResult> {
+  const { email, unsubscribeUrl } = target as EmailTarget
+  const cfg = config as EmailConfig
 
-    try {
-      if (BROADCAST_EMAIL_EVENTS.has(event.type)) {
-        const { emailBudgetAvailable } = await import('@/lib/server/domains/settings/tier-enforce')
-        if (!(await emailBudgetAvailable())) {
-          log.warn({ event_type: event.type }, 'email budget exhausted; broadcast skipped')
-          return { success: true }
-        }
-      }
+  log.debug({ event_type: event.type }, 'sending email notification')
 
-      let result: EmailResult
-
-      if (event.type === 'post.status_changed') {
-        result = await sendStatusChangeEmail({
-          to: email,
-          postTitle: cfg.postTitle,
-          postUrl: cfg.postUrl,
-          previousStatus: cfg.previousStatus!,
-          newStatus: cfg.newStatus!,
-          workspaceName: cfg.workspaceName,
-          unsubscribeUrl,
-          preferencesUrl: cfg.preferencesUrl,
-          logoUrl: cfg.logoUrl,
-        })
-      } else if (event.type === 'comment.created') {
-        result = await sendNewCommentEmail({
-          to: email,
-          postTitle: cfg.postTitle,
-          postUrl: cfg.postUrl,
-          commenterName: cfg.commenterName!,
-          commentPreview: cfg.commentPreview!,
-          isTeamMember: cfg.isTeamMember ?? false,
-          workspaceName: cfg.workspaceName,
-          unsubscribeUrl,
-          preferencesUrl: cfg.preferencesUrl,
-          logoUrl: cfg.logoUrl,
-        })
-      } else if (event.type === 'post.mentioned') {
-        const data = event.data as EventPostMentionedData
-        result = await sendPostMentionEmail({
-          to: email,
-          mentionerName: event.actor.displayName ?? '',
-          postTitle: data.postTitle,
-          excerpt: data.excerpt,
-          postUrl: data.postUrl,
-          workspaceName: cfg.workspaceName,
-          unsubscribeUrl,
-          preferencesUrl: cfg.preferencesUrl,
-          logoUrl: cfg.logoUrl,
-        })
-      } else if (event.type === 'conversation.note_mentioned') {
-        const c = config as unknown as NoteMentionEmailConfig
-        result = await sendNoteMentionEmail({
-          to: email,
-          authorName: c.authorName,
-          preview: c.preview,
-          conversationUrl: c.ctaUrl,
-          workspaceName: c.workspaceName,
-          preferencesUrl: c.preferencesUrl,
-          logoUrl: c.logoUrl,
-          ...noteMentionThreading(c),
-        })
-      } else if (event.type === 'changelog.published') {
-        const changelogCfg = config as Record<string, unknown>
-        result = await sendChangelogPublishedEmail({
-          to: email,
-          changelogTitle: changelogCfg.changelogTitle as string,
-          changelogUrl: changelogCfg.changelogUrl as string,
-          contentPreview: (changelogCfg.contentPreview as string) ?? '',
-          contentHtml: (changelogCfg.contentHtml as string) ?? '',
-          workspaceName: cfg.workspaceName,
-          unsubscribeUrl,
-          preferencesUrl: cfg.preferencesUrl,
-          logoUrl: cfg.logoUrl,
-          from:
-            (await permittedSendingIdentity((changelogCfg.from as string | undefined) ?? null)) ??
-            undefined,
-        })
-      } else if (event.type === 'status.incident_created') {
-        const c = config as Record<string, unknown>
-        result = await sendStatusIncidentPublishedEmail({
-          to: email,
-          incidentTitle: c.incidentTitle as string,
-          impact: (c.impact as IncidentImpact) ?? 'none',
-          statusLabel: c.statusLabel as string,
-          body: (c.body as string) ?? '',
-          affectedComponents:
-            (c.affectedComponents as Array<{ name: string; status: string }>) ?? [],
-          incidentUrl: c.incidentUrl as string,
-          workspaceName: cfg.workspaceName,
-          unsubscribeUrl: unsubscribeUrl ?? '',
-          preferencesUrl: cfg.preferencesUrl,
-          logoUrl: cfg.logoUrl,
-        })
-      } else if (event.type === 'status.maintenance_scheduled') {
-        const c = config as Record<string, unknown>
-        result = await sendStatusMaintenanceScheduledEmail({
-          to: email,
-          maintenanceTitle: c.incidentTitle as string,
-          body: (c.body as string) ?? '',
-          startLabel: (c.scheduledStartLabel as string) ?? '',
-          endLabel: (c.scheduledEndLabel as string) ?? '',
-          affectedComponents: ((c.affectedComponents as Array<{ name: string }>) ?? []).map(
-            (a) => a.name
-          ),
-          incidentUrl: c.incidentUrl as string,
-          workspaceName: cfg.workspaceName,
-          unsubscribeUrl: unsubscribeUrl ?? '',
-          preferencesUrl: cfg.preferencesUrl,
-          logoUrl: cfg.logoUrl,
-        })
-      } else if (TICKET_EMAIL_EVENT_TYPES.has(event.type)) {
-        // All six ticket/SLA event types map onto sendTicketEventEmail; the
-        // per-recipient config already carries the copy `kind`, CTA, per-team
-        // From, and reply-by-email Reply-To, so the hook only computes threading.
-        const t = config as TicketEmailConfig
-        // TicketEmailConfig's field names already match SendTicketEventEmailParams;
-        // spread it plus the hook-computed threading (the extra `ticketId` the
-        // config carries for threading is a harmless excess property).
-        result = await sendTicketEventEmail({
-          to: email,
-          ...t,
-          // Re-asked HERE rather than trusted from the payload. The target
-          // builder resolved this address when the event was enqueued, and this
-          // send happens after the queue, which may be minutes later and is
-          // certainly after a re-check could have demoted the domain. Sending
-          // is the moment the claim is made, so it is the moment the claim is
-          // checked; the enqueue-time resolution stays because it decides
-          // WHICH address to try, and this decides whether it may be used.
-          from: (await permittedSendingIdentity(t.from ?? null)) ?? undefined,
-          ...ticketThreading(t),
-        })
-      } else {
-        return { success: false, error: `Unsupported event type: ${event.type}` }
-      }
-
-      if (!result.sent) {
-        // Every `sent: false` is the system declining on purpose: an install
-        // with no provider configured, or a refused synthetic anonymous
-        // address. Neither is a hook failure. A send that was attempted and
-        // went wrong throws instead, and is caught below.
-        log.debug({ event_type: event.type, reason: result.reason }, 'email skipped, not sent')
+  try {
+    if (BROADCAST_EMAIL_EVENTS.has(event.type)) {
+      const { emailBudgetAvailable } = await import('@/lib/server/domains/settings/tier-enforce')
+      if (!(await emailBudgetAvailable())) {
+        log.warn({ event_type: event.type }, 'email budget exhausted; broadcast skipped')
         return { success: true }
       }
-
-      log.info({ event_type: event.type }, 'email sent')
-      return { success: true }
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-      log.error({ err: error, event_type: event.type }, 'email send failed')
-      return {
-        success: false,
-        error: errorMsg,
-        shouldRetry: isRetryableError(error),
-      }
     }
-  },
+
+    let result: EmailResult
+
+    if (event.type === 'post.status_changed') {
+      result = await sendStatusChangeEmail({
+        to: email,
+        postTitle: cfg.postTitle,
+        postUrl: cfg.postUrl,
+        previousStatus: cfg.previousStatus!,
+        newStatus: cfg.newStatus!,
+        workspaceName: cfg.workspaceName,
+        unsubscribeUrl,
+        preferencesUrl: cfg.preferencesUrl,
+        logoUrl: cfg.logoUrl,
+      })
+    } else if (event.type === 'comment.created') {
+      result = await sendNewCommentEmail({
+        to: email,
+        postTitle: cfg.postTitle,
+        postUrl: cfg.postUrl,
+        commenterName: cfg.commenterName!,
+        commentPreview: cfg.commentPreview!,
+        isTeamMember: cfg.isTeamMember ?? false,
+        workspaceName: cfg.workspaceName,
+        unsubscribeUrl,
+        preferencesUrl: cfg.preferencesUrl,
+        logoUrl: cfg.logoUrl,
+      })
+    } else if (event.type === 'post.mentioned') {
+      const data = event.data as EventPostMentionedData
+      result = await sendPostMentionEmail({
+        to: email,
+        mentionerName: event.actor.displayName ?? '',
+        postTitle: data.postTitle,
+        excerpt: data.excerpt,
+        postUrl: data.postUrl,
+        workspaceName: cfg.workspaceName,
+        unsubscribeUrl,
+        preferencesUrl: cfg.preferencesUrl,
+        logoUrl: cfg.logoUrl,
+      })
+    } else if (event.type === 'conversation.note_mentioned') {
+      const c = config as unknown as NoteMentionEmailConfig
+      result = await sendNoteMentionEmail({
+        to: email,
+        authorName: c.authorName,
+        preview: c.preview,
+        conversationUrl: c.ctaUrl,
+        workspaceName: c.workspaceName,
+        preferencesUrl: c.preferencesUrl,
+        logoUrl: c.logoUrl,
+        ...noteMentionThreading(c),
+      })
+    } else if (event.type === 'changelog.published') {
+      const changelogCfg = config as Record<string, unknown>
+      result = await sendChangelogPublishedEmail({
+        to: email,
+        changelogTitle: changelogCfg.changelogTitle as string,
+        changelogUrl: changelogCfg.changelogUrl as string,
+        contentPreview: (changelogCfg.contentPreview as string) ?? '',
+        contentHtml: (changelogCfg.contentHtml as string) ?? '',
+        workspaceName: cfg.workspaceName,
+        unsubscribeUrl,
+        preferencesUrl: cfg.preferencesUrl,
+        logoUrl: cfg.logoUrl,
+        from:
+          (await permittedSendingIdentity((changelogCfg.from as string | undefined) ?? null)) ??
+          undefined,
+      })
+    } else if (event.type === 'status.incident_created') {
+      const c = config as Record<string, unknown>
+      result = await sendStatusIncidentPublishedEmail({
+        to: email,
+        incidentTitle: c.incidentTitle as string,
+        impact: (c.impact as IncidentImpact) ?? 'none',
+        statusLabel: c.statusLabel as string,
+        body: (c.body as string) ?? '',
+        affectedComponents: (c.affectedComponents as Array<{ name: string; status: string }>) ?? [],
+        incidentUrl: c.incidentUrl as string,
+        workspaceName: cfg.workspaceName,
+        unsubscribeUrl: unsubscribeUrl ?? '',
+        preferencesUrl: cfg.preferencesUrl,
+        logoUrl: cfg.logoUrl,
+      })
+    } else if (event.type === 'status.maintenance_scheduled') {
+      const c = config as Record<string, unknown>
+      result = await sendStatusMaintenanceScheduledEmail({
+        to: email,
+        maintenanceTitle: c.incidentTitle as string,
+        body: (c.body as string) ?? '',
+        startLabel: (c.scheduledStartLabel as string) ?? '',
+        endLabel: (c.scheduledEndLabel as string) ?? '',
+        affectedComponents: ((c.affectedComponents as Array<{ name: string }>) ?? []).map(
+          (a) => a.name
+        ),
+        incidentUrl: c.incidentUrl as string,
+        workspaceName: cfg.workspaceName,
+        unsubscribeUrl: unsubscribeUrl ?? '',
+        preferencesUrl: cfg.preferencesUrl,
+        logoUrl: cfg.logoUrl,
+      })
+    } else if (TICKET_EMAIL_EVENT_TYPES.has(event.type)) {
+      // All six ticket/SLA event types map onto sendTicketEventEmail; the
+      // per-recipient config already carries the copy `kind`, CTA, per-team
+      // From, and reply-by-email Reply-To, so the hook only computes threading.
+      const t = config as TicketEmailConfig
+      // TicketEmailConfig's field names already match SendTicketEventEmailParams;
+      // spread it plus the hook-computed threading (the extra `ticketId` the
+      // config carries for threading is a harmless excess property).
+      result = await sendTicketEventEmail({
+        to: email,
+        ...t,
+        // Re-asked HERE rather than trusted from the payload. The target
+        // builder resolved this address when the event was enqueued, and this
+        // send happens after the queue, which may be minutes later and is
+        // certainly after a re-check could have demoted the domain. Sending
+        // is the moment the claim is made, so it is the moment the claim is
+        // checked; the enqueue-time resolution stays because it decides
+        // WHICH address to try, and this decides whether it may be used.
+        from: (await permittedSendingIdentity(t.from ?? null)) ?? undefined,
+        ...ticketThreading(t),
+      })
+    } else {
+      return { success: false, error: `Unsupported event type: ${event.type}` }
+    }
+
+    if (!result.sent) {
+      // Every `sent: false` is the system declining on purpose: an install
+      // with no provider configured, or a refused synthetic anonymous
+      // address. Neither is a hook failure. A send that was attempted and
+      // went wrong throws instead, and is caught below.
+      log.debug({ event_type: event.type, reason: result.reason }, 'email skipped, not sent')
+      return { success: true }
+    }
+
+    log.info({ event_type: event.type }, 'email sent')
+    return { success: true }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+    log.error({ err: error, event_type: event.type }, 'email send failed')
+    return {
+      success: false,
+      error: errorMsg,
+      shouldRetry: isRetryableError(error),
+    }
+  }
 }

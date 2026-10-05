@@ -4,14 +4,10 @@
  * Single batched LLM call to verify true duplicates and determine merge direction.
  */
 
-import { chat } from '@tanstack/ai'
-import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
 import { z } from 'zod'
 import { config } from '@/lib/server/config'
-import {
-  isAiClientConfigured,
-  structuredOutputProviderOptions,
-} from '@/lib/server/domains/ai/config'
+import { isAiClientConfigured } from '@/lib/server/domains/ai/config'
+import { structuredChat } from '@/lib/server/domains/ai/structured-chat'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { logger } from '@/lib/server/logger'
 import type { PostId } from '@quackback/ids'
@@ -121,16 +117,12 @@ export async function assessMergeCandidates(
 
   let object: z.infer<typeof MergeAssessmentResponseSchema>
   try {
-    object = await chat({
-      adapter: openaiCompatibleText(model, {
-        baseURL: config.openaiBaseUrl!,
-        apiKey: config.openaiApiKey!,
-      }),
+    object = await structuredChat({
+      model,
       systemPrompts: [SYSTEM_PROMPT],
       messages: [{ role: 'user', content: userPrompt }],
-      outputSchema: MergeAssessmentResponseSchema,
-      stream: false,
-      modelOptions: { max_tokens: 1000, ...structuredOutputProviderOptions() },
+      schema: MergeAssessmentResponseSchema,
+      maxTokens: 1000,
     })
   } catch (err) {
     if (!isStructuredOutputError(err)) throw err
