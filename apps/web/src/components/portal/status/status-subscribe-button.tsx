@@ -121,7 +121,7 @@ export function StatusSubscribeButton({ className }: StatusSubscribeButtonProps)
         onClick={() => unsubscribeMutation.mutate()}
       >
         <BellIconSolid className="h-4 w-4 text-primary" />
-        <span className="hidden sm:inline">
+        <span className="sr-only sm:not-sr-only">
           {intl.formatMessage({ id: 'portal.status.subscribed', defaultMessage: 'Subscribed' })}
         </span>
       </Button>
@@ -148,7 +148,7 @@ export function StatusSubscribeButton({ className }: StatusSubscribeButtonProps)
         onClick={() => setOpen(true)}
       >
         <BellIcon className="h-4 w-4" />
-        <span className="hidden sm:inline">
+        <span className="sr-only sm:not-sr-only">
           {intl.formatMessage({ id: 'portal.status.subscribe.cta', defaultMessage: 'Subscribe' })}
         </span>
       </Button>

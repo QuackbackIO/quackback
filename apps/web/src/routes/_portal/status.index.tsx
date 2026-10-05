@@ -145,7 +145,7 @@ function StatusPage() {
             <Button variant="outline" size="sm" asChild className="shrink-0 gap-1.5">
               <a href="/status/feed" target="_blank" rel="noopener noreferrer">
                 <RssIcon className="h-4 w-4" />
-                <span className="hidden sm:inline">
+                <span className="sr-only sm:not-sr-only">
                   {intl.formatMessage({ id: 'portal.status.rssFeed', defaultMessage: 'RSS Feed' })}
                 </span>
               </a>

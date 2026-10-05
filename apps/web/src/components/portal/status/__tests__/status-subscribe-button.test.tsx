@@ -52,3 +52,18 @@ it('says nothing about accounts to a signed-in visitor', async () => {
   await openDialog()
   expect(screen.queryByText(/Email updates need a free portal account/)).toBeNull()
 })
+
+it('keeps its name for screen readers on narrow screens, where the label is visually hidden', async () => {
+  hoisted.session = null
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <IntlProvider locale="en">
+        <StatusSubscribeButton />
+      </IntlProvider>
+    </QueryClientProvider>
+  )
+  const label = screen.getByText('Subscribe')
+  // display:none would drop the name; sr-only keeps it.
+  expect(label).not.toHaveClass('hidden')
+  expect(label).toHaveClass('sr-only')
+})

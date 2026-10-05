@@ -59,7 +59,7 @@ function ChangelogPage() {
             <Button variant="outline" size="sm" asChild className="shrink-0 gap-1.5">
               <a href="/changelog/feed" target="_blank" rel="noopener noreferrer">
                 <RssIcon className="h-4 w-4" />
-                <span className="hidden sm:inline">
+                <span className="sr-only sm:not-sr-only">
                   {intl.formatMessage({
                     id: 'portal.changelog.rssFeed',
                     defaultMessage: 'RSS Feed',

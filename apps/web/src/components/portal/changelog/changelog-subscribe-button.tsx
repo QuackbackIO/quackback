@@ -51,7 +51,7 @@ export function ChangelogSubscribeButton({ enabled }: { enabled: boolean }) {
       ) : (
         <BellIcon className="h-4 w-4" />
       )}
-      <span className="hidden sm:inline">{subscribed ? 'Subscribed' : 'Subscribe'}</span>
+      <span className="sr-only sm:not-sr-only">{subscribed ? 'Subscribed' : 'Subscribe'}</span>
     </Button>
   )
 }
