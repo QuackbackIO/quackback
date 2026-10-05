@@ -29,7 +29,10 @@ const router = vi.hoisted(() => ({
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => router,
   Link: ({ to, children }: { to: string; children: ReactNode }) => <a href={to}>{children}</a>,
-  createFileRoute: () => (options: unknown) => options,
+  createFileRoute: () => (options: object) => ({
+    ...options,
+    useLoaderData: () => ({ launchMessages: {} }),
+  }),
 }))
 vi.mock('@/lib/server/functions/onboarding-progress', () => ({
   getTourContextFn: async () => ({

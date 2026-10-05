@@ -8,10 +8,12 @@ import { OverviewCounts, OverviewDashboard } from '@/components/admin/admin-over
 import { HomeLaunchArea } from '@/components/onboarding/home-try-it'
 import { HomeLaunchChips } from '@/components/onboarding/home-launch-chips'
 import { HomeGreeting } from '@/components/onboarding/home-greeting'
+import { LaunchMessages } from '@/components/onboarding/launch-messages'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { adminOverviewQueries } from '@/lib/client/queries/admin-overview'
 import { useHasPermission } from '@/lib/client/use-permissions'
 import { ensureOnboardingHomeReadyFn } from '@/lib/server/functions/onboarding'
+import { DEFAULT_LOCALE, loadLaunchMessages } from '@/lib/shared/i18n'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { isAdmin } from '@/lib/shared/roles'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
@@ -35,6 +37,8 @@ export const Route = createFileRoute('/admin/')({
       ? { copilotThread: search.copilotThread }
       : {},
   loader: async ({ context }) => {
+    // Home's own strings, which the admin seed leaves out.
+    const launchMessages = loadLaunchMessages(context.acceptLanguageLocale ?? DEFAULT_LOCALE)
     const admin = isAdmin(context.userRole)
     let modulesChanged = false
     if (admin) {
@@ -52,12 +56,21 @@ export const Route = createFileRoute('/admin/')({
             .catch(() => null)
         : null
     if (!copilot?.enabled) await context.queryClient.ensureQueryData(adminOverviewQueries.get())
-    return { modulesChanged }
+    return { modulesChanged, launchMessages: await launchMessages }
   },
   component: AdminOverviewPage,
 })
 
 function AdminOverviewPage() {
+  const { launchMessages } = Route.useLoaderData()
+  return (
+    <LaunchMessages messages={launchMessages}>
+      <AdminHome />
+    </LaunchMessages>
+  )
+}
+
+function AdminHome() {
   const router = useRouter()
   const { modulesChanged } = Route.useLoaderData()
   const { copilotThread } = Route.useSearch()

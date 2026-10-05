@@ -277,6 +277,45 @@ export async function loadSheetMessages(locale: SupportedLocale): Promise<Record
   return subset
 }
 
+/**
+ * Strings only Home and the Launch plan page render: the plan and its steps,
+ * the next step and first win cards, the greeting. Those two routes load them
+ * as they load (see `LaunchMessages`), so every other admin page leaves them
+ * out of its seed. The sidebar dock and the tour's end card, on every page,
+ * keep the few they render.
+ */
+const LAUNCH_MESSAGE_PREFIXES = [
+  'onboarding.task.',
+  'onboarding.win.',
+  'onboarding.home.',
+  'onboarding.path.',
+  'onboarding.chip.',
+  'onboarding.launch.',
+  'onboarding.branding.',
+] as const
+const SEEDED_LAUNCH_MESSAGES: ReadonlySet<string> = new Set([
+  'onboarding.launch.name',
+  'onboarding.launch.stepOf',
+  'onboarding.launch.error',
+])
+
+export function isLaunchMessage(key: string): boolean {
+  return (
+    LAUNCH_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix)) &&
+    !SEEDED_LAUNCH_MESSAGES.has(key)
+  )
+}
+
+/** Home's and the Launch plan page's strings in a locale. */
+export async function loadLaunchMessages(locale: SupportedLocale): Promise<Record<string, string>> {
+  const all = await loadMessages(locale)
+  const subset: Record<string, string> = {}
+  for (const [key, value] of Object.entries(all)) {
+    if (isLaunchMessage(key)) subset[key] = value
+  }
+  return subset
+}
+
 /** The prefix of the unsubscribe page's strings, which no other page renders. */
 const UNSUBSCRIBE_MESSAGE_PREFIX = 'unsubscribe.'
 
@@ -295,14 +334,15 @@ export async function loadUnsubscribeMessages(
 /**
  * The catalog an admin page seeds: everything but the strings that load with
  * a lazy surface (the file viewer, the product tour, Copilot and search, the
- * setup sheets), the wizard's and the unsubscribe page's own, and email copy (formatted on the
- * server, never rendered).
+ * setup sheets) or with their own page (Home and the Launch plan, the wizard,
+ * the unsubscribe page), and email copy (formatted on the server, never
+ * rendered).
  */
 export function adminSeedMessages(all: Record<string, string>): Record<string, string> {
   const subset: Record<string, string> = {}
   for (const [key, value] of Object.entries(all)) {
     if (isViewerMessage(key) || isTourMessage(key) || isAskMessage(key)) continue
-    if (isSheetMessage(key)) continue
+    if (isSheetMessage(key) || isLaunchMessage(key)) continue
     if (key.startsWith('email.') || key.startsWith(UNSUBSCRIBE_MESSAGE_PREFIX)) continue
     if (WIZARD_ONLY_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))) continue
     subset[key] = value

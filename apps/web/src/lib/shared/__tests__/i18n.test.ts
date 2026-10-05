@@ -19,6 +19,8 @@ import {
   loadUnsubscribeMessages,
   isSheetMessage,
   loadSheetMessages,
+  isLaunchMessage,
+  loadLaunchMessages,
 } from '../i18n'
 
 describe('normalizeLocale', () => {
@@ -268,5 +270,26 @@ describe('setup sheet strings', () => {
     expect(sheets['onboarding.test.badge']).toBe(all['onboarding.test.badge'])
     expect(Object.keys(sheets).length).toBeGreaterThan(40)
     expect(Object.keys(sheets).every(isSheetMessage)).toBe(true)
+  })
+})
+
+describe('launch plan strings', () => {
+  it('are left to Home and the Launch plan page, while the dock keeps its own', async () => {
+    const [all, launch] = await Promise.all([loadMessages('de'), loadLaunchMessages('de')])
+    const seeded = adminSeedMessages(all)
+    expect(Object.keys(seeded).filter(isLaunchMessage)).toEqual([])
+    expect(seeded['onboarding.win.generic']).toBeUndefined()
+    expect(seeded['onboarding.home.greeting']).toBeUndefined()
+    // The sidebar dock and the tour's end card render on every page.
+    for (const key of [
+      'onboarding.launch.name',
+      'onboarding.launch.stepOf',
+      'onboarding.launch.error',
+    ]) {
+      expect(seeded[key]).toBe(all[key])
+    }
+    expect(launch['onboarding.win.generic']).toBe(all['onboarding.win.generic'])
+    expect(Object.keys(launch).length).toBeGreaterThan(60)
+    expect(Object.keys(launch).every(isLaunchMessage)).toBe(true)
   })
 })
