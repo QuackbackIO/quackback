@@ -222,6 +222,7 @@ it('waits for a real idea from someone other than the owner for the private-feed
     version: 2,
     goals: ['product_feedback'],
     feedbackPrivate: true,
+    ownerPrincipalId: owner,
     steps: {
       core: true,
       workspace: true,
