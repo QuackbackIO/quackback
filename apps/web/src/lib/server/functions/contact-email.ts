@@ -86,7 +86,8 @@ export const sendCurrentAddressCodeFn = createServerFn({ method: 'POST' }).handl
   // and burn the workspace's sending reputation.
   const { getClientIp } = await import('@/lib/server/domains/api/rate-limit')
   const { checkContactEmailSendRateLimit } = await import('@/lib/server/auth/signin-rate-limit')
-  const headers = getRequestHeaders()
+  const { withTrustedClientIp } = await import('@/lib/server/auth/client-ip')
+  const headers = withTrustedClientIp(getRequestHeaders())
   const limit = await checkContactEmailSendRateLimit(getClientIp(headers), row.id)
   if (!limit.allowed) {
     throw new ValidationError('RATE_LIMITED', 'Too many attempts. Try again a little later.')
@@ -125,7 +126,8 @@ export const requestEmailChangeFn = createServerFn({ method: 'POST' })
 
     const { getClientIp } = await import('@/lib/server/domains/api/rate-limit')
     const { checkContactEmailSendRateLimit } = await import('@/lib/server/auth/signin-rate-limit')
-    const headers = getRequestHeaders()
+    const { withTrustedClientIp } = await import('@/lib/server/auth/client-ip')
+    const headers = withTrustedClientIp(getRequestHeaders())
     const limit = await checkContactEmailSendRateLimit(getClientIp(headers), row.id)
     if (!limit.allowed) {
       throw new ValidationError('RATE_LIMITED', 'Too many attempts. Try again a little later.')
@@ -200,11 +202,12 @@ export const confirmEmailChangeFn = createServerFn({ method: 'POST' })
     if (holder) return { ok: false as const, reason: 'invalid_or_taken' as const }
 
     const { getAuth } = await import('@/lib/server/auth')
+    const { withTrustedClientIp } = await import('@/lib/server/auth/client-ip')
     const auth = await getAuth()
     try {
       await auth.api.changeEmailEmailOTP({
         body: { newEmail: email, otp: data.code },
-        headers: getRequestHeaders(),
+        headers: withTrustedClientIp(getRequestHeaders()),
       })
     } catch (err) {
       // Either the code is wrong or the address was claimed inside the window.

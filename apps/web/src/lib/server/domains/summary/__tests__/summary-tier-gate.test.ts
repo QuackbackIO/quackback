@@ -9,8 +9,14 @@ vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
   getTierLimits: vi.fn(),
 }))
 
-vi.mock('@/lib/server/domains/ai/usage-counter', () => ({
-  aiTokensThisMonth: vi.fn(),
+vi.mock('@/lib/server/domains/ai/usage-counter', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/domains/ai/usage-counter')>()),
+  aiTokensInWindow: vi.fn(),
+}))
+
+vi.mock('@/lib/server/domains/settings/cloud/cloud.service', async () => ({
+  getCloudConfig: async () =>
+    (await import('@/lib/server/domains/settings/cloud/cloud.types')).DISABLED_CLOUD_CONFIG,
 }))
 
 vi.mock('@/lib/server/config', () => ({
@@ -48,7 +54,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 
 import { generateAndSavePostSummary } from '../summary.service'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
-import { aiTokensThisMonth } from '@/lib/server/domains/ai/usage-counter'
+import { aiTokensInWindow } from '@/lib/server/domains/ai/usage-counter'
 import { OSS_TIER_LIMITS } from '@/lib/server/domains/settings/tier-limits.types'
 import type { PostId } from '@quackback/ids'
 
@@ -59,7 +65,7 @@ describe('generateAndSavePostSummary — token budget gate', () => {
 
   it('throws TierLimitError when token budget is 0 (AI off)', async () => {
     vi.mocked(getTierLimits).mockResolvedValue({ ...OSS_TIER_LIMITS, aiTokensPerMonth: 0 })
-    vi.mocked(aiTokensThisMonth).mockResolvedValue(0)
+    vi.mocked(aiTokensInWindow).mockResolvedValue(0)
     await expect(generateAndSavePostSummary('post_x' as PostId)).rejects.toBeInstanceOf(
       TierLimitError
     )
@@ -67,7 +73,7 @@ describe('generateAndSavePostSummary — token budget gate', () => {
 
   it('throws TierLimitError when current usage >= budget', async () => {
     vi.mocked(getTierLimits).mockResolvedValue({ ...OSS_TIER_LIMITS, aiTokensPerMonth: 1_000_000 })
-    vi.mocked(aiTokensThisMonth).mockResolvedValue(1_000_000)
+    vi.mocked(aiTokensInWindow).mockResolvedValue(1_000_000)
     await expect(generateAndSavePostSummary('post_x' as PostId)).rejects.toBeInstanceOf(
       TierLimitError
     )
@@ -81,7 +87,7 @@ describe('generateAndSavePostSummary — token budget gate', () => {
 
   it('does not throw when usage is below budget', async () => {
     vi.mocked(getTierLimits).mockResolvedValue({ ...OSS_TIER_LIMITS, aiTokensPerMonth: 1_000_000 })
-    vi.mocked(aiTokensThisMonth).mockResolvedValue(500_000)
+    vi.mocked(aiTokensInWindow).mockResolvedValue(500_000)
     await expect(generateAndSavePostSummary('post_x' as PostId)).resolves.toBeUndefined()
   })
 })

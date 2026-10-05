@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { FormattedMessage } from 'react-intl'
 import {
   Dialog,
   DialogContent,
@@ -123,6 +124,14 @@ export function ArticleTranslationsDialog({
                   statusesQuery.data?.find((s) => s.locale === locale)?.status ?? 'untranslated'
                 ]
               }
+            </span>
+          )}
+          {locale && statusesQuery.data?.find((s) => s.locale === locale)?.autoTranslatePaused && (
+            <span className="text-xs text-muted-foreground">
+              <FormattedMessage
+                id="admin.helpCenter.autoTranslatePaused"
+                defaultMessage="Paused: AI allowance used up"
+              />
             </span>
           )}
         </div>

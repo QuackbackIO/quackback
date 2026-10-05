@@ -35,13 +35,16 @@ export const Route = createFileRoute('/onboarding/_layout/no-access')({
       // the workspace they paid for that it "belongs to an existing admin"
       // sends them to support for nothing.
       claimedByOther: state.setupClaimedByOther,
+      // A finished workspace whose admins are gone: not provisioned for anyone,
+      // just already set up.
+      alreadySetUp: !state.setupClaimedByOther && state.setupClosedReason === 'setupComplete',
     }
   },
   component: NoAccessStep,
 })
 
 function NoAccessStep() {
-  const { setupComplete, claimedByOther } = Route.useLoaderData()
+  const { setupComplete, claimedByOther, alreadySetUp } = Route.useLoaderData()
 
   return (
     <div className="w-full max-w-md mx-auto">
@@ -53,6 +56,11 @@ function NoAccessStep() {
                 id="onboarding.noAccess.title"
                 defaultMessage="Setup belongs to an existing admin"
               />
+            ) : alreadySetUp ? (
+              <FormattedMessage
+                id="onboarding.noAccess.alreadySetUpTitle"
+                defaultMessage="This workspace is already set up"
+              />
             ) : (
               <FormattedMessage
                 id="onboarding.noAccess.notOpenTitle"
@@ -61,7 +69,12 @@ function NoAccessStep() {
             )}
           </h1>
           <p className="mt-2 text-muted-foreground">
-            {!claimedByOther ? (
+            {alreadySetUp ? (
+              <FormattedMessage
+                id="onboarding.noAccess.alreadySetUpBody"
+                defaultMessage="Sign in with an admin account to manage it."
+              />
+            ) : !claimedByOther ? (
               <FormattedMessage
                 id="onboarding.noAccess.notOpenBody"
                 defaultMessage="This workspace was created for a specific account. Sign in with that account to set it up."

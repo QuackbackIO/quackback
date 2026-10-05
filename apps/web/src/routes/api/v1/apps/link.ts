@@ -27,8 +27,10 @@ export const Route = createFileRoute('/api/v1/apps/link')({
 
       POST: async ({ request }) => {
         try {
+          // Linking records a vote for the requester, the same act as a
+          // proxy vote in the admin UI.
           const { principalId } = await withApiKeyAuth(request, {
-            permission: PERMISSIONS.INTEGRATION_MANAGE,
+            permission: PERMISSIONS.POST_VOTE_ON_BEHALF,
           })
 
           const body = await request.json()

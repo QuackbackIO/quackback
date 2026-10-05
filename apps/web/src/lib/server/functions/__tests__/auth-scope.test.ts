@@ -54,7 +54,8 @@ import {
   requireAuth,
 } from '../auth-helpers'
 import { ensurePrincipalForUser } from '@/lib/server/domains/principals/principal.factory'
-import { sessionRole, toSessionScope } from '@/lib/shared/roles'
+import { SESSION_AUDIENCE_HEADER, sessionRole, toSessionScope } from '@/lib/shared/roles'
+import { assignSessionScope } from '@/lib/server/auth/session-audience'
 
 function sessionWithScope(scope: string) {
   return {
@@ -109,6 +110,56 @@ describe('requireAuth permission gates are dashboard-only', () => {
     const auth = await requireAuth()
     expect(auth.principal.role).toBe('admin')
     expect(auth.permissions).toContain(PERMISSIONS.SETTINGS_MANAGE)
+  })
+})
+
+// The mint decision and the gate, end to end: the scope assignSessionScope
+// stamps on a fresh anonymous session is the scope requireAuth then reads.
+describe('anonymous sessions minted by each surface', () => {
+  async function mintedAnonymousSession(headers: Record<string, string>) {
+    const minted = await assignSessionScope(
+      { userId: 'user_anon', token: 'tok' },
+      { path: '/sign-in/anonymous', headers: new Headers(headers) }
+    )
+    return {
+      session: { id: 'sess_anon', scope: minted?.data.scope },
+      user: { id: 'user_anon', email: 'temp-x@anon.invalid', name: 'Anon', image: null },
+    }
+  }
+
+  beforeEach(() => {
+    mockPrincipalFindFirst.mockResolvedValue({
+      id: 'principal_anon',
+      role: 'user',
+      type: 'anonymous',
+    })
+  })
+
+  it('lets a portal anonymous session through requireAuth as an anonymous portal user', async () => {
+    mockGetSession.mockResolvedValue(
+      await mintedAnonymousSession({ [SESSION_AUDIENCE_HEADER]: 'portal' })
+    )
+
+    const auth = await requireAuth()
+    expect(auth.scope).toBe('portal')
+    expect(auth.principal).toEqual({ id: 'principal_anon', role: 'user', type: 'anonymous' })
+    expect(auth.permissions).toEqual([])
+  })
+
+  it('still refuses a widget anonymous session at requireAuth', async () => {
+    mockGetSession.mockResolvedValue(await mintedAnonymousSession({}))
+
+    await expect(requireAuth()).rejects.toThrow(/Widget sessions cannot access this resource/)
+  })
+
+  it('refuses a portal anonymous session at a permission gate', async () => {
+    mockGetSession.mockResolvedValue(
+      await mintedAnonymousSession({ [SESSION_AUDIENCE_HEADER]: 'portal' })
+    )
+
+    await expect(requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })).rejects.toThrow(
+      /dashboard session/
+    )
   })
 })
 

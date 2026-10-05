@@ -148,6 +148,27 @@ const PRIVATE_MAX_AGE_SECONDS = 3600
  */
 const PRESIGN_SECONDS = 172_800
 
+/**
+ * Per-client budget for the bucket lookups a token-less private link can
+ * cause. A link whose answer is cached spends none of it, so real old links
+ * keep working; past the budget a made-up key gets the ordinary 403 without
+ * reaching the object store. Fails open with the shared limiter, so a store
+ * outage degrades to the bounded caches rather than to refusing old links.
+ */
+const LEGACY_LOOKUPS_PER_MINUTE = 30
+
+async function mayAskBucketFor(request: Request): Promise<boolean> {
+  const [{ getClientIp }, { incrementBucket }] = await Promise.all([
+    import('@/lib/server/domains/api/rate-limit'),
+    import('@/lib/server/utils/rate-bucket'),
+  ])
+  const { count } = await incrementBucket({
+    key: `storage:legacy-lookup:${getClientIp(request)}`,
+    windowSeconds: 60,
+  })
+  return count === null || count <= LEGACY_LOOKUPS_PER_MINUTE
+}
+
 function isSingleByteRange(value: string): boolean {
   const match = /^bytes=(\d*)-(\d*)$/.exec(value)
   return !!match && (match[1] !== '' || match[2] !== '')
@@ -300,6 +321,7 @@ async function serveStorageGet(request: Request): Promise<Response> {
     getS3Object,
     getStorageSigningSecret,
     isPublicStorageKey,
+    isPreNamespaceObject,
     hasExpiringReadToken,
     StorageUnavailableError,
     verifyStorageReadToken,
@@ -326,9 +348,13 @@ async function serveStorageGet(request: Request): Promise<Response> {
   }
 
   const exp = url.searchParams.get('exp')
+  const readToken = url.searchParams.get('read')
+  // A link with no token at all may predate read tokens; `isPreNamespaceObject`
+  // says when that is provably so. A wrong token is never given that chance.
   if (
     !isPublicStorageKey(key) &&
-    !verifyStorageReadToken(getStorageSigningSecret(), key, url.searchParams.get('read'), exp)
+    !verifyStorageReadToken(getStorageSigningSecret(), key, readToken, exp) &&
+    !(readToken === null && (await isPreNamespaceObject(key, () => mayAskBucketFor(request))))
   ) {
     return Response.json({ error: 'Invalid storage read token' }, { status: 403 })
   }

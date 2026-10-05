@@ -29,6 +29,7 @@ import { backfillUnifiedSignInMethods, parseSettingsOauth } from './backfill-sig
 import { resetAuth } from './index'
 import { decryptPlatformCredentials } from '@/lib/server/integrations/encryption'
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
+import { writeRedirectStyle } from '@/lib/server/domains/settings/identity-providers.service'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'idp-backfill' })
@@ -91,6 +92,9 @@ export async function backfillCustomOidcProvider(db: DbOrTx): Promise<{ created:
     // custom-oidc is the portal-facing sign-in button (the SSO provider is not).
     showButton: true,
   })
+  // The credential this comes from predates the callback move, so its IdP has
+  // the legacy redirect URI registered. Keep sending that one.
+  await writeRedirectStyle(db, 'custom-oidc', 'legacy')
   await db.update(settings).set({ authConfigVersion: sql`${settings.authConfigVersion} + 1` })
 
   return { created: 1 }

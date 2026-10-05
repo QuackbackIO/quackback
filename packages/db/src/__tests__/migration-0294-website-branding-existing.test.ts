@@ -4,12 +4,12 @@ import { join } from 'node:path'
 import { sql } from 'drizzle-orm'
 import { createDb, type Database } from '../client'
 
-// 0293 marks every settings row that exists at upgrade time as already looked
+// 0294 marks every settings row that exists at upgrade time as already looked
 // up, so automatic website branding only runs for workspaces created later.
 // The rows are copied into a private schema inside a rolled-back transaction,
 // so the migration's loop over "settings" sees only this test's rows.
 const MIGRATION = readFileSync(
-  join(__dirname, '../../drizzle/0293_website_branding_existing_workspaces.sql'),
+  join(__dirname, '../../drizzle/0294_website_branding_existing_workspaces.sql'),
   'utf8'
 )
 
@@ -31,11 +31,11 @@ const STORED = {
   array: '[1]',
 } as const
 
-describe.skipIf(!db)('migration 0293 existing workspaces skip website branding', () => {
+describe.skipIf(!db)('migration 0294 existing workspaces skip website branding', () => {
   it('marks only unmarked object bags, keeps siblings, and replays as a no-op', async () => {
     await db!
       .transaction(async (tx) => {
-        const schema = `m0293_${Date.now().toString(36)}`
+        const schema = `m0294_${Date.now().toString(36)}`
         await tx.execute(sql.raw(`CREATE SCHEMA ${schema}`))
         await tx.execute(
           sql.raw(`CREATE TABLE ${schema}.settings (LIKE public.settings INCLUDING ALL)`)

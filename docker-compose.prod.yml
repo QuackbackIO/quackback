@@ -37,6 +37,10 @@ services:
     # Internal wiring is fixed here (derived from the secrets in .env) so a
     # self-hoster can't point these at the wrong host — these override env_file.
     environment:
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env (openssl rand -base64 32)}
+      # Number of reverse proxies in front of the app (see .env.prod.example).
+      # The app port is published directly, so the default must stay 0.
+      TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-0}
       DATABASE_URL: postgresql://${POSTGRES_USER:?set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-quackback}
       S3_ENDPOINT: http://minio:9000
       S3_BUCKET: ${S3_BUCKET:-quackback}

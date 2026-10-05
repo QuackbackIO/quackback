@@ -73,6 +73,8 @@ import {
 } from './settings.helpers'
 import { withCurrentStorageReadTokens } from '@/lib/server/content/storage-read-urls'
 
+import { logSettingsReadError } from './settings-log'
+
 const log = logger.child({ component: 'settings' })
 
 /** Mint current `?read=` tokens on a public welcome card. Persist stays unsigned. */
@@ -146,8 +148,9 @@ async function getEmailDependentPassthroughKeys(): Promise<string[]> {
  * `identity_provider` table (NOT the static AUTH_PROVIDERS map). Each
  * button's `id` is the provider's `registrationId`, so a click drives
  * `signIn.social({ provider: registrationId })` →
- * `/api/auth/callback/<registrationId>`. A return to the pre-1.7
- * `/api/auth/oauth2/callback/<registrationId>` URL is rewritten onto that path.
+ * `/api/auth/callback/<registrationId>`. A return to the legacy
+ * `/api/auth/oauth2/callback/<registrationId>` URL, which providers on the
+ * legacy redirect style send, is rewritten onto that path.
  *
  * A provider yields a button only when it is BOTH:
  *   - button-eligible (`shouldRenderPublicButton`): no verified domain,
@@ -158,12 +161,15 @@ async function getEmailDependentPassthroughKeys(): Promise<string[]> {
  * Routed-only providers (verified domain + `showButton:false`) are
  * reached via the email-first SSO routing, so they're excluded here.
  */
-export async function getPublicOidcProviders(): Promise<OidcSignInButton[]> {
+export async function getPublicOidcProviders(
+  /** The settings row's raw `auth_config`, which every caller already holds. */
+  authConfig: string | null | undefined
+): Promise<OidcSignInButton[]> {
   const { listIdentityProviders, shouldRenderPublicButton } =
     await import('./identity-providers.service')
   const { getRegisteredOidcProviderIds } = await import('@/lib/server/auth/registered-providers')
 
-  const providers = await listIdentityProviders()
+  const providers = await listIdentityProviders({ authConfig: authConfig ?? null })
   // No providers → no buttons; skip the tier + credential round-trips.
   if (providers.length === 0) return []
   const registered = await getRegisteredOidcProviderIds(providers)
@@ -178,7 +184,7 @@ export async function getAuthConfig(freshness: SettingsFreshness = 'cached'): Pr
     const org = await readSettingsRow(freshness)
     return parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
   } catch (error) {
-    log.error({ err: error }, 'get auth config failed')
+    logSettingsReadError(log, error, 'get auth config failed')
     wrapDbError('fetch auth config', error)
   }
 }
@@ -341,9 +347,27 @@ export async function updateAuthConfig(input: UpdateAuthConfigInput): Promise<Au
     const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
     const { resetAuth } = await import('@/lib/server/auth')
     await db.transaction(async (tx) => {
+      // Everything above decided on a read taken outside any lock, and holds
+      // no lock across its DNS checks. `oidcRedirectStyles` is not this
+      // writer's to change, so take it from the row as it stands now, under
+      // the lock the identity-provider service also writes it under, rather
+      // than writing back the copy read earlier.
+      const [locked] = await tx
+        .select({ authConfig: settings.authConfig })
+        .from(settings)
+        .limit(1)
+        .for('update')
+      const current = parseJsonConfig(locked?.authConfig ?? null, DEFAULT_AUTH_CONFIG)
+      const { oidcRedirectStyles: _stale, ...ours } = updated
       await tx
         .update(settings)
-        .set({ authConfig: JSON.stringify(updated) })
+        .set({
+          authConfig: JSON.stringify(
+            current.oidcRedirectStyles
+              ? { ...ours, oidcRedirectStyles: current.oidcRedirectStyles }
+              : ours
+          ),
+        })
         .where(eq(settings.id, org.id))
       await bumpAuthConfigVersionInTx(tx)
     })
@@ -371,18 +395,29 @@ export async function updateAuthConfig(input: UpdateAuthConfigInput): Promise<Au
  * a cross-pod Better-Auth rebuild on every test sign-in.
  */
 async function patchSsoOidc(patch: Partial<NonNullable<AuthConfig['ssoOidc']>>): Promise<void> {
-  const org = await requireSettings()
-  const existing = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
-  if (!existing.ssoOidc) return
-  const updated: AuthConfig = {
-    ...existing,
-    ssoOidc: { ...existing.ssoOidc, ...patch },
-  }
-  await db
-    .update(settings)
-    .set({ authConfig: JSON.stringify(updated) })
-    .where(eq(settings.id, org.id))
-  await invalidateSettingsCache()
+  // Read-modify-write under the row lock, so a concurrent writer of another
+  // key (the identity-provider service's `oidcRedirectStyles`) is not undone
+  // by a copy read before it committed.
+  const wrote = await db.transaction(async (tx) => {
+    const [org] = await tx
+      .select({ id: settings.id, authConfig: settings.authConfig })
+      .from(settings)
+      .limit(1)
+      .for('update')
+    if (!org) return false
+    const existing = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
+    if (!existing.ssoOidc) return false
+    const updated: AuthConfig = {
+      ...existing,
+      ssoOidc: { ...existing.ssoOidc, ...patch },
+    }
+    await tx
+      .update(settings)
+      .set({ authConfig: JSON.stringify(updated) })
+      .where(eq(settings.id, org.id))
+    return true
+  })
+  if (wrote) await invalidateSettingsCache()
 }
 
 /**
@@ -631,7 +666,7 @@ export async function getPortalConfig(
     const org = await readSettingsRow(freshness)
     return parsePortalConfig(org.portalConfig)
   } catch (error) {
-    log.error({ err: error }, 'get portal config failed')
+    logSettingsReadError(log, error, 'get portal config failed')
     wrapDbError('fetch portal config', error)
   }
 }
@@ -854,7 +889,7 @@ export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
       twoFactor: { required: authConfig.twoFactor?.required ?? false },
     }
   } catch (error) {
-    log.error({ err: error }, 'get public auth config failed')
+    logSettingsReadError(log, error, 'get public auth config failed')
     wrapDbError('fetch public auth config', error)
   }
 }
@@ -864,7 +899,7 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
     const org = await requireSettingsCached()
     const portalConfig = parsePortalConfig(org.portalConfig)
 
-    const oidcProviders = await getPublicOidcProviders()
+    const oidcProviders = await getPublicOidcProviders(org.authConfig)
     const welcome = publicWelcomeCard(portalConfig.welcomeCard)
     const authConfig = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
     return {
@@ -883,7 +918,7 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
       },
     }
   } catch (error) {
-    log.error({ err: error }, 'get public portal config failed')
+    logSettingsReadError(log, error, 'get public portal config failed')
     wrapDbError('fetch public portal config', error)
   }
 }
@@ -976,7 +1011,7 @@ async function readWorkspaceSettings(): Promise<WorkspaceSettings | null> {
     )
     // Public OIDC buttons come from the identity_provider table (portal
     // surface only); the static map supplies social providers only.
-    const portalOidcProviders = await getPublicOidcProviders()
+    const portalOidcProviders = await getPublicOidcProviders(org.authConfig)
 
     const brandingData: SettingsBrandingData = {
       name: org.name,
@@ -1032,7 +1067,7 @@ async function readWorkspaceSettings(): Promise<WorkspaceSettings | null> {
     await cacheSet(CACHE_KEYS.WORKSPACE_SETTINGS, result, 3600)
     return result
   } catch (error) {
-    log.error({ err: error }, 'get workspace settings failed')
+    logSettingsReadError(log, error, 'get workspace settings failed')
     wrapDbError('fetch settings with all configs', error)
   }
 }

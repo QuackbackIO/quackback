@@ -78,6 +78,8 @@ vi.mock('@/lib/server/db', () => ({
         where: () => ({
           orderBy: () => Promise.resolve([]),
         }),
+        // The redirect-style read of `settings`: no settings row.
+        limit: () => Promise.resolve([]),
       }),
     })),
     transaction: async (fn: (tx: object) => Promise<unknown>) => {
@@ -87,6 +89,8 @@ vi.mock('@/lib/server/db', () => ({
           from: () => ({
             // Returns whatever txSelectResult holds at call time.
             where: () => Promise.resolve(hoisted.txSelectResult),
+            // The redirect-style write locks `settings`: no settings row.
+            limit: () => ({ for: () => Promise.resolve([]) }),
           }),
         }),
         update: () => ({
@@ -124,6 +128,7 @@ vi.mock('@/lib/server/db', () => ({
     },
   },
   identityProvider: {},
+  settings: {},
   ssoVerifiedDomain: {},
   eq: vi.fn(),
 }))
