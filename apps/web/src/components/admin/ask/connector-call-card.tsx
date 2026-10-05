@@ -85,7 +85,7 @@ export function ConnectorCallCard({
             variant="ghost"
             size="sm"
             disabled={decide.isPending}
-            className="focus-visible:ring-foreground/25"
+            className="focus-visible:ring-muted-foreground"
             onClick={() => decide.mutate('skip')}
           >
             {intl.formatMessage({ id: 'ask.connector.skip', defaultMessage: 'Skip' })}
@@ -94,7 +94,7 @@ export function ConnectorCallCard({
             type="button"
             size="sm"
             disabled={decide.isPending}
-            className="focus-visible:ring-foreground/25"
+            className="focus-visible:ring-muted-foreground"
             onClick={() => decide.mutate('allow')}
           >
             {intl.formatMessage({ id: 'ask.connector.allow', defaultMessage: 'Allow' })}

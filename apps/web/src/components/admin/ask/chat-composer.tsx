@@ -38,7 +38,7 @@ export function ChatComposer({
   }, [autoFocus])
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-3 shadow-float transition-[box-shadow,border-color,translate] duration-300 ease-out focus-within:-translate-y-px focus-within:border-foreground/20 focus-within:shadow-float-focus motion-reduce:transition-none motion-reduce:focus-within:translate-y-0">
+    <div className="rounded-2xl border border-border bg-card p-3 shadow-float transition-[box-shadow,border-color,translate] duration-300 ease-out focus-within:-translate-y-px focus-within:border-muted-foreground focus-within:shadow-float-focus motion-reduce:transition-none motion-reduce:focus-within:translate-y-0">
       <Textarea
         ref={input}
         value={query}
@@ -79,7 +79,7 @@ export function ChatComposer({
               type="button"
               variant="secondary"
               size="icon-sm"
-              className="shrink-0 rounded-full focus-visible:ring-foreground/25"
+              className="shrink-0 rounded-full focus-visible:ring-muted-foreground"
               aria-label={intl.formatMessage({ id: 'ask.chat.stop', defaultMessage: 'Stop' })}
               onClick={onStop}
             >
@@ -90,7 +90,7 @@ export function ChatComposer({
               type="button"
               variant="secondary"
               size="icon-sm"
-              className="shrink-0 rounded-full focus-visible:ring-foreground/25"
+              className="shrink-0 rounded-full focus-visible:ring-muted-foreground"
               aria-label={intl.formatMessage({
                 id: 'ask.composer.ask',
                 defaultMessage: 'Ask Copilot',

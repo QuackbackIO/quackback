@@ -74,3 +74,17 @@ describe('the focused chat composer', () => {
     expect(props.onAsk).not.toHaveBeenCalled()
   })
 })
+
+describe('the composer focus state', () => {
+  // A 20% foreground border sits near 1.4:1 against the card; the muted
+  // foreground token clears the 3:1 a focus indicator needs in both themes.
+  it('draws a neutral focus border strong enough to see, on the box and its button', () => {
+    mount()
+    const box = screen.getByRole('textbox').parentElement as HTMLElement
+    expect(box).toHaveClass('focus-within:border-muted-foreground')
+    expect(box.className).not.toMatch(/focus-within:border-foreground\/\d+/)
+    expect(screen.getByRole('button', { name: 'Ask Copilot' })).toHaveClass(
+      'focus-visible:ring-muted-foreground'
+    )
+  })
+})

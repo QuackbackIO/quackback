@@ -350,7 +350,7 @@ function CopilotHomeView({ threadKey, canAsk, header, chips, locked, below }: Co
                 <button
                   type="button"
                   onClick={() => openThread(latest.key)}
-                  className="flex w-full items-center gap-2 rounded-lg px-1 py-1.5 text-start text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/25"
+                  className="flex w-full items-center gap-2 rounded-lg px-1 py-1.5 text-start text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground"
                 >
                   <ChatBubbleLeftIcon className="size-4 shrink-0" aria-hidden="true" />
                   <span className="min-w-0 truncate">
@@ -453,7 +453,7 @@ function CopilotThread({
                 variant="outline"
                 size="sm"
                 onClick={() => onNavigate(link.href)}
-                className="bg-card shadow-raise transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-px hover:shadow-raise-hover focus-visible:ring-foreground/25"
+                className="bg-card shadow-raise transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-px hover:shadow-raise-hover focus-visible:ring-muted-foreground"
               >
                 {link.messageId
                   ? intl.formatMessage({ id: link.messageId, defaultMessage: link.label })
@@ -472,7 +472,7 @@ function CopilotThread({
           type="button"
           variant="ghost"
           size="sm"
-          className="gap-2 text-muted-foreground focus-visible:ring-foreground/25"
+          className="gap-2 text-muted-foreground focus-visible:ring-muted-foreground"
           onClick={onBack}
           aria-keyshortcuts="Escape"
         >
@@ -484,7 +484,7 @@ function CopilotThread({
           type="button"
           variant="ghost"
           size="icon-sm"
-          className="focus-visible:ring-foreground/25"
+          className="focus-visible:ring-muted-foreground"
           onClick={search.open}
           aria-label={intl.formatMessage({ id: 'ask.search.row', defaultMessage: 'Search' })}
           title={shortcut}
@@ -498,7 +498,7 @@ function CopilotThread({
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                className="focus-visible:ring-foreground/25"
+                className="focus-visible:ring-muted-foreground"
                 aria-label={intl.formatMessage({
                   id: 'ask.chat.history',
                   defaultMessage: 'Your conversations',
@@ -521,7 +521,7 @@ function CopilotThread({
           variant="outline"
           size="sm"
           disabled={busy}
-          className="focus-visible:ring-foreground/25"
+          className="focus-visible:ring-muted-foreground"
           onClick={onNewChat}
         >
           {intl.formatMessage({ id: 'ask.chat.newChat', defaultMessage: 'New chat' })}

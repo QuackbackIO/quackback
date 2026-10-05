@@ -231,7 +231,7 @@ export function SettingsChangeCard({
                     aria-label={changeLabel}
                     checked={selected.has(change.id)}
                     disabled={busy}
-                    className="focus-visible:border-muted-foreground focus-visible:ring-foreground/25"
+                    className="focus-visible:border-muted-foreground focus-visible:ring-muted-foreground"
                     onCheckedChange={(checked) =>
                       setSelection((previous) => {
                         const next = new Set(previous ?? changes.map((item) => item.id))
@@ -278,7 +278,7 @@ export function SettingsChangeCard({
             type="button"
             size="sm"
             disabled={busy || count === 0}
-            className="focus-visible:ring-foreground/25"
+            className="focus-visible:ring-muted-foreground"
             onClick={() => {
               if (count > 0)
                 onApply(
@@ -302,7 +302,7 @@ export function SettingsChangeCard({
             size="sm"
             disabled={busy}
             onClick={onUndo}
-            className="focus-visible:ring-foreground/25"
+            className="focus-visible:ring-muted-foreground"
           >
             {intl.formatMessage({ id: 'ask.settings.undo', defaultMessage: 'Undo' })}
           </Button>
@@ -313,7 +313,7 @@ export function SettingsChangeCard({
             type="button"
             variant="ghost"
             size="sm"
-            className="text-xs focus-visible:ring-foreground/25"
+            className="text-xs focus-visible:ring-muted-foreground"
             onClick={() => onOpenSettings(page.href)}
           >
             {pages.length === 1
