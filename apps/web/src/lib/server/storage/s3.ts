@@ -54,6 +54,11 @@
  * hourly for a day afterwards so bare keys an older replica writes during a
  * rolling upgrade are picked up too.
  *
+ * Links to those objects were minted before read tokens and carry none. On a
+ * single-workspace install the storage route still serves such a link while
+ * the bare original remains, reading the relocated copy; see
+ * {@link isPreNamespaceObject}.
+ *
  * It reaches the bucket root through {@link openLegacyRelocationBucket}, which
  * refuses under pooled tenancy and inside any workspace scope. Listing and
  * copying at the root is correct against a bucket that holds one workspace and
@@ -807,6 +812,110 @@ export async function openLegacyRelocationBucket(): Promise<LegacyRelocationBuck
       }
     },
   }
+}
+
+// ============================================================================
+// Token-less links to objects that predate read tokens (single-workspace only)
+// ============================================================================
+
+/**
+ * Private prefixes that were written, and linked, with no read token before
+ * read tokens and the namespace existed. Every other prefix written then is
+ * public today; every other private prefix has always carried a token, so its
+ * bare originals were never reachable without one and stay that way.
+ */
+const PRE_TOKEN_PRIVATE_PREFIXES = new Set(['chat-images', 'uploads', 'widget-images'])
+
+/** How long a bucket answer is reused. A miss is kept briefly in case the key appears. */
+const PRE_NAMESPACE_HIT_TTL_MS = 60 * 60 * 1000
+const PRE_NAMESPACE_MISS_TTL_MS = 5 * 60 * 1000
+const PRE_NAMESPACE_CACHE_MAX = 10_000
+
+/**
+ * Bare key → whether its pre-namespace original exists, and when that was
+ * asked. Bounded and LRU-evicted; holds booleans, never bytes. Only ever
+ * written by {@link isPreNamespaceObject}, which refuses under pooled tenancy
+ * and inside any workspace scope, so the one bucket it describes is the one
+ * this process's only workspace owns.
+ */
+const preNamespaceObjects = new Map<string, { exists: boolean; at: number }>()
+
+/**
+ * Whether `key` names an object that existed before the namespace, so a link
+ * to it carries no read token and may be served without one.
+ *
+ * Links minted before read tokens point at `/api/storage/<key>` with nothing
+ * else, and many cannot be re-signed: they are in emails already delivered, on
+ * pages outside the app, and in API clients that stored the URL. The
+ * relocation (`legacy-relocation.ts`) copies such an object to its namespaced
+ * name and keeps the bare original, and nothing written since creates a bare
+ * key, so "the bare original exists" is exactly "this object predates the
+ * namespace". A new upload never has one and keeps needing its token.
+ *
+ * The bare original is only ever asked about, never served: the route still
+ * reads the namespaced copy. That keeps the header's rule that reads never
+ * fall back to a bare key, and it is why this is safe to answer from a HEAD.
+ *
+ * Narrowed on purpose:
+ * - **Single-workspace only.** Under pooled tenancy, or inside any workspace
+ *   scope, a bucket-root key is nobody's namespace, so the answer is no without
+ *   asking.
+ * - **Pre-token private prefixes only** ({@link PRE_TOKEN_PRIVATE_PREFIXES}).
+ *   A key under `w/<workspace>/` is therefore never asked about, so no other
+ *   namespace's object, nor this workspace's own new upload, can stand in for
+ *   a bare original.
+ * - **Canonical keys only.** The key must compose into this workspace's
+ *   namespace, which refuses traversal, encoded traversal, empty and relative
+ *   segments and backslashes, so no spelling of a key borrows another
+ *   object's existence.
+ *
+ * An operator who moved rather than copied the originals has no bare key left,
+ * and those links then need their token like any other private link.
+ */
+export async function isPreNamespaceObject(key: string): Promise<boolean> {
+  if (isPooledTenancy() || config.isPooledTenancy) return false
+  if (getCurrentWorkspace()) return false
+  if (!PRE_TOKEN_PRIVATE_PREFIXES.has(key.split('/', 1)[0] ?? '')) return false
+  if (!isS3Usable()) return false
+
+  let connection: S3Config
+  try {
+    composeNamespacedKey(await currentWorkspaceId(), key)
+    connection = getS3Config()
+  } catch {
+    return false
+  }
+
+  const now = Date.now()
+  const cached = preNamespaceObjects.get(key)
+  if (cached) {
+    const ttl = cached.exists ? PRE_NAMESPACE_HIT_TTL_MS : PRE_NAMESPACE_MISS_TTL_MS
+    if (now - cached.at < ttl) {
+      preNamespaceObjects.delete(key)
+      preNamespaceObjects.set(key, cached)
+      return cached.exists
+    }
+    preNamespaceObjects.delete(key)
+  }
+
+  let exists: boolean
+  try {
+    const client = await getS3Client(connection)
+    const { HeadObjectCommand } = await getS3Module()
+    await client.send(new HeadObjectCommand({ Bucket: connection.bucket, Key: key }))
+    exists = true
+  } catch (err) {
+    // Anything but a definite "absent" is not an answer worth remembering.
+    if (s3StatusCode(err) !== 404) return false
+    exists = false
+  }
+  preNamespaceObjects.set(key, { exists, at: now })
+  while (preNamespaceObjects.size > PRE_NAMESPACE_CACHE_MAX) {
+    const oldest = preNamespaceObjects.keys().next()
+    if (oldest.done) break
+    preNamespaceObjects.delete(oldest.value)
+  }
+  return exists
 }
 
 /** The HTTP status an SDK error carries, if any. */

@@ -300,6 +300,7 @@ async function serveStorageGet(request: Request): Promise<Response> {
     getS3Object,
     getStorageSigningSecret,
     isPublicStorageKey,
+    isPreNamespaceObject,
     hasExpiringReadToken,
     StorageUnavailableError,
     verifyStorageReadToken,
@@ -326,9 +327,13 @@ async function serveStorageGet(request: Request): Promise<Response> {
   }
 
   const exp = url.searchParams.get('exp')
+  const readToken = url.searchParams.get('read')
+  // A link with no token at all may predate read tokens; `isPreNamespaceObject`
+  // says when that is provably so. A wrong token is never given that chance.
   if (
     !isPublicStorageKey(key) &&
-    !verifyStorageReadToken(getStorageSigningSecret(), key, url.searchParams.get('read'), exp)
+    !verifyStorageReadToken(getStorageSigningSecret(), key, readToken, exp) &&
+    !(readToken === null && (await isPreNamespaceObject(key)))
   ) {
     return Response.json({ error: 'Invalid storage read token' }, { status: 403 })
   }

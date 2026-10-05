@@ -271,6 +271,18 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'captured with the credentials at construction.',
   },
   {
+    file: 'apps/web/src/lib/server/storage/s3.ts',
+    name: 'preNamespaceObjects',
+    category: 'refuses-pooled',
+    reason:
+      'Bare bucket-root key → whether that pre-namespace original exists, a boolean per key, ' +
+      'bounded and LRU-evicted. It decides whether a token-less link is served, so a shared entry ' +
+      "would let one workspace's original vouch for a key in another workspace's namespace. " +
+      'isPreNamespaceObject, its only writer, returns false before touching it under pooled ' +
+      'tenancy or inside any workspace scope, so it only ever describes the one bucket a ' +
+      "single-workspace process's only workspace owns.",
+  },
+  {
     file: 'apps/web/src/lib/server/storage/workspace-scope.ts',
     name: 'workspaceIds',
     category: 'workspace-keyed',
