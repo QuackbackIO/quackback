@@ -1,0 +1,175 @@
+/**
+ * The client address Better Auth sees must be the one the rest of the app
+ * trusts: the socket peer on a direct install, the trusted hop behind proxies,
+ * and never a header the client wrote.
+ *
+ * The adapter is checked on its own, then once through a real Better Auth
+ * instance configured the way the app configures it, so a library upgrade that
+ * stops reading `ipAddressHeaders` (or starts reading something else first)
+ * fails here.
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { betterAuth } from 'better-auth'
+import { memoryAdapter } from 'better-auth/adapters/memory'
+
+const { proxyConfig, mockGetRequestIP } = vi.hoisted(() => ({
+  proxyConfig: { hops: 0 },
+  mockGetRequestIP: vi.fn(),
+}))
+
+vi.mock('@/lib/server/config', () => ({
+  config: {
+    get trustedProxyHops() {
+      return proxyConfig.hops
+    },
+  },
+}))
+
+vi.mock('@tanstack/react-start/server', () => ({
+  getRequestIP: mockGetRequestIP,
+}))
+
+import {
+  CLIENT_IP_HEADER,
+  betterAuthIpAddressOptions,
+  withTrustedClientIp,
+  withTrustedClientIpArgs,
+  withTrustedClientIpRequest,
+} from '../client-ip'
+
+beforeEach(() => {
+  proxyConfig.hops = 0
+  mockGetRequestIP.mockReset()
+})
+
+describe('withTrustedClientIp', () => {
+  it('uses the socket peer and ignores a spoofed X-Forwarded-For when no proxy is trusted', () => {
+    mockGetRequestIP.mockReturnValue('203.0.113.7')
+    const headers = withTrustedClientIp({ 'x-forwarded-for': '9.9.9.9' })
+    expect(headers.get(CLIENT_IP_HEADER)).toBe('203.0.113.7')
+  })
+
+  it('uses the trusted hop when one proxy is trusted', () => {
+    proxyConfig.hops = 1
+    mockGetRequestIP.mockReturnValue('10.0.0.1')
+    const headers = withTrustedClientIp({ 'x-forwarded-for': '9.9.9.9, 198.51.100.4' })
+    expect(headers.get(CLIENT_IP_HEADER)).toBe('198.51.100.4')
+  })
+
+  it('overwrites a client-supplied copy of the private header', () => {
+    mockGetRequestIP.mockReturnValue('203.0.113.7')
+    const headers = withTrustedClientIp({ [CLIENT_IP_HEADER]: '9.9.9.9' })
+    expect(headers.get(CLIENT_IP_HEADER)).toBe('203.0.113.7')
+  })
+
+  it('drops a client-supplied copy when no address can be resolved', () => {
+    mockGetRequestIP.mockReturnValue(undefined)
+    const headers = withTrustedClientIp({ [CLIENT_IP_HEADER]: '9.9.9.9' })
+    expect(headers.has(CLIENT_IP_HEADER)).toBe(false)
+  })
+
+  it('leaves the caller headers untouched', () => {
+    mockGetRequestIP.mockReturnValue('203.0.113.7')
+    const original = new Headers({ [CLIENT_IP_HEADER]: '9.9.9.9' })
+    withTrustedClientIp(original)
+    expect(original.get(CLIENT_IP_HEADER)).toBe('9.9.9.9')
+  })
+})
+
+describe('withTrustedClientIpRequest', () => {
+  it('keeps method, url and body', async () => {
+    mockGetRequestIP.mockReturnValue('203.0.113.7')
+    const request = withTrustedClientIpRequest(
+      new Request('https://acme.example/api/auth/sign-in/email', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-forwarded-for': '9.9.9.9' },
+        body: JSON.stringify({ email: 'a@acme.example' }),
+      })
+    )
+    expect(request.method).toBe('POST')
+    expect(request.url).toBe('https://acme.example/api/auth/sign-in/email')
+    expect(request.headers.get(CLIENT_IP_HEADER)).toBe('203.0.113.7')
+    expect(await request.json()).toEqual({ email: 'a@acme.example' })
+  })
+})
+
+describe('withTrustedClientIpArgs', () => {
+  it('rewrites the headers of a server-side api call', () => {
+    mockGetRequestIP.mockReturnValue('203.0.113.7')
+    const [arg] = withTrustedClientIpArgs([
+      { headers: new Headers({ [CLIENT_IP_HEADER]: '9.9.9.9' }), body: { x: 1 } },
+    ]) as [{ headers: Headers; body: unknown }]
+    expect(arg.headers.get(CLIENT_IP_HEADER)).toBe('203.0.113.7')
+    expect(arg.body).toEqual({ x: 1 })
+  })
+
+  it('passes calls without headers through', () => {
+    const args = [{ body: { x: 1 } }]
+    expect(withTrustedClientIpArgs(args)).toBe(args)
+    expect(withTrustedClientIpArgs([])).toEqual([])
+  })
+})
+
+describe('through a real Better Auth instance', () => {
+  const keys: string[] = []
+  const counters = new Map<string, number>()
+  const auth = betterAuth({
+    baseURL: 'https://acme.example',
+    secret: 'test-secret-not-used-for-anything-real',
+    database: memoryAdapter({ user: [], session: [], account: [], verification: [] }),
+    emailAndPassword: { enabled: true },
+    advanced: { ipAddress: betterAuthIpAddressOptions },
+    rateLimit: {
+      enabled: true,
+      customStorage: {
+        async consume(key: string, rule: { window: number; max: number }) {
+          keys.push(key)
+          const count = (counters.get(key) ?? 0) + 1
+          counters.set(key, count)
+          return count > rule.max
+            ? { allowed: false, retryAfter: rule.window }
+            : { allowed: true, retryAfter: null }
+        },
+      },
+    },
+  })
+
+  function wrongPassword(peer: string, headers: Record<string, string> = {}) {
+    mockGetRequestIP.mockReturnValue(peer)
+    return auth.handler(
+      withTrustedClientIpRequest(
+        new Request('https://acme.example/api/auth/sign-in/email', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', ...headers },
+          body: JSON.stringify({ email: 'nobody@acme.example', password: 'wrong-password' }),
+        })
+      )
+    )
+  }
+
+  beforeEach(() => {
+    keys.length = 0
+    counters.clear()
+  })
+
+  it('buckets by the socket peer, not by a spoofed X-Forwarded-For', async () => {
+    await wrongPassword('203.0.113.21', { 'x-forwarded-for': '9.9.9.9' })
+    expect(keys).toEqual(['203.0.113.21|/sign-in/email'])
+  })
+
+  it('ignores a client-supplied private header', async () => {
+    await wrongPassword('203.0.113.22', { [CLIENT_IP_HEADER]: '9.9.9.9' })
+    expect(keys).toEqual(['203.0.113.22|/sign-in/email'])
+  })
+
+  it('keeps one client locked out without locking out another, spoof or not', async () => {
+    const statuses: number[] = []
+    for (let i = 0; i < 4; i += 1) statuses.push((await wrongPassword('203.0.113.31')).status)
+    expect(statuses.at(-1)).toBe(429)
+
+    // The locked-out client cannot buy a fresh bucket with a forwarding header.
+    expect((await wrongPassword('203.0.113.31', { 'x-forwarded-for': '9.9.9.9' })).status).toBe(429)
+    // A different client is unaffected.
+    expect((await wrongPassword('203.0.113.32')).status).not.toBe(429)
+  })
+})
