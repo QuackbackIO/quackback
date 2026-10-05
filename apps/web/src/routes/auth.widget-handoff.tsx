@@ -19,8 +19,8 @@
  *      renders.
  *
  * Why the server fn wrapper?
- *   The actual OTT consumption logic needs `setResponseHeader` and
- *   `getRequestHeaders` from `@tanstack/react-start/server`. Vite's
+ *   The actual OTT consumption logic needs `setResponseHeader` from
+ *   `@tanstack/react-start/server`. Vite's
  *   import-protection plugin denies that specifier in client-bundled code,
  *   and route files end up in the client bundle via `routeTree.gen.ts`.
  *   Wrapping the logic in a `createServerFn` confines the server-only
@@ -41,7 +41,7 @@
  */
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
-import { getRequestHeaders, setResponseHeader } from '@tanstack/react-start/server'
+import { setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import { isSafeCallbackUrl } from '@/lib/shared/routing'
 import { buildSigninRedirect } from '@/lib/shared/auth-prompt'
@@ -93,6 +93,22 @@ export const isWidgetSessionHmacVerified = createServerOnlyFn(
     }
   }
 )
+
+/**
+ * Request init for the server-to-server OTT verify call. Exported for tests.
+ *
+ * Carries no cookie: the verify endpoint resolves the session from the token
+ * alone, and a Cookie header on a POST without an Origin makes Better Auth's
+ * CSRF check reject it (403 MISSING_OR_NULL_ORIGIN). Forwarding the visitor's
+ * cookies therefore broke the handoff for anyone who already had one.
+ */
+export function buildOttVerifyInit(token: string): RequestInit {
+  return {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token }),
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Search schema
@@ -155,18 +171,10 @@ const consumeWidgetHandoffFn = createServerFn({ method: 'POST' })
     // redirect fires.
     let verifyResponse: Response
     try {
-      verifyResponse = await fetch(`${config.baseUrl}/api/auth/one-time-token/verify`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          // Forward the caller's cookie header so BA can resolve any
-          // existing session context if needed.
-          ...(getRequestHeaders().get('cookie')
-            ? { cookie: getRequestHeaders().get('cookie')! }
-            : {}),
-        },
-        body: JSON.stringify({ token: data.ott }),
-      })
+      verifyResponse = await fetch(
+        `${config.baseUrl}/api/auth/one-time-token/verify`,
+        buildOttVerifyInit(data.ott)
+      )
     } catch (err) {
       log.error({ err }, 'ott verify fetch failed')
       await recordAuditEvent({

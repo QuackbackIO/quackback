@@ -89,7 +89,8 @@ vi.stubGlobal('fetch', mockFetch)
 // ---------------------------------------------------------------------------
 
 async function runHandoffLoader(search: string) {
-  const { setResponseHeader, getRequestHeaders } = await import('@tanstack/react-start/server')
+  const { setResponseHeader } = await import('@tanstack/react-start/server')
+  const { buildOttVerifyInit } = await import('../auth.widget-handoff')
   const { config } = await import('@/lib/server/config')
   const { db, widgetOriginSession, session, eq } = await import('@/lib/server/db')
   const { recordAuditEvent } = await import('@/lib/server/audit/log')
@@ -112,16 +113,10 @@ async function runHandoffLoader(search: string) {
 
   let verifyResponse: Response
   try {
-    verifyResponse = await fetch(`${config.baseUrl}/api/auth/one-time-token/verify`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        ...(getRequestHeaders().get('cookie')
-          ? { cookie: getRequestHeaders().get('cookie')! }
-          : {}),
-      },
-      body: JSON.stringify({ token: ott }),
-    })
+    verifyResponse = await fetch(
+      `${config.baseUrl}/api/auth/one-time-token/verify`,
+      buildOttVerifyInit(ott)
+    )
   } catch {
     await recordAuditEvent({
       event: 'portal.widget_handshake.invalid',
