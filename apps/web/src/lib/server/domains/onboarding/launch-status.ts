@@ -32,7 +32,7 @@ import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service
 import { hasEntitlement } from '@/lib/server/domains/settings/cloud/entitlements'
 import { isAssistantConfigured } from '@/lib/server/domains/assistant'
 import { canTestCustomerPostIdea } from '@/lib/server/test-customer-feedback'
-import { detectFirstWin } from '@/lib/server/activation-wins'
+import { detectFirstWin, internalWinScope, winOutcome } from '@/lib/server/activation-wins'
 import { isLaunchWindowOpen, launchWindowFor } from '@/lib/shared/launch-window'
 import { CURRENT_WIDGET_SDK_VERSION, widgetSdkNeedsUpdate } from '@/lib/shared/widget/sdk-version'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
@@ -114,6 +114,13 @@ export async function loadLaunchStatus(caller: LaunchStatusCaller) {
   const hasInternalBoard = orgBoards.some((board) => board.access.view === 'team')
   const publicBoard = orgBoards.find((board) => board.access.view === 'anonymous')
   const hasPublicBoard = Boolean(publicBoard)
+  // A private team plan: the team board its win is judged on, whose access
+  // settings decide who sees it.
+  const teamScope =
+    winOutcome(setupState) === 'internal' ? await internalWinScope(setupState) : null
+  const teamBoard = teamScope
+    ? orgBoards.find((board) => board.id === teamScope.boardId)
+    : undefined
 
   log.debug(
     {
@@ -134,6 +141,7 @@ export async function loadLaunchStatus(caller: LaunchStatusCaller) {
     hasPublicBoard,
     publicBoardId: publicBoard?.id ?? null,
     publicBoardSlug: publicBoard?.slug ?? null,
+    teamBoardSlug: teamBoard?.slug ?? null,
     publicBoardPath: publicBoard ? `/?board=${encodeURIComponent(publicBoard.slug)}` : null,
     publicBoardLinkCopiedAt: setupState?.activationMilestones?.publicBoardLinkCopiedAt ?? null,
     statusLinkCopiedAt: setupState?.activationMilestones?.statusLinkCopiedAt ?? null,

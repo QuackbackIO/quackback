@@ -168,6 +168,19 @@ describe('the launch path', () => {
     expect(launchVisibilityHref('support', base)).toBeNull()
   })
 
+  it('sends a private path to the team board access, never a public board', () => {
+    const both = { ...base, publicBoardSlug: 'feedback', teamBoardSlug: 'team-ideas' }
+    expect(launchVisibilityHref('private', both)).toBe(
+      '/admin/settings/boards/team-ideas?tab=access'
+    )
+    expect(launchVisibilityHref('private', { ...base, publicBoardSlug: 'feedback' })).toBe(
+      '/admin/settings/boards'
+    )
+    expect(launchVisibilityHref('feedback', both)).toBe(
+      '/admin/settings/boards/feedback?tab=access'
+    )
+  })
+
   it('completes sharing the status page when its link is copied', () => {
     const status = { ...base, goals: ['status_page' as const] }
     expect(launchPath(status).step).toBe(2)

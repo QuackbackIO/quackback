@@ -23,6 +23,8 @@ export interface LaunchStatus {
   hasPublicBoard?: boolean
   publicBoardId?: string | null
   publicBoardSlug?: string | null
+  /** The private team board a private plan's win is judged on. */
+  teamBoardSlug?: string | null
   publicBoardPath?: string | null
   publicBoardLinkCopiedAt?: string | null
   /** When an admin first copied the status page link. */
@@ -567,8 +569,9 @@ export const LAUNCH_LIVE_STEP: Record<LaunchPathGoal, { id: string; defaultMessa
  */
 export function launchVisibilityHref(goal: LaunchPathGoal, status: LaunchStatus): string | null {
   if (goal === 'feedback' || goal === 'private') {
-    return status.publicBoardSlug
-      ? `/admin/settings/boards/${encodeURIComponent(status.publicBoardSlug)}?tab=access`
+    const slug = goal === 'private' ? status.teamBoardSlug : status.publicBoardSlug
+    return slug
+      ? `/admin/settings/boards/${encodeURIComponent(slug)}?tab=access`
       : '/admin/settings/boards'
   }
   if (goal === 'status') return '/admin/settings/status'
