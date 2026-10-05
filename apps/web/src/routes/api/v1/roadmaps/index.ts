@@ -9,6 +9,8 @@ import {
 } from '@/lib/server/domains/api/responses'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
+  applyLegacyRoadmapIsPublic,
+  legacyRoadmapIsPublicSchema,
   roadmapBaseFilterSchema,
   roadmapFrequencySchema,
   roadmapTypeSchema,
@@ -27,22 +29,25 @@ const roadmapColumnSchema = z.object({
 })
 
 // Input validation schema
-const createRoadmapSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(100),
-  slug: z
-    .string()
-    .min(1, 'Slug is required')
-    .max(100)
-    .regex(/^[a-z0-9-]+$/, 'Slug must contain only lowercase letters, numbers, and hyphens'),
-  description: z.string().max(500).optional(),
-  type: roadmapTypeSchema.optional(),
-  baseFilter: roadmapBaseFilterSchema.optional(),
-  dateSource: z.literal('eta').nullable().optional(),
-  frequency: roadmapFrequencySchema.nullable().optional(),
-  visibility: roadmapVisibilitySchema.optional(),
-  visibleSegmentIds: z.array(segmentIdInputSchema).nullable().optional(),
-  columns: z.array(roadmapColumnSchema).optional(),
-})
+const createRoadmapSchema = z
+  .object({
+    name: z.string().min(1, 'Name is required').max(100),
+    slug: z
+      .string()
+      .min(1, 'Slug is required')
+      .max(100)
+      .regex(/^[a-z0-9-]+$/, 'Slug must contain only lowercase letters, numbers, and hyphens'),
+    description: z.string().max(500).optional(),
+    type: roadmapTypeSchema.optional(),
+    baseFilter: roadmapBaseFilterSchema.optional(),
+    dateSource: z.literal('eta').nullable().optional(),
+    frequency: roadmapFrequencySchema.nullable().optional(),
+    visibility: roadmapVisibilitySchema.optional(),
+    isPublic: legacyRoadmapIsPublicSchema,
+    visibleSegmentIds: z.array(segmentIdInputSchema).nullable().optional(),
+    columns: z.array(roadmapColumnSchema).optional(),
+  })
+  .transform(applyLegacyRoadmapIsPublic)
 
 function serializeRoadmap(
   roadmap: Awaited<

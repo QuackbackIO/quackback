@@ -29,7 +29,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
 import { createId, type PrincipalId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { principal, user, settings, eq, sql } from '@/lib/server/db'
+import { principal, user, settings, eq, sql, DEFAULT_SETUP_STATE } from '@/lib/server/db'
+import { finishIdentityOnboarding } from '@/lib/server/setup-state'
+import { mergeSetupState } from '@/lib/server/config-file/reconciler'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -144,6 +146,30 @@ async function seedPrincipal(input: {
     createdAt: new Date(),
   })
   return id
+}
+
+/** A self-hosted settings row (no provisioning stamp) with this setup state. */
+async function seedSettings(setupState: string): Promise<void> {
+  const row = {
+    id: createId('workspace'),
+    name: 'Existing',
+    slug: `existing-${Math.random().toString(36).slice(2, 8)}`,
+    createdAt: new Date(),
+    setupState,
+  }
+  await testDb.insert(settings).values(row)
+  hoisted.getSettings.mockResolvedValue(row)
+}
+
+/** An admin API principal: an admin, but not a human owner. */
+async function seedServiceAdmin(): Promise<void> {
+  await testDb.insert(principal).values({
+    id: createId('principal') as PrincipalId,
+    userId: null,
+    role: 'admin',
+    type: 'service',
+    createdAt: new Date(),
+  })
 }
 
 const WORKSPACE_INPUT = { workspaceName: 'Acme', useCase: 'product_feedback' as const }
@@ -375,6 +401,73 @@ describe.skipIf(!fixture.available)('bootstrap promotion guard', () => {
 
     expect(hoisted.ensurePrincipalForUser).not.toHaveBeenCalled()
     expect(hoisted.setPrincipalRole).not.toHaveBeenCalled()
+  })
+
+  // A finished install whose human admins are all gone, with only an API
+  // principal left. Nobody owns it, but its setup is not waiting for anyone:
+  // the workspace step must not hand admin, and the workspace's name and slug,
+  // to the next signed-in portal user who posts it.
+  it('refuses a portal user on a finished install that has no human admin', async () => {
+    await seedSettings(
+      JSON.stringify(
+        finishIdentityOnboarding(
+          { ...DEFAULT_SETUP_STATE, steps: { ...DEFAULT_SETUP_STATE.steps, workspace: true } },
+          'product_feedback'
+        )
+      )
+    )
+    await seedServiceAdmin()
+    const portalUserId = await seedUser('portal.user@elsewhere.example')
+    await seedPrincipal({ userId: portalUserId, role: 'user' })
+    hoisted.getSession.mockResolvedValue({
+      session: { scope: 'dashboard' },
+      user: { id: portalUserId },
+    })
+
+    await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).rejects.toThrow(
+      /already set up/i
+    )
+    expect(hoisted.ensurePrincipalForUser).not.toHaveBeenCalled()
+    expect(hoisted.setPrincipalRole).not.toHaveBeenCalled()
+    const [row] = await testDb.select({ name: settings.name }).from(settings)
+    expect(row?.name).toBe('Existing')
+  })
+
+  // The declarative config file can stamp onboarding complete before anyone
+  // has signed in. That workspace has no owner yet, so its first user must
+  // still be able to claim it. The state is the reconciler's own output.
+  it('still lets the first user claim a workspace the config file stamped complete', async () => {
+    await seedSettings(
+      JSON.stringify(mergeSetupState(null, { name: 'Acme', onboardingComplete: true }))
+    )
+    const firstId = await seedUser('first@acme.example')
+    await seedPrincipal({ userId: firstId, role: 'user' })
+    hoisted.getSession.mockResolvedValue({ session: { scope: 'dashboard' }, user: { id: firstId } })
+    hoisted.ensurePrincipalForUser.mockResolvedValue({
+      created: false,
+      principal: { id: 'principal_first', role: 'user' },
+    })
+
+    await saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })
+
+    expect(hoisted.setPrincipalRole).toHaveBeenCalledWith(
+      { userId: firstId },
+      'admin',
+      expect.objectContaining({ knownUserId: firstId })
+    )
+  })
+
+  it('still lets the first user claim a workspace the config file only named', async () => {
+    await seedSettings(JSON.stringify(mergeSetupState(null, { name: 'Acme' })))
+    const firstId = await seedUser('first@acme.example')
+    hoisted.getSession.mockResolvedValue({ session: { scope: 'dashboard' }, user: { id: firstId } })
+
+    await saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })
+
+    expect(hoisted.ensurePrincipalForUser).toHaveBeenCalledWith(
+      { userId: firstId, role: 'admin' },
+      expect.any(Object)
+    )
   })
 
   // Same starting shape, opposite answer: an owner already exists, so the

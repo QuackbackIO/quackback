@@ -7,6 +7,20 @@ export const roadmapDateSourceSchema = z.literal('eta')
 export const roadmapFrequencySchema = z.enum(['monthly', 'quarterly', 'semiannual'])
 export const roadmapVisibilitySchema = z.enum(['public', 'team', 'segment'])
 
+/**
+ * Deprecated boolean spelling of roadmap visibility, still accepted on API
+ * input: `false` means team-only, `true` means public. `visibility` wins when
+ * both are sent.
+ */
+export const legacyRoadmapIsPublicSchema = z.boolean().optional()
+
+export function applyLegacyRoadmapIsPublic<
+  T extends { isPublic?: boolean; visibility?: z.infer<typeof roadmapVisibilitySchema> },
+>({ isPublic, ...input }: T): Omit<T, 'isPublic'> {
+  if (input.visibility !== undefined || isPublic === undefined) return input
+  return { ...input, visibility: isPublic ? 'public' : 'team' }
+}
+
 function compatibleIdSchema(schema: { safeParse: (value: unknown) => { success: boolean } }) {
   return z.string().refine((value) => schema.safeParse(value).success, 'Invalid TypeID')
 }

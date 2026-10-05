@@ -66,6 +66,13 @@ export interface LedgerEntry {
 
 export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   {
+    file: 'apps/web/src/lib/server/domains/ai/structured-chat.ts',
+    name: 'fallbackLevels',
+    category: 'fleet-wide',
+    reason:
+      'Maps an AI endpoint (the process-wide OPENAI_BASE_URL plus the model name) to how far structured requests had to fall back from json_schema. The base URL is process config and the model is a per-feature setting, neither is workspace data, and every workspace in the process talks to the same endpoints. A cross-workspace hit returns only "this endpoint and model reject json_schema (or response_format)", which is exactly what the requesting workspace would learn from its own first request; the worst case is one extra fallback request.',
+  },
+  {
     file: 'apps/web/src/lib/server/functions/read-batch.ts',
     name: 'registeredReads',
     category: 'fleet-wide',
@@ -115,6 +122,15 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'auth_config_version is a small per-workspace counter, so two workspaces sitting on the same ' +
       'number is routine; compared across workspaces the guard reads "unchanged" and hands back an ' +
       'instance built for someone else.',
+  },
+  {
+    file: 'apps/web/src/lib/server/domains/conversation/conversation-translation.service.ts',
+    name: 'overAllowanceWarned',
+    category: 'workspace-keyed',
+    reason:
+      'Remembers which allowance windows already logged the over-allowance warning. Window start ' +
+      'times are shared by every workspace on calendar months, so a cross-workspace hit would ' +
+      "silence another workspace's one warning for the period.",
   },
   {
     file: 'apps/web/src/lib/server/auth/index.ts',
@@ -262,6 +278,30 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       "another picked up the LATER scope's client, reaching its own bucket through somebody " +
       "else's endpoint and credentials. The bucket is no longer read from here at all: it is " +
       'captured with the credentials at construction.',
+  },
+  {
+    file: 'apps/web/src/lib/server/storage/s3.ts',
+    name: 'preNamespaceHits',
+    category: 'refuses-pooled',
+    reason:
+      'Bare bucket-root key → when its pre-namespace original was last seen present; bounded and LRU-evicted, kept apart from misses so a flood of made-up keys cannot evict it. ' +
+      'It decides whether a token-less link is served, so a shared entry would let one ' +
+      "workspace's bucket vouch for a key in another workspace's namespace. " +
+      'isPreNamespaceObject, its only writer, returns false before touching it under pooled ' +
+      'tenancy or inside any workspace scope, so it only ever describes the one bucket a ' +
+      "single-workspace process's only workspace owns.",
+  },
+  {
+    file: 'apps/web/src/lib/server/storage/s3.ts',
+    name: 'preNamespaceMisses',
+    category: 'refuses-pooled',
+    reason:
+      'Bare bucket-root key → when its pre-namespace original was last seen absent (HEAD 403 or 404); bounded and LRU-evicted, short TTL. ' +
+      'It decides whether a token-less link is served, so a shared entry would let one ' +
+      "workspace's bucket vouch for a key in another workspace's namespace. " +
+      'isPreNamespaceObject, its only writer, returns false before touching it under pooled ' +
+      'tenancy or inside any workspace scope, so it only ever describes the one bucket a ' +
+      "single-workspace process's only workspace owns.",
   },
   {
     file: 'apps/web/src/lib/server/storage/workspace-scope.ts',
@@ -527,11 +567,27 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   },
   {
     file: 'packages/email/src/index.ts',
-    name: 'inboundFetchClient',
+    name: 'resendClient',
     category: 'fleet-wide',
     reason:
-      'Built from the inbound API key, which §8 confirms the control plane writes fleet-wide into ' +
-      'every workspace. Fetches an inbound body by provider id; carries no outbound mail.',
+      'Built from EMAIL_RESEND_API_KEY/RESEND_API_KEY, a process environment value (§8: written ' +
+      'fleet-wide into every workspace), and stored beside the key it was built from so a key ' +
+      'change rebuilds it. A cross-workspace hit returns the client the requesting workspace ' +
+      'would have built from the same key. It fetches inbound bodies by provider id and, when ' +
+      'Resend is the outbound provider, sends; every per-message field (From, To, headers) is ' +
+      'passed per call, so it holds nothing of any workspace.',
+  },
+  {
+    file: 'packages/email/src/idempotency.ts',
+    name: 'scope',
+    category: 'process-lifetime',
+    reason:
+      "The AsyncLocalStorage instance carrying one logical send's idempotency key. " +
+      'withEmailIdempotencyKey opens a new store per send (a hook job id, or a fresh uuid around ' +
+      "the conversation retry loop), so concurrent workspaces and sends never read each other's " +
+      'key, and the instance itself holds no value outside those contexts. Only dispatch reads it, ' +
+      'at send time; work armed inside a send that later sends mail of its own would inherit the ' +
+      'key, and nothing inside either scope does.',
   },
   {
     file: 'packages/email/src/ses.ts',
@@ -607,6 +663,38 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     reason:
       'OpenAPI path registrations accumulated at import time from static zod schemas. The document is ' +
       'identical for every workspace.',
+  },
+  {
+    file: 'apps/web/src/lib/server/domains/api/rate-limit.ts',
+    name: 'lastEdgeRejectionWarnAt',
+    category: 'process-lifetime',
+    reason:
+      'Timestamp throttling the rejected-edge-address warning to one line a minute. It holds a ' +
+      'single number about the PROCESS and no workspace data: the edge secret and trusted origins ' +
+      'are process configuration, so a rejection seen in one workspace is the same misconfiguration ' +
+      'in every other, and sharing the throttle across workspaces costs at most a minute of ' +
+      'suppressed duplicate log lines.',
+  },
+  {
+    file: 'apps/web/src/lib/server/domains/api/rate-limit.ts',
+    name: 'lastTrustedHeaderWarnAt',
+    category: 'process-lifetime',
+    reason:
+      'Timestamp throttling the unusable TRUSTED_CLIENT_IP_HEADER warning to one line a minute. It ' +
+      'holds a single number about the PROCESS and no workspace data, never the header value: the ' +
+      'header name is process configuration and the proxy that fails to set it fronts every ' +
+      'workspace alike, so sharing the throttle across workspaces costs at most a minute of ' +
+      'suppressed duplicate log lines.',
+  },
+  {
+    file: 'apps/web/src/lib/server/domains/api/rate-limit.ts',
+    name: 'warnedForwardedHeaders',
+    category: 'process-lifetime',
+    reason:
+      'Warn-once latch for the missing TRUSTED_PROXY_HOPS setting. It holds a single boolean about the ' +
+      'PROCESS and no workspace data: TRUSTED_PROXY_HOPS is process configuration, so the condition ' +
+      'it describes has no workspace dimension, and sharing the latch across workspaces costs one ' +
+      'suppressed duplicate log line.',
   },
   {
     file: 'apps/web/src/lib/server/domains/conversation/conversation.email-imap-queue.ts',
@@ -1213,5 +1301,19 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'A stateless closure bundle from createAttributeDefinitionService. Every method reads and ' +
       'writes the ACTIVE workspace\u2019s company_attribute_definitions rows through the db proxy ' +
       'on each call; it caches nothing, so a cross-workspace hit cannot return another tenant\u2019s data.',
+  },
+  {
+    file: 'apps/web/src/lib/server/auth/provider-trust.ts',
+    name: 'reportedObservations',
+    category: 'workspace-scoped-key',
+    keyedBy: 'row.id',
+    reason:
+      'The last connection-test state this process logged for each untested identity provider, ' +
+      'keyed by the provider row id (a random uuid, unique across workspaces) and holding only ' +
+      'that row’s two test timestamps, so an auth rebuild does not repeat the same info line. ' +
+      'One entry per row, dropped once the provider is trusted, so it is bounded by the number ' +
+      'of untested providers across the fleet. It holds no workspace data and gates nothing but ' +
+      'a log line: a wrong hit would drop one informational line, never change which providers ' +
+      'are trusted.',
   },
 ]

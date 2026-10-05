@@ -61,7 +61,7 @@ export const PERMISSIONS = {
   POST_SET_OWNER: 'post.set_owner', // assign owner / assignee
   POST_SET_AUTHOR: 'post.set_author', // override author on create
   POST_MERGE: 'post.merge', // merge / unmerge
-  POST_EXPORT: 'post.export', // RESERVED: bulk export
+  POST_EXPORT: 'post.export', // bulk export (posts CSV)
   POST_SET_PINNED: 'post.set_pinned', // RESERVED: pin a post to the top of its board
   POST_SET_ETA: 'post.set_eta', // RESERVED: set a post ETA (time-based roadmap)
   POST_APPROVE: 'post.approve', // approve / reject the pre-publication moderation queue
@@ -321,7 +321,7 @@ export const PERMISSION_CATALOGUE: ReadonlyArray<{
   {
     key: PERMISSIONS.POST_EXPORT,
     category: 'feedback',
-    description: 'Bulk export posts (reserved; not yet enforced)',
+    description: 'Bulk export posts',
   },
   {
     key: PERMISSIONS.POST_SET_PINNED,

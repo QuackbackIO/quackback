@@ -660,6 +660,43 @@ describe('conversation email send retry', () => {
     delete process.env.EMAIL_INBOUND_SIGNING_SECRET
   })
 
+  it('sends one idempotency key for every attempt of one email, and a new one per email', async () => {
+    isPrincipalOnline.mockResolvedValue(false)
+    visitorRows = [{ type: 'user', email: 'account@x.com' }]
+    const { currentEmailIdempotencyKey } = await import('@quackback/email/idempotency')
+    const keys: Array<string | undefined> = []
+    sendConversationMessageEmail
+      .mockImplementationOnce(async () => {
+        keys.push(currentEmailIdempotencyKey())
+        throw new Error('provider 503')
+      })
+      .mockImplementationOnce(async () => {
+        keys.push(currentEmailIdempotencyKey())
+        return { sent: true }
+      })
+      .mockImplementationOnce(async () => {
+        keys.push(currentEmailIdempotencyKey())
+        return { sent: true }
+      })
+
+    const reply = () =>
+      notifyAgentReply({
+        conversationId,
+        visitorPrincipalId,
+        content: 'answer',
+        agentName: 'Agent',
+        channel: 'messenger',
+      })
+    await reply()
+    await reply()
+
+    expect(keys).toHaveLength(3)
+    expect(keys[0]).toMatch(/^qb-[0-9a-f]{64}$/)
+    expect(keys[1]).toBe(keys[0])
+    expect(keys[2]).toMatch(/^qb-[0-9a-f]{64}$/)
+    expect(keys[2]).not.toBe(keys[0])
+  })
+
   it('does not retry an error that declares itself permanent', async () => {
     // Retrying is the default precisely because a hand-maintained taxonomy of
     // transient errors fails closed. An error that says re-sending reproduces it

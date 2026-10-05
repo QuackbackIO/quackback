@@ -338,6 +338,18 @@ export function useUpdateSpamFilterConfig() {
   })
 }
 
+/** The AI spam filter switch: autosaves like the other settings toggles. */
+export function useUpdateSpamAiClassifier() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (aiClassifier: boolean) => updateSpamFilterConfigFn({ data: { aiClassifier } }),
+    meta: AUTOSAVE,
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: settingsQueries.spamFilterConfig().queryKey }),
+  })
+}
+
 /**
  * Help Center config writes are read-merge-write on the server, so every
  * mutation that changes it shares one scope and runs after the previous one settles.

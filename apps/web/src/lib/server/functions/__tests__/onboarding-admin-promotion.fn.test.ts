@@ -149,8 +149,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
 })
 
 const { saveWorkspaceAndGoalFn } = await import('../onboarding')
-const { DEFAULT_FEATURE_FLAGS } =
-  await import('@/lib/server/domains/settings/settings.types')
+const { DEFAULT_FEATURE_FLAGS } = await import('@/lib/server/domains/settings/settings.types')
 const { bootstrapAdminLock } = await import('@/lib/server/domains/principals/bootstrap-admin')
 
 beforeEach(() => {
@@ -170,6 +169,10 @@ beforeEach(() => {
   // about the ordering between exactly those two.
   hoisted.txExecute.mockImplementation(async (statement: { queryChunks?: unknown[] }) => {
     const text = JSON.stringify(statement?.queryChunks ?? '')
+    if (text.includes('setup_state')) {
+      const row = await hoisted.getSettings()
+      return row ? [{ setup_state: row.setupState ?? null }] : []
+    }
     if (!text.includes('cloud_workspace_key')) return undefined
     return [{ stamp_column: hoisted.stamp.value, metadata: null }]
   })

@@ -5,8 +5,14 @@ vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
   getTierLimits: vi.fn(),
 }))
 
-vi.mock('@/lib/server/domains/ai/usage-counter', () => ({
-  aiTokensThisMonth: vi.fn(),
+vi.mock('@/lib/server/domains/ai/usage-counter', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/domains/ai/usage-counter')>()),
+  aiTokensInWindow: vi.fn(),
+}))
+
+vi.mock('@/lib/server/domains/settings/cloud/cloud.service', async () => ({
+  getCloudConfig: async () =>
+    (await import('@/lib/server/domains/settings/cloud/cloud.types')).DISABLED_CLOUD_CONFIG,
 }))
 
 vi.mock('@/lib/server/config', () => ({
@@ -27,7 +33,7 @@ vi.mock('@tanstack/ai-openai/compatible', () => ({
 
 import { assessMergeCandidates } from '../merge-assessment.service'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
-import { aiTokensThisMonth } from '@/lib/server/domains/ai/usage-counter'
+import { aiTokensInWindow } from '@/lib/server/domains/ai/usage-counter'
 import { OSS_TIER_LIMITS } from '@/lib/server/domains/settings/tier-limits.types'
 
 describe('assessMergeCandidates — token budget gate', () => {
@@ -39,7 +45,7 @@ describe('assessMergeCandidates — token budget gate', () => {
 
   it('throws TierLimitError when budget exceeded', async () => {
     vi.mocked(getTierLimits).mockResolvedValue({ ...OSS_TIER_LIMITS, aiTokensPerMonth: 0 })
-    vi.mocked(aiTokensThisMonth).mockResolvedValue(0)
+    vi.mocked(aiTokensInWindow).mockResolvedValue(0)
     await expect(assessMergeCandidates(sourcePost, [], 'test-model')).rejects.toBeInstanceOf(
       TierLimitError
     )

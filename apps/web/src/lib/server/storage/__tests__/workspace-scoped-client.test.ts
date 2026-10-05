@@ -416,11 +416,27 @@ describe('the module exports no way to address the bucket', () => {
     expect(nullary.length).toBeGreaterThan(0)
 
     for (const [name, fn] of nullary) {
-      const result = withWorkspace('workspace-alpha', () => (fn as () => unknown)())
+      // Awaited, so an async export is judged by what it resolves to. A
+      // rejection is a refusal, which hands back nothing.
+      const result = await withWorkspace('workspace-alpha', async () => {
+        try {
+          return await (fn as () => unknown)()
+        } catch {
+          return undefined
+        }
+      })
       if (result && typeof result === 'object') {
         expect(result, `${name} returns a bucket`).not.toHaveProperty('bucket')
       }
     }
+  })
+
+  it('refuses the relocation bucket root inside a workspace scope', async () => {
+    const { openLegacyRelocationBucket, LegacyRelocationRefused } = await import('../s3')
+    await expect(
+      withWorkspace('workspace-alpha', () => openLegacyRelocationBucket())
+    ).rejects.toBeInstanceOf(LegacyRelocationRefused)
+    expect(sent).toHaveLength(0)
   })
 })
 

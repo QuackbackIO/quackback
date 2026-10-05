@@ -28,6 +28,7 @@ vi.mock('@/lib/server/storage/s3', () => ({
   verifyStorageReadToken: vi.fn(
     (_secret: string, _key: string, sig: string | null) => sig === 'ok'
   ),
+  isPreNamespaceObject: vi.fn(async () => false),
   getS3Object,
   generatePresignedGetUrl,
   StorageUnavailableError: class StorageUnavailableError extends Error {},

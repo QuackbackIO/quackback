@@ -11,7 +11,7 @@
 import { Label } from '@/components/ui/label'
 import { CopyButton } from '@/components/shared/copy-button'
 
-export function RedirectUriCallout({ uri }: { uri: string }) {
+export function RedirectUriCallout({ uri, children }: { uri: string; children?: React.ReactNode }) {
   return (
     <div className="space-y-2">
       <div>
@@ -26,6 +26,7 @@ export function RedirectUriCallout({ uri }: { uri: string }) {
         </code>
         <CopyButton value={uri} aria-label="Copy redirect URI" />
       </div>
+      {children}
     </div>
   )
 }
