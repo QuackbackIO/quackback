@@ -774,7 +774,7 @@ export async function sendMagicLinkEmail(params: SendMagicLinkParams): Promise<E
   return sendEmail({
     to,
     subject: magicLinkSubject(code, workspaceName),
-    react: MagicLinkEmail({ signInUrl, code, logoUrl }),
+    react: MagicLinkEmail({ signInUrl, code, logoUrl, workspaceName }),
     emailType: 'MagicLinkEmail',
     preview: { signInUrl, code },
   })
