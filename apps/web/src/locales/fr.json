@@ -203,6 +203,8 @@
   "files.upload.error.blocked": "Ce type de fichier ne peut pas être envoyé",
   "files.upload.error.rateLimited": "Trop d'envois. Veuillez réessayer dans une minute.",
   "admin.inbox.filesSectionTitle": "Fichiers",
+  "admin.inbox.translationOverAllowance": "Le budget IA est épuisé. La traduction continue de fonctionner.",
+  "admin.helpCenter.autoTranslatePaused": "En pause : budget IA épuisé",
   "portal.header.nav.feedback": "Feedback",
   "portal.header.nav.roadmap": "Roadmap",
   "portal.header.nav.changelog": "Nouveautés",

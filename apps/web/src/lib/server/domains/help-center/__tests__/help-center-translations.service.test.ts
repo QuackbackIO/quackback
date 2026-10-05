@@ -172,16 +172,26 @@ describe('article translations', () => {
       { locale: 'fr', status: 'draft', updatedAt: new Date('2026-01-03') },
     ])
 
-    const statuses = await getArticleTranslationStatuses('article_1' as KbArticleId, [
-      'de',
-      'fr',
-      'es',
-    ])
+    const statuses = await getArticleTranslationStatuses(
+      'article_1' as KbArticleId,
+      ['de', 'fr', 'es'],
+      ['es']
+    )
 
     expect(statuses).toEqual([
-      { locale: 'de', status: 'published', updatedAt: new Date('2026-01-02') },
-      { locale: 'fr', status: 'draft', updatedAt: new Date('2026-01-03') },
-      { locale: 'es', status: 'untranslated', updatedAt: null },
+      {
+        locale: 'de',
+        status: 'published',
+        updatedAt: new Date('2026-01-02'),
+        autoTranslatePaused: false,
+      },
+      {
+        locale: 'fr',
+        status: 'draft',
+        updatedAt: new Date('2026-01-03'),
+        autoTranslatePaused: false,
+      },
+      { locale: 'es', status: 'untranslated', updatedAt: null, autoTranslatePaused: true },
     ])
   })
 })

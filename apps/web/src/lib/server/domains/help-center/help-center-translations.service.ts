@@ -132,16 +132,19 @@ export async function deleteArticleTranslation(
 /** One entry per enabled additional locale, for the admin editor's status pills. */
 export async function getArticleTranslationStatuses(
   articleId: KbArticleId,
-  enabledLocales: string[]
+  enabledLocales: string[],
+  pausedLocales: readonly string[] = []
 ): Promise<ArticleTranslationStatusEntry[]> {
   const rows = await listArticleTranslations(articleId)
   const byLocale = new Map(rows.map((r) => [r.locale, r]))
+  const paused = new Set(pausedLocales)
   return enabledLocales.map((locale) => {
     const row = byLocale.get(locale)
     return {
       locale,
       status: row ? row.status : 'untranslated',
       updatedAt: row?.updatedAt ?? null,
+      autoTranslatePaused: paused.has(locale),
     }
   })
 }

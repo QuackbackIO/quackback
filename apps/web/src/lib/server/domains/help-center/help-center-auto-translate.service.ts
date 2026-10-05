@@ -16,6 +16,7 @@ import {
   structuredOutputProviderOptions,
 } from '@/lib/server/domains/ai/config'
 import { createUsageLoggingMiddleware } from '@/lib/server/domains/ai/usage-middleware'
+import { getAiBudgetStatus } from '@/lib/server/domains/ai/ai-budget'
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import { getHelpCenterConfig } from '@/lib/server/domains/settings/settings.service'
@@ -78,15 +79,35 @@ Example output:
   return { system, user }
 }
 
-/** The job handler: translate one article into one locale, write a draft. */
+/** Returned instead of translating when the AI allowance is used up. */
+export interface AutoTranslatePause {
+  /** When the allowance window ends; the caller retries no later than this. */
+  pausedUntil: Date
+}
+
+/**
+ * The job handler: translate one article into one locale, write a draft.
+ *
+ * Checks the AI allowance before the model call, so a used-up allowance costs
+ * nothing and writes nothing; the caller parks the item and retries it.
+ */
 export async function translateArticleForLocale(
   articleId: KbArticleId,
   locale: string
-): Promise<void> {
+): Promise<AutoTranslatePause | undefined> {
   const model = getChatModel('helpCenterTranslate')
   if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) {
     log.debug({ article_id: articleId, locale }, 'auto-translate skipped: AI not configured')
     return
+  }
+
+  const budget = await getAiBudgetStatus()
+  if (budget.exhausted) {
+    log.info(
+      { article_id: articleId, locale, resume_at: budget.window.end.toISOString() },
+      'auto-translate paused: AI allowance used up'
+    )
+    return { pausedUntil: budget.window.end }
   }
 
   const helpCenterConfig = await getHelpCenterConfig()
