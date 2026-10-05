@@ -103,7 +103,10 @@ export async function applyOnboardingGoals(
     if (isNew && !goals.includes('product_feedback')) {
       const widget = parseWidgetConfig(patch.widgetConfig ?? row.widgetConfig)
       if (widget.tabs?.feedback !== false) {
-        patch.widgetConfig = JSON.stringify({ ...widget, tabs: { ...widget.tabs, feedback: false } })
+        patch.widgetConfig = JSON.stringify({
+          ...widget,
+          tabs: { ...widget.tabs, feedback: false },
+        })
       }
     }
     if (isNew && goals.includes('product_feedback')) {

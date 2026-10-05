@@ -301,7 +301,11 @@ describe('wizard goals read and write', () => {
 
   // A provisioner stores only its own auth keys; the anonymous switch is unset.
   const provisionedPortal = JSON.stringify({ oauth: { email: true }, openSignup: true })
-  const operatorRowWith = (createdAt: Date, portalConfig: string, goals = ['product_feedback']) => ({
+  const operatorRowWith = (
+    createdAt: Date,
+    portalConfig: string,
+    goals = ['product_feedback']
+  ) => ({
     ...operatorRow(createdAt),
     portalConfig,
     setupState: JSON.stringify({

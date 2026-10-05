@@ -139,7 +139,9 @@ it('copies the short snippet and keeps identify behind a disclosure that links t
   const copied = vi.mocked(navigator.clipboard.writeText).mock.calls[0][0]
   expect(copied).toContain('Quackback("init");')
   expect(copied).not.toContain('identify')
-  expect(screen.getByText('Copying or sending also turns Messenger on for your website.')).toBeTruthy()
+  expect(
+    screen.getByText('Copying or sending also turns Messenger on for your website.')
+  ).toBeTruthy()
 
   expect(screen.queryByRole('link', { name: 'Install settings' })).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: 'Recognise signed-in users (optional)' }))
