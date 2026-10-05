@@ -13,6 +13,7 @@ import type { JSONContent } from '@tiptap/core'
 import type { ConversationId } from '@quackback/ids'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useVisitorSurfaceRpc, type VisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
+import { useHostShown } from '@/lib/client/hooks/use-host-shown'
 import {
   createValueStore,
   useDebouncedStoreValue,
@@ -297,6 +298,10 @@ export function useMarkReadOnIncoming({
   onMarkedRef.current = onMarked
   const readThroughRef = useRef(readThrough)
   readThroughRef.current = readThrough
+  // A frame its host is hiding is not being read: what arrives meanwhile stays
+  // unread until the frame is shown again, and is read then.
+  const hostShown = useHostShown()
+  if (!hostShown) enabled = false
 
   useEffect(() => {
     if (!conversationId || !enabled) return

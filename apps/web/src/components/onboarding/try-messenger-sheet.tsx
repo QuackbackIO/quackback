@@ -193,6 +193,26 @@ function TryMessengerBody({
           'aria-labelledby': `try-messenger-${key}-tab`,
         }
 
+  // Below lg one side is hidden while staying mounted. A hidden side is not
+  // being read, so neither marks a new message read until it is shown: the
+  // inbox through its thread, the customer's frame through the host message.
+  const customerShown = wide || pane === 'customer'
+  useEffect(() => {
+    const frame = document.querySelector<HTMLIFrameElement>('#try-messenger-customer iframe')
+    try {
+      frame?.contentWindow?.postMessage(
+        // The Messenger's HOST_SHOWN_MESSAGE (see `use-host-shown`), spelled
+        // out so this admin sheet adds no module to the Messenger's chunk graph.
+        { type: 'quackback:shown', shown: customerShown },
+        window.location.origin
+      )
+    } catch {
+      // Not on the Messenger's origin yet; the next status change sends it again.
+    }
+    // Sent again as the frame's session comes up, so a frame that loaded
+    // while hidden learns it.
+  }, [customerShown, status])
+
   return (
     <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[380px_minmax(0,1fr)_300px] lg:overflow-hidden">
       <div
@@ -331,6 +351,7 @@ function TryMessengerBody({
               isVisitorTyping={false}
               isOtherAgentTyping={false}
               replyFirst
+              markRead={wide || pane === 'inbox'}
             />
           </div>
         ) : (
@@ -426,7 +447,10 @@ function TryMessengerBody({
 /** What a screen reader hears as the round trip moves on. */
 function roundTripAnnouncement(steps: ReturnType<typeof roundTripSteps>, intl: IntlShape): string {
   if (steps.seen)
-    return intl.formatMessage({ id: 'onboarding.test.done', defaultMessage: "That's the round trip" })
+    return intl.formatMessage({
+      id: 'onboarding.test.done',
+      defaultMessage: "That's the round trip",
+    })
   const done = steps.replied ? 2 : steps.sent ? 1 : 0
   if (done === 0) return ''
   return intl.formatMessage(

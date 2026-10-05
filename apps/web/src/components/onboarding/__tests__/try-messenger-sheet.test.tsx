@@ -25,8 +25,12 @@ vi.mock('../test-customer-frame', () => ({
   },
 }))
 vi.mock('@/components/conversation/agent-conversation-thread', () => ({
-  AgentConversationThread: (props: { replyFirst?: boolean }) => (
-    <div data-testid="thread" data-reply-first={String(!!props.replyFirst)} />
+  AgentConversationThread: (props: { replyFirst?: boolean; markRead?: boolean }) => (
+    <div
+      data-testid="thread"
+      data-reply-first={String(!!props.replyFirst)}
+      data-mark-read={String(props.markRead ?? true)}
+    />
   ),
 }))
 vi.mock('@/lib/client/hooks/use-conversation-stream', () => ({ useConversationStream: vi.fn() }))
@@ -103,6 +107,41 @@ describe('TryMessengerSheet', () => {
     expect(screen.getByRole('tablist').className).toContain('lg:hidden')
   })
 
+  it('on a narrow screen reads a side only while it is the one shown', async () => {
+    fns.overview.mockResolvedValue({ conversationId: 'conversation_t', testEmailAddress: null })
+    // A phone: the sheet's wide layout query does not match.
+    const matchMedia = vi.spyOn(window, 'matchMedia').mockImplementation(
+      (query: string) =>
+        ({
+          matches: false,
+          media: query,
+          addEventListener: () => {},
+          removeEventListener: () => {},
+        }) as unknown as MediaQueryList
+    )
+    renderSheet()
+    const thread = await screen.findByTestId('thread')
+    const iframe = screen.getByTitle('Messenger as a test customer') as HTMLIFrameElement
+    // A bare test frame is not on this origin; record what the sheet sends it.
+    const post = vi.spyOn(iframe.contentWindow!, 'postMessage').mockImplementation(() => {})
+    const shown = () =>
+      post.mock.calls
+        .map(([m]) => m as { type?: string; shown?: boolean })
+        .filter((m) => m.type === 'quackback:shown')
+        .map((m) => m.shown)
+
+    // The inbox is hidden behind its tab, so it leaves the customer's message unread.
+    expect(thread.getAttribute('data-mark-read')).toBe('false')
+    fireEvent.click(screen.getByRole('tab', { name: /Inbox/ }))
+    expect(screen.getByTestId('thread').getAttribute('data-mark-read')).toBe('true')
+    // The customer's frame, now hidden but still signed in, is told so.
+    await waitFor(() => expect(shown().at(-1)).toBe(false))
+    fireEvent.click(screen.getByRole('tab', { name: /Customer/ }))
+    await waitFor(() => expect(shown().at(-1)).toBe(true))
+    expect(screen.getByTestId('thread').getAttribute('data-mark-read')).toBe('false')
+    matchMedia.mockRestore()
+  })
+
   it('moves between the tabs with the arrow keys', async () => {
     fns.overview.mockResolvedValue({ conversationId: null, testEmailAddress: null })
     renderSheet()
@@ -132,7 +171,12 @@ describe('TryMessengerSheet', () => {
   it('announces each finished step to screen readers', async () => {
     fns.overview.mockResolvedValue({ conversationId: 'conversation_t', testEmailAddress: null })
     const client = new QueryClient()
-    seedThread(client, 'conversation_t', [{ senderType: 'visitor', at: '2026-10-04T10:00:00Z' }], null)
+    seedThread(
+      client,
+      'conversation_t',
+      [{ senderType: 'visitor', at: '2026-10-04T10:00:00Z' }],
+      null
+    )
     renderSheet(client)
     const live = await screen.findByTestId('round-trip-live')
     expect(live.getAttribute('role')).toBe('status')
@@ -166,13 +210,23 @@ describe('TryMessengerSheet', () => {
   it('swaps in a fresh phone code once the shown one is used or expires', async () => {
     fns.overview.mockResolvedValue({ conversationId: null, testEmailAddress: null })
     fns.mintPhone
-      .mockResolvedValueOnce({ url: 'https://acme.test/try-messenger?ott=one', token: 'one', expiresAt: '' })
-      .mockResolvedValueOnce({ url: 'https://acme.test/try-messenger?ott=two', token: 'two', expiresAt: '' })
+      .mockResolvedValueOnce({
+        url: 'https://acme.test/try-messenger?ott=one',
+        token: 'one',
+        expiresAt: '',
+      })
+      .mockResolvedValueOnce({
+        url: 'https://acme.test/try-messenger?ott=two',
+        token: 'two',
+        expiresAt: '',
+      })
     fns.phoneStatus.mockResolvedValue({ pending: true })
     const { client } = renderSheet()
     fireEvent.click(await screen.findByRole('button', { name: 'Show code' }))
     const qr = await screen.findByTestId('try-messenger-qr')
-    await waitFor(() => expect(qr.getAttribute('src')).toBe('data:qr,https://acme.test/try-messenger?ott=one'))
+    await waitFor(() =>
+      expect(qr.getAttribute('src')).toBe('data:qr,https://acme.test/try-messenger?ott=one')
+    )
     await waitFor(() => expect(fns.phoneStatus).toHaveBeenCalledWith({ data: { token: 'one' } }))
     expect(fns.mintPhone).toHaveBeenCalledTimes(1)
 
@@ -184,6 +238,8 @@ describe('TryMessengerSheet', () => {
       )
     )
     expect(fns.mintPhone).toHaveBeenCalledTimes(2)
-    expect(screen.getByText('One use, valid 10 minutes. A new code appears here once it is used.')).toBeTruthy()
+    expect(
+      screen.getByText('One use, valid 10 minutes. A new code appears here once it is used.')
+    ).toBeTruthy()
   })
 })
