@@ -1238,4 +1238,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'writes the ACTIVE workspace\u2019s company_attribute_definitions rows through the db proxy ' +
       'on each call; it caches nothing, so a cross-workspace hit cannot return another tenant\u2019s data.',
   },
+  {
+    file: 'apps/web/src/lib/server/auth/provider-trust.ts',
+    name: 'reportedObservations',
+    category: 'workspace-scoped-key',
+    keyedBy: 'row.id',
+    reason:
+      'Which identity-provider test states this process has already logged, keyed by the ' +
+      'provider row id (a random uuid, unique across workspaces) plus its two test timestamps, ' +
+      'so an auth rebuild does not repeat the same info line. It holds no workspace data and ' +
+      'gates nothing but a log line: a wrong hit would drop one informational line, never ' +
+      'change which providers are trusted.',
+  },
 ]

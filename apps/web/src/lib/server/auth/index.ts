@@ -311,31 +311,18 @@ async function createAuth() {
   // Observed, not enforced. Withdrawing it outright would stop existing
   // password users linking on their first SSO sign-in and start returning
   // "account not linked" — a regression for providers that are behaving
-  // perfectly well. So log which providers would lose it, size the blast radius
-  // from real installations, and flip afterwards. Two of the predicate's inputs
-  // (whether the provider asserts a verified address, and an admin override)
-  // also need a column that has not landed yet.
-  const { allowsAutoLinking } = await import('./provider-trust')
-  for (const c of oidcConfigs) {
-    trustedProviders.push(c.providerId)
-    const row = providerRows.find((p) => p.registrationId === c.providerId)
-    if (
-      row &&
-      !allowsAutoLinking({
-        lastSuccessfulTestAt: row.lastSuccessfulTestAt,
-        detailsChangedAt: row.detailsChangedAt,
-        // Not yet persisted; assumed true so the observation isolates the
-        // connection-test signal rather than flagging every provider.
-        assertsVerifiedEmail: true,
-        trustOverride: null,
-      })
-    ) {
-      log.warn(
-        { registrationId: c.providerId },
-        'provider would lose auto-linking under derived trust (no fresh connection test)'
-      )
-    }
-  }
+  // perfectly well. So note which providers the derived predicate would not
+  // trust, size the population from real installations, and flip afterwards.
+  // Two of the predicate's inputs (whether the provider asserts a verified
+  // address, and an admin override) also need a column that has not landed yet.
+  const { oidcTrustedProviderIds } = await import('./provider-trust')
+  trustedProviders.push(
+    ...oidcTrustedProviderIds(
+      oidcConfigs.map((c) => c.providerId),
+      providerRows,
+      log
+    )
+  )
 
   // Layer A registration filter: an OAuth provider is registered on
   // the Better-Auth instance only if creds exist AND `authConfig.oauth`
