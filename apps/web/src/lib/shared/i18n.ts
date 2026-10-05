@@ -244,16 +244,32 @@ const WIZARD_ONLY_MESSAGE_PREFIXES = [
   'onboarding.error.',
 ] as const
 
+/** The prefix of the unsubscribe page's strings, which no other page renders. */
+const UNSUBSCRIBE_MESSAGE_PREFIX = 'unsubscribe.'
+
+/** The unsubscribe page's strings in a locale: the one page that seeds them. */
+export async function loadUnsubscribeMessages(
+  locale: SupportedLocale
+): Promise<Record<string, string>> {
+  const all = await loadMessages(locale)
+  const subset: Record<string, string> = {}
+  for (const [key, value] of Object.entries(all)) {
+    if (key.startsWith(UNSUBSCRIBE_MESSAGE_PREFIX)) subset[key] = value
+  }
+  return subset
+}
+
 /**
  * The catalog an admin page seeds: everything but the strings that load with
  * a lazy surface (the file viewer, the product tour, Copilot and search), the
- * wizard's own, and email copy (formatted on the server, never rendered).
+ * wizard's and the unsubscribe page's own, and email copy (formatted on the
+ * server, never rendered).
  */
 export function adminSeedMessages(all: Record<string, string>): Record<string, string> {
   const subset: Record<string, string> = {}
   for (const [key, value] of Object.entries(all)) {
     if (isViewerMessage(key) || isTourMessage(key) || isAskMessage(key)) continue
-    if (key.startsWith('email.')) continue
+    if (key.startsWith('email.') || key.startsWith(UNSUBSCRIBE_MESSAGE_PREFIX)) continue
     if (WIZARD_ONLY_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))) continue
     subset[key] = value
   }

@@ -16,6 +16,7 @@ import {
   adminSeedMessages,
   isTourMessage,
   loadTourMessages,
+  loadUnsubscribeMessages,
 } from '../i18n'
 
 describe('normalizeLocale', () => {
@@ -224,5 +225,23 @@ describe('admin seed', () => {
     expect(tour['onboarding.tour.next']).toBe(all['onboarding.tour.next'])
     expect(Object.keys(tour).every(isTourMessage)).toBe(true)
     expect(Object.keys(tour).length).toBeGreaterThan(20)
+  })
+})
+
+describe('unsubscribe page strings', () => {
+  it('are seeded by that page alone', async () => {
+    const [all, portal, page] = await Promise.all([
+      loadMessages('de'),
+      loadPortalMessages('de'),
+      loadUnsubscribeMessages('de'),
+    ])
+    const isUnsubscribe = (key: string) => key.startsWith('unsubscribe.')
+    expect(Object.keys(page).length).toBeGreaterThan(30)
+    expect(Object.keys(page).every(isUnsubscribe)).toBe(true)
+    expect(page['unsubscribe.button']).toBe(all['unsubscribe.button'])
+    expect(Object.keys(portal).filter(isUnsubscribe)).toEqual([])
+    expect(Object.keys(adminSeedMessages(all)).filter(isUnsubscribe)).toEqual([])
+    // The post page's resubscribe banner is portal copy.
+    expect(portal['portal.unsubscribeBanner.dismiss']).toBe(all['portal.unsubscribeBanner.dismiss'])
   })
 })
