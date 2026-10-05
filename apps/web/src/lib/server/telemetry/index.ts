@@ -20,8 +20,8 @@ const TWENTY_THREE_HOURS = 23 * 60 * 60 * 1000
 
 async function sendPing(): Promise<void> {
   try {
-    const payload = await buildPayload()
-    await sendTelemetryPing(payload)
+    const { payload, workspaceId } = await buildPayload()
+    await sendTelemetryPing(payload, workspaceId)
   } catch {
     // Silent failure
   }

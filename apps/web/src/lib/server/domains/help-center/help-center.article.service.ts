@@ -17,6 +17,7 @@ import { rehostExternalImages } from '@/lib/server/content/rehost-images'
 import { slugify } from '@/lib/shared/utils/slugify'
 import { uniqueHelpCenterSlug } from './help-center.slug'
 import { deleteRedirectRulesForTarget } from './help-center-redirect-rules.service'
+import { cancelPendingAutoTranslations } from './help-center-translate-jobs'
 import type {
   HelpCenterArticleWithCategory,
   CreateArticleInput,
@@ -360,6 +361,8 @@ export async function deleteArticle(id: KbArticleId): Promise<void> {
   // No DB-level FK on redirect rules (polymorphic target) -- remove any rule
   // pointing at this article explicitly (domains/languages §2).
   await deleteRedirectRulesForTarget('article', id)
+  // Nothing left to translate.
+  await cancelPendingAutoTranslations(id)
 }
 
 export async function restoreArticle(id: KbArticleId): Promise<HelpCenterArticleWithCategory> {

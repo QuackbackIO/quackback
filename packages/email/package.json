@@ -11,6 +11,8 @@
     "./templates": "./src/templates/index.ts",
     "./anon": "./src/anon.ts",
     "./message-id": "./src/message-id.ts",
+    "./idempotency": "./src/idempotency.ts",
+    "./provider": "./src/provider.ts",
     "./recipient": "./src/recipient.ts",
     "./sender": "./src/sender.ts",
     "./ses": "./src/ses.ts",

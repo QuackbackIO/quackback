@@ -119,6 +119,8 @@ function registryKey(namespace: string, channel: string): string {
 }
 
 function dispatch(namespace: string, listener: RealtimeListener, raw: string): void {
+  // Delivery-check probes share the channel and are not envelopes.
+  if (raw.startsWith('__verify__')) return
   let envelope: Envelope
   try {
     envelope = JSON.parse(raw) as Envelope
@@ -191,6 +193,37 @@ async function directConnection(): Promise<{ url: string; password?: () => Promi
   return { url: workspace.database.directUrl, password: () => resolveWorkspacePassword(workspace) }
 }
 
+/**
+ * One notify round trip after a listener first connects. Behind a
+ * transaction-mode pooler `LISTEN` is accepted and nothing is delivered, so
+ * without this check realtime goes quiet with no signal. Never throws: a
+ * failed check must not take down the subscribe that triggered it.
+ */
+async function checkDelivery(namespace: string, listener: RealtimeListener): Promise<void> {
+  let ok: boolean
+  try {
+    ok = await listener.verify()
+  } catch (err) {
+    // The probe itself failed (outage, connection limit), so nothing is known
+    // about delivery and the pooler diagnosis would be a guess.
+    log.warn({ err, workspace: namespace }, 'realtime delivery check could not run')
+    return
+  }
+  if (ok) return
+  // The remedy differs by tenancy: a single-workspace install is told which
+  // variable to change, a pooled one which registry field, by workspace id and
+  // never by URL.
+  const remedy = isPooledTenancy()
+    ? `the direct database URL registered for workspace ${namespace} must be a direct or ` +
+      'session-mode connection'
+    : 'DATABASE_URL must be a direct or session-mode connection'
+  log.error(
+    { workspace: namespace },
+    'realtime notifications are not being delivered. Realtime uses Postgres LISTEN/NOTIFY, ' +
+      `so ${remedy}, not a transaction-mode pooler (for example PgBouncer in transaction mode).`
+  )
+}
+
 async function acquireConnection(namespace: string): Promise<WorkspaceConnection> {
   const existing = connections.get(namespace)
   if (existing) {
@@ -221,6 +254,7 @@ async function acquireConnection(namespace: string): Promise<WorkspaceConnection
     box.listener = listener
     const conn: WorkspaceConnection = { listener, refs: 0 }
     connections.set(namespace, conn)
+    void checkDelivery(namespace, listener)
     return conn
   })()
 

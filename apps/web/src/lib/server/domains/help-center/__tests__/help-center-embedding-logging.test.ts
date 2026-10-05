@@ -11,7 +11,8 @@ vi.mock('@/lib/server/domains/ai/models', () => ({
   getEmbeddingModel: vi.fn(() => 'text-embedding-3-small'),
 }))
 
-vi.mock('@/lib/server/domains/ai/usage-log', () => ({
+vi.mock('@/lib/server/domains/ai/usage-log', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/domains/ai/usage-log')>()),
   withUsageLogging: (...args: unknown[]) => mockWithUsageLogging(...args),
 }))
 

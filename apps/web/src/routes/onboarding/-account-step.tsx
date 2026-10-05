@@ -7,6 +7,7 @@ import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { startOidcSignIn } from '@/lib/client/start-oidc-sign-in'
 import type { WorkspaceClaim } from '@/lib/server/functions/onboarding'
 import type { OidcSignInButton } from '@/lib/shared/oidc-sign-in-button'
+import { track } from '@/lib/client/analytics'
 
 /** Sign-in methods the workspace actually allows, in the shape
  *  `PortalAuthFormInline` already consumes on the portal. */
@@ -43,12 +44,15 @@ const ONBOARDING_CALLBACK = '/onboarding'
  * The router context is refreshed FIRST: `/onboarding` decides on the session
  * it can see, and a stale one sends the user straight back to this screen.
  */
-function useAdvanceOnAuthSuccess(): void {
+function useAdvanceOnAuthSuccess(
+  event: 'onboarding_account_created' | 'onboarding_signed_in'
+): void {
   const router = useRouter()
   const navigate = useNavigate()
 
   useAuthBroadcast({
     onSuccess: () => {
+      void track(event)
       void (async () => {
         await router.invalidate()
         await navigate({ to: ONBOARDING_CALLBACK })
@@ -88,13 +92,22 @@ export function AccountStep({ ssoEnabled, claim, authConfig, workspaceName }: Ac
   // complete in a popup that closes itself, and the code step completes in
   // this window with nothing to navigate it. Without this the sign-in worked
   // and the wizard just sat there.
-  useAdvanceOnAuthSuccess()
+  // Only the first-user form creates an account; the others sign an existing
+  // owner in, which a conversion funnel must not count as a sign-up.
+  const signInOnly = ssoEnabled || claim.claimed || !claim.openToClaim
+  useAdvanceOnAuthSuccess(signInOnly ? 'onboarding_signed_in' : 'onboarding_account_created')
 
   if (ssoEnabled) return <SsoStep />
   if (claim.claimed || !claim.openToClaim) {
     return (
       <SignInOnlyStep
-        reason={claim.claimed ? 'claimed' : 'notOpen'}
+        reason={
+          claim.claimed
+            ? 'claimed'
+            : claim.closedReason === 'setupComplete'
+              ? 'setupComplete'
+              : 'notOpen'
+        }
         claim={claim}
         authConfig={authConfig}
         workspaceName={workspaceName}
@@ -116,7 +129,11 @@ export function AccountStep({ ssoEnabled, claim, authConfig, workspaceName }: Ac
  * setup mail. Someone who is not the owner does not need the address; they
  * need to know the form is not theirs, which the copy says outright.
  *
- * The two reasons get different copy because they are different situations to
+ * A finished workspace with no admin left is a third situation: nobody is
+ * waiting to set it up, so it asks for an admin account and offers nothing to
+ * create.
+ *
+ * The reasons get different copy because they are different situations to
  * be in, and telling a customer waiting on a workspace they just paid for that
  * it "already has an owner" would send them to support for no reason.
  */
@@ -126,7 +143,7 @@ function SignInOnlyStep({
   authConfig,
   workspaceName,
 }: {
-  reason: 'claimed' | 'notOpen'
+  reason: 'claimed' | 'notOpen' | 'setupComplete'
   claim: WorkspaceClaim
   authConfig: AccountAuthConfig
   workspaceName?: string
@@ -140,6 +157,11 @@ function SignInOnlyStep({
               id="onboarding.account.claimed.title"
               defaultMessage="This workspace already has an owner"
             />
+          ) : reason === 'setupComplete' ? (
+            <FormattedMessage
+              id="onboarding.account.setupComplete.title"
+              defaultMessage="This workspace is already set up"
+            />
           ) : (
             <FormattedMessage
               id="onboarding.account.notOpen.title"
@@ -152,6 +174,11 @@ function SignInOnlyStep({
             <FormattedMessage
               id="onboarding.account.claimed.signIn"
               defaultMessage="Setup belongs to an existing admin. Sign in as that admin to pick up where setup left off."
+            />
+          ) : reason === 'setupComplete' ? (
+            <FormattedMessage
+              id="onboarding.account.setupComplete.signIn"
+              defaultMessage="Sign in with an admin account."
             />
           ) : (
             <FormattedMessage

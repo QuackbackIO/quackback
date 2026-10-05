@@ -22,6 +22,7 @@
 import type { GenericOAuthConfig as LibraryGenericOAuthConfig } from 'better-auth/plugins'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import { authorizeRequestFor, supportsPrompt } from '@/lib/shared/oidc-request'
+import { oidcRedirectStyleFrom, oidcRedirectUri } from '@/lib/shared/oidc-redirect'
 import { resolveIdentity, pickAvatarUrl } from './resolve-identity'
 import { finalizeProfileOutcome } from '@/lib/shared/sso-profile-outcome'
 import {
@@ -71,6 +72,13 @@ export interface GenericOAuthConfig {
    */
   disableProviderLogout: true
   discoveryUrl?: string
+  /**
+   * The redirect URI sent on the authorize request AND the token exchange.
+   * The library uses this one value for both, which is what keeps a code
+   * minted for this URI redeemable. Set only for a `legacy` provider; a
+   * `current` one leaves it to the library's own `/callback/<id>` default.
+   */
+  redirectURI?: string
   pkce?: boolean
   authorizationUrl?: string
   tokenUrl?: string
@@ -131,6 +139,12 @@ export interface BuildGenericOAuthConfigsArgs {
   /** `tierLimits.features.customOidcProvider` — gates ALL OIDC registration. */
   tierAllowsOidc: boolean
   /**
+   * The server's base URL, which the library also builds its callback URLs
+   * from. Needed to send a `legacy` provider's redirect URI; without it every
+   * provider falls back to the library default.
+   */
+  baseUrl?: string
+  /**
    * Fetches a provider's discovery document, or null when it is unreachable.
    *
    * Injected the same way `creds` is, which keeps this module free of fetch and
@@ -178,6 +192,7 @@ export async function buildGenericOAuthConfigs({
   providers,
   creds,
   tierAllowsOidc,
+  baseUrl,
   discovery,
   fetchUserInfo,
   onResolutionWarning,
@@ -328,11 +343,21 @@ export async function buildGenericOAuthConfigs({
       }
     }
 
+    // A provider registered at its IdP before the callback path moved keeps
+    // sending the URL it registered. Many IdPs match it exactly, and would
+    // refuse the authorize request before any rewrite on the way back in
+    // could help.
+    const redirectURI =
+      baseUrl && oidcRedirectStyleFrom(provider.redirectStyle) === 'legacy'
+        ? oidcRedirectUri(baseUrl, provider.registrationId, 'legacy')
+        : undefined
+
     configs.push({
       getUserInfo,
       providerId: provider.registrationId,
       clientId,
       clientSecret: c.clientSecret,
+      ...(redirectURI ? { redirectURI } : {}),
       ...(discoveryUrl ? { discoveryUrl } : {}),
       ...(authorizationUrl ? { authorizationUrl } : {}),
       ...(tokenUrl ? { tokenUrl } : {}),

@@ -16,12 +16,13 @@ import {
   createRouter,
 } from '@tanstack/react-router'
 
-const anonymousSignIn = vi.fn(async () => ({ error: null }))
+const anonymousSignIn = vi.fn(async (_opts?: unknown) => ({ error: null }))
 vi.mock('@/lib/client/auth-client', () => ({
-  authClient: { signIn: { anonymous: () => anonymousSignIn() } },
+  authClient: { signIn: { anonymous: (opts?: unknown) => anonymousSignIn(opts) } },
 }))
 
 const { useEnsureAnonSession } = await import('../use-ensure-anon-session')
+const { SESSION_AUDIENCE_HEADER } = await import('@/lib/shared/roles')
 
 afterEach(() => {
   cleanup()
@@ -89,5 +90,19 @@ describe('useEnsureAnonSession', () => {
       await expect(ensure()).resolves.toBe(true)
     })
     expect(anonymousSignIn).toHaveBeenCalledTimes(1)
+  })
+
+  // Without the marker the server tags the session for the widget, and every
+  // portal write (post, vote, comment) is then refused by requireAuth.
+  it('marks its anonymous mint as the portal audience', async () => {
+    const router = buildRouter(null)
+    render(<RouterProvider router={router} />)
+    await screen.findByText('card')
+
+    await act(async () => {
+      await ensure()
+    })
+    const [opts] = anonymousSignIn.mock.calls[0] as [{ fetchOptions?: RequestInit } | undefined]
+    expect(new Headers(opts?.fetchOptions?.headers).get(SESSION_AUDIENCE_HEADER)).toBe('portal')
   })
 })

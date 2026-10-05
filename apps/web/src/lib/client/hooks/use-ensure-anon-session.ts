@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { authClient } from '@/lib/client/auth-client'
+import { SESSION_AUDIENCE_HEADER } from '@/lib/shared/roles'
 
 export function useEnsureAnonSession(): () => Promise<boolean> {
   const router = useRouter()
@@ -31,7 +32,11 @@ export function useEnsureAnonSession(): () => Promise<boolean> {
   return useCallback(async (): Promise<boolean> => {
     if (hasSessionRef.current) return true
     try {
-      const result = await authClient.signIn.anonymous()
+      // The marker tags the session for the portal; unmarked mints are the
+      // widget's, which site surfaces such as posting and voting refuse.
+      const result = await authClient.signIn.anonymous({
+        fetchOptions: { headers: { [SESSION_AUDIENCE_HEADER]: 'portal' } },
+      })
       if (result.error) {
         console.error('[anon-session] Anonymous sign-in failed:', result.error)
         return false

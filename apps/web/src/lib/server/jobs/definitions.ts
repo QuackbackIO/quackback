@@ -432,6 +432,23 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       ),
   },
   {
+    // Releases auto-translations parked at the AI allowance once allowance is
+    // available again (an upgrade mid-window). Parked rows run on their own at
+    // the window's end; this only brings them forward. Inert while nothing is
+    // parked.
+    name: 'help-center-translate-resume',
+    cron: '25 * * * *',
+    maxAttempts: 1,
+    cronEnabled: () =>
+      import('@/lib/server/domains/help-center/help-center-translate-resume').then((m) =>
+        m.hasPausedTranslations()
+      ),
+    handler: () =>
+      import('@/lib/server/domains/help-center/help-center-translate-resume').then(
+        (m) => m.runHelpCenterTranslateResume
+      ),
+  },
+  {
     // Was `{email-imap}`, a 60s repeatable poll. `cronEnabled` keeps the
     // schedule inert unless an IMAP mailbox is actually configured, which is
     // what the reference achieved by never constructing the worker.

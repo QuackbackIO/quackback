@@ -10,7 +10,7 @@
  * `claim_mapping` column without erasing the slices it does not render.
  */
 import { toast } from 'sonner'
-import { authProviderCallbackPath } from '@/lib/shared/auth-providers'
+import { oidcRedirectUri, type OidcRedirectStyle } from '@/lib/shared/oidc-redirect'
 import type { Role } from '@/lib/shared/roles'
 import {
   DEFAULT_IDENTITY_SOURCES,
@@ -77,14 +77,18 @@ export const ROLES: Role[] = ['admin', 'member', 'user']
 /** The role section of `claim_mapping` — the claim→role rules. */
 export type RoleMapping = NonNullable<IdentityProviderClaimMapping['role']>
 
-/** Redirect URI the admin copies into the IdP. Matches the path Better Auth
- *  1.7 sends on authorize: `/api/auth/callback/<registrationId>`. */
-export function redirectUriFor(baseUrl: string | undefined, registrationId: string): string {
+/** Redirect URI the admin copies into the IdP: the one sign-in sends for a
+ *  provider with this redirect style (see `oidc-redirect.ts`). */
+export function redirectUriFor(
+  baseUrl: string | undefined,
+  registrationId: string,
+  style: OidcRedirectStyle
+): string {
   // Build from the SERVER's configured base URL (what Better-Auth actually uses
   // for the OAuth redirect_uri), not window.location.origin — those diverge
   // behind a proxy/tunnel (e.g. ngrok) and a mismatch breaks the OAuth flow.
   const origin = baseUrl || (typeof window !== 'undefined' ? window.location.origin : '')
-  return `${origin.replace(/\/+$/, '')}${authProviderCallbackPath(registrationId)}`
+  return oidcRedirectUri(origin, registrationId, style)
 }
 
 /** New providers get an `oidc_<id>` registrationId (stable across the
