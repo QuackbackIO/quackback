@@ -66,6 +66,13 @@ export interface LedgerEntry {
 
 export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   {
+    file: 'apps/web/src/lib/server/domains/ai/structured-chat.ts',
+    name: 'needsJsonObjectFallback',
+    category: 'fleet-wide',
+    reason:
+      'The set of AI base URLs whose server rejected json_schema. The key is the process-wide OPENAI_BASE_URL, which is process config and not workspace data, so every workspace in the process talks to the same endpoints. A cross-workspace hit returns only "this endpoint rejects json_schema", which is exactly what the requesting workspace would learn from its own first request; the worst case is one extra json_object call.',
+  },
+  {
     file: 'apps/web/src/lib/server/functions/read-batch.ts',
     name: 'registeredReads',
     category: 'fleet-wide',
