@@ -297,7 +297,10 @@ export async function buildGenericOAuthConfigs({
           warnings: warnings ?? [],
           provenance: {},
         },
-        { allowMissingEmail: allowsMissingEmail(provider.claimMapping) }
+        {
+          allowMissingEmail: allowsMissingEmail(provider.claimMapping),
+          usernameClaim: identityMapping.usernameClaim,
+        }
       )
 
       // Gap-fill runs LAST, after every real source has been tried, so it can
@@ -323,10 +326,10 @@ export async function buildGenericOAuthConfigs({
       }
 
       // Better-Auth's genericOAuth derives the avatar from `image` only, so
-      // hand it the resolved `picture` URL. Better-Auth persists it only when it
+      // hand it the resolved avatar URL (the mapped claim, else `picture`). Better-Auth persists it only when it
       // CREATES the user; an existing account is backfilled by
       // `handleAvatarBackfillAfter` (fill-if-empty, never overwrites).
-      const resolvedImage = image ?? pickAvatarUrl(claims)
+      const resolvedImage = image ?? pickAvatarUrl(claims, identityMapping.imageClaim)
 
       // Raw claims first, mapped fields last: the mapped values are the
       // resolved answer and must not be shadowed by a same-named raw claim.

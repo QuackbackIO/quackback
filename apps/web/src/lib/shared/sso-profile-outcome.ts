@@ -4,6 +4,7 @@
  */
 
 import type { JsonValue } from './json'
+import { getClaimByPath } from './oidc-claim-mapping'
 import type { BindingState, FieldProvenance, ResolveWarning } from './sso-claim-binder'
 
 export type ProfileOutcomeKind =
@@ -48,13 +49,20 @@ function readableFromSubject(subject: string): string {
  * A display name from the claims, falling back to the subject. Ordered by how
  * deliberately the person chose it: a handle they set, then a nickname, then
  * whatever can be read out of the identifier.
+ *
+ * A mapped username claim replaces the two standard handle claims rather than
+ * joining them: the admin named the claim that holds the handle, so a
+ * same-named standard claim from the provider is not a better guess.
  */
-export function synthesizeName(claims: Record<string, unknown>, subject: string): string {
-  return (
-    usableClaim(claims.preferred_username) ??
-    usableClaim(claims.nickname) ??
-    readableFromSubject(usableClaim(subject) ?? '')
-  )
+export function synthesizeName(
+  claims: Record<string, unknown>,
+  subject: string,
+  usernameClaim?: string
+): string {
+  const handle = usernameClaim
+    ? usableClaim(getClaimByPath(claims, usernameClaim))
+    : (usableClaim(claims.preferred_username) ?? usableClaim(claims.nickname))
+  return handle ?? readableFromSubject(usableClaim(subject) ?? '')
 }
 
 /** Matches Better-Auth genericOAuth's stored-email lowercase. */
@@ -69,7 +77,7 @@ export type ProfileFinalizationInput = Pick<
 
 export function finalizeProfileOutcome(
   bound: ProfileFinalizationInput,
-  opts: { allowMissingEmail: boolean }
+  opts: { allowMissingEmail: boolean; usernameClaim?: string }
 ): ProfileOutcome {
   const { identity, acceptedClaims, warnings, provenance } = bound
   const base = {
@@ -86,7 +94,7 @@ export function finalizeProfileOutcome(
       placeholderEmail: false,
     }
   }
-  const name = identity.name ?? synthesizeName(acceptedClaims, identity.id)
+  const name = identity.name ?? synthesizeName(acceptedClaims, identity.id, opts.usernameClaim)
   const nameSynthesized = identity.name === undefined
   if (!identity.email) {
     return {

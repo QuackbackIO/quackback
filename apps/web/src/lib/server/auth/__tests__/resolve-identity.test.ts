@@ -663,3 +663,26 @@ describe('pickAvatarUrl — the OIDC `picture` claim', () => {
     expect(pickAvatarUrl({ picture: 'javascript:alert(1)' })).toBeUndefined()
   })
 })
+
+describe('pickAvatarUrl with a mapped avatar claim', () => {
+  it('reads the mapped claim, including a nested path, and accepts an extension-less URL', () => {
+    expect(
+      pickAvatarUrl({ profile: { photo: 'https://cdn.example.com/123/456' } }, 'profile.photo')
+    ).toBe('https://cdn.example.com/123/456')
+  })
+
+  it('never falls back to picture once a claim is mapped', () => {
+    expect(pickAvatarUrl({ picture: 'https://cdn.example.com/p.png' }, 'photo_url')).toBeUndefined()
+  })
+
+  it('refuses a value that is not an http(s) URL', () => {
+    expect(pickAvatarUrl({ photo_url: 'Sam Lee' }, 'photo_url')).toBeUndefined()
+    expect(pickAvatarUrl({ photo_url: 'javascript:alert(1)' }, 'photo_url')).toBeUndefined()
+  })
+
+  it('reads picture when no claim is mapped', () => {
+    expect(pickAvatarUrl({ picture: 'https://cdn.example.com/p.png' })).toBe(
+      'https://cdn.example.com/p.png'
+    )
+  })
+})

@@ -80,3 +80,42 @@ describe('sso-profile-outcome', () => {
     expect(fromSubject).not.toContain(':')
   })
 })
+
+describe('synthesizeName with a mapped username claim', () => {
+  it('uses the mapped claim, including a nested path, before the subject', () => {
+    expect(
+      synthesizeName(
+        { user: { handle: 'sam_lee' }, preferred_username: 'other' },
+        '42',
+        'user.handle'
+      )
+    ).toBe('sam_lee')
+  })
+
+  it('skips the standard handle claims once a username claim is mapped', () => {
+    expect(
+      synthesizeName({ preferred_username: 'other', nickname: 'nick' }, '42', 'user.handle')
+    ).toBe('42')
+  })
+
+  it('keeps the standard order when no username claim is mapped', () => {
+    expect(synthesizeName({ preferred_username: 'pref', nickname: 'nick' }, '42')).toBe('pref')
+  })
+
+  it('names an account from the mapped username when the provider sends no name', () => {
+    const bound = finishBinding(
+      replayClaimMapping({ mapping: { sources: ['idToken'] } }, [
+        {
+          source: 'idToken',
+          claims: { sub: '42', email: 'a@example.com', profile: { handle: 'ally' } },
+        },
+      ])
+    )
+    const outcome = finalizeProfileOutcome(bound, {
+      allowMissingEmail: false,
+      usernameClaim: 'profile.handle',
+    })
+    expect(outcome.name).toBe('ally')
+    expect(outcome.nameSynthesized).toBe(true)
+  })
+})

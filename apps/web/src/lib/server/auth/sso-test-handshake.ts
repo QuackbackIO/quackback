@@ -519,6 +519,7 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
   )
   const mappingOutcome = finalizeProfileOutcome(bound, {
     allowMissingEmail: input.allowMissingEmail === true,
+    usernameClaim: identityMapping?.usernameClaim,
   })
   const diagnosticClaims = mergeSnapshotClaims(snapshots)
   const capture = buildTestCapture({

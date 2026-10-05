@@ -29,6 +29,7 @@ import { actorFromAuth, withAuditEvent } from '@/lib/server/audit/log'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { diffProviderAudit } from '@/lib/server/auth/idp-audit-diff'
 import { applyClaimMappingEdits } from '@/lib/shared/sso-claim-mapping-edit'
+import { PROFILE_FIELDS } from '@/lib/shared/oidc-claim-mapping'
 import { OIDC_REDIRECT_STYLES } from '@/lib/shared/oidc-redirect'
 import { requireAuth } from './auth-helpers'
 
@@ -175,10 +176,13 @@ const claimMappingSchema = z
             id: z.string().optional(),
             email: z.string().optional(),
             name: z.string().optional(),
+            username: z.string().optional(),
+            image: z.string().optional(),
           })
           .passthrough()
           .optional(),
         allowMissingEmail: z.boolean().optional(),
+        syncOnSignIn: z.boolean().optional(),
       })
       .passthrough()
       .optional(),
@@ -314,13 +318,16 @@ export const upsertIdentityProviderFn = createServerFn({ method: 'POST' })
     )
   })
 
+const profileField = z.enum(PROFILE_FIELDS)
+
 const claimMappingOperationSchema = z.discriminatedUnion('op', [
   z.object({
     op: z.literal('setProfileClaim'),
-    field: z.enum(['id', 'email', 'name']),
+    field: profileField,
     path: z.string(),
   }),
-  z.object({ op: z.literal('resetProfileClaim'), field: z.enum(['id', 'email', 'name']) }),
+  z.object({ op: z.literal('resetProfileClaim'), field: profileField }),
+  z.object({ op: z.literal('setProfileSync'), syncOnSignIn: z.boolean() }),
   z.object({
     op: z.literal('setSources'),
     sources: z.array(z.enum(['idToken', 'userinfo', 'accessTokenJwt'])),

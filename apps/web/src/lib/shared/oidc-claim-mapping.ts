@@ -8,7 +8,8 @@
  * table, two of them misleadingly named — the same drift this area keeps
  * producing. So there is one column with named sections instead:
  *
- *   profile     which claim holds the account id, the email, the display name
+ *   profile     which claim holds the account id, the email, the display name,
+ *               the username and the avatar
  *   role        the former attribute_mapping, unchanged in behaviour
  *   attributes  claim to user-attribute copying
  *
@@ -37,6 +38,15 @@ export type {
   SourceSnapshot,
   SourceUnavailableReason,
 }
+
+/** Every profile field a claim can be bound to. */
+export const PROFILE_FIELDS = [
+  'id',
+  'email',
+  'name',
+  'username',
+  'image',
+] as const satisfies readonly ProfileField[]
 
 /** Where identity may be read from, in the order the resolver tries them. */
 export const IDENTITY_SOURCES = ['idToken', 'userinfo', 'accessTokenJwt'] as const
@@ -76,7 +86,7 @@ function readProfile(value: unknown): IdentityProviderClaimMapping['profile'] {
   if (!isRecord(value)) return undefined
   const claims: Partial<Record<ProfileField, string>> = {}
   const rawClaims = isRecord(value.claims) ? value.claims : {}
-  for (const field of ['id', 'email', 'name'] as const) {
+  for (const field of PROFILE_FIELDS) {
     const path = usablePath(rawClaims[field])
     if (path) claims[field] = path
   }
@@ -87,6 +97,8 @@ function readProfile(value: unknown): IdentityProviderClaimMapping['profile'] {
   // Strictly `true`. A truthy string from a hand-edited row must not enable
   // one-way placeholder minting.
   if (value.allowMissingEmail === true) profile.allowMissingEmail = true
+  // Strictly `true` as well: sync overwrites profile fields on every sign-in.
+  if (value.syncOnSignIn === true) profile.syncOnSignIn = true
   return Object.keys(profile).length > 0 ? profile : undefined
 }
 
@@ -155,30 +167,37 @@ export function allowsMissingEmail(stored: unknown): boolean {
   return claimMappingFor(stored).profile?.allowMissingEmail === true
 }
 
+/** Whether sign-in refreshes the name and avatar from this provider. Off unless set. */
+export function profileSyncEnabled(stored: unknown): boolean {
+  return claimMappingFor(stored).profile?.syncOnSignIn === true
+}
+
 /** The sources to try, in order, for this provider. */
 export function identitySourcesFor(stored: unknown): IdentitySource[] {
   return claimMappingFor(stored).profile?.sources ?? DEFAULT_IDENTITY_SOURCES
 }
 
-/** String-only identity mapping shared by production sign-in and the SSO test. */
-export function identityMappingFor(stored: unknown): {
+export type ProviderIdentityMapping = {
   sources: IdentitySource[]
   idClaim?: string
   emailClaim?: string
   nameClaim?: string
-} {
-  const mapping: {
-    sources: IdentitySource[]
-    idClaim?: string
-    emailClaim?: string
-    nameClaim?: string
-  } = { sources: identitySourcesFor(stored) }
-  const idClaim = profileClaimFor(stored, 'id')
-  const emailClaim = profileClaimFor(stored, 'email')
-  const nameClaim = profileClaimFor(stored, 'name')
-  if (idClaim) mapping.idClaim = idClaim
-  if (emailClaim) mapping.emailClaim = emailClaim
-  if (nameClaim) mapping.nameClaim = nameClaim
+  usernameClaim?: string
+  imageClaim?: string
+}
+
+/**
+ * String-only identity mapping shared by production sign-in, the SSO test and
+ * the admin preview. An absent path means the standard claim.
+ */
+export function identityMappingFor(stored: unknown): ProviderIdentityMapping {
+  const mapping: ProviderIdentityMapping = { sources: identitySourcesFor(stored) }
+  const claims = claimMappingFor(stored).profile?.claims ?? {}
+  if (claims.id) mapping.idClaim = claims.id
+  if (claims.email) mapping.emailClaim = claims.email
+  if (claims.name) mapping.nameClaim = claims.name
+  if (claims.username) mapping.usernameClaim = claims.username
+  if (claims.image) mapping.imageClaim = claims.image
   return mapping
 }
 

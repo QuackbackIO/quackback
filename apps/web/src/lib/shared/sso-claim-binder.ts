@@ -20,6 +20,8 @@ export type IdentityMapping = {
   nameClaim?: string
   emailClaim?: string
   imageClaim?: string
+  /** Read only when naming an account the provider sent no name for. */
+  usernameClaim?: string
 }
 
 export type BindingConfig = {

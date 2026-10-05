@@ -575,8 +575,12 @@ export const settings = pgTable('settings', {
 /** Where identity may be read from, in resolver order. */
 export type IdentitySource = 'idToken' | 'userinfo' | 'accessTokenJwt'
 
-/** Profile fields a claim can be bound to. */
-export type ProfileField = 'id' | 'email' | 'name'
+/**
+ * Profile fields a claim can be bound to. `username` has no column of its
+ * own: it names the account when the provider sends no display name. `image`
+ * is the avatar, read as an http(s) URL.
+ */
+export type ProfileField = 'id' | 'email' | 'name' | 'username' | 'image'
 
 /**
  * Role-mapping rules applied to an OIDC claim at sign-in. Now the `role`
@@ -603,12 +607,15 @@ export type ClaimRoleMapping = {
  * this is interpreted.
  */
 export type IdentityProviderClaimMapping = {
-  /** Which claim carries the account id, the email, the display name. */
+  /** Which claim carries the account id, the email, the display name, the
+   *  username and the avatar. */
   profile?: {
     sources?: IdentitySource[]
-    claims?: { id?: string; email?: string; name?: string }
+    claims?: { id?: string; email?: string; name?: string; username?: string; image?: string }
     /** Mint a placeholder address when the provider supplies no email. */
     allowMissingEmail?: boolean
+    /** Refresh the name and avatar from the provider on every sign-in. */
+    syncOnSignIn?: boolean
   }
   role?: ClaimRoleMapping
   /** Claim to user-attribute copying. */

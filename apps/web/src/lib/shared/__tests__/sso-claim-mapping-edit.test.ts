@@ -300,3 +300,56 @@ describe('mappingWouldStripUnsupported', () => {
     ).toBe(false)
   })
 })
+
+describe('avatar, username and profile sync', () => {
+  it('sets and resets the image and username claims', () => {
+    const set = applyClaimMappingEdits(null, [
+      { op: 'setProfileClaim', field: 'image', path: ' photo_url ' },
+      { op: 'setProfileClaim', field: 'username', path: 'handle' },
+    ])
+    expect(set).toEqual({ profile: { claims: { image: 'photo_url', username: 'handle' } } })
+    const reset = applyClaimMappingEdits(set, [{ op: 'resetProfileClaim', field: 'image' }])
+    expect(reset).toEqual({ profile: { claims: { username: 'handle' } } })
+  })
+
+  it('turns profile sync on and off', () => {
+    const on = applyClaimMappingEdits({ profile: { claims: { name: 'n' } } }, [
+      { op: 'setProfileSync', syncOnSignIn: true },
+    ])
+    expect(on).toEqual({ profile: { claims: { name: 'n' }, syncOnSignIn: true } })
+    expect(applyClaimMappingEdits(on, [{ op: 'setProfileSync', syncOnSignIn: false }])).toEqual({
+      profile: { claims: { name: 'n' } },
+    })
+  })
+
+  it('diffs the new fields into operations', () => {
+    const ops = diffClaimMappingOperations(
+      { profile: { claims: { image: 'old' } } },
+      { profile: { claims: { username: 'handle' }, syncOnSignIn: true } }
+    )
+    expect(ops).toEqual(
+      expect.arrayContaining([
+        { op: 'resetProfileClaim', field: 'image' },
+        { op: 'setProfileClaim', field: 'username', path: 'handle' },
+        { op: 'setProfileSync', syncOnSignIn: true },
+      ])
+    )
+    expect(ops).toHaveLength(3)
+  })
+
+  it('does not count avatar, username or sync as an identity change', () => {
+    const base = { profile: { claims: { email: 'upn' } } }
+    const changed = {
+      profile: {
+        claims: { email: 'upn', image: 'photo_url', username: 'handle' },
+        syncOnSignIn: true,
+      },
+    }
+    expect(effectiveProfileSignature(changed)).toBe(effectiveProfileSignature(base))
+  })
+
+  it('treats the new keys as supported, not as unknown JSON a save would strip', () => {
+    const stored = { profile: { claims: { image: 'photo_url' }, syncOnSignIn: true } }
+    expect(mappingWouldStripUnsupported(stored, { profile: {} })).toBe(false)
+  })
+})

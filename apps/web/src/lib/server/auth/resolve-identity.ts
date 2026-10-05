@@ -24,7 +24,11 @@ import {
   type BindingState,
   type IdentityMapping,
 } from '@/lib/shared/sso-claim-binder'
-import type { IdentitySource, SourceUnavailableReason } from '@/lib/shared/oidc-claim-mapping'
+import {
+  getClaimByPath,
+  type IdentitySource,
+  type SourceUnavailableReason,
+} from '@/lib/shared/oidc-claim-mapping'
 
 export type { IdentitySource, IdentityMapping }
 
@@ -110,16 +114,23 @@ function decodeSource(
 }
 
 /**
- * The avatar URL to adopt for an OIDC account, read from the OIDC Core `picture`
- * claim (`userinfo` or the ID token — `claims` here is already the merged set).
+ * The avatar URL to adopt for an OIDC account, read from the provider's mapped
+ * avatar claim, or the OIDC Core `picture` claim when none is mapped (`userinfo`
+ * or the ID token; `claims` here is already the merged set). Only an http(s)
+ * URL is adopted. A mapped claim never falls back to `picture`: the admin
+ * chose where the avatar lives, and a guess from another claim would hide that
+ * the chosen one is missing.
  *
  * Better-Auth's genericOAuth only maps `userInfo.image` to `user.image`, never
  * `picture`, so without this a fully compliant provider produces no avatar.
  * Kept standalone so it is unit-testable without the resolver, and reused by the
  * after-callback avatar backfill.
  */
-export function pickAvatarUrl(claims: Record<string, unknown>): string | undefined {
-  return asHttpUrl(claims.picture)
+export function pickAvatarUrl(
+  claims: Record<string, unknown>,
+  imageClaim: string = 'picture'
+): string | undefined {
+  return asHttpUrl(getClaimByPath(claims, imageClaim))
 }
 
 function sourcesFrom(state: BindingState): ResolvedIdentity['sources'] {

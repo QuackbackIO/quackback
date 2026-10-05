@@ -150,10 +150,11 @@ export function previewClaimMapping({
     }
   }
 
+  const identityMapping = identityMappingFor(draft)
   const bound = finishBinding(
     replayClaimMapping(
       {
-        mapping: identityMappingFor(draft),
+        mapping: identityMapping,
         requiredClaimPaths: requiredClaimPathsFor(draft),
         wantImage: true,
       },
@@ -162,6 +163,7 @@ export function previewClaimMapping({
   )
   const identity = finalizeProfileOutcome(bound, {
     allowMissingEmail: allowsMissingEmail(draft),
+    usernameClaim: identityMapping.usernameClaim,
   })
   const mapping = claimMappingFor(draft)
   const roleMatch = resolveSsoRoleMatch(identity.acceptedClaims, mapping.role)
