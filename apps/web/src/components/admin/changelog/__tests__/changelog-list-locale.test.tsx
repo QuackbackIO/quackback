@@ -33,7 +33,11 @@ vi.mock('@/lib/client/mutations/changelog', () => ({
 }))
 vi.mock('@/lib/client/hooks/use-infinite-scroll', () => ({ useInfiniteScroll: () => vi.fn() }))
 vi.mock('@/components/admin/feedback/inbox-layout', () => ({
-  InboxLayout: (props: { headerTitle: string; filters: React.ReactNode; children: React.ReactNode }) => (
+  InboxLayout: (props: {
+    headerTitle: string
+    filters: React.ReactNode
+    children: React.ReactNode
+  }) => (
     <div>
       <h2>{props.headerTitle}</h2>
       {props.filters}

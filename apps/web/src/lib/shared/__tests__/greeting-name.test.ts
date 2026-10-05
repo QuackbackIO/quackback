@@ -79,6 +79,8 @@ describe('principalShownName', () => {
     expect(
       principalShownName({ type: 'user', displayName: 'Ana S', name: null, email: null })
     ).toBe('Ana S')
-    expect(principalShownName({ type: null, displayName: null, name: null, email: null })).toBeNull()
+    expect(
+      principalShownName({ type: null, displayName: null, name: null, email: null })
+    ).toBeNull()
   })
 })
