@@ -162,7 +162,8 @@ export const fetchAuthProviderCredentialsMaskedFn = createServerFn({ method: 'GE
     log.debug({ credential_type: data.credentialType }, 'fetch masked auth provider credentials')
     await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
 
-    const { getAuthProvider } = await import('@/lib/server/auth/auth-providers')
+    const { getAuthProvider, normalizeStoredAuthCredentials } =
+      await import('@/lib/server/auth/auth-providers')
     const provider = getAuthProvider(data.credentialType)
     if (!provider) {
       throw new Error(`Unknown auth provider: ${data.credentialType}`)
@@ -171,10 +172,11 @@ export const fetchAuthProviderCredentialsMaskedFn = createServerFn({ method: 'GE
     const { getBaseUrl } = await import('@/lib/server/config')
     const baseUrl = getBaseUrl()
 
-    const credentials = await getPlatformCredentials(data.credentialType)
-    if (!credentials) {
+    const stored = await getPlatformCredentials(data.credentialType)
+    if (!stored) {
       return { configured: false as const, fields: null, baseUrl }
     }
+    const credentials = normalizeStoredAuthCredentials(data.credentialType, stored)
 
     const fieldDefs = new Map<string, PlatformCredentialField>(
       provider.platformCredentials.map((f) => [f.key, f])
