@@ -6,11 +6,6 @@ describe('roadmap OpenAPI contract', () => {
   it('publishes the derived-view contract within API v1', () => {
     const spec = generateOpenAPISpec()
     const roadmapPosts = spec.paths?.['/roadmaps/{roadmapId}/posts']
-    const roadmapPaths = JSON.stringify({
-      collection: spec.paths?.['/roadmaps'],
-      detail: spec.paths?.['/roadmaps/{roadmapId}'],
-      posts: roadmapPosts,
-    })
 
     expect(spec.info.version).toBe('1.0.0')
     expect(roadmapPosts).toHaveProperty('get')
