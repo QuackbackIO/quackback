@@ -1877,6 +1877,20 @@
       "when": 1789987200006,
       "tag": "0290_files",
       "breakpoints": true
+    },
+    {
+      "idx": 268,
+      "version": "7",
+      "when": 1789987200007,
+      "tag": "0291_legacy_surface_switches",
+      "breakpoints": true
+    },
+    {
+      "idx": 269,
+      "version": "7",
+      "when": 1789987200008,
+      "tag": "0292_spam_ai_classifier_opt_in",
+      "breakpoints": true
     }
   ]
 }

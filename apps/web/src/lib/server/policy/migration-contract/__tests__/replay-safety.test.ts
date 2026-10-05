@@ -296,6 +296,12 @@ describe('the real corpus', () => {
     // a populated archive, or none at all, makes the block do nothing.
     // 0209 drops a trigram index only while it has no partial predicate; the
     // partial copy the concurrent build creates is never dropped.
+    // 0291 rewrites only feature_flags blobs that lack the `feedback` key and
+    // its last UPDATE adds that key to every such blob, so a second run
+    // selects no rows and skips the cache DELETE.
+    // 0292 stamps aiClassifier onto spam_filter_config rows without the key;
+    // the column default it sets gives every later row the key, so a second
+    // run selects no rows.
     const vouching = files.filter(
       (f) => assessReplaySafety(f, readFileSync(join(MIGRATIONS_DIR, f), 'utf8')).vouched.length > 0
     )
@@ -316,6 +322,8 @@ describe('the real corpus', () => {
       '0284_integration_sync.sql',
       '0285_integration_link_scope.sql',
       '0288_kb_translations_dutch_search.sql',
+      '0291_legacy_surface_switches.sql',
+      '0292_spam_ai_classifier_opt_in.sql',
     ])
   })
 

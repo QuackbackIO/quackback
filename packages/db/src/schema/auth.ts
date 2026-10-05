@@ -495,10 +495,12 @@ export const settings = pgTable('settings', {
   featureFlags: text('feature_flags'),
   /**
    * Inbound spam-filter configuration (JSON)
-   * Structure: { trustedSenders: string[] } — exact addresses or domains
-   * whose inbound messages bypass spam classification entirely.
+   * Structure: { trustedSenders: string[], aiClassifier: boolean }.
+   * trustedSenders: exact addresses or domains whose inbound messages bypass
+   * spam classification entirely. aiClassifier: whether new conversations go
+   * to the AI classifier (absent reads as on).
    */
-  spamFilterConfig: text('spam_filter_config'),
+  spamFilterConfig: text('spam_filter_config').default('{"trustedSenders":[],"aiClassifier":true}'),
   /**
    * Help center configuration (JSON)
    * Structure: { enabled, homepageTitle, homepageDescription, seo }
