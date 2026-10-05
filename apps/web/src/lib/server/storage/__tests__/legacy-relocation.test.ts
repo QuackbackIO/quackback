@@ -176,7 +176,7 @@ const {
   RELOCATION_RETRY_MS,
   RECONCILE_GRACE_MS,
 } = await import('../legacy-relocation')
-const { withWorkspace } = await import('@/lib/server/__tests__/workspace-scope')
+const { withWorkspace, workspaceIdFor } = await import('@/lib/server/__tests__/workspace-scope')
 const { openLegacyRelocationBucket, LegacyRelocationRefused } = await import('../s3')
 
 const copies = () => sent.filter((c) => c.kind === 'CopyObject')
@@ -227,14 +227,43 @@ describe('single-workspace relocation', () => {
   })
 
   it('leaves already-namespaced objects alone, including other namespaces', async () => {
+    const other = workspaceIdFor('workspace-other')
     put(`${NS}post-images/new.png`, 'new')
-    put('w/workspace_01other0000000000000000000/logos/x.png', 'other')
+    put(`w/${other}/logos/x.png`, 'other')
     put('avatars/a.png', 'avatar')
 
     await runLegacyStorageRelocation()
 
     expect(copies().map((c) => c.input.Key)).toEqual([`${NS}avatars/a.png`])
     expect([...bucket.keys()].some((k) => k.startsWith(`${NS}w/`))).toBe(false)
+  })
+
+  it('relocates a bare key that merely starts with w/', async () => {
+    // An upload prefix is caller-chosen, so `w/custom/...` is an ordinary
+    // stored key. Only `w/<valid workspace TypeID>/` is a namespace.
+    put('w/custom/2026/x.png', 'custom')
+    put('w/workspace_not-a-typeid/y.png', 'lookalike')
+    put(`w/${workspaceIdFor('workspace-other')}/z.png`, 'other')
+
+    await runLegacyStorageRelocation()
+
+    expect(copies().map((c) => c.input.Key)).toEqual([
+      `${NS}w/custom/2026/x.png`,
+      `${NS}w/workspace_not-a-typeid/y.png`,
+    ])
+    expect(bucket.get(`${NS}w/custom/2026/x.png`)?.body).toBe('custom')
+    expect(bucket.has('w/custom/2026/x.png')).toBe(true)
+  })
+
+  it('treats a relocated w/ key as present on the next pass', async () => {
+    put('w/custom/x.png', 'custom')
+    await runLegacyStorageRelocation()
+    sent.length = 0
+
+    const again = await runLegacyStorageRelocation()
+
+    expect(copies()).toHaveLength(0)
+    expect('marker' in again && again.marker.lateCopies).toBe(0)
   })
 
   it('pages through a listing larger than one page', async () => {

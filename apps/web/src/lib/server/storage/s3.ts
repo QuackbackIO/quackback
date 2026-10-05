@@ -45,8 +45,9 @@
  * The relocation is instead a one-time copy inside the bucket, and on a
  * single-workspace install it runs by itself: `legacy-relocation.ts`, armed by
  * `startup.ts` on the process that runs background work, copies every key
- * outside `w/` to `w/<workspace TypeID>/<key>` with server-side CopyObject,
- * keeps the originals (so a restored older database backup still finds its
+ * outside any workspace namespace (a stored key may itself start with `w/`;
+ * only `w/<valid workspace TypeID>/` is a namespace) to
+ * `w/<workspace TypeID>/<key>` with server-side CopyObject, keeps the originals (so a restored older database backup still finds its
  * files), skips destinations already present, and records completion in
  * `kv_store`. Until its first pass finishes, pre-existing assets 404; it runs
  * in the background so readiness never waits on it, and keeps reconciling
@@ -65,7 +66,7 @@
  * which the application never writes), the operator fallback is:
  *
  * ```
- * aws s3 cp s3://<bucket>/ s3://<bucket>/w/<workspace TypeID>/ --recursive --exclude 'w/*'
+ * aws s3 cp s3://<bucket>/ s3://<bucket>/w/<workspace TypeID>/ --recursive --exclude 'w/workspace_*'
  * ```
  *
  * (`mv` instead of `cp` to drop the originals.) The prefix is

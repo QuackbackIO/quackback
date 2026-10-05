@@ -35,7 +35,7 @@ import { kvGet, kvSet } from '@/lib/server/kv/pg-kv'
 import { runWithoutLogContext } from '@/lib/server/log-context'
 import { logger } from '@/lib/server/logger'
 import { withSweepLock } from '@/lib/server/sweep-lock'
-import { WORKSPACE_NAMESPACE_ROOT } from './namespace'
+import { isWorkspaceNamespacedName } from './namespace'
 import { openLegacyRelocationBucket, type LegacyRelocationBucket, type ListedObject } from './s3'
 
 const log = logger.child({ component: 'storage-relocation' })
@@ -66,7 +66,7 @@ const PROGRESS_EVERY = 1000
 const SAMPLE_LIMIT = 20
 
 export interface RelocationCounts {
-  /** Objects at the bucket root, outside `w/`. */
+  /** Objects outside every workspace namespace (`w/<workspace TypeID>/`). */
   bareObjects: number
   copied: number
   /** Destination already holds the same object. */
@@ -214,7 +214,7 @@ export async function relocateBareObjects(
 
   let started = false
   await listAll(bucket, undefined, async (objects) => {
-    const bare = objects.filter((o) => !o.key.startsWith(`${WORKSPACE_NAMESPACE_ROOT}/`))
+    const bare = objects.filter((o) => !isWorkspaceNamespacedName(o.key))
     if (bare.length > 0 && !started) {
       started = true
       notice(
