@@ -259,6 +259,25 @@ async function readRedirectStyles(
   return parseRedirectStyles(parseAuthConfigJson(row?.authConfig ?? null))
 }
 
+/**
+ * The same styles from the workspace settings row every request already reads
+ * (memoized per request and cached across them), so listing providers costs no
+ * extra query. A caller that already holds the row passes its `auth_config`,
+ * which the workspace-settings loader must do: it lists providers while that
+ * very memo is being filled, and waiting on it from inside would never return.
+ * Writes read through {@link readRedirectStyles} instead, after their commit.
+ */
+async function readCachedRedirectStyles(opts: {
+  authConfig?: string | null
+}): Promise<Record<string, OidcRedirectStyle>> {
+  let authConfig = opts.authConfig ?? null
+  if (!('authConfig' in opts)) {
+    const { getWorkspaceSettingsRow } = await import('./settings.service')
+    authConfig = (await getWorkspaceSettingsRow())?.authConfig ?? null
+  }
+  return parseRedirectStyles(parseAuthConfigJson(authConfig))
+}
+
 function parseAuthConfigJson(json: string | null): Record<string, unknown> {
   if (!json) return {}
   try {
@@ -362,14 +381,19 @@ function rowToIdentityProvider(
  * List every identity provider with its linked verified domains and the
  * derived visibility. Domains are grouped from `sso_verified_domain` by
  * `provider_id`; unlinked domains (null `provider_id`) are excluded.
+ *
+ * `opts.authConfig` is the raw `settings.auth_config` the caller already holds
+ * (null for none); omitted, it comes from the request's cached settings row.
  */
-export async function listIdentityProviders(): Promise<IdentityProvider[]> {
+export async function listIdentityProviders(
+  opts: { authConfig?: string | null } = {}
+): Promise<IdentityProvider[]> {
   try {
     const [providers, domains, configuredTypes, redirectStyles] = await Promise.all([
       db.select().from(identityProvider).orderBy(identityProvider.createdAt),
       db.select().from(ssoVerifiedDomain).orderBy(ssoVerifiedDomain.createdAt),
       getConfiguredIntegrationTypes(),
-      readRedirectStyles(db),
+      readCachedRedirectStyles(opts),
     ])
 
     const byProvider = new Map<string, VerifiedDomain[]>()

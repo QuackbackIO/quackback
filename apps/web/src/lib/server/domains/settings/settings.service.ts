@@ -160,12 +160,15 @@ async function getEmailDependentPassthroughKeys(): Promise<string[]> {
  * Routed-only providers (verified domain + `showButton:false`) are
  * reached via the email-first SSO routing, so they're excluded here.
  */
-export async function getPublicOidcProviders(): Promise<OidcSignInButton[]> {
+export async function getPublicOidcProviders(
+  /** The settings row's raw `auth_config`, which every caller already holds. */
+  authConfig: string | null | undefined
+): Promise<OidcSignInButton[]> {
   const { listIdentityProviders, shouldRenderPublicButton } =
     await import('./identity-providers.service')
   const { getRegisteredOidcProviderIds } = await import('@/lib/server/auth/registered-providers')
 
-  const providers = await listIdentityProviders()
+  const providers = await listIdentityProviders({ authConfig: authConfig ?? null })
   // No providers → no buttons; skip the tier + credential round-trips.
   if (providers.length === 0) return []
   const registered = await getRegisteredOidcProviderIds(providers)
@@ -866,7 +869,7 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
     const org = await requireSettingsCached()
     const portalConfig = parsePortalConfig(org.portalConfig)
 
-    const oidcProviders = await getPublicOidcProviders()
+    const oidcProviders = await getPublicOidcProviders(org.authConfig)
     const welcome = publicWelcomeCard(portalConfig.welcomeCard)
     const authConfig = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
     return {
@@ -978,7 +981,7 @@ async function readWorkspaceSettings(): Promise<WorkspaceSettings | null> {
     )
     // Public OIDC buttons come from the identity_provider table (portal
     // surface only); the static map supplies social providers only.
-    const portalOidcProviders = await getPublicOidcProviders()
+    const portalOidcProviders = await getPublicOidcProviders(org.authConfig)
 
     const brandingData: SettingsBrandingData = {
       name: org.name,
