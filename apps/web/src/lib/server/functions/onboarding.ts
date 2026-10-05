@@ -20,6 +20,7 @@ import {
   bootstrapAdminLock,
   findHumanAdmin,
   isOpenToBootstrapClaim,
+  isSetupOpenToClaim,
 } from '@/lib/server/domains/principals/bootstrap-admin'
 import { db, settings, principal, user, postStatuses, eq, DEFAULT_STATUSES } from '@/lib/server/db'
 import { isOnboardingComplete } from '@/lib/shared/db-types'
@@ -49,6 +50,10 @@ const log = logger.child({ component: 'onboarding' })
 /** Refusal for a workspace whose owner is decided somewhere other than here. */
 export const NOT_OPEN_TO_CLAIM_MESSAGE =
   'This workspace is not open to be set up here. Sign in with the account it was created for.'
+
+/** Refusal for a claim on a workspace whose setup is already finished. */
+export const SETUP_ALREADY_COMPLETE_MESSAGE =
+  'This workspace is already set up. Sign in with an admin account.'
 
 /**
  * The one place a workspace's first admin is created, and the one place the
@@ -86,6 +91,14 @@ async function ensureBootstrapAdmin(userId: UserId): Promise<void> {
     if (!(await isOpenToBootstrapClaim(tx))) {
       log.warn({ user_id: userId }, 'bootstrap admin promotion refused: workspace is provisioned')
       throw new Error(NOT_OPEN_TO_CLAIM_MESSAGE)
+    }
+
+    // A finished workspace with no human admin left is not unclaimed setup.
+    // Claiming is how setup gets finished, so once it is finished nobody
+    // claims it by arriving, however its admins came to be gone.
+    if (!(await isSetupOpenToClaim(tx))) {
+      log.warn({ user_id: userId }, 'bootstrap admin promotion refused: setup is complete')
+      throw new Error(SETUP_ALREADY_COMPLETE_MESSAGE)
     }
 
     const { created, principal: p } = await ensurePrincipalForUser({ userId, role: 'admin' }, tx)

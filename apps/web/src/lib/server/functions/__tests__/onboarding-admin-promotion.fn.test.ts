@@ -151,6 +151,10 @@ beforeEach(() => {
   // about the ordering between exactly those two.
   hoisted.txExecute.mockImplementation(async (statement: { queryChunks?: unknown[] }) => {
     const text = JSON.stringify(statement?.queryChunks ?? '')
+    if (text.includes('setup_state')) {
+      const row = await hoisted.getSettings()
+      return row ? [{ setup_state: row.setupState ?? null }] : []
+    }
     if (!text.includes('cloud_workspace_key')) return undefined
     return [{ stamp_column: hoisted.stamp.value, metadata: null }]
   })
