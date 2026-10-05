@@ -194,7 +194,7 @@ async function createAuth() {
   const { sendPasswordResetEmail, isEmailConfigured } = await import('@quackback/email')
   const { getPlatformCredentials } =
     await import('@/lib/server/domains/platform-credentials/platform-credential.service')
-  const { getAllAuthProviders } = await import('./auth-providers')
+  const { getAllAuthProviders, socialProviderConfig } = await import('./auth-providers')
   const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
   const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
   const { listIdentityProviders, getIdentityProviderCredentials } =
@@ -350,18 +350,10 @@ async function createAuth() {
     if (!isSignInMethodEnabled(unifiedOAuthConfig, provider.id)) continue
 
     // Built-in social providers
-    const providerConfig: Record<string, unknown> = {
-      clientId: creds.clientId,
-      clientSecret: creds.clientSecret,
+    socialProviders[provider.id] = {
+      ...socialProviderConfig(provider, creds),
       mapProfileToUser: mapProfileClaims,
     }
-    // Add provider-specific fields (e.g., workspaceKey for Microsoft, issuer for GitLab)
-    for (const field of provider.platformCredentials) {
-      if (field.key !== 'clientId' && field.key !== 'clientSecret' && creds[field.key]) {
-        providerConfig[field.key] = creds[field.key]
-      }
-    }
-    socialProviders[provider.id] = providerConfig
     trustedProviders.push(provider.id)
   }
 
