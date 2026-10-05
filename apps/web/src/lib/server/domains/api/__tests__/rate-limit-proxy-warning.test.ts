@@ -51,7 +51,12 @@ describe('getClientIp proxy misconfiguration warning', () => {
       const getClientIp = await loadGetClientIp()
       getClientIp(requestWith({ [header]: '198.51.100.7' }))
       expect(mockWarn).toHaveBeenCalledTimes(1)
-      expect(String(mockWarn.mock.calls[0][1])).toContain('TRUSTED_PROXY_HOPS')
+      const message = String(mockWarn.mock.calls[0][1])
+      expect(message).toContain('TRUSTED_PROXY_HOPS')
+      // Conditional advice: directly exposed instances must keep 0.
+      expect(message).toContain('reverse proxy')
+      expect(message).toContain('connect directly')
+      expect(message).toContain('keep 0')
     }
   )
 

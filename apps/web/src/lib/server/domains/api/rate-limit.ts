@@ -28,7 +28,7 @@ function warnIfForwardedHeaders(headers: Headers): void {
   warnedForwardedHeaders = true
   log.warn(
     {},
-    'Request carries forwarding headers but TRUSTED_PROXY_HOPS is 0, so every client behind the proxy shares one rate-limit bucket. Set TRUSTED_PROXY_HOPS to the number of reverse proxies in front of Quackback (1 for a single proxy).'
+    'Request carries forwarding headers while TRUSTED_PROXY_HOPS is 0. If Quackback runs behind a reverse proxy, set TRUSTED_PROXY_HOPS to the number of proxies in front of it, otherwise every client shares one rate-limit bucket. If clients connect directly, ignore this and keep 0.'
   )
 }
 
