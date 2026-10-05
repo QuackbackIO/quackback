@@ -459,7 +459,7 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
                   <button data-admin-rail-item="" className={railControlClass()}>
                     <QuestionMarkCircleIcon className="size-5 shrink-0" />
                     <span className="min-w-0 flex-1 truncate text-left">
-                      <FormattedMessage id="admin.help.label" defaultMessage="Help" />
+                      {intl.formatMessage({ id: 'admin.help.label', defaultMessage: 'Help' })}
                     </span>
                     {latestVersion && (
                       <span className="size-2 rounded-full bg-primary" aria-hidden="true" />

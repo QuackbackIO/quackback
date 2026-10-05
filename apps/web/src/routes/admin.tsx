@@ -26,7 +26,7 @@ import { createRouteContextMemo } from '@/lib/client/route-context-memo'
 import { isAdminPathAllowedDuringDowngradeLock } from '@/lib/shared/billing/plan-downgrade-lock'
 import type { requireWorkspaceRole } from '@/lib/server/functions/workspace-utils'
 import { useFeatureFlag, useProductEnabled } from '@/lib/client/hooks/use-root-context'
-import { useToasterLocale } from '@/components/ui/sonner'
+import { useToasterLocale } from '@/components/ui/use-toaster-locale'
 
 /** What the admin pages read from the role guard's answer. */
 type AdminGuard = Pick<

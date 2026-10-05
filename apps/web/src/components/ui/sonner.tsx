@@ -5,7 +5,7 @@ import {
   XCircleIcon,
 } from '@heroicons/react/24/solid'
 import { useTheme } from 'next-themes'
-import { useEffect, useSyncExternalStore } from 'react'
+import { useSyncExternalStore } from 'react'
 import { Toaster as Sonner, type ToasterProps } from 'sonner'
 import { normalizeLocale, type SupportedLocale } from '@/lib/shared/i18n'
 
@@ -41,12 +41,19 @@ function setSurfaceLocale(locale: string | null) {
   for (const listener of listeners) listener()
 }
 
-/** Names the toast region in this surface's language while it is mounted. */
-export function useToasterLocale(locale: string) {
-  useEffect(() => {
-    setSurfaceLocale(locale)
-    return () => setSurfaceLocale(null)
-  }, [locale])
+function regionLabel(locale: string | null | undefined): string {
+  return REGION_LABEL[normalizeLocale(locale ?? '') ?? 'en']
+}
+
+/**
+ * Names the toast region in a surface's language until the returned function
+ * is called. Surfaces reach it through `useToasterLocale`.
+ */
+export function setToasterLocale(locale: string): () => void {
+  setSurfaceLocale(locale)
+  return () => {
+    if (surfaceLocale === locale) setSurfaceLocale(null)
+  }
 }
 
 function Toaster({
@@ -54,17 +61,19 @@ function Toaster({
   ...props
 }: ToasterProps & { /** The page language. */ locale?: string }): React.ReactElement {
   const { theme = 'system' } = useTheme()
-  const surface = useSyncExternalStore(
+  // The label itself is the snapshot, so a surface that picks the language
+  // the page already has does not render the toaster again.
+  const label = useSyncExternalStore(
     subscribe,
-    () => surfaceLocale,
-    () => null
+    () => regionLabel(surfaceLocale ?? locale),
+    () => regionLabel(locale)
   )
 
   return (
     <Sonner
       theme={theme as ToasterProps['theme']}
       className="toaster group"
-      containerAriaLabel={REGION_LABEL[normalizeLocale(surface ?? locale ?? '') ?? 'en']}
+      containerAriaLabel={label}
       icons={{
         success: <CheckCircleIcon className="size-4" />,
         info: <InformationCircleIcon className="size-4" />,
