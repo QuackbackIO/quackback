@@ -6,8 +6,8 @@
  * `utils/rate-bucket` (durable across instances); fails OPEN when the bucket
  * store errors, so a blip never locks visitors out.
  *
- * Keyed on the real client IP (getClientIp reads cf-connecting-ip behind the
- * trusted proxy), so the caps target one client, not a shared proxy. Generous
+ * Keyed on the real client IP (getClientIp, per the operator's trusted-proxy
+ * settings), so the caps target one client, not a shared proxy. Generous
  * enough for a NAT'd office where many real visitors share one public IP.
  */
 import {

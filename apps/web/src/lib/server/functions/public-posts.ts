@@ -359,7 +359,8 @@ export const runToggleVote = createServerOnlyFn(async function runToggleVote(
       throw new Error('Anonymous interaction is not enabled')
     }
 
-    // Rate limit anonymous voters by IP
+    // Rate limit anonymous voters by IP. Resolved the same way as the
+    // `ipAddress` Better Auth records on the anonymous sessions it counts.
     if (!(await checkAnonVoteRateLimit(clientIp()))) {
       throw new Error('Too many votes, please try again later')
     }

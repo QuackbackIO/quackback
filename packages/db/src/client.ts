@@ -25,6 +25,11 @@ export function createDb(connectionString: string, options?: CreateDbOptions): D
     max: options?.max ?? 10,
     prepare: options?.prepare ?? true,
     idle_timeout: options?.idleTimeout ?? 20,
+    // postgres-js prints every server NOTICE to the console by default, and
+    // idempotent DDL (`CREATE TABLE IF NOT EXISTS` for page_views partitions at
+    // boot) emits one per skipped object. Errors still throw; notices carry
+    // nothing an operator acts on.
+    onnotice: () => {},
   })
   return drizzle(sql, { schema, logger: options?.logger })
 }

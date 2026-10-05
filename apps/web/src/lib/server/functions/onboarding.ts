@@ -20,6 +20,7 @@ import {
   bootstrapAdminLock,
   findHumanAdmin,
   isOpenToBootstrapClaim,
+  isSetupOpenToClaim,
 } from '@/lib/server/domains/principals/bootstrap-admin'
 import { db, settings, principal, user, postStatuses, eq, DEFAULT_STATUSES } from '@/lib/server/db'
 import { isOnboardingComplete } from '@/lib/shared/db-types'
@@ -50,6 +51,10 @@ const log = logger.child({ component: 'onboarding' })
 /** Refusal for a workspace whose owner is decided somewhere other than here. */
 export const NOT_OPEN_TO_CLAIM_MESSAGE =
   'This workspace is not open to be set up here. Sign in with the account it was created for.'
+
+/** Refusal for a claim on a workspace whose setup is already finished. */
+export const SETUP_ALREADY_COMPLETE_MESSAGE =
+  'This workspace is already set up. Sign in with an admin account.'
 
 /**
  * The one place a workspace's first admin is created, and the one place the
@@ -89,6 +94,14 @@ async function ensureBootstrapAdmin(userId: UserId): Promise<void> {
       throw new Error(NOT_OPEN_TO_CLAIM_MESSAGE)
     }
 
+    // A finished workspace with no human admin left is not unclaimed setup.
+    // Claiming is how setup gets finished, so once it is finished nobody
+    // claims it by arriving, however its admins came to be gone.
+    if (!(await isSetupOpenToClaim(tx))) {
+      log.warn({ user_id: userId }, 'bootstrap admin promotion refused: setup is complete')
+      throw new Error(SETUP_ALREADY_COMPLETE_MESSAGE)
+    }
+
     const { created, principal: p } = await ensurePrincipalForUser({ userId, role: 'admin' }, tx)
     if (!created && !isAdmin(p.role)) {
       await setPrincipalRole({ userId }, 'admin', { executor: tx, knownUserId: userId })
@@ -116,11 +129,18 @@ export interface WorkspaceClaim {
    * Whether arriving here is still a way to become this workspace's admin.
    *
    * False on a workspace a control plane provisioned, whose owner is recorded
-   * where it was created. A screen that offered account creation on such a
-   * workspace would be offering a path the promoter refuses, which is the
-   * disagreement this whole answer exists to prevent.
+   * where it was created, and on a workspace whose setup is already finished.
+   * A screen that offered account creation on such a workspace would be
+   * offering a path the promoter refuses, which is the disagreement this whole
+   * answer exists to prevent.
    */
   openToClaim: boolean
+  /**
+   * Why {@link openToClaim} is false, so the screen can say the true thing:
+   * `provisioned` (created for a named account) or `setupComplete` (already
+   * set up; an admin signs in). Null while it is open.
+   */
+  closedReason: 'provisioned' | 'setupComplete' | null
 }
 
 /**
@@ -154,12 +174,18 @@ export const getWorkspaceClaimFn = createServerFn({ method: 'GET' }).handler(
     // Existence only, on the same predicates the promoter guards with, so the
     // screen and the promoter can never disagree about who owns setup or about
     // whether it is still there to be taken.
-    const [owner, openToClaim] = await Promise.all([findHumanAdmin(db), isOpenToBootstrapClaim(db)])
+    const [owner, unprovisioned, setupOpen] = await Promise.all([
+      findHumanAdmin(db),
+      isOpenToBootstrapClaim(db),
+      isSetupOpenToClaim(db),
+    ])
 
     const current = await getSettings()
     const setupComplete = isOnboardingComplete(getSetupState(current?.setupState ?? null))
 
-    return { claimed: !!owner, setupComplete, openToClaim }
+    // Same order the promoter refuses in: provenance first, then setup state.
+    const closedReason = !unprovisioned ? 'provisioned' : !setupOpen ? 'setupComplete' : null
+    return { claimed: !!owner, setupComplete, openToClaim: closedReason === null, closedReason }
   }
 )
 

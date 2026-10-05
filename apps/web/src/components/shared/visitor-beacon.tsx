@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { useRouterState } from '@tanstack/react-router'
+import { browserOptedOutOfTracking } from '@/lib/client/analytics'
 
 /**
  * Fires an anonymous pageview beacon on portal route changes (visitor
@@ -43,8 +44,7 @@ export function VisitorBeacon() {
 
   useEffect(() => {
     if (!href || lastTracked.current === href) return
-    const nav = navigator as Navigator & { globalPrivacyControl?: boolean }
-    if (nav.doNotTrack === '1' || nav.globalPrivacyControl === true) return
+    if (browserOptedOutOfTracking()) return
     lastTracked.current = href
 
     const deviceId = getOrCreateDeviceId()

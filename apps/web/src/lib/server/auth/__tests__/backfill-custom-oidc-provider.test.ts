@@ -78,6 +78,18 @@ describe('custom-oidc backfill', () => {
         )
         expect(providers[0].enabled).toBe(true)
 
+        // Registered at the IdP before the callback moved: keeps the legacy
+        // redirect URI, and the rest of auth_config is left as it was.
+        const [stored] = await tx
+          .select({ authConfig: settings.authConfig })
+          .from(settings)
+          .where(eq(settings.id, settingsRow.id))
+        expect(JSON.parse(stored.authConfig!)).toEqual({
+          oauth: { password: false, 'custom-oidc': true },
+          openSignup: false,
+          oidcRedirectStyles: { 'custom-oidc': 'legacy' },
+        })
+
         const [settingsAfterFirst] = await tx
           .select({ authConfigVersion: settings.authConfigVersion })
           .from(settings)

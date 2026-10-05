@@ -44,7 +44,8 @@ vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({
 }))
 
 const mockGetSpamFilterConfig = vi.fn(
-  (): Promise<{ trustedSenders: string[] }> => Promise.resolve({ trustedSenders: [] })
+  (): Promise<{ trustedSenders: string[]; aiClassifier: boolean }> =>
+    Promise.resolve({ trustedSenders: [], aiClassifier: true })
 )
 vi.mock('@/lib/server/domains/settings/settings.spam', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/domains/settings/settings.spam')>()),
@@ -64,7 +65,7 @@ beforeEach(() => {
   mockConfig.openaiApiKey = 'test-key'
   mockConfig.openaiBaseUrl = 'http://localhost:9999/v1'
   mockGetChatModel.mockReturnValue('test-classify-model')
-  mockGetSpamFilterConfig.mockResolvedValue({ trustedSenders: [] })
+  mockGetSpamFilterConfig.mockResolvedValue({ trustedSenders: [], aiClassifier: true })
   mockEnforceAiTokenBudget.mockResolvedValue(undefined)
   mockChat.mockResolvedValue({ spam: false })
 })
@@ -82,16 +83,28 @@ describe('classifyInboundAsSpam', () => {
   })
 
   it('bypasses classification entirely for a trusted sender', async () => {
-    mockGetSpamFilterConfig.mockResolvedValue({ trustedSenders: ['example.com'] })
+    mockGetSpamFilterConfig.mockResolvedValue({
+      trustedSenders: ['example.com'],
+      aiClassifier: true,
+    })
     mockChat.mockResolvedValue({ spam: true })
     await expect(classifyInboundAsSpam(input)).resolves.toBe(false)
     expect(mockChat).not.toHaveBeenCalled()
   })
 
-  it('fails open when the trusted-sender list cannot be read', async () => {
-    mockGetSpamFilterConfig.mockRejectedValue(new Error('settings row missing'))
+  it('never calls the model while the workspace has the AI classifier off', async () => {
+    mockGetSpamFilterConfig.mockResolvedValue({ trustedSenders: [], aiClassifier: false })
     mockChat.mockResolvedValue({ spam: true })
-    await expect(classifyInboundAsSpam(input)).resolves.toBe(true)
+    await expect(classifyInboundAsSpam(input)).resolves.toBe(false)
+    expect(mockChat).not.toHaveBeenCalled()
+    expect(mockEnforceAiTokenBudget).not.toHaveBeenCalled()
+  })
+
+  it('does not call the model when the spam settings cannot be read', async () => {
+    mockGetSpamFilterConfig.mockRejectedValue(new Error('db down'))
+    mockChat.mockResolvedValue({ spam: true })
+    await expect(classifyInboundAsSpam(input)).resolves.toBe(false)
+    expect(mockChat).not.toHaveBeenCalled()
   })
 
   it('returns false when the AI client is unconfigured', async () => {

@@ -48,3 +48,80 @@ export function allowsAutoLinking(input: ProviderTrustInputs): boolean {
   if (input.trustOverride !== null) return input.trustOverride
   return hasFreshPass(input) && input.assertsVerifiedEmail
 }
+
+/** The provider fields the observation reads. */
+export interface ObservedProviderRow {
+  id: string
+  registrationId: string
+  lastSuccessfulTestAt: string | null
+  detailsChangedAt: string | null
+}
+
+/** Sink for the observation; the auth builder passes the pino logger. */
+export interface TrustObservationLogger {
+  info: (ctx: Record<string, unknown>, msg: string) => void
+}
+
+/**
+ * The last test state this process reported for each provider row. The auth
+ * instance is rebuilt on every auth_config_version change, so without this the
+ * same line repeats on each rebuild. One entry per row id (unique across
+ * workspaces), holding that row's two timestamps: a provider is reported again
+ * only when its state differs from the one stored, and its entry is dropped
+ * once it is trusted, so the map never holds more than the untested providers.
+ */
+const reportedObservations = new Map<string, string>()
+
+/** Test seam: forget what has been reported. */
+export function resetTrustObservations(): void {
+  reportedObservations.clear()
+}
+
+/**
+ * The OIDC registration ids trusted for auto-linking.
+ *
+ * Every registered OIDC provider is trusted, whatever its connection-test
+ * state. Withholding trust from untested providers would refuse first-time SSO
+ * sign-ins by existing password and magic-link users ("account not linked") on
+ * providers that have always linked them, and most existing providers have
+ * never recorded a test.
+ *
+ * Observed, not enforced: providers the derived predicate would not trust are
+ * reported at info level, once per provider state, so the real population is
+ * known before any enforcement. The line names the action that earns the trust
+ * (a passing connection test) and states that nothing is withheld.
+ */
+export function oidcTrustedProviderIds(
+  registrationIds: readonly string[],
+  rows: readonly ObservedProviderRow[],
+  log: TrustObservationLogger
+): string[] {
+  for (const registrationId of registrationIds) {
+    const row = rows.find((p) => p.registrationId === registrationId)
+    if (!row) continue
+    const trusted = allowsAutoLinking({
+      lastSuccessfulTestAt: row.lastSuccessfulTestAt,
+      detailsChangedAt: row.detailsChangedAt,
+      // Not yet persisted; assumed true so the observation isolates the
+      // connection-test signal rather than flagging every provider.
+      assertsVerifiedEmail: true,
+      trustOverride: null,
+    })
+    if (trusted) {
+      reportedObservations.delete(row.id)
+      continue
+    }
+    const state = `${row.lastSuccessfulTestAt ?? ''}|${row.detailsChangedAt ?? ''}`
+    if (reportedObservations.get(row.id) === state) continue
+    reportedObservations.set(row.id, state)
+    log.info(
+      {
+        registrationId,
+        identityProviderId: row.id,
+        testState: row.lastSuccessfulTestAt ? 'stale' : 'untested',
+      },
+      'identity provider has no connection test newer than its last change; sign-in and email auto-linking are unaffected. Run the connection test on the provider (Settings > Security > Single sign-on) to record one'
+    )
+  }
+  return [...registrationIds]
+}

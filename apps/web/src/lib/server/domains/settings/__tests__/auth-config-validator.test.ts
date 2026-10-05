@@ -2,7 +2,21 @@ import { describe, it, expect, vi } from 'vitest'
 
 vi.mock('@/lib/server/db', async (importOriginal) => {
   const chain = { set: () => ({ where: vi.fn() }) }
-  const tx = { update: () => chain }
+  const tx = {
+    update: () => chain,
+    // The read a read-modify-write takes under the row lock. Only the locking
+    // form is faked, so an unlocked read fails here.
+    select: () => ({
+      from: () => ({
+        limit: () => ({
+          for: async (strength: string) => {
+            if (strength !== 'update') throw new Error(`unexpected lock: ${strength}`)
+            return [{ id: 's1', authConfig: '{"oauth":{}}' }]
+          },
+        }),
+      }),
+    }),
+  }
   // Spread the real db module so tables/operators stay current; override only what this suite drives.
   return {
     ...(await importOriginal<typeof import('@/lib/server/db')>()),
