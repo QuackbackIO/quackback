@@ -104,6 +104,16 @@ describe('resolveWorkspaceAndContinue', () => {
     expect(noteWorkspaceActivity).not.toHaveBeenCalled()
   })
 
+  it('relays analytics without resolving a workspace, so it never opens a pool', async () => {
+    const result = await serve('t1.localhost', {
+      url: 'http://t1.localhost/api/relay/e/',
+      method: 'POST',
+    })
+    expect(result).toBe('served the workspace')
+    expect(acquireScopeForHost).not.toHaveBeenCalled()
+    expect(noteWorkspaceActivity).not.toHaveBeenCalled()
+  })
+
   describe('which served requests count as activity', () => {
     const okScope = async () => {
       const { createWorkspaceScope } = await import('../workspace-context')

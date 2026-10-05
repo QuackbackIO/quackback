@@ -74,6 +74,14 @@ const FLEET_PATHS = [
   '/api/internal/job-wake',
 ]
 
+/**
+ * The product analytics relay forwards to a fixed host from process
+ * configuration and reads no workspace data, so it never opens a pool. An
+ * admin tab sends to it in the background, and that must not count as a
+ * visit or keep a database awake on its own.
+ */
+const ANALYTICS_RELAY_PREFIX = '/api/relay'
+
 export { requestWorkspaceHost } from './saas-edge-host'
 
 export async function resolveWorkspaceAndContinue<T>({
@@ -86,7 +94,9 @@ export async function resolveWorkspaceAndContinue<T>({
   log?: Pick<typeof logger, 'warn' | 'error' | 'info'>
 }): Promise<T | Response> {
   const pathname = new URL(request.url).pathname.replace(/\/$/, '') || '/'
-  if (FLEET_PATHS.includes(pathname)) return next()
+  if (FLEET_PATHS.includes(pathname) || pathname.startsWith(`${ANALYTICS_RELAY_PREFIX}/`)) {
+    return next()
+  }
 
   const host = requestWorkspaceHost(request)
   const acquisition = await acquireScopeForHost(host, 'request')

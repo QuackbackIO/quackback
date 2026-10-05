@@ -25,6 +25,7 @@ import { runWithoutLogContext } from '@/lib/server/log-context'
 import { shouldRunWorkers } from '@/lib/server/process-role'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 import { analyticsWorkspaceKey } from '@/lib/shared/analytics-identity'
+import { posthogUiHost } from '@/lib/server/analytics-relay'
 
 const log = logger.child({ component: 'bootstrap' })
 
@@ -91,7 +92,10 @@ export interface BootstrapData {
    */
   productAnalytics: {
     key: string
-    host: string
+    /** The first-party relay path the SDK sends to (analytics-relay.ts). */
+    apiHost: string
+    /** The PostHog app, for toolbar links. */
+    uiHost: string
     sessionRecording: boolean
     workspaceId: string | null
   } | null
@@ -297,7 +301,10 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     cloudEnabled: cloud.enabled,
     productAnalytics: config.productAnalytics
       ? {
-          ...config.productAnalytics,
+          key: config.productAnalytics.key,
+          apiHost: '/api/relay',
+          uiHost: posthogUiHost(config.productAnalytics.host),
+          sessionRecording: config.productAnalytics.sessionRecording,
           workspaceId: await analyticsWorkspaceKey(
             getCurrentWorkspace()?.workspaceKey,
             typeof settings?.settings?.id === 'string' ? settings.settings.id : null

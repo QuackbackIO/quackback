@@ -16,7 +16,8 @@ vi.mock('posthog-js', () => ({ default: posthog }))
 const ctx = vi.hoisted(() => ({
   analytics: null as null | {
     key: string
-    host: string
+    apiHost: string
+    uiHost: string
     sessionRecording: boolean
     workspaceId: string | null
   },
@@ -52,7 +53,8 @@ beforeEach(() => {
   posthog.get_distinct_id.mockReturnValue('anon-device')
   ctx.analytics = {
     key: 'phc_test',
-    host: 'https://eu.i.posthog.com',
+    apiHost: '/api/relay',
+    uiHost: 'https://eu.posthog.com',
     sessionRecording: true,
     workspaceId: 'ws_1',
   }
@@ -76,7 +78,8 @@ describe('ProductAnalytics', () => {
     const [key, options] = posthog.init.mock.calls[0] as [string, Record<string, unknown>]
     expect(key).toBe('phc_test')
     expect(options).toMatchObject({
-      api_host: 'https://eu.i.posthog.com',
+      api_host: '/api/relay',
+      ui_host: 'https://eu.posthog.com',
       cross_subdomain_cookie: true,
       capture_pageview: 'history_change',
       person_profiles: 'identified_only',
