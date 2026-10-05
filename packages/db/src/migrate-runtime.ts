@@ -273,9 +273,15 @@ export async function runMigrations(
     }
 
     onStep('requirements')
-    // Before anything writes: a server that cannot finish the lineage is told
-    // so by name here, instead of failing minutes into the transaction.
-    await assertMigrationPreflight(sql)
+    // Before anything writes: a server that cannot finish this run is told so
+    // by name here, instead of failing minutes into the transaction. Only what
+    // this run will exercise is required (see PreflightNeeds).
+    const plan = await planMigrations(sql, migrationsFolder)
+    await assertMigrationPreflight(sql, {
+      migrationsPending: plan.pending.length > 0,
+      extensions: plan.pending.length > 0 || concurrentIndexes,
+      tempTables: plan.usesTempTables,
+    })
 
     onStep('extensions')
     await ensureExtensions(sql)
@@ -291,7 +297,7 @@ export async function runMigrations(
       await sql.unsafe(`SET lock_timeout = ${lockTimeoutMs}`)
     }
     try {
-      await migrateWithProgress(sql, migrationsFolder, onPending, onMigration)
+      await migrateWithProgress(sql, plan, migrationsFolder, onPending, onMigration)
     } finally {
       if (lockTimeoutMs !== undefined) await sql.unsafe(`SET lock_timeout = 0`).catch(() => {})
     }
@@ -325,25 +331,28 @@ export async function runMigrations(
   }
 }
 
+export interface MigrationPlan {
+  /** Every bundled migration, in journal order. */
+  migrations: MigrationMeta[]
+  /** The ones the migration transaction will run. */
+  pending: MigrationMeta[]
+  isPending: (m: MigrationMeta) => boolean
+  tagOf: (m: MigrationMeta) => string
+  /** A pending migration defines `pg_temp` helpers, so TEMPORARY is required. */
+  usesTempTables: boolean
+}
+
+const PG_TEMP_USE = /\bpg_temp\./i
+
 /**
- * drizzle's `migrate()`, with progress.
- *
- * `migrate()` is `readMigrationFiles()` followed by `PgDialect.migrate()`, and
- * the dialect walks the migration list with `for await` inside its one
- * transaction, finishing each migration (statements, then its ledger row)
- * before asking for the next. So a list whose iterator notes when it is
- * advanced sees every migration start and finish without re-implementing the
- * migrator: the statements, the ledger and the transaction stay drizzle's.
- *
- * "Pending" uses the dialect's own rule (journal `when` above the newest ledger
- * row), read under the same advisory lock, so the count matches what runs.
+ * What the migration transaction will run, by the dialect's own rule: journal
+ * `when` above the newest ledger row. Read under the advisory lock, so it
+ * matches what then runs.
  */
-async function migrateWithProgress(
+export async function planMigrations(
   sql: postgres.Sql,
-  migrationsFolder: string,
-  onPending: (pending: PendingMigrations) => void,
-  onMigration: (event: MigrationProgress) => void
-): Promise<void> {
+  migrationsFolder: string
+): Promise<MigrationPlan> {
   const migrations = readMigrationFiles({ migrationsFolder })
   const journal = JSON.parse(
     readFileSync(path.join(migrationsFolder, 'meta', '_journal.json'), 'utf8')
@@ -362,8 +371,34 @@ async function migrateWithProgress(
   }
   const isPending = (m: MigrationMeta) => lastApplied === null || lastApplied < m.folderMillis
   const tagOf = (m: MigrationMeta) => tagByMillis.get(m.folderMillis) ?? String(m.folderMillis)
-
   const pending = migrations.filter(isPending)
+  return {
+    migrations,
+    pending,
+    isPending,
+    tagOf,
+    usesTempTables: pending.some((m) => m.sql.some((stmt) => PG_TEMP_USE.test(stmt))),
+  }
+}
+
+/**
+ * drizzle's `migrate()`, with progress.
+ *
+ * `migrate()` is `readMigrationFiles()` followed by `PgDialect.migrate()`, and
+ * the dialect walks the migration list with `for await` inside its one
+ * transaction, finishing each migration (statements, then its ledger row)
+ * before asking for the next. So a list whose iterator notes when it is
+ * advanced sees every migration start and finish without re-implementing the
+ * migrator: the statements, the ledger and the transaction stay drizzle's.
+ */
+async function migrateWithProgress(
+  sql: postgres.Sql,
+  plan: MigrationPlan,
+  migrationsFolder: string,
+  onPending: (pending: PendingMigrations) => void,
+  onMigration: (event: MigrationProgress) => void
+): Promise<void> {
+  const { migrations, pending, isPending, tagOf } = plan
   onPending({ tags: pending.map(tagOf) })
 
   const tracked = [...migrations]

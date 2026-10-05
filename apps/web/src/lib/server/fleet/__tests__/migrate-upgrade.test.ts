@@ -25,7 +25,7 @@ import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import postgres from 'postgres'
 import { runMigrations, type MigrationProgress } from '@quackback/db/migrate'
-import { CONCURRENT_INDEX_SPECS } from '@quackback/db/schema-ops'
+import { CONCURRENT_INDEX_SPECS, MigrationPreflightError } from '@quackback/db/schema-ops'
 import { BUNDLED_MIGRATIONS, MIGRATIONS_DIR } from '@quackback/db/schema-version'
 
 const ADMIN_URL =
@@ -201,5 +201,81 @@ describe('a fresh install', () => {
       [CONCURRENT_INDEX_SPECS.filter((s) => s.concurrent).map((s) => s.name)]
     )
     expect(rows).toEqual([])
+  })
+})
+
+describe('the TEMPORARY requirement follows the pending work', () => {
+  // A role that owns its databases but has TEMPORARY revoked: a hardened
+  // deployment. It may run every start of an install that is already current,
+  // and is refused only when a pending migration defines pg_temp helpers.
+  const id = randomUUID().replace(/-/g, '').slice(0, 10)
+  const ROLE = `qb_mig_notemp_${id}`
+  const CURRENT = `qb_mig_cur_${id}`
+  const BEHIND = `qb_mig_behind_${id}`
+  let admin: postgres.Sql
+  let stage: string
+
+  function roleDsn(db: string): string {
+    const url = new URL(dsnFor(db))
+    url.username = ROLE
+    url.password = 'notemp'
+    return url.toString()
+  }
+
+  async function ledgerRows(db: string): Promise<number> {
+    const sql = postgres(dsnFor(db), { max: 1, ...quiet })
+    try {
+      const [row] = await sql.unsafe(`SELECT count(*)::int AS n FROM drizzle.__drizzle_migrations`)
+      return row!.n as number
+    } finally {
+      await sql.end({ timeout: 5 })
+    }
+  }
+
+  beforeAll(async () => {
+    admin = postgres(ADMIN_URL, { max: 1, ...quiet })
+    await admin.unsafe(`CREATE ROLE ${ROLE} LOGIN PASSWORD 'notemp'`)
+    stage = stageMigrations(RELEASED_TAG_PREFIX)
+    for (const db of [CURRENT, BEHIND]) {
+      await admin.unsafe(`CREATE DATABASE ${db} OWNER ${ROLE}`)
+      // Extensions are a superuser's job; the role only owns what migrations make.
+      const su = postgres(dsnFor(db), { max: 1, ...quiet })
+      await su.unsafe(`CREATE EXTENSION IF NOT EXISTS vector`)
+      await su.unsafe(`CREATE EXTENSION IF NOT EXISTS pg_trgm`)
+      await su.end({ timeout: 5 })
+    }
+    await runMigrations(roleDsn(CURRENT), { requireSessionMode: false, verify: false })
+    await runMigrations(roleDsn(BEHIND), { ...coreOnly, migrationsFolder: stage })
+    for (const db of [CURRENT, BEHIND]) {
+      await admin.unsafe(`REVOKE TEMPORARY ON DATABASE ${db} FROM PUBLIC, ${ROLE}`)
+    }
+  }, 300_000)
+
+  afterAll(async () => {
+    for (const db of [CURRENT, BEHIND]) {
+      await admin?.unsafe(`DROP DATABASE IF EXISTS ${db} WITH (FORCE)`).catch(() => {})
+    }
+    await admin?.unsafe(`DROP ROLE IF EXISTS ${ROLE}`).catch(() => {})
+    await admin?.end({ timeout: 5 }).catch(() => {})
+    if (stage) rmSync(stage, { recursive: true, force: true })
+  }, 60_000)
+
+  it('starts a current install whose role lacks TEMPORARY', async () => {
+    const pending: string[][] = []
+    await runMigrations(roleDsn(CURRENT), {
+      requireSessionMode: false,
+      onPending: ({ tags }) => pending.push(tags),
+    })
+    expect(pending).toEqual([[]])
+  })
+
+  it('refuses an upgrade whose pending migrations use pg_temp, before applying any', async () => {
+    const before = await ledgerRows(BEHIND)
+    const run = runMigrations(roleDsn(BEHIND), { requireSessionMode: false })
+    await expect(run).rejects.toBeInstanceOf(MigrationPreflightError)
+    await expect(run).rejects.toThrow(
+      `The database user "${ROLE}" lacks the TEMPORARY privilege on database "${BEHIND}"`
+    )
+    expect(await ledgerRows(BEHIND)).toBe(before)
   })
 })

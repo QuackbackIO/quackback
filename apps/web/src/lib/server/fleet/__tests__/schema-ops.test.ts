@@ -314,6 +314,31 @@ describe('migration preflight', () => {
     ])
   })
 
+  it('requires only what the run will exercise', () => {
+    const broken: PreflightFacts = {
+      ...healthy,
+      serverVersion: '13.9',
+      serverVersionNum: 130009,
+      canCreateTemp: false,
+      extensions: {
+        vector: { available: null, installed: null },
+        pg_trgm: { available: null, installed: null },
+      },
+    }
+    const none = { migrationsPending: false, extensions: false, tempTables: false }
+    expect(preflightProblems(broken, none)).toEqual([])
+    expect(preflightProblems(broken, { ...none, tempTables: true })).toEqual([
+      expect.stringContaining('lacks the TEMPORARY privilege'),
+    ])
+    expect(preflightProblems(broken, { ...none, migrationsPending: true })).toEqual([
+      expect.stringContaining('PostgreSQL 14 or newer is required'),
+    ])
+    expect(preflightProblems(broken, { ...none, extensions: true })).toEqual([
+      expect.stringContaining('"vector" extension'),
+      expect.stringContaining('"pg_trgm" extension'),
+    ])
+  })
+
   it('lists every problem in one readable error', () => {
     const err = new MigrationPreflightError(['first problem', 'second problem'])
     expect(err.message).toBe(

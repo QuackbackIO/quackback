@@ -217,15 +217,57 @@ function versionAtLeast(version: string, minimum: string): boolean {
   return true
 }
 
-/** Every unmet prerequisite, worded for the operator who has to fix it. */
-export function preflightProblems(facts: PreflightFacts): string[] {
+/**
+ * Which prerequisites this run actually depends on.
+ *
+ * Each check is gated on the work that needs it, so an install that is already
+ * current is never refused over a requirement it will not exercise (a hardened
+ * role with TEMPORARY revoked, say):
+ *
+ * - `migrationsPending`: the server-version floor. Only pending migrations use
+ *   syntax newer than the floor; a database with nothing to apply already ran
+ *   them, or never will.
+ * - `extensions`: pgvector (HNSW) and pg_trgm. Pending migrations use them, and
+ *   so do the HNSW and trigram builds after the transaction, which run on every
+ *   start. A current install has both installed at a working version, so the
+ *   check costs it nothing.
+ * - `tempTables`: TEMPORARY on the database. Only migrations that define
+ *   `pg_temp` helpers need it, so it is required only when one is pending.
+ */
+export interface PreflightNeeds {
+  migrationsPending: boolean
+  extensions: boolean
+  tempTables: boolean
+}
+
+const ALL_NEEDS: PreflightNeeds = { migrationsPending: true, extensions: true, tempTables: true }
+
+/** Every unmet prerequisite this run needs, worded for the operator who has to fix it. */
+export function preflightProblems(
+  facts: PreflightFacts,
+  needs: PreflightNeeds = ALL_NEEDS
+): string[] {
   const problems: string[] = []
-  if (facts.serverVersionNum < MIN_SERVER_VERSION_NUM) {
+  if (needs.migrationsPending && facts.serverVersionNum < MIN_SERVER_VERSION_NUM) {
     problems.push(
       `PostgreSQL 14 or newer is required, but this server runs ${facts.serverVersion}. Upgrade PostgreSQL.`
     )
   }
 
+  if (needs.extensions) problems.push(...extensionProblems(facts))
+
+  if (needs.tempTables && !facts.canCreateTemp) {
+    problems.push(
+      `The database user "${facts.user}" lacks the TEMPORARY privilege on database ` +
+        `"${facts.database}", which the upgrade needs. Run as a superuser: ` +
+        `GRANT TEMPORARY ON DATABASE "${facts.database}" TO "${facts.user}";`
+    )
+  }
+  return problems
+}
+
+function extensionProblems(facts: PreflightFacts): string[] {
+  const problems: string[] = []
   const vector = facts.extensions.vector
   if (vector.installed !== null) {
     if (!versionAtLeast(vector.installed, MIN_VECTOR_VERSION)) {
@@ -259,14 +301,6 @@ export function preflightProblems(facts: PreflightFacts): string[] {
         'Install the PostgreSQL contrib package for your PostgreSQL version.'
     )
   }
-
-  if (!facts.canCreateTemp) {
-    problems.push(
-      `The database user "${facts.user}" lacks the TEMPORARY privilege on database ` +
-        `"${facts.database}", which the upgrade needs. Run as a superuser: ` +
-        `GRANT TEMPORARY ON DATABASE "${facts.database}" TO "${facts.user}";`
-    )
-  }
   return problems
 }
 
@@ -274,8 +308,11 @@ export function preflightProblems(facts: PreflightFacts): string[] {
  * Refuse to start the migration transaction on a server that cannot finish it.
  * Read-only: it asks the catalogue and changes nothing.
  */
-export async function assertMigrationPreflight(sql: postgres.Sql): Promise<void> {
-  const problems = preflightProblems(await readPreflightFacts(sql))
+export async function assertMigrationPreflight(
+  sql: postgres.Sql,
+  needs: PreflightNeeds = ALL_NEEDS
+): Promise<void> {
+  const problems = preflightProblems(await readPreflightFacts(sql), needs)
   if (problems.length > 0) throw new MigrationPreflightError(problems)
 }
 
