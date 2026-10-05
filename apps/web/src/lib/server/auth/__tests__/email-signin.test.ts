@@ -12,6 +12,7 @@ const hoisted = vi.hoisted(() => ({
   // through the plugin's send callback, so the double returns one too.
   mockCreateVerificationOTP: vi.fn(async () => '123456'),
   mockSendMagicLinkEmail: vi.fn(async () => undefined),
+  settings: null as null | { name: string; logoKey: string | null },
 }))
 
 vi.mock('../magic-link-mint', () => ({ mintMagicLinkUrl: hoisted.mockMintMagicLinkUrl }))
@@ -33,7 +34,7 @@ vi.mock('../index', () => ({
 }))
 
 vi.mock('@/lib/server/db', () => ({
-  db: { query: { settings: { findFirst: vi.fn(async () => null) } } },
+  db: { query: { settings: { findFirst: vi.fn(async () => hoisted.settings) } } },
 }))
 
 vi.mock('@quackback/email', () => ({
@@ -85,6 +86,19 @@ describe('requestEmailSignin — failed-verify redirect', () => {
     await requestEmailSignin({ email: 'user@example.com', callbackURL: '/p/posts' })
     expect(hoisted.mockMintMagicLinkUrl).toHaveBeenCalledWith(
       expect.objectContaining({ errorCallbackPath: '/auth/login' })
+    )
+  })
+})
+
+describe('requestEmailSignin: the sign-in email', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('names the workspace being signed in to, for the subject', async () => {
+    hoisted.settings = { name: 'Acme', logoKey: null }
+    await requestEmailSignin({ email: 'jess@example.com', callbackURL: '/' })
+    hoisted.settings = null
+    expect(hoisted.mockSendMagicLinkEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ code: '123456', workspaceName: 'Acme' })
     )
   })
 })

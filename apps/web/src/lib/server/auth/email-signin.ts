@@ -145,5 +145,6 @@ export async function requestEmailSignin(opts: {
     signInUrl: minted.url,
     code: otp,
     logoUrl,
+    workspaceName: settings?.name ?? undefined,
   })
 }

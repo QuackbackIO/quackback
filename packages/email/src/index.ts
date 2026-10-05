@@ -757,15 +757,23 @@ interface SendMagicLinkParams {
   signInUrl: string
   code: string
   logoUrl?: string
+  /** The workspace being signed in to, named in the subject beside the code. */
+  workspaceName?: string
+}
+
+/** The code first, so the inbox list alone is enough to sign in. */
+export function magicLinkSubject(code: string, workspaceName?: string): string {
+  const name = workspaceName?.trim()
+  return name ? `${code} is your code for ${name}` : `${code} is your sign-in code`
 }
 
 export async function sendMagicLinkEmail(params: SendMagicLinkParams): Promise<EmailResult> {
-  const { to, signInUrl, code, logoUrl } = params
+  const { to, signInUrl, code, logoUrl, workspaceName } = params
 
   log.debug('sending sign-in email')
   return sendEmail({
     to,
-    subject: 'Your Quackback sign-in link',
+    subject: magicLinkSubject(code, workspaceName),
     react: MagicLinkEmail({ signInUrl, code, logoUrl }),
     emailType: 'MagicLinkEmail',
     preview: { signInUrl, code },
