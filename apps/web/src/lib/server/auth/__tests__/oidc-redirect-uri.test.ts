@@ -9,7 +9,7 @@
  *
  * The library is handed its own default (`<base>/api/auth/callback/<id>`) as
  * the per-request URI, exactly as its sign-in and callback routes do. A
- * legacy provider only reads legacy if our config overrides that.
+ * legacy provider only sends legacy if our config overrides that.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { genericOAuth } from 'better-auth/plugins'
@@ -111,10 +111,10 @@ describe('OIDC redirect URI sent by sign-in', () => {
     expect(sent.token).toBe(`${BASE_URL}/api/auth/oauth2/callback/sso`)
   })
 
-  it('treats a provider with no recorded style as legacy', async () => {
+  it('treats a provider with no recorded style as current', async () => {
     const sent = await redirectUrisSent(await providerFor({}))
-    expect(sent.authorize).toBe(`${BASE_URL}/api/auth/oauth2/callback/sso`)
-    expect(sent.token).toBe(`${BASE_URL}/api/auth/oauth2/callback/sso`)
+    expect(sent.authorize).toBe(`${BASE_URL}/api/auth/callback/sso`)
+    expect(sent.token).toBe(`${BASE_URL}/api/auth/callback/sso`)
   })
 
   it('sends the current URI on authorize and token exchange for a current provider', async () => {

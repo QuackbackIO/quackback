@@ -7,13 +7,15 @@
  * the authorize request and the token exchange, and many IdPs match that
  * exactly against the redirect URIs registered with them.
  *
- * - `legacy` sends `/api/auth/oauth2/callback/<id>`. Every provider created
- *   before the style was recorded registered this URL, so a provider with no
- *   recorded style reads as legacy and keeps signing in without any change
- *   at its IdP.
+ * - `legacy` sends `/api/auth/oauth2/callback/<id>`. Providers that existed
+ *   before the sign-in library moved its callback registered this URL, and
+ *   migration 0279 records each of them as legacy (as does the startup
+ *   backfill that creates the custom-oidc provider from its older config),
+ *   so they keep signing in without any change at their IdP.
  * - `current` sends `/api/auth/callback/<id>`, the sign-in library's own
- *   default. New providers are created with it, and an admin can move a
- *   legacy provider onto it once the new URL is registered.
+ *   default. A provider with no recorded style is current, which covers
+ *   every provider created since; an admin can move a legacy provider onto
+ *   it once the new URL is registered.
  *
  * Shared because the admin UI shows the URL and the server sends it, and the
  * two must never disagree.
@@ -26,9 +28,9 @@ export const OIDC_REDIRECT_STYLES = ['legacy', 'current'] as const
 const LEGACY_CALLBACK_PREFIX = '/api/auth/oauth2/callback/'
 const CURRENT_CALLBACK_PREFIX = '/api/auth/callback/'
 
-/** Read-time default: anything other than an explicit `current` is legacy. */
+/** Read-time default: anything other than an explicit `legacy` is current. */
 export function oidcRedirectStyleFrom(stored: unknown): OidcRedirectStyle {
-  return stored === 'current' ? 'current' : 'legacy'
+  return stored === 'legacy' ? 'legacy' : 'current'
 }
 
 export function oidcCallbackPath(registrationId: string, style: OidcRedirectStyle): string {

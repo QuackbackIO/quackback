@@ -27,7 +27,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { oidcRedirectUri } from '@/lib/shared/oidc-redirect'
+import { oidcRedirectStyleFrom, oidcRedirectUri } from '@/lib/shared/oidc-redirect'
 import type { DiagnosticStep, HandshakeStage } from '@/lib/server/auth/sso-test-handshake'
 import type { ProfileOutcome } from '@/lib/shared/sso-profile-outcome'
 import type { SsoTestCaptureV2 } from '@/lib/shared/sso-test-capture'
@@ -167,7 +167,11 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
     // Same path Better Auth sends on sign-in, so the test and production
     // share one redirect URI. The catch-all dispatches test vs prod by
     // looking up the OAuth `state` in the KV store (miss → fall through).
-    const redirectUri = oidcRedirectUri(config.baseUrl, data.registrationId, provider.redirectStyle)
+    const redirectUri = oidcRedirectUri(
+      config.baseUrl,
+      data.registrationId,
+      oidcRedirectStyleFrom(provider.redirectStyle)
+    )
     const testId = `ssotest_${randomBytes(15).toString('base64url')}`
     const state = randomBytes(32).toString('base64url')
     // PKCE (RFC 7636, S256) — mirrors production now that genericOAuth

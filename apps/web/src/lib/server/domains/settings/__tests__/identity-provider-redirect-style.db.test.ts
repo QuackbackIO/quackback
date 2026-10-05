@@ -1,10 +1,10 @@
 /**
  * Real-Postgres proof of which redirect URI each identity provider sends.
  *
- * Providers that existed before the style was recorded have no entry and must
- * keep sending the legacy `/api/auth/oauth2/callback/<id>` URL their IdP
- * already has; a provider created here records `current`; an admin switch
- * flips one. Each case is read back through `listIdentityProviders` and fed to
+ * A provider recorded `legacy` (migration 0279 stamps the ones that predate
+ * the callback move) keeps sending `/api/auth/oauth2/callback/<id>`; a
+ * provider with no entry, which is every one created since, sends the current
+ * `/api/auth/callback/<id>`; an admin switch flips one. Each case is read back through `listIdentityProviders` and fed to
  * `buildGenericOAuthConfigs`, the path the auth runtime registers from, so the
  * assertion is on the redirect URI sign-in would actually send.
  *
@@ -52,7 +52,7 @@ vi.mock('@/lib/server/domains/platform-credentials/platform-credential.service',
 // builds its own connection rather than going through the global `db`.
 // oxlint-disable-next-line no-restricted-imports
 import { createDbFromSql } from '@quackback/db/client'
-import { db, eq, identityProvider, settings } from '@/lib/server/db'
+import { db, identityProvider, settings } from '@/lib/server/db'
 import { buildGenericOAuthConfigs } from '@/lib/server/auth/build-oauth-configs'
 import {
   deleteIdentityProvider,
@@ -105,8 +105,8 @@ beforeEach(async () => {
   })
 })
 
-/** A provider row as an upgrade finds it: written before any style existed. */
-async function seedExistingProvider(registrationId: string) {
+/** A provider row, optionally recorded with a redirect style. */
+async function seedProvider(registrationId: string, style?: 'legacy' | 'current') {
   const [row] = await db
     .insert(identityProvider)
     .values({
@@ -118,6 +118,17 @@ async function seedExistingProvider(registrationId: string) {
       enabled: true,
     })
     .returning({ id: identityProvider.id })
+  if (style) {
+    await db.update(settings).set({
+      authConfig: JSON.stringify({
+        ...(await storedAuthConfig()),
+        oidcRedirectStyles: {
+          ...((await storedAuthConfig()).oidcRedirectStyles as object),
+          [registrationId]: style,
+        },
+      }),
+    })
+  }
   return row!.id
 }
 
@@ -142,40 +153,34 @@ async function storedAuthConfig(): Promise<Record<string, unknown>> {
 }
 
 describe.skipIf(!available)('identity provider redirect style', () => {
-  it('keeps an existing provider on the legacy redirect URI', async () => {
-    await seedExistingProvider('sso')
+  it('keeps a provider recorded as legacy on the legacy redirect URI', async () => {
+    await seedProvider('sso', 'legacy')
 
     const [provider] = await listIdentityProviders()
     expect(provider!.redirectStyle).toBe('legacy')
     expect(await sentRedirectUri('sso')).toBe(`${BASE_URL}/api/auth/oauth2/callback/sso`)
   })
 
-  it('records a newly created provider on the current redirect URI', async () => {
+  it('sends the current redirect URI for a provider with no entry', async () => {
+    await seedProvider('oidc_plain')
+
+    const [provider] = await listIdentityProviders()
+    expect(provider!.redirectStyle).toBe('current')
+    expect(await sentRedirectUri('oidc_plain')).toBe(`${BASE_URL}/api/auth/callback/oidc_plain`)
+  })
+
+  it('creates a provider on the current redirect URI without touching auth_config', async () => {
     const created = await upsertIdentityProvider({
       registrationId: 'oidc_new',
       label: 'New',
       clientId: 'client-2',
     })
     expect(created.redirectStyle).toBe('current')
-    await db
-      .update(identityProvider)
-      .set({
-        enabled: true,
-        authorizationUrl: 'https://idp.example/authorize',
-        tokenUrl: 'https://idp.example/token',
-      })
-      .where(eq(identityProvider.id, created.id))
-
-    expect(await sentRedirectUri('oidc_new')).toBe(`${BASE_URL}/api/auth/callback/oidc_new`)
-    // The rest of the stored JSON is left exactly as it was.
-    expect(await storedAuthConfig()).toEqual({
-      ...STORED_AUTH_CONFIG,
-      oidcRedirectStyles: { oidc_new: 'current' },
-    })
+    expect(await storedAuthConfig()).toEqual(STORED_AUTH_CONFIG)
   })
 
-  it('switches an existing provider to the current redirect URI and back', async () => {
-    const id = await seedExistingProvider('custom-oidc')
+  it('switches a legacy provider to the current redirect URI and back', async () => {
+    const id = await seedProvider('custom-oidc', 'legacy')
 
     const switched = await setIdentityProviderRedirectStyle(id, 'current')
     expect(switched?.redirectStyle).toBe('current')
@@ -187,12 +192,16 @@ describe.skipIf(!available)('identity provider redirect style', () => {
     expect(await sentRedirectUri('custom-oidc')).toBe(
       `${BASE_URL}/api/auth/oauth2/callback/custom-oidc`
     )
-    expect(await storedAuthConfig()).toMatchObject(STORED_AUTH_CONFIG)
+    // The rest of the stored JSON is left exactly as it was.
+    expect(await storedAuthConfig()).toEqual({
+      ...STORED_AUTH_CONFIG,
+      oidcRedirectStyles: { 'custom-oidc': 'legacy' },
+    })
   })
 
   it('switches only the provider asked for', async () => {
-    const first = await seedExistingProvider('sso')
-    await seedExistingProvider('custom-oidc')
+    const first = await seedProvider('sso', 'legacy')
+    await seedProvider('custom-oidc', 'legacy')
 
     await setIdentityProviderRedirectStyle(first, 'current')
 
@@ -203,8 +212,7 @@ describe.skipIf(!available)('identity provider redirect style', () => {
   })
 
   it('forgets the style when the provider is deleted', async () => {
-    const id = await seedExistingProvider('oidc_gone')
-    await setIdentityProviderRedirectStyle(id, 'current')
+    const id = await seedProvider('oidc_gone', 'legacy')
 
     await deleteIdentityProvider(id)
 

@@ -98,8 +98,8 @@ export interface IdentityProvider {
   autoCreateUsers: boolean
   autoProvisionRole: Role | null
   claimMapping: IdentityProviderClaimMapping | null
-  /** Which callback URL sign-in sends as the redirect URI. `legacy` for any
-   *  provider created before this was recorded; see `oidc-redirect.ts`. */
+  /** Which callback URL sign-in sends as the redirect URI. `current` unless
+   *  the provider was recorded as `legacy`; see `oidc-redirect.ts`. */
   redirectStyle: OidcRedirectStyle
   showButton: boolean
   /** S3 storage key for the uploaded provider logo, or null. */
@@ -284,14 +284,14 @@ function parseRedirectStyles(
 }
 
 /**
- * Record (or with `null`, forget) a provider's redirect style inside the
- * caller's transaction. Rewrites only the `oidcRedirectStyles` key of the
+ * Record (or with `null`, forget) a provider's redirect style, inside the
+ * caller's transaction when it passes one. Rewrites only the `oidcRedirectStyles` key of the
  * stored JSON and leaves every other key exactly as stored, under a row lock
  * so a concurrent write to the same blob cannot be lost. A workspace with no
  * settings row has nothing to record against and is left alone.
  */
-async function writeRedirectStyle(
-  tx: Transaction,
+export async function writeRedirectStyle(
+  tx: Database | Transaction,
   registrationId: string,
   style: OidcRedirectStyle | null
 ): Promise<void> {
@@ -609,9 +609,6 @@ export async function upsertIdentityProvider(
             showButton: input.showButton ?? false,
           })
           .returning()
-        // A provider created now registers the sign-in library's own callback
-        // URL, so record that. Providers that predate the record read legacy.
-        await writeRedirectStyle(tx, row!.registrationId, 'current')
       }
       await bumpAuthConfigVersionInTx(tx)
       return row

@@ -118,7 +118,7 @@ describe('startSsoTestFn', () => {
   })
 
   it('returns testId + authorizeUrl when preconditions met (legacy sso provider)', async () => {
-    hoisted.listIdentityProviders.mockResolvedValue([ssoProvider])
+    hoisted.listIdentityProviders.mockResolvedValue([{ ...ssoProvider, redirectStyle: 'legacy' }])
     hoisted.getIdentityProviderCredentials.mockResolvedValue({ clientSecret: 'secret' })
     hoisted.safeFetch.mockResolvedValue(
       new Response(
@@ -140,8 +140,8 @@ describe('startSsoTestFn', () => {
 
     expect(result.testId).toMatch(/^ssotest_/)
     expect(result.authorizeUrl).toMatch(/^https:\/\/idp\/auth\?/)
-    // Redirect URI is the one production sends for this provider. A provider
-    // with no recorded style is legacy: the URL its IdP already has.
+    // Redirect URI is the one production sends for this provider: a legacy
+    // provider sends the URL its IdP already has.
     expect(new URL(result.authorizeUrl).searchParams.get('redirect_uri')).toBe(
       'https://qb.test/api/auth/oauth2/callback/sso'
     )
@@ -369,7 +369,6 @@ describe('startSsoTestFn', () => {
       registrationId: 'oidc_abc123',
       discoveryUrl: 'https://custom-idp/.well-known',
       clientId: 'custom-client',
-      redirectStyle: 'current',
       domains: [],
     }
     hoisted.listIdentityProviders.mockResolvedValue([customProvider])
@@ -392,7 +391,8 @@ describe('startSsoTestFn', () => {
       authorizeUrl: string
     }
 
-    // Redirect URI must be the provider's OWN callback, on the current path.
+    // Redirect URI must be the provider's OWN callback; no recorded style is
+    // the current path.
     expect(new URL(result.authorizeUrl).searchParams.get('redirect_uri')).toBe(
       'https://qb.test/api/auth/callback/oidc_abc123'
     )

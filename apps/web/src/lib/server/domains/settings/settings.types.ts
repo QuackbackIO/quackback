@@ -128,10 +128,10 @@ export interface AuthConfig {
   twoFactor?: { required: boolean }
   /**
    * Which callback URL each OIDC provider sends as its redirect URI, keyed by
-   * the provider's `registrationId`. A provider with no entry is `legacy`; see
-   * `lib/shared/oidc-redirect.ts`. Written only by the identity-provider
-   * service: stamped `current` when a provider is created, changed when an
-   * admin switches it, removed when it is deleted.
+   * the provider's `registrationId`. A provider with no entry is `current`; see
+   * `lib/shared/oidc-redirect.ts`. `legacy` is stamped by migration 0279 and the
+   * custom-oidc startup backfill for providers registered before the callback
+   * moved; an admin switch changes it and deleting the provider removes it.
    */
   oidcRedirectStyles?: Record<string, OidcRedirectStyle>
 }
