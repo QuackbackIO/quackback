@@ -65,6 +65,8 @@ vi.mock('@/lib/server/domains/assistant', () => ({
 }))
 vi.mock('@/lib/server/activation-wins', () => ({
   detectFirstWin: async () => ({ reached: false, reachedAt: null }),
+  winOutcome: () => null,
+  internalWinScope: async () => null,
 }))
 vi.mock('@/lib/server/logger', () => ({
   logger: { child: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }) },
