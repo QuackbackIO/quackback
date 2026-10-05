@@ -1,3 +1,4 @@
+import { useIntl } from 'react-intl'
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
@@ -429,6 +430,7 @@ function UsageCard(props: {
   onTopUp: (meter: 'ai' | 'email') => void
 }) {
   const format = useLocalDateFormatter()
+  const intl = useIntl()
   const emails = props.usage.find((line) => line.key === 'emailsPerMonth')
   const api = props.usage.find((line) => line.key === 'apiRequestsPerMonth')
   const inventory = props.usage.filter(
@@ -447,10 +449,17 @@ function UsageCard(props: {
   if (!hasAi && !hasEmails && !hasApi && inventory.length === 0) return null
 
   const reset = nextMonthResetLabel(format)
+  // A trial's AI allowance runs to the trial end, not the calendar month.
+  const aiReset = ai?.resetsAt
+    ? intl.formatMessage(
+        { id: 'admin.billing.aiResets', defaultMessage: 'Resets {date}' },
+        { date: format(new Date(ai.resetsAt), { month: 'short', day: 'numeric' }) }
+      )
+    : null
   const aiCap = ai ? (ai.includedCents > 0 ? ai.includedCents : ai.extraCents) : 0
   const aiUsed = ai ? Math.min(ai.usedCents, aiCap) : 0
   const aiPercent = aiCap > 0 ? Math.min(100, Math.round((aiUsed / aiCap) * 100)) : 0
-  const hasMonthly = hasAi || hasEmails || hasApi
+  const hasMonthly = (hasAi && !aiReset) || hasEmails || hasApi
 
   return (
     <section data-settings-card="" className="overflow-hidden rounded-xl border bg-card">
@@ -465,11 +474,14 @@ function UsageCard(props: {
           <div className="px-6 py-4">
             <UsageMeter
               label="Quinn usage"
-              description={
+              description={[
                 ai.extraCents > 0
                   ? 'Included usage is used first, then extra credit.'
-                  : 'Included usage this period.'
-              }
+                  : 'Included usage this period.',
+                aiReset,
+              ]
+                .filter(Boolean)
+                .join(' ')}
               valueText={`${aiPercent}% used this period`}
               used={aiUsed}
               limit={aiCap}

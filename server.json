@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.QuackbackIO/quackback",
-  "description": "Open-source feedback platform. Agents can search, triage, comment, vote, and manage changelogs.",
+  "description": "Open-source feedback and support platform: feedback, conversations, tickets, changelog, help center.",
   "repository": {
     "url": "https://github.com/QuackbackIO/quackback",
     "source": "github"
@@ -22,30 +22,164 @@
   ],
   "tools": [
     {
+      "name": "create_changelog",
+      "description": "Create a changelog entry"
+    },
+    {
+      "name": "update_changelog",
+      "description": "Update title, content, publish state, and/or linked posts on an existing changelog entry"
+    },
+    {
+      "name": "delete_changelog",
+      "description": "Soft-delete a changelog entry"
+    },
+    {
+      "name": "add_comment",
+      "description": "Post a comment on a feedback post"
+    },
+    {
+      "name": "update_comment",
+      "description": "Edit a comment's content"
+    },
+    {
+      "name": "delete_comment",
+      "description": "Hard-delete a comment and all its replies (cascade)"
+    },
+    {
+      "name": "react_to_comment",
+      "description": "Add or remove an emoji reaction on a comment"
+    },
+    {
+      "name": "list_conversations",
+      "description": "List support-inbox conversations, newest activity first"
+    },
+    {
+      "name": "get_conversation",
+      "description": "Get a conversation and its most recent messages"
+    },
+    {
+      "name": "reply_to_conversation",
+      "description": "Send an agent reply in a conversation (visible to the visitor)"
+    },
+    {
+      "name": "suggest_post",
+      "description": "Suggest to the SUPPORT TEAM (not the visitor) that a RESOLVED conversation be tracked as a feedback post"
+    },
+    {
+      "name": "share_post",
+      "description": "Embed an EXISTING feedback post as a card in the conversation so the visitor can view and upvote it"
+    },
+    {
+      "name": "set_conversation_status",
+      "description": "Change a conversation's status (open, snoozed, or closed)"
+    },
+    {
+      "name": "upload_file",
+      "description": "Upload a file (base64-encoded, max 5 MB decoded) so it can be attached to a conversation reply, ticket reply, or ticket note"
+    },
+    {
+      "name": "create_article",
+      "description": "Create a new help center article (draft)"
+    },
+    {
+      "name": "update_article",
+      "description": "Update a help center article"
+    },
+    {
+      "name": "delete_article",
+      "description": "Soft-delete a help center article"
+    },
+    {
+      "name": "manage_category",
+      "description": "Create, update, or delete a help center category"
+    },
+    {
+      "name": "triage_post",
+      "description": "Update a post: set status, tags, and/or owner"
+    },
+    {
+      "name": "vote_post",
+      "description": "Toggle vote on a feedback post"
+    },
+    {
+      "name": "proxy_vote",
+      "description": "Add or remove a vote on behalf of another user"
+    },
+    {
+      "name": "create_post",
+      "description": "Submit new feedback on a board"
+    },
+    {
+      "name": "merge_post",
+      "description": "Merge a duplicate post into a canonical post"
+    },
+    {
+      "name": "unmerge_post",
+      "description": "Restore a merged post to independent state"
+    },
+    {
+      "name": "delete_post",
+      "description": "Soft-delete a feedback post"
+    },
+    {
+      "name": "restore_post",
+      "description": "Restore a soft-deleted post"
+    },
+    {
+      "name": "get_post_activity",
+      "description": "Get the activity log for a post"
+    },
+    {
       "name": "search",
-      "description": "Search feedback posts or changelog entries with filtering and pagination"
+      "description": "Search feedback posts, changelog entries, or help center articles"
     },
     {
       "name": "get_details",
-      "description": "Get full details for any entity by TypeID (post, changelog)"
+      "description": "Get full details for any entity by TypeID"
     },
-    { "name": "triage_post", "description": "Update a post: set status, tags, and/or owner" },
-    { "name": "vote_post", "description": "Toggle vote on a feedback post" },
     {
-      "name": "add_comment",
-      "description": "Post a comment on a feedback post, with threaded reply support"
+      "name": "accept_suggestion",
+      "description": "Accept a post-to-post merge suggestion, merging the source post into the target"
     },
-    { "name": "create_post", "description": "Submit new feedback on a board" },
-    { "name": "create_changelog", "description": "Create a changelog entry (draft or published)" },
     {
-      "name": "update_changelog",
-      "description": "Update title, content, publish state, and linked posts on a changelog"
+      "name": "dismiss_suggestion",
+      "description": "Dismiss a merge suggestion"
     },
-    { "name": "delete_changelog", "description": "Soft-delete a changelog entry" },
-    { "name": "update_comment", "description": "Edit a comment's content" },
-    { "name": "delete_comment", "description": "Hard-delete a comment and its replies" },
-    { "name": "react_to_comment", "description": "Add or remove an emoji reaction on a comment" },
-    { "name": "merge_post", "description": "Merge a duplicate post into a canonical post" },
-    { "name": "unmerge_post", "description": "Restore a merged post to independent state" }
+    {
+      "name": "restore_suggestion",
+      "description": "Restore a dismissed merge suggestion back to pending status"
+    },
+    {
+      "name": "list_tickets",
+      "description": "List support tickets"
+    },
+    {
+      "name": "get_ticket",
+      "description": "Get a ticket and its most recent thread messages, oldest-first"
+    },
+    {
+      "name": "create_ticket",
+      "description": "Open a support ticket"
+    },
+    {
+      "name": "reply_to_ticket",
+      "description": "Post a reply on a ticket thread (visible to the requester)"
+    },
+    {
+      "name": "add_ticket_note",
+      "description": "Add an internal note to a ticket thread"
+    },
+    {
+      "name": "link_ticket",
+      "description": "Link a customer ticket to a tracker so the tracker's stage changes cascade onto it"
+    },
+    {
+      "name": "unlink_ticket",
+      "description": "Remove a customer ticket from a tracker"
+    },
+    {
+      "name": "widget_install_status",
+      "description": "Read whether the Quackback widget is connected on the customer site"
+    }
   ]
 }

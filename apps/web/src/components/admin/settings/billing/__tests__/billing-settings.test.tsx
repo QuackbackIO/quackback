@@ -2,6 +2,8 @@
 import '@testing-library/jest-dom/vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
+import { IntlProvider } from 'react-intl'
+import de from '@/locales/de.json'
 import type { BillingCatalogue } from '@/lib/server/control-plane/client'
 import type { BillingProjectionOverview } from '@/lib/server/domains/billing/projection-overview'
 import { BillingPlansView } from '../billing-settings'
@@ -81,7 +83,7 @@ const paidOverview: BillingProjectionOverview = {
     { id: 'enterprise', name: 'Enterprise' },
   ],
   seats: { used: 7, pending: 1, members: 6, purchased: null, limit: 20 },
-  ai: { includedCents: 3000, usedCents: 2520, extraCents: 1000 },
+  ai: { includedCents: 3000, usedCents: 2520, extraCents: 1000, resetsAt: null },
   hideBranding: false,
 }
 
@@ -90,31 +92,69 @@ function renderView(
     overview?: BillingProjectionOverview
     catalogue?: BillingCatalogue | null
     usage?: Array<{ key: string; label: string; used: number; limit: number | null }>
+    locale?: string
+    messages?: Record<string, string>
   } = {}
 ) {
   return render(
-    <BillingPlansView
-      overview={overrides.overview ?? paidOverview}
-      catalogue={overrides.catalogue === undefined ? catalogue : overrides.catalogue}
-      catalogueError={null}
-      invoices={[
-        {
-          id: 'in_1',
-          number: 'INV-1001',
-          createdAt: '2026-08-14T00:00:00.000Z',
-          amountCents: 288000,
-          currency: 'usd',
-          status: 'paid',
-          hostedUrl: 'https://billing.example.com/invoice/in_1',
-        },
-      ]}
-      invoicesError={null}
-      usage={overrides.usage}
-    />
+    <IntlProvider locale={overrides.locale ?? 'en'} messages={overrides.messages ?? {}}>
+      <BillingPlansView
+        overview={overrides.overview ?? paidOverview}
+        catalogue={overrides.catalogue === undefined ? catalogue : overrides.catalogue}
+        catalogueError={null}
+        invoices={[
+          {
+            id: 'in_1',
+            number: 'INV-1001',
+            createdAt: '2026-08-14T00:00:00.000Z',
+            amountCents: 288000,
+            currency: 'usd',
+            status: 'paid',
+            hostedUrl: 'https://billing.example.com/invoice/in_1',
+          },
+        ]}
+        invoicesError={null}
+        usage={overrides.usage}
+      />
+    </IntlProvider>
   )
 }
 
 describe('BillingPlansView', () => {
+  it('shows the trial end as the AI reset during a trial crossing a month', () => {
+    renderView({
+      overview: {
+        ...paidOverview,
+        status: null,
+        trialActive: true,
+        trialExpiresAt: '2026-11-08T09:00:00.000Z',
+        ai: { ...paidOverview.ai!, resetsAt: '2026-11-08T09:00:00.000Z' },
+      },
+      usage: [{ key: 'emailsPerMonth', label: 'emails', used: 1840, limit: 10_000 }],
+    })
+    expect(screen.getByText(/Resets Nov 8/)).toBeInTheDocument()
+    // Other meters keep their calendar reset.
+    expect(screen.getByText(/Monthly meters reset/)).toBeInTheDocument()
+  })
+
+  it('localises the AI reset', () => {
+    renderView({
+      overview: {
+        ...paidOverview,
+        ai: { ...paidOverview.ai!, resetsAt: '2026-11-08T09:00:00.000Z' },
+      },
+      locale: 'de',
+      messages: de,
+    })
+    expect(screen.getByText(/Wird am .*zurückgesetzt/)).toBeInTheDocument()
+  })
+
+  it('keeps only the monthly reset copy outside a trial', () => {
+    renderView()
+    expect(screen.queryByText(/Resets /)).not.toBeInTheDocument()
+    expect(screen.getByText(/Monthly meters reset/)).toBeInTheDocument()
+  })
+
   it('renders the active paid plan and invoices', () => {
     renderView()
 
@@ -185,7 +225,7 @@ describe('BillingPlansView', () => {
         canManageBilling: true,
         renewalAt: null,
         seats: { used: 1, pending: 0, members: 1, purchased: null },
-        ai: { includedCents: 0, usedCents: 0, extraCents: 1000 },
+        ai: { includedCents: 0, usedCents: 0, extraCents: 1000, resetsAt: null },
       },
     })
     expect(screen.getByText('Quinn usage')).toBeInTheDocument()
@@ -205,7 +245,7 @@ describe('BillingPlansView', () => {
         canManageBilling: false,
         renewalAt: null,
         seats: { used: 1, pending: 0, members: 1, purchased: null },
-        ai: { includedCents: 0, usedCents: 0, extraCents: 0 },
+        ai: { includedCents: 0, usedCents: 0, extraCents: 0, resetsAt: null },
       },
     })
     expect(screen.queryByRole('button', { name: 'Add seats' })).not.toBeInTheDocument()

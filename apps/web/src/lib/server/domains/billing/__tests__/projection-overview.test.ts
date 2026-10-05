@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { aiBudgetWindow } from '@/lib/server/domains/ai/ai-budget'
 import {
   composeAiUsage,
   purchasedSeatsFromProjection,
@@ -19,7 +20,43 @@ describe('composeAiUsage', () => {
       includedCents: 3000,
       usedCents: 2520,
       extraCents: 1000,
+      resetsAt: null,
     })
+  })
+
+  it('reports the trial end as the AI reset for a trial crossing a month', () => {
+    const window = aiBudgetWindow(
+      {
+        enabled: true,
+        trialActive: true,
+        trialStartedAt: '2026-10-25T09:00:00.000Z',
+        trialExpiresAt: '2026-11-08T09:00:00.000Z',
+      },
+      new Date('2026-10-28T12:00:00.000Z')
+    )
+    const ai = composeAiUsage({
+      usedTokens: 0,
+      tokenCap: 6_000_000,
+      includedCents: 3000,
+      blendedCentsPerMTok: 500,
+      window,
+    })
+    expect(ai.resetsAt).toBe('2026-11-08T09:00:00.000Z')
+  })
+
+  it('leaves the AI reset to the monthly copy outside a trial', () => {
+    const window = aiBudgetWindow(
+      { enabled: true, trialActive: false, trialStartedAt: null, trialExpiresAt: null },
+      new Date('2026-10-28T12:00:00.000Z')
+    )
+    const ai = composeAiUsage({
+      usedTokens: 0,
+      tokenCap: 6_000_000,
+      includedCents: 3000,
+      blendedCentsPerMTok: 500,
+      window,
+    })
+    expect(ai.resetsAt).toBeNull()
   })
 
   it('does not invent extra credit when the cap is the included allowance', () => {
@@ -30,7 +67,7 @@ describe('composeAiUsage', () => {
         includedCents: 3000,
         blendedCentsPerMTok: 500,
       })
-    ).toEqual({ includedCents: 3000, usedCents: 0, extraCents: 0 })
+    ).toEqual({ includedCents: 3000, usedCents: 0, extraCents: 0, resetsAt: null })
   })
 })
 

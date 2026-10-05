@@ -88,7 +88,7 @@ export function AuthProviderCredentialsForm({
   const saveMutation = useSaveAuthProviderCredentials()
   const deleteMutation = useDeleteAuthProviderCredentials()
 
-  // Better Auth 1.7: social and generic OIDC share `/api/auth/callback/<id>`.
+  // Social providers return to `/api/auth/callback/<id>`.
   const redirectUri = `${baseUrl}${authProviderCallbackPath(providerId)}`
 
   const handleStartEdit = () => {

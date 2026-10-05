@@ -82,7 +82,7 @@ describe('the scanner is looking at something', () => {
       'apps/web/src/routes/api/health.ready.ts#migrationsKnownUpToDate',
       'apps/web/src/routes/api/auth/$.ts#registrationAttempts',
       'packages/email/src/index.ts#smtpTransporter',
-      'packages/email/src/index.ts#inboundFetchClient',
+      'packages/email/src/index.ts#resendClient',
       'packages/email/src/ses.ts#cachedClient',
     ]) {
       expect(ids.has(id), id).toBe(true)

@@ -12,6 +12,7 @@ import { IntlProvider } from 'react-intl'
 import type { ReactNode } from 'react'
 import type { ConversationId } from '@quackback/ids'
 import type { AgentConversationMessageDTO } from '@/lib/shared/conversation/types'
+import de from '@/locales/de.json'
 
 const hoisted = vi.hoisted(() => ({
   translateConversationMessagesFn: vi.fn(),
@@ -83,7 +84,10 @@ function agentMessage(
 beforeEach(() => {
   vi.clearAllMocks()
   hoisted.getMyLanguagePreferenceFn.mockResolvedValue({ language: 'en' })
-  hoisted.translateConversationMessagesFn.mockResolvedValue({})
+  hoisted.translateConversationMessagesFn.mockResolvedValue({
+    translations: {},
+    overAllowance: false,
+  })
   hoisted.setInboxTranslationEnabledFn.mockResolvedValue({ ok: true })
   hoisted.dismissInboxTranslationSuggestionFn.mockResolvedValue({ ok: true })
 })
@@ -364,7 +368,8 @@ describe('useInboxTranslation — translationFor (per-message display)', () => {
   it('resolves an incoming visitor message once the fetched translation lands', async () => {
     const message = visitorMessage()
     hoisted.translateConversationMessagesFn.mockResolvedValue({
-      [message.id]: { content: 'Hello', sourceLocale: 'fr' },
+      translations: { [message.id]: { content: 'Hello', sourceLocale: 'fr' } },
+      overAllowance: false,
     })
     const { result } = renderHook(
       () =>
@@ -393,7 +398,8 @@ describe('useInboxTranslation — translationFor (per-message display)', () => {
   it('toggling a message flips showingOriginal for just that message', async () => {
     const message = visitorMessage()
     hoisted.translateConversationMessagesFn.mockResolvedValue({
-      [message.id]: { content: 'Hello', sourceLocale: 'fr' },
+      translations: { [message.id]: { content: 'Hello', sourceLocale: 'fr' } },
+      overAllowance: false,
     })
     const { result, rerender } = renderHook(
       () =>
@@ -462,5 +468,64 @@ describe('useInboxTranslation — translationFor (per-message display)', () => {
       { wrapper }
     )
     expect(result.current.translationFor(agentMessage())).toBeUndefined()
+  })
+})
+
+describe('useInboxTranslation over the AI allowance', () => {
+  function germanWrapper({ children }: { children: ReactNode }) {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    return (
+      <IntlProvider locale="de" messages={de}>
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      </IntlProvider>
+    )
+  }
+
+  const activeState = { enabled: true, detectedCustomerLanguage: 'fr', suggestionDismissed: false }
+
+  it('keeps showing translations and adds a localised notice', async () => {
+    const message = visitorMessage()
+    hoisted.translateConversationMessagesFn.mockResolvedValue({
+      translations: { [message.id]: { content: 'Hello', sourceLocale: 'fr' } },
+      overAllowance: true,
+    })
+    const { result } = renderHook(
+      () =>
+        useInboxTranslation({
+          enabledFlag: true,
+          conversationId,
+          translationState: activeState,
+          messages: [message],
+          onChanged: vi.fn(),
+        }),
+      { wrapper: germanWrapper }
+    )
+
+    await waitFor(() => expect(result.current.overAllowanceNotice).not.toBeNull())
+    expect(result.current.overAllowanceNotice).toBe(
+      'Das KI-Budget ist aufgebraucht. Die Übersetzung läuft weiter.'
+    )
+    expect(result.current.translationFor(message)?.translatedContent).toBe('Hello')
+  })
+
+  it('shows no notice while allowance remains', async () => {
+    const message = visitorMessage()
+    hoisted.translateConversationMessagesFn.mockResolvedValue({
+      translations: { [message.id]: { content: 'Hello', sourceLocale: 'fr' } },
+      overAllowance: false,
+    })
+    const { result } = renderHook(
+      () =>
+        useInboxTranslation({
+          enabledFlag: true,
+          conversationId,
+          translationState: activeState,
+          messages: [message],
+          onChanged: vi.fn(),
+        }),
+      { wrapper: germanWrapper }
+    )
+    await waitFor(() => expect(result.current.translationFor(message)).toBeDefined())
+    expect(result.current.overAllowanceNotice).toBeNull()
   })
 })

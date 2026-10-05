@@ -32,8 +32,21 @@ interface CallState {
   usage: { input: number; output: number; total: number }
 }
 
-export function createUsageLoggingMiddleware(params: UsageMiddlewareParams): ChatMiddleware {
+export type UsageLoggingMiddleware = ChatMiddleware & {
+  /**
+   * Resolves once every usage row this middleware started has been written
+   * (or has failed and been logged). Rows are written fire-and-forget so a
+   * chat() call never waits on them; a caller that reads usage right after
+   * its own calls awaits this first so those calls are counted.
+   */
+  settled: () => Promise<void>
+}
+
+export function createUsageLoggingMiddleware(
+  params: UsageMiddlewareParams
+): UsageLoggingMiddleware {
   const calls = new Map<string, CallState>()
+  const writes = new Set<Promise<void>>()
 
   const finalize = (
     ctx: ChatMiddlewareContext,
@@ -42,7 +55,7 @@ export function createUsageLoggingMiddleware(params: UsageMiddlewareParams): Cha
     const state = calls.get(ctx.requestId)
     if (!state) return
     calls.delete(ctx.requestId)
-    void logAiUsage({
+    const write: Promise<void> = logAiUsage({
       ...params,
       callType: 'chat_completion',
       model: ctx.model ?? params.model,
@@ -51,13 +64,20 @@ export function createUsageLoggingMiddleware(params: UsageMiddlewareParams): Cha
       totalTokens: state.usage.total,
       durationMs: Date.now() - state.startedAt,
       ...outcome,
-    }).catch((err) => {
-      log.warn({ err }, 'failed to log ai usage')
     })
+      .catch((err) => {
+        log.warn({ err }, 'failed to log ai usage')
+      })
+      .finally(() => writes.delete(write))
+    writes.add(write)
   }
 
   return {
     name: 'ai-usage-logging',
+
+    async settled() {
+      await Promise.all([...writes])
+    },
 
     onStart(ctx: ChatMiddlewareContext) {
       calls.set(ctx.requestId, {

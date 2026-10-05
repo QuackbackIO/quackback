@@ -1,6 +1,6 @@
 {
   "name": "@quackback/web",
-  "version": "0.13.2",
+  "version": "0.14.0",
   "private": true,
   "license": "AGPL-3.0",
   "type": "module",
@@ -121,6 +121,7 @@
     "pdfjs-dist": "6.3.289",
     "pino": "^10.3.1",
     "postgres": "^3.4.9",
+    "posthog-js": "^1.435.9",
     "qrcode": "^1.5.4",
     "react": "^19.3.0",
     "react-day-picker": "^10.0.1",

@@ -12,6 +12,7 @@
  * would open several connections to every workspace database instead of one.
  */
 import { logger } from '@/lib/server/logger'
+import { isPooledTenancy } from '@/lib/server/workspaces/mode'
 
 const log = logger.child({ component: 'fleet-cron' })
 
@@ -163,6 +164,8 @@ export async function runStatusMaintenanceSweep(): Promise<void> {
  * stops two replicas from both enumerating the fleet at once.
  */
 export async function runFleetMigratorPass(): Promise<void> {
+  // The registry the migrator walks only exists under pooled tenancy.
+  if (!isPooledTenancy()) return
   const { withSweepLock } = await import('@/lib/server/sweep-lock')
   await withSweepLock('fleet_migrator', ONE_HOUR, async () => {
     const [{ enrolActiveWorkspaces, runReconcilePass }, { hostname }, { randomUUID }] =

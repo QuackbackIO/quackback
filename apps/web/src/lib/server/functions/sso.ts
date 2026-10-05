@@ -29,6 +29,7 @@ import { actorFromAuth, withAuditEvent } from '@/lib/server/audit/log'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { diffProviderAudit } from '@/lib/server/auth/idp-audit-diff'
 import { applyClaimMappingEdits } from '@/lib/shared/sso-claim-mapping-edit'
+import { OIDC_REDIRECT_STYLES } from '@/lib/shared/oidc-redirect'
 import { requireAuth } from './auth-helpers'
 
 const verifiedDomainId = z.string().regex(/^domain_/) as z.ZodType<`domain_${string}`>
@@ -446,6 +447,44 @@ export const deleteIdentityProviderFn = createServerFn({ method: 'POST' })
           await import('@/lib/server/domains/settings/identity-providers.service')
         await deleteIdentityProvider(data.id)
         return { success: true }
+      }
+    )
+  })
+
+const setRedirectStyleInput = z.object({
+  id: identityProviderId,
+  style: z.enum(OIDC_REDIRECT_STYLES),
+})
+
+/**
+ * Switch which callback URL a provider sends as its redirect URI. Existing
+ * providers keep the legacy URL their IdP already has until an admin moves
+ * them, after registering the new one at the IdP.
+ */
+export const setIdentityProviderRedirectStyleFn = createServerFn({ method: 'POST' })
+  .validator(setRedirectStyleInput)
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
+    const { listIdentityProviders, setIdentityProviderRedirectStyle } =
+      await import('@/lib/server/domains/settings/identity-providers.service')
+    const prior = (await listIdentityProviders()).find((p) => p.id === data.id)
+    if (!prior) {
+      throw new ValidationError('IDP_NOT_FOUND', 'Identity provider not found.')
+    }
+
+    return withAuditEvent(
+      {
+        event: 'idp.updated',
+        actor: actorFromAuth(auth),
+        target: { type: 'identity_provider', id: prior.id },
+        before: { redirectStyle: prior.redirectStyle },
+        after: { redirectStyle: data.style },
+        headers: getRequestHeaders(),
+      },
+      async () => {
+        const saved = await setIdentityProviderRedirectStyle(prior.id, data.style)
+        if (!saved) throw new ValidationError('IDP_NOT_FOUND', 'Identity provider not found.')
+        return saved
       }
     )
   })

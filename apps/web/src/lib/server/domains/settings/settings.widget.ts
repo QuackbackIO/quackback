@@ -26,6 +26,8 @@ import {
 } from '@/lib/shared/assistant/config'
 import { isWidgetMessengerEnabled } from '@/lib/shared/support-surfaces'
 
+import { logSettingsReadError } from './settings-log'
+
 const log = logger.child({ component: 'settings-widget' })
 export const WIDGET_OBSERVATION_THROTTLE_MS = 15 * 60 * 1000
 
@@ -184,7 +186,7 @@ export async function getWidgetConfig(
     const org = await readSettingsRow(freshness)
     return parseWidgetConfig(org.widgetConfig)
   } catch (error) {
-    log.error({ err: error }, 'get widget config failed')
+    logSettingsReadError(log, error, 'get widget config failed')
     wrapDbError('fetch widget config', error)
   }
 }
@@ -348,7 +350,7 @@ export async function getPublicWidgetConfig(): Promise<PublicWidgetConfig> {
     const flags = resolveFeatureFlags(org.featureFlags)
     return projectPublicWidgetConfig(config, flags, identity)
   } catch (error) {
-    log.error({ err: error }, 'get public widget config failed')
+    logSettingsReadError(log, error, 'get public widget config failed')
     wrapDbError('fetch public widget config', error)
   }
 }

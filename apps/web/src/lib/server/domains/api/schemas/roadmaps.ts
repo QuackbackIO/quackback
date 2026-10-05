@@ -67,6 +67,12 @@ const RoadmapPostSchema = z.object({
 })
 
 // Request body schemas
+const LegacyIsPublicSchema = z.boolean().optional().meta({
+  deprecated: true,
+  description:
+    'Deprecated: use `visibility`. `false` maps to `team`, `true` maps to `public`. Ignored when `visibility` is sent.',
+})
+
 const CreateRoadmapSchema = z
   .object({
     name: z
@@ -86,6 +92,7 @@ const CreateRoadmapSchema = z
     dateSource: z.literal('eta').nullable().optional(),
     frequency: z.enum(['monthly', 'quarterly', 'semiannual']).nullable().optional(),
     visibility: z.enum(['public', 'team', 'segment']).optional(),
+    isPublic: LegacyIsPublicSchema,
     visibleSegmentIds: z.array(TypeIdSchema).nullable().optional(),
     columns: z.array(RoadmapColumnSchema.omit({ id: true, roadmapId: true })).optional(),
   })
@@ -100,6 +107,7 @@ const UpdateRoadmapSchema = z
     dateSource: z.literal('eta').nullable().optional(),
     frequency: z.enum(['monthly', 'quarterly', 'semiannual']).nullable().optional(),
     visibility: z.enum(['public', 'team', 'segment']).optional(),
+    isPublic: LegacyIsPublicSchema,
     visibleSegmentIds: z.array(TypeIdSchema).nullable().optional(),
     columns: z.array(RoadmapColumnSchema).optional(),
   })

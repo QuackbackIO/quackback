@@ -70,6 +70,9 @@ export interface UseInboxTranslationResult {
    *  translation doesn't apply (inactive, a note, a rich message, or —
    *  for an incoming message — not translated yet). */
   translationFor: (message: AgentConversationMessageDTO) => MessageTranslationDisplay | undefined
+  /** One-line notice when translation is running past the AI allowance
+   *  (it keeps working and counting); null otherwise. */
+  overAllowanceNotice: string | null
 }
 
 export function useInboxTranslation({
@@ -161,7 +164,7 @@ export function useInboxTranslation({
       const onToggleOriginal = () => toggleOriginal(message.id)
 
       if (message.senderType === 'visitor') {
-        const fetched = translationsQuery.data?.[message.id]
+        const fetched = translationsQuery.data?.translations[message.id]
         if (!fetched) return undefined
         return {
           label: `Translated from ${languageDisplayName(fetched.sourceLocale ?? detectedForDisplay ?? '')}`,
@@ -192,7 +195,16 @@ export function useInboxTranslation({
     ]
   )
 
+  const overAllowanceNotice =
+    enabledFlag && translationState?.enabled && translationsQuery.data?.overAllowance
+      ? intl.formatMessage({
+          id: 'admin.inbox.translationOverAllowance',
+          defaultMessage: 'Your AI allowance is used up. Translation keeps working.',
+        })
+      : null
+
   return {
+    overAllowanceNotice,
     showSuggestionBanner,
     detectedLanguageLabel: detectedForDisplay ? languageDisplayName(detectedForDisplay) : '',
     dismissSuggestion: () => dismissMutation.mutate(),
