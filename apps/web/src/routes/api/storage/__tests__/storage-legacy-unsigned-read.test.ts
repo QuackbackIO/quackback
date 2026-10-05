@@ -28,8 +28,23 @@ const mockConfig = vi.hoisted(() => ({
   s3Proxy: true,
   baseUrl: 'https://feedback.example.com',
   isPooledTenancy: false,
+  // One trusted proxy, so the client address is the last X-Forwarded-For entry.
+  trustedProxyHops: 1,
 }))
 vi.mock('@/lib/server/config', () => ({ config: mockConfig }))
+
+/** The shared limiter's store: bucket key → count in the current window. */
+const buckets = vi.hoisted(() => new Map<string, number>())
+vi.mock('@/lib/server/utils/rate-bucket', () => ({
+  incrementBucket: async ({ key }: { key: string }) => {
+    const count = (buckets.get(key) ?? 0) + 1
+    buckets.set(key, count)
+    return { count }
+  },
+}))
+
+/** What a HEAD of a missing key answers: 404, or 403 for a credential that cannot list. */
+const missingStatus = vi.hoisted(() => ({ value: 404 }))
 vi.mock('@/lib/server/db', () => ({
   db: { query: { settings: { findFirst: async () => ({ id: WORKSPACE_ID }) } } },
 }))
@@ -44,8 +59,11 @@ vi.mock('@aws-sdk/client-s3', () => {
     vi.fn(function (input: { Key: string }) {
       return { kind, input }
     })
-  const notFound = () =>
-    Object.assign(new Error('not found'), { name: 'NotFound', $metadata: { httpStatusCode: 404 } })
+  const notFound = (status = 404) =>
+    Object.assign(new Error('not found'), {
+      name: status === 404 ? 'NotFound' : 'Forbidden',
+      $metadata: { httpStatusCode: status },
+    })
   return {
     S3Client: vi.fn(function () {
       return {
@@ -53,7 +71,7 @@ vi.mock('@aws-sdk/client-s3', () => {
           sent.push({ kind: cmd.kind, Key: cmd.input.Key })
           const body = objects.get(cmd.input.Key)
           if (cmd.kind === 'head') {
-            if (!body) throw notFound()
+            if (!body) throw notFound(missingStatus.value)
             return { ContentLength: body.byteLength }
           }
           if (cmd.kind === 'get') {
@@ -82,7 +100,8 @@ vi.mock('@aws-sdk/s3-request-presigner', () => ({
 }))
 
 const { handleStorageGet } = await import('../$')
-const { getPublicUrlOrNull } = await import('@/lib/server/storage/s3')
+const { getPublicUrlOrNull, isPreNamespaceObject, PRE_NAMESPACE_CACHE_MAX } =
+  await import('@/lib/server/storage/s3')
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
 let n = 0
@@ -96,13 +115,21 @@ function seedLegacy(key: string): void {
   objects.set(`${NS}${key}`, PNG)
 }
 
-const get = (path: string) =>
-  handleStorageGet({ request: new Request(`https://feedback.example.com${path}`) })
+let client = 0
+/** A request from `ip`, or from a client of its own so no budget is shared by accident. */
+const get = (path: string, ip = `198.51.100.${++client % 250}`) =>
+  handleStorageGet({
+    request: new Request(`https://feedback.example.com${path}`, {
+      headers: { 'x-forwarded-for': ip },
+    }),
+  })
 const heads = () => sent.filter((c) => c.kind === 'head')
 
 beforeEach(() => {
   objects.clear()
   sent.length = 0
+  buckets.clear()
+  missingStatus.value = 404
   mockConfig.isPooledTenancy = false
   delete process.env.QUACKBACK_TENANCY
 })
@@ -248,5 +275,50 @@ describe('no spelling of a key borrows another object’s original', () => {
     // Only canonical keys under a legacy prefix ever reach the bucket root.
     for (const head of heads()) expect(head.Key.startsWith('uploads/')).toBe(true)
     expect(heads().filter((h) => /\.\.|\/\/|\/\.\/|%|\\/.test(h.Key))).toEqual([])
+  })
+})
+
+describe('the cost of a token-less request is bounded', () => {
+  it('remembers a 403 from HEAD as absent, so a key missing under a no-list credential is asked once', async () => {
+    missingStatus.value = 403
+    const key = freshKey('uploads')
+    objects.set(`${NS}${key}`, PNG)
+
+    for (let i = 0; i < 3; i++) expect((await get(`/api/storage/${key}`)).status).toBe(403)
+
+    expect(heads()).toHaveLength(1)
+  })
+
+  it('keeps a real old link answered from memory through a flood of made-up keys', async () => {
+    const real = freshKey('chat-images')
+    seedLegacy(real)
+    expect(await isPreNamespaceObject(real)).toBe(true)
+
+    for (let i = 0; i <= PRE_NAMESPACE_CACHE_MAX; i++) {
+      await isPreNamespaceObject(`uploads/flood/${i}-x.png`)
+    }
+    sent.length = 0
+
+    expect(await isPreNamespaceObject(real)).toBe(true)
+    expect(heads()).toHaveLength(0)
+  })
+
+  it('stops asking the bucket for one client past its budget, with the ordinary 403', async () => {
+    const ip = '203.0.113.7'
+    for (let i = 0; i < 40; i++) {
+      expect((await get(`/api/storage/${freshKey('uploads')}`, ip)).status).toBe(403)
+    }
+    expect(heads()).toHaveLength(30)
+
+    // Over budget, even a genuine old link is refused rather than looked up...
+    const real = freshKey('uploads')
+    seedLegacy(real)
+    expect((await get(`/api/storage/${real}`, ip)).status).toBe(403)
+    expect(heads()).toHaveLength(30)
+
+    // ...while another client is unaffected, and once answered it costs no budget.
+    expect((await get(`/api/storage/${real}`, '203.0.113.8')).status).toBe(200)
+    expect((await get(`/api/storage/${real}`, ip)).status).toBe(200)
+    expect(heads()).toHaveLength(31)
   })
 })

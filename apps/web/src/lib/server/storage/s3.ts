@@ -829,16 +829,47 @@ const PRE_TOKEN_PRIVATE_PREFIXES = new Set(['chat-images', 'uploads', 'widget-im
 /** How long a bucket answer is reused. A miss is kept briefly in case the key appears. */
 const PRE_NAMESPACE_HIT_TTL_MS = 60 * 60 * 1000
 const PRE_NAMESPACE_MISS_TTL_MS = 5 * 60 * 1000
-const PRE_NAMESPACE_CACHE_MAX = 10_000
+/** Entries per answer cache. Exported for tests. */
+export const PRE_NAMESPACE_CACHE_MAX = 10_000
 
 /**
- * Bare key → whether its pre-namespace original exists, and when that was
- * asked. Bounded and LRU-evicted; holds booleans, never bytes. Only ever
- * written by {@link isPreNamespaceObject}, which refuses under pooled tenancy
- * and inside any workspace scope, so the one bucket it describes is the one
- * this process's only workspace owns.
+ * Bare key → when an answer was recorded, bounded and LRU-evicted, entries
+ * fresh for `ttlMs`. Timestamps only, never bytes.
  */
-const preNamespaceObjects = new Map<string, { exists: boolean; at: number }>()
+function createAnswerCache(ttlMs: number) {
+  const entries = new Map<string, number>()
+  return {
+    /** Whether a fresh answer is held, refreshing its recency; a stale one is dropped. */
+    has(key: string, now: number): boolean {
+      const at = entries.get(key)
+      if (at === undefined) return false
+      entries.delete(key)
+      if (now - at >= ttlMs) return false
+      entries.set(key, at)
+      return true
+    },
+    remember(key: string, now: number): void {
+      entries.delete(key)
+      entries.set(key, now)
+      while (entries.size > PRE_NAMESPACE_CACHE_MAX) {
+        const oldest = entries.keys().next()
+        if (oldest.done) break
+        entries.delete(oldest.value)
+      }
+    },
+  }
+}
+
+/**
+ * Where a pre-namespace original was last seen present (hits) or absent
+ * (misses). Two caches, so a flood of made-up keys fills only the miss cache
+ * and never pushes out a real link's answer. Only ever used by
+ * {@link isPreNamespaceObject}, which refuses under pooled tenancy and inside
+ * any workspace scope, so the one bucket they describe is the one this
+ * process's only workspace owns.
+ */
+const preNamespaceHits = createAnswerCache(PRE_NAMESPACE_HIT_TTL_MS)
+const preNamespaceMisses = createAnswerCache(PRE_NAMESPACE_MISS_TTL_MS)
 
 /**
  * Whether `key` names an object that existed before the namespace, so a link
@@ -869,10 +900,18 @@ const preNamespaceObjects = new Map<string, { exists: boolean; at: number }>()
  *   segments and backslashes, so no spelling of a key borrows another
  *   object's existence.
  *
+ * Answers are cached, and only a key with no fresh answer costs a HEAD.
+ * `mayAskBucket` gates that request: the route passes a per-client budget, so
+ * token-less requests for made-up keys cannot turn into unbounded calls to the
+ * object store. Refused, the answer is no, which is the ordinary 403.
+ *
  * An operator who moved rather than copied the originals has no bare key left,
  * and those links then need their token like any other private link.
  */
-export async function isPreNamespaceObject(key: string): Promise<boolean> {
+export async function isPreNamespaceObject(
+  key: string,
+  mayAskBucket: () => Promise<boolean> = async () => true
+): Promise<boolean> {
   if (isPooledTenancy() || config.isPooledTenancy) return false
   if (getCurrentWorkspace()) return false
   if (!PRE_TOKEN_PRIVATE_PREFIXES.has(key.split('/', 1)[0] ?? '')) return false
@@ -887,35 +926,24 @@ export async function isPreNamespaceObject(key: string): Promise<boolean> {
   }
 
   const now = Date.now()
-  const cached = preNamespaceObjects.get(key)
-  if (cached) {
-    const ttl = cached.exists ? PRE_NAMESPACE_HIT_TTL_MS : PRE_NAMESPACE_MISS_TTL_MS
-    if (now - cached.at < ttl) {
-      preNamespaceObjects.delete(key)
-      preNamespaceObjects.set(key, cached)
-      return cached.exists
-    }
-    preNamespaceObjects.delete(key)
-  }
+  if (preNamespaceHits.has(key, now)) return true
+  if (preNamespaceMisses.has(key, now)) return false
+  if (!(await mayAskBucket())) return false
 
-  let exists: boolean
   try {
     const client = await getS3Client(connection)
     const { HeadObjectCommand } = await getS3Module()
     await client.send(new HeadObjectCommand({ Bucket: connection.bucket, Key: key }))
-    exists = true
   } catch (err) {
-    // Anything but a definite "absent" is not an answer worth remembering.
-    if (s3StatusCode(err) !== 404) return false
-    exists = false
+    // A HEAD of a missing key answers 403 rather than 404 when the credential
+    // may not list the bucket, so both are "absent". Any other failure is not
+    // an answer worth remembering.
+    const status = s3StatusCode(err)
+    if (status === 403 || status === 404) preNamespaceMisses.remember(key, now)
+    return false
   }
-  preNamespaceObjects.set(key, { exists, at: now })
-  while (preNamespaceObjects.size > PRE_NAMESPACE_CACHE_MAX) {
-    const oldest = preNamespaceObjects.keys().next()
-    if (oldest.done) break
-    preNamespaceObjects.delete(oldest.value)
-  }
-  return exists
+  preNamespaceHits.remember(key, now)
+  return true
 }
 
 /** The HTTP status an SDK error carries, if any. */

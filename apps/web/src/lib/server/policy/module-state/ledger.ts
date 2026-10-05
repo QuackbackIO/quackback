@@ -272,12 +272,24 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   },
   {
     file: 'apps/web/src/lib/server/storage/s3.ts',
-    name: 'preNamespaceObjects',
+    name: 'preNamespaceHits',
     category: 'refuses-pooled',
     reason:
-      'Bare bucket-root key → whether that pre-namespace original exists, a boolean per key, ' +
-      'bounded and LRU-evicted. It decides whether a token-less link is served, so a shared entry ' +
-      "would let one workspace's original vouch for a key in another workspace's namespace. " +
+      'Bare bucket-root key → when its pre-namespace original was last seen present; bounded and LRU-evicted, kept apart from misses so a flood of made-up keys cannot evict it. ' +
+      'It decides whether a token-less link is served, so a shared entry would let one ' +
+      "workspace's bucket vouch for a key in another workspace's namespace. " +
+      'isPreNamespaceObject, its only writer, returns false before touching it under pooled ' +
+      'tenancy or inside any workspace scope, so it only ever describes the one bucket a ' +
+      "single-workspace process's only workspace owns.",
+  },
+  {
+    file: 'apps/web/src/lib/server/storage/s3.ts',
+    name: 'preNamespaceMisses',
+    category: 'refuses-pooled',
+    reason:
+      'Bare bucket-root key → when its pre-namespace original was last seen absent (HEAD 403 or 404); bounded and LRU-evicted, short TTL. ' +
+      'It decides whether a token-less link is served, so a shared entry would let one ' +
+      "workspace's bucket vouch for a key in another workspace's namespace. " +
       'isPreNamespaceObject, its only writer, returns false before touching it under pooled ' +
       'tenancy or inside any workspace scope, so it only ever describes the one bucket a ' +
       "single-workspace process's only workspace owns.",
