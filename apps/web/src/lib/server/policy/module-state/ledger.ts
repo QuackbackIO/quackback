@@ -124,6 +124,15 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'instance built for someone else.',
   },
   {
+    file: 'apps/web/src/lib/server/domains/conversation/conversation-translation.service.ts',
+    name: 'overAllowanceWarned',
+    category: 'workspace-keyed',
+    reason:
+      'Remembers which allowance windows already logged the over-allowance warning. Window start ' +
+      'times are shared by every workspace on calendar months, so a cross-workspace hit would ' +
+      'silence another workspace\'s one warning for the period.',
+  },
+  {
     file: 'apps/web/src/lib/server/auth/index.ts',
     name: 'authBuilds',
     category: 'workspace-keyed',
