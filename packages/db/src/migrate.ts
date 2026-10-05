@@ -3,10 +3,17 @@ config({ path: '../../.env', quiet: true })
 
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { runMigrations } from './migrate-runtime'
+import { MigrationPreflightError, runMigrations } from './migrate-runtime'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+
+/** Pending migrations at or above which the "do not interrupt" notice is printed. */
+const MANY_PENDING = 20
+
+function formatDuration(ms: number): string {
+  return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`
+}
 
 /**
  * The CLI entrypoint. `docker-entrypoint.sh` runs this at boot, and the control
@@ -46,13 +53,54 @@ async function main() {
   console.log('🔄 Running migrations...')
   console.log(`   Migrations folder: ${migrationsFolder}`)
 
+  let migrateStartedAt = 0
+  // The migration running inside the transaction, so a failure can name it.
+  let currentMigration: string | null = null
   const result = await runMigrations(connectionString, {
     migrationsFolder,
     requireSessionMode: false,
     onStep: (step) => {
       if (step === 'lock') console.log('🔒 Waiting for migration lock...')
-      if (step === 'extensions') console.log('🔓 Acquired migration lock')
+      if (step === 'requirements') console.log('🔓 Acquired migration lock')
+      if (step === 'concurrent-indexes' && migrateStartedAt > 0) {
+        console.log(
+          `   Migrations committed in ${formatDuration(performance.now() - migrateStartedAt)}`
+        )
+        console.log('🔄 Building search indexes (can take a while on a large database)...')
+      }
     },
+    onPending: ({ tags }) => {
+      if (tags.length === 0) {
+        console.log('   Database schema is up to date')
+        return
+      }
+      console.log(`   ${tags.length} pending migration(s): ${tags[0]} .. ${tags[tags.length - 1]}`)
+      if (tags.length >= MANY_PENDING) {
+        console.log(
+          '⏳ This can take several minutes on a large database (usually the first start after ' +
+            'an upgrade). Do not stop or restart the container until it finishes: the migrations run in one ' +
+            'transaction, and an interrupted run rolls back and starts over.'
+        )
+      }
+      migrateStartedAt = performance.now()
+    },
+    onMigration: (event) => {
+      if (event.phase === 'start') {
+        currentMigration = event.tag
+        return
+      }
+      currentMigration = null
+      console.log(
+        `   [${event.index}/${event.total}] ${event.tag} (${formatDuration(event.durationMs ?? 0)})`
+      )
+    },
+  }).catch((error: unknown) => {
+    if (currentMigration) {
+      console.error(
+        `❌ Migration ${currentMigration} failed; every migration in this run was rolled back.`
+      )
+    }
+    throw error
   })
 
   if (result.healed.length > 0) {
@@ -88,6 +136,11 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('❌ Migration failed:', error)
+  if (error instanceof MigrationPreflightError) {
+    // Already worded for the operator; a stack trace would only bury it.
+    console.error(`❌ ${error.message}`)
+  } else {
+    console.error('❌ Migration failed:', error)
+  }
   process.exit(1)
 })

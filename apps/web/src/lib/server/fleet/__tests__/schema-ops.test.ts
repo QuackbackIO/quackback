@@ -24,11 +24,19 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import postgres from 'postgres'
 import {
+  assertMigrationPreflight,
   dropInvalidIndexes,
+  ensureConcurrentIndexes,
+  ensureExtensions,
   listInvalidIndexes,
+  preflightProblems,
+  readPreflightFacts,
   verifySchemaPostconditions,
   CONCURRENT_INDEX_SPECS,
+  MigrationPreflightError,
   REQUIRED_EXTENSIONS,
+  type ConcurrentIndexSpec,
+  type PreflightFacts,
 } from '@quackback/db/schema-ops'
 
 const ADMIN_URL =
@@ -157,5 +165,186 @@ describe('verifySchemaPostconditions', () => {
     // added a spec. This asserts the two are the same object, so they cannot.
     const report = await verifySchemaPostconditions(sql)
     expect(report.observed.missingIndexes).toEqual(CONCURRENT_INDEX_SPECS.map((s) => s.name))
+  })
+})
+
+describe('ensureConcurrentIndexes', () => {
+  const spec: ConcurrentIndexSpec = {
+    name: 'widgets_name_idx',
+    concurrent: true,
+    ddl: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS widgets_name_idx ON widgets (name)',
+  }
+
+  async function isValid(name: string): Promise<boolean> {
+    const [row] = await sql.unsafe(
+      `SELECT indisvalid FROM pg_index WHERE indexrelid = '${name}'::regclass`
+    )
+    return row!.indisvalid as boolean
+  }
+
+  it('drops and rebuilds a spec index a killed build left INVALID', async () => {
+    // Without the guard the build below is the verbatim IF NOT EXISTS that the
+    // first describe proves skips an invalid index.
+    await sql.unsafe(`CREATE INDEX widgets_name_idx ON widgets (name)`)
+    await invalidate('widgets_name_idx')
+
+    const rebuilt = await ensureConcurrentIndexes(sql, [spec])
+
+    expect(rebuilt).toEqual(['widgets_name_idx'])
+    expect(await isValid('widgets_name_idx')).toBe(true)
+  })
+
+  it('leaves a valid spec index in place', async () => {
+    await sql.unsafe(`CREATE INDEX widgets_name_idx ON widgets (name)`)
+    const [before] = await sql.unsafe(`SELECT 'widgets_name_idx'::regclass::oid AS oid`)
+
+    expect(await ensureConcurrentIndexes(sql, [spec])).toEqual([])
+
+    const [after] = await sql.unsafe(`SELECT 'widgets_name_idx'::regclass::oid AS oid`)
+    expect(after!.oid).toBe(before!.oid)
+  })
+
+  it('builds a spec index that does not exist yet', async () => {
+    expect(await ensureConcurrentIndexes(sql, [spec])).toEqual([])
+    expect(await isValid('widgets_name_idx')).toBe(true)
+  })
+})
+
+describe('migration preflight', () => {
+  const healthy: PreflightFacts = {
+    serverVersion: '18.1',
+    serverVersionNum: 180001,
+    database: 'qb',
+    user: 'quackback',
+    canCreateTemp: true,
+    extensions: {
+      vector: { available: '0.8.1', installed: '0.8.1' },
+      pg_trgm: { available: '1.6', installed: null },
+    },
+  }
+
+  it('passes this test server', async () => {
+    expect(preflightProblems(await readPreflightFacts(sql))).toEqual([])
+  })
+
+  it('passes a healthy server', () => {
+    expect(preflightProblems(healthy)).toEqual([])
+  })
+
+  it('names an old PostgreSQL server', () => {
+    const problems = preflightProblems({
+      ...healthy,
+      serverVersion: '13.9',
+      serverVersionNum: 130009,
+    })
+    expect(problems).toEqual([
+      'PostgreSQL 14 or newer is required, but this server runs 13.9. Upgrade PostgreSQL.',
+    ])
+  })
+
+  it('names a missing pgvector', () => {
+    const problems = preflightProblems({
+      ...healthy,
+      extensions: { ...healthy.extensions, vector: { available: null, installed: null } },
+    })
+    expect(problems).toEqual([
+      'The "vector" extension (pgvector) is not available on this server. Install pgvector ' +
+        '0.5.0 or newer for your PostgreSQL version (or use the pgvector/pgvector Docker image).',
+    ])
+  })
+
+  it('names an available pgvector that is too old for HNSW', () => {
+    const problems = preflightProblems({
+      ...healthy,
+      extensions: { ...healthy.extensions, vector: { available: '0.4.4', installed: null } },
+    })
+    expect(problems).toEqual([
+      'pgvector 0.4.4 is available on this server, but HNSW indexes need 0.5.0 or newer. ' +
+        'Upgrade the pgvector package on the database server.',
+    ])
+  })
+
+  it('asks for ALTER EXTENSION when a newer pgvector is available than the one installed', () => {
+    const problems = preflightProblems({
+      ...healthy,
+      extensions: { ...healthy.extensions, vector: { available: '0.8.1', installed: '0.4.4' } },
+    })
+    expect(problems).toEqual([
+      'pgvector 0.4.4 is installed in database "qb", but HNSW indexes need 0.5.0 or newer. ' +
+        'Run as a superuser: ALTER EXTENSION vector UPDATE;',
+    ])
+  })
+
+  it('asks for a package upgrade when the installed pgvector is the newest available', () => {
+    const problems = preflightProblems({
+      ...healthy,
+      extensions: { ...healthy.extensions, vector: { available: '0.4.4', installed: '0.4.4' } },
+    })
+    expect(problems).toEqual([
+      'pgvector 0.4.4 is installed in database "qb", but HNSW indexes need 0.5.0 or newer. ' +
+        'Upgrade the pgvector package on the database server, then run as a superuser: ' +
+        'ALTER EXTENSION vector UPDATE;',
+    ])
+  })
+
+  it('compares versions numerically, not as text', () => {
+    const problems = preflightProblems({
+      ...healthy,
+      extensions: { ...healthy.extensions, vector: { available: '0.10.0', installed: '0.10.0' } },
+    })
+    expect(problems).toEqual([])
+  })
+
+  it('names a missing pg_trgm', () => {
+    const problems = preflightProblems({
+      ...healthy,
+      extensions: { ...healthy.extensions, pg_trgm: { available: null, installed: null } },
+    })
+    expect(problems).toEqual([
+      'The "pg_trgm" extension is not available on this server. ' +
+        'Install the PostgreSQL contrib package for your PostgreSQL version.',
+    ])
+  })
+
+  it('names a missing TEMPORARY privilege', () => {
+    const problems = preflightProblems({ ...healthy, canCreateTemp: false })
+    expect(problems).toEqual([
+      'The database user "quackback" lacks the TEMPORARY privilege on database "qb", ' +
+        'which the upgrade needs. Run as a superuser: GRANT TEMPORARY ON DATABASE "qb" TO "quackback";',
+    ])
+  })
+
+  it('lists every problem in one readable error', () => {
+    const err = new MigrationPreflightError(['first problem', 'second problem'])
+    expect(err.message).toBe(
+      'The database is not ready for this version of Quackback; no migrations were applied.\n' +
+        '  - first problem\n' +
+        '  - second problem'
+    )
+  })
+
+  it('reads a missing TEMPORARY privilege from the catalogue, and explains a failed CREATE EXTENSION', async () => {
+    const role = `qb_p10_lowpriv_${randomUUID().replace(/-/g, '').slice(0, 8)}`
+    await admin.unsafe(`CREATE ROLE ${role} LOGIN PASSWORD 'lowpriv'`)
+    await admin.unsafe(`REVOKE TEMPORARY ON DATABASE ${SCRATCH} FROM PUBLIC`)
+    const url = new URL(ADMIN_URL)
+    url.username = role
+    url.password = 'lowpriv'
+    url.pathname = `/${SCRATCH}`
+    const low = postgres(url.toString(), { max: 1, onnotice: () => {} })
+    try {
+      const facts = await readPreflightFacts(low)
+      expect(facts.canCreateTemp).toBe(false)
+      expect(facts.user).toBe(role)
+      await expect(assertMigrationPreflight(low)).rejects.toThrow(/TEMPORARY privilege/)
+      // This role cannot create extensions, and the scratch database has none.
+      await expect(ensureExtensions(low)).rejects.toThrow(
+        /Could not create the "vector" extension in database "qb_p10_ops_\w+".*CREATE EXTENSION IF NOT EXISTS vector;/s
+      )
+    } finally {
+      await low.end({ timeout: 5 }).catch(() => {})
+      await admin.unsafe(`GRANT TEMPORARY ON DATABASE ${SCRATCH} TO PUBLIC`).catch(() => {})
+      await admin.unsafe(`DROP ROLE IF EXISTS ${role}`).catch(() => {})
+    }
   })
 })

@@ -61,13 +61,17 @@
  * the same workspace. That is why the pooled endpoint is refused up front rather
  * than allowed to half-work — see {@link assertSessionModeDsn}.
  */
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+import { readMigrationFiles, type MigrationMeta } from 'drizzle-orm/migrator'
+import { PgDialect } from 'drizzle-orm/pg-core'
 import { drizzle } from 'drizzle-orm/postgres-js'
-import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import postgres from 'postgres'
 import * as schema from './schema'
 import { seedSystemData } from './seed-system'
 import {
   MIGRATION_LOCK_NS,
+  assertMigrationPreflight,
   dropInvalidIndexes,
   ensureConcurrentIndexes,
   ensureExtensions,
@@ -76,6 +80,8 @@ import {
   type PostconditionReport,
 } from './schema-ops'
 import { MIGRATIONS_DIR } from './schema-version'
+
+export { MigrationPreflightError } from './schema-ops'
 
 // The same directory the replay-safety preflight reads, deliberately shared
 // rather than re-derived: a run that executes files the plan did not read is
@@ -86,6 +92,7 @@ const MIGRATIONS_FOLDER = MIGRATIONS_DIR
 export type MigrationStep =
   | 'connect'
   | 'lock'
+  | 'requirements'
   | 'extensions'
   | 'heal-invalid-indexes'
   | 'migrate'
@@ -145,6 +152,29 @@ export interface RunMigrationsOptions {
   lockTimeoutMs?: number
   /** Progress callback, so a reconciler can report which step a kill landed in. */
   onStep?: (step: MigrationStep) => void
+  /** Called once before the migration transaction opens, with what it will run. */
+  onPending?: (pending: PendingMigrations) => void
+  /**
+   * Called as each pending migration starts and finishes inside the migration
+   * transaction. A finished migration is not durable until the whole
+   * transaction commits.
+   */
+  onMigration?: (event: MigrationProgress) => void
+}
+
+export interface PendingMigrations {
+  /** Journal tags of the migrations the transaction will run, in order. */
+  tags: string[]
+}
+
+export interface MigrationProgress {
+  phase: 'start' | 'done'
+  tag: string
+  /** 1-based position among the pending migrations. */
+  index: number
+  total: number
+  /** Set on `done`: wall time spent on this migration's statements. */
+  durationMs?: number
 }
 
 export interface RunMigrationsResult {
@@ -218,6 +248,8 @@ export async function runMigrations(
     migrationsFolder = MIGRATIONS_FOLDER,
     lockTimeoutMs,
     onStep = () => {},
+    onPending = () => {},
+    onMigration = () => {},
   } = options
 
   if (lockTimeoutMs !== undefined && !Number.isSafeInteger(lockTimeoutMs)) {
@@ -240,6 +272,11 @@ export async function runMigrations(
       locked = true
     }
 
+    onStep('requirements')
+    // Before anything writes: a server that cannot finish the lineage is told
+    // so by name here, instead of failing minutes into the transaction.
+    await assertMigrationPreflight(sql)
+
     onStep('extensions')
     await ensureExtensions(sql)
 
@@ -254,7 +291,7 @@ export async function runMigrations(
       await sql.unsafe(`SET lock_timeout = ${lockTimeoutMs}`)
     }
     try {
-      await migrate(database, { migrationsFolder })
+      await migrateWithProgress(sql, migrationsFolder, onPending, onMigration)
     } finally {
       if (lockTimeoutMs !== undefined) await sql.unsafe(`SET lock_timeout = 0`).catch(() => {})
     }
@@ -286,4 +323,71 @@ export async function runMigrations(
     }
     await sql.end()
   }
+}
+
+/**
+ * drizzle's `migrate()`, with progress.
+ *
+ * `migrate()` is `readMigrationFiles()` followed by `PgDialect.migrate()`, and
+ * the dialect walks the migration list with `for await` inside its one
+ * transaction, finishing each migration (statements, then its ledger row)
+ * before asking for the next. So a list whose iterator notes when it is
+ * advanced sees every migration start and finish without re-implementing the
+ * migrator: the statements, the ledger and the transaction stay drizzle's.
+ *
+ * "Pending" uses the dialect's own rule (journal `when` above the newest ledger
+ * row), read under the same advisory lock, so the count matches what runs.
+ */
+async function migrateWithProgress(
+  sql: postgres.Sql,
+  migrationsFolder: string,
+  onPending: (pending: PendingMigrations) => void,
+  onMigration: (event: MigrationProgress) => void
+): Promise<void> {
+  const migrations = readMigrationFiles({ migrationsFolder })
+  const journal = JSON.parse(
+    readFileSync(path.join(migrationsFolder, 'meta', '_journal.json'), 'utf8')
+  ) as { entries: { tag: string; when: number }[] }
+  const tagByMillis = new Map(journal.entries.map((e) => [e.when, e.tag]))
+
+  const [ledger] = await sql.unsafe<{ ledger: string | null }[]>(
+    `SELECT to_regclass('drizzle.__drizzle_migrations')::text AS ledger`
+  )
+  let lastApplied: number | null = null
+  if (ledger?.ledger) {
+    const [row] = await sql.unsafe<{ created_at: string | null }[]>(
+      `SELECT created_at FROM drizzle.__drizzle_migrations ORDER BY created_at DESC LIMIT 1`
+    )
+    if (row?.created_at != null) lastApplied = Number(row.created_at)
+  }
+  const isPending = (m: MigrationMeta) => lastApplied === null || lastApplied < m.folderMillis
+  const tagOf = (m: MigrationMeta) => tagByMillis.get(m.folderMillis) ?? String(m.folderMillis)
+
+  const pending = migrations.filter(isPending)
+  onPending({ tags: pending.map(tagOf) })
+
+  const tracked = [...migrations]
+  Object.defineProperty(tracked, Symbol.iterator, {
+    value: function* () {
+      let index = 0
+      for (const migration of migrations) {
+        if (!isPending(migration)) {
+          yield migration
+          continue
+        }
+        index += 1
+        const event = { tag: tagOf(migration), index, total: pending.length }
+        onMigration({ phase: 'start', ...event })
+        const started = performance.now()
+        yield migration
+        onMigration({ phase: 'done', ...event, durationMs: performance.now() - started })
+      }
+    },
+  })
+
+  // A handle on the same connection, because the advisory lock needs this exact
+  // backend. The cast is drizzle's own: its migrator passes the session through
+  // untyped generics the same way.
+  const session = drizzle(sql)._.session as unknown as Parameters<PgDialect['migrate']>[1]
+  await new PgDialect().migrate(tracked, session, { migrationsFolder })
 }

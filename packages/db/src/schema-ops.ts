@@ -122,10 +122,184 @@ export const CONCURRENT_INDEX_SPECS: readonly ConcurrentIndexSpec[] = [
   },
 ]
 
-/** Create the extensions the bundled schema needs. Idempotent. */
+/** The oldest server the lineage runs on (`CREATE OR REPLACE TRIGGER`). */
+export const MIN_SERVER_VERSION_NUM = 140000
+/** The oldest pgvector with the HNSW access method. */
+export const MIN_VECTOR_VERSION = '0.5.0'
+
+/**
+ * A server that cannot run the lineage, found before the migration transaction
+ * opens.
+ *
+ * The lineage is one transaction, so a missing prerequisite surfaces as a raw
+ * SQL error from somewhere in the middle of it (`access method "hnsw" does not
+ * exist`), after minutes of work that then rolls back, and again on every
+ * restart. This error names every missing prerequisite at once, with the fix.
+ */
+export class MigrationPreflightError extends Error {
+  constructor(readonly problems: readonly string[]) {
+    super(
+      'The database is not ready for this version of Quackback; no migrations were applied.\n' +
+        problems.map((p) => `  - ${p}`).join('\n')
+    )
+    this.name = 'MigrationPreflightError'
+  }
+}
+
+export interface ExtensionAvailability {
+  /** The version `CREATE EXTENSION` would install, or null when the server has none. */
+  available: string | null
+  /** The version installed in this database, or null. */
+  installed: string | null
+}
+
+export interface PreflightFacts {
+  serverVersion: string
+  serverVersionNum: number
+  database: string
+  user: string
+  /** `pg_temp` helper functions in the lineage need TEMPORARY on the database. */
+  canCreateTemp: boolean
+  extensions: Record<(typeof REQUIRED_EXTENSIONS)[number], ExtensionAvailability>
+}
+
+export async function readPreflightFacts(sql: postgres.Sql): Promise<PreflightFacts> {
+  const [server] = await sql.unsafe<
+    {
+      server_version: string
+      server_version_num: string
+      database: string
+      user: string
+      can_temp: boolean
+    }[]
+  >(`
+    SELECT current_setting('server_version')     AS server_version,
+           current_setting('server_version_num') AS server_version_num,
+           current_database()                    AS database,
+           current_user                          AS user,
+           has_database_privilege(current_database(), 'TEMPORARY') AS can_temp
+  `)
+  const rows = await sql.unsafe<
+    { name: string; default_version: string | null; installed_version: string | null }[]
+  >(
+    `SELECT name, default_version, installed_version
+       FROM pg_available_extensions
+      WHERE name = ANY($1::text[])`,
+    [[...REQUIRED_EXTENSIONS]]
+  )
+  const extensions = Object.fromEntries(
+    REQUIRED_EXTENSIONS.map((ext) => {
+      const row = rows.find((r) => r.name === ext)
+      return [
+        ext,
+        { available: row?.default_version ?? null, installed: row?.installed_version ?? null },
+      ]
+    })
+  ) as PreflightFacts['extensions']
+  return {
+    serverVersion: server!.server_version,
+    serverVersionNum: Number(server!.server_version_num),
+    database: server!.database,
+    user: server!.user,
+    canCreateTemp: server!.can_temp,
+    extensions,
+  }
+}
+
+/** Numeric dotted-version comparison, so `0.10.0` sorts after `0.5.0`. */
+function versionAtLeast(version: string, minimum: string): boolean {
+  const a = version.split('.').map((p) => Number.parseInt(p, 10) || 0)
+  const b = minimum.split('.').map((p) => Number.parseInt(p, 10) || 0)
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const diff = (a[i] ?? 0) - (b[i] ?? 0)
+    if (diff !== 0) return diff > 0
+  }
+  return true
+}
+
+/** Every unmet prerequisite, worded for the operator who has to fix it. */
+export function preflightProblems(facts: PreflightFacts): string[] {
+  const problems: string[] = []
+  if (facts.serverVersionNum < MIN_SERVER_VERSION_NUM) {
+    problems.push(
+      `PostgreSQL 14 or newer is required, but this server runs ${facts.serverVersion}. Upgrade PostgreSQL.`
+    )
+  }
+
+  const vector = facts.extensions.vector
+  if (vector.installed !== null) {
+    if (!versionAtLeast(vector.installed, MIN_VECTOR_VERSION)) {
+      const upgradeable =
+        vector.available !== null && versionAtLeast(vector.available, MIN_VECTOR_VERSION)
+      problems.push(
+        `pgvector ${vector.installed} is installed in database "${facts.database}", but HNSW ` +
+          `indexes need ${MIN_VECTOR_VERSION} or newer. ` +
+          (upgradeable
+            ? 'Run as a superuser: ALTER EXTENSION vector UPDATE;'
+            : 'Upgrade the pgvector package on the database server, then run as a superuser: ' +
+              'ALTER EXTENSION vector UPDATE;')
+      )
+    }
+  } else if (vector.available === null) {
+    problems.push(
+      'The "vector" extension (pgvector) is not available on this server. Install pgvector ' +
+        `${MIN_VECTOR_VERSION} or newer for your PostgreSQL version (or use the pgvector/pgvector Docker image).`
+    )
+  } else if (!versionAtLeast(vector.available, MIN_VECTOR_VERSION)) {
+    problems.push(
+      `pgvector ${vector.available} is available on this server, but HNSW indexes need ` +
+        `${MIN_VECTOR_VERSION} or newer. Upgrade the pgvector package on the database server.`
+    )
+  }
+
+  const trgm = facts.extensions.pg_trgm
+  if (trgm.installed === null && trgm.available === null) {
+    problems.push(
+      'The "pg_trgm" extension is not available on this server. ' +
+        'Install the PostgreSQL contrib package for your PostgreSQL version.'
+    )
+  }
+
+  if (!facts.canCreateTemp) {
+    problems.push(
+      `The database user "${facts.user}" lacks the TEMPORARY privilege on database ` +
+        `"${facts.database}", which the upgrade needs. Run as a superuser: ` +
+        `GRANT TEMPORARY ON DATABASE "${facts.database}" TO "${facts.user}";`
+    )
+  }
+  return problems
+}
+
+/**
+ * Refuse to start the migration transaction on a server that cannot finish it.
+ * Read-only: it asks the catalogue and changes nothing.
+ */
+export async function assertMigrationPreflight(sql: postgres.Sql): Promise<void> {
+  const problems = preflightProblems(await readPreflightFacts(sql))
+  if (problems.length > 0) throw new MigrationPreflightError(problems)
+}
+
+/**
+ * Create the extensions the bundled schema needs. Idempotent.
+ *
+ * A failure (usually a role that may not create extensions) is reported as a
+ * {@link MigrationPreflightError} naming the extension and the statement a
+ * superuser can run, rather than as the bare SQL error.
+ */
 export async function ensureExtensions(sql: postgres.Sql): Promise<void> {
   for (const ext of REQUIRED_EXTENSIONS) {
-    await sql.unsafe(`CREATE EXTENSION IF NOT EXISTS ${ext}`)
+    try {
+      await sql.unsafe(`CREATE EXTENSION IF NOT EXISTS ${ext}`)
+    } catch (err) {
+      const [row] = await sql
+        .unsafe<{ database: string }[]>(`SELECT current_database() AS database`)
+        .catch(() => [{ database: '(unknown)' }])
+      const reason = err instanceof Error ? err.message : String(err)
+      throw new MigrationPreflightError([
+        `Could not create the "${ext}" extension in database "${row!.database}" (${reason}). ` +
+          `Ask a database superuser to run: CREATE EXTENSION IF NOT EXISTS ${ext};`,
+      ])
+    }
   }
 }
 
@@ -222,14 +396,34 @@ export async function dropInvalidIndexes(sql: postgres.Sql): Promise<DropInvalid
 /**
  * Build the indexes that cannot live inside the migration transaction.
  *
- * Not idempotent in the way it looks: `IF NOT EXISTS` skips an *invalid* index
- * as readily as a valid one, which is why {@link dropInvalidIndexes} must have
- * run first.
+ * `IF NOT EXISTS` skips an *invalid* index as readily as a valid one, so each
+ * spec's index is checked first and dropped when invalid, then built. Returns
+ * the names it had to drop and rebuild.
  */
-export async function ensureConcurrentIndexes(sql: postgres.Sql): Promise<void> {
-  for (const spec of CONCURRENT_INDEX_SPECS) {
+export async function ensureConcurrentIndexes(
+  sql: postgres.Sql,
+  specs: readonly ConcurrentIndexSpec[] = CONCURRENT_INDEX_SPECS
+): Promise<string[]> {
+  const rebuilt: string[] = []
+  for (const spec of specs) {
+    // Checked per spec as well as swept by dropInvalidIndexes, so a caller that
+    // reaches this function without the sweep (or a build killed between the
+    // sweep and here) still cannot certify an invalid index.
+    const [existing] = await sql.unsafe<{ indisvalid: boolean }[]>(
+      `SELECT indisvalid FROM pg_index WHERE indexrelid = to_regclass($1)`,
+      [spec.name]
+    )
+    if (existing && !existing.indisvalid) {
+      // DROP INDEX CONCURRENTLY is refused on a partitioned parent, exactly
+      // like the build, so it follows the spec's own `concurrent` flag.
+      await sql.unsafe(
+        `DROP INDEX ${spec.concurrent ? 'CONCURRENTLY ' : ''}IF EXISTS "${spec.name}"`
+      )
+      rebuilt.push(spec.name)
+    }
     await sql.unsafe(spec.ddl)
   }
+  return rebuilt
 }
 
 export interface PostconditionViolation {
