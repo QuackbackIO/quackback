@@ -24,12 +24,22 @@ import { stripCodeFences, structuredOutputProviderOptions } from './config'
 
 const log = logger.child({ component: 'ai-structured-chat' })
 
-/** Base URLs whose server rejected `json_schema` during this process. */
-const needsJsonObjectFallback = new Set<string>()
+/**
+ * How far a `(base URL, model)` pair has had to fall back during this process:
+ * `json_object` when the server rejected `json_schema`, `none` when it does not
+ * implement `response_format` at all.
+ */
+type FallbackLevel = 'json_object' | 'none'
+const fallbackLevels = new Map<string, FallbackLevel>()
 
-/** Test seam: forget which base URLs need the fallback. */
+/** Per-feature models share one base URL, and support differs by model. */
+function fallbackKey(baseURL: string, model: string): string {
+  return `${baseURL}\u0000${model}`
+}
+
+/** Test seam: forget which endpoints need a fallback. */
 export function resetStructuredFallbackMemory(): void {
-  needsJsonObjectFallback.clear()
+  fallbackLevels.clear()
 }
 
 interface ErrorShape {
@@ -54,6 +64,20 @@ export function isResponseFormatRejection(err: unknown): boolean {
   if (status !== undefined && status !== 400 && status !== 422) return false
   if ((e.param ?? e.error?.param) === 'response_format') return true
   return RESPONSE_FORMAT_MENTION.test(`${e.message ?? ''} ${e.error?.message ?? ''}`)
+}
+
+/**
+ * True when the server says the `response_format` parameter itself is not
+ * implemented, as opposed to rejecting one of its types. A message that names
+ * `json_schema` or `json_object` is about a type; a bare "unsupported
+ * parameter: response_format" is about the parameter.
+ */
+export function rejectsResponseFormatEntirely(err: unknown): boolean {
+  if (!isResponseFormatRejection(err)) return false
+  const e = err as ErrorShape
+  const text = `${e.message ?? ''} ${e.error?.message ?? ''}`
+  if (/json_schema|json schema|json_object|json object/i.test(text)) return false
+  return /response_format/i.test(text) || (e.param ?? e.error?.param) === 'response_format'
 }
 
 function structuredError(code: string, message: string): Error {
@@ -81,7 +105,10 @@ export async function structuredChat<S extends z.ZodType>(
     ...(input.middleware ? { middleware: input.middleware } : {}),
   }
 
-  if (!needsJsonObjectFallback.has(baseURL)) {
+  const key = fallbackKey(baseURL, input.model)
+  let level = fallbackLevels.get(key)
+
+  if (!level) {
     try {
       return (await chat({
         ...common,
@@ -91,23 +118,41 @@ export async function structuredChat<S extends z.ZodType>(
       } as never)) as z.infer<S>
     } catch (err) {
       if (!isResponseFormatRejection(err)) throw err
-      needsJsonObjectFallback.add(baseURL)
+      level = rejectsResponseFormatEntirely(err) ? 'none' : 'json_object'
+      fallbackLevels.set(key, level)
       log.warn(
-        { base_url: baseURL, model: input.model, err },
-        'provider rejected response_format json_schema; using json_object with the schema in the prompt'
+        { base_url: baseURL, model: input.model, fallback: level, err },
+        'provider rejected response_format json_schema; describing the schema in the prompt instead'
       )
     }
   }
 
-  const text = (await chat({
-    ...common,
-    systemPrompts: [...input.systemPrompts, describeSchema(input.schema)],
-    modelOptions: {
-      max_tokens: input.maxTokens,
-      response_format: { type: 'json_object' },
-      ...structuredOutputProviderOptions(),
-    },
-  } as never)) as unknown as string
+  const promptOnly = (lvl: FallbackLevel) =>
+    chat({
+      ...common,
+      systemPrompts: [...input.systemPrompts, describeSchema(input.schema)],
+      modelOptions: {
+        max_tokens: input.maxTokens,
+        ...(lvl === 'json_object' ? { response_format: { type: 'json_object' } } : {}),
+        ...structuredOutputProviderOptions(),
+      },
+    } as never) as unknown as Promise<string>
+
+  let text: string
+  try {
+    text = await promptOnly(level!)
+  } catch (err) {
+    // A server that accepts json_schema's absence but also refuses json_object
+    // does not implement the parameter; ask for JSON in the prompt alone.
+    if (level !== 'json_object' || !isResponseFormatRejection(err)) throw err
+    level = 'none'
+    fallbackLevels.set(key, level)
+    log.warn(
+      { base_url: baseURL, model: input.model, fallback: level, err },
+      'provider rejected response_format json_object; asking for JSON in the prompt alone'
+    )
+    text = await promptOnly(level)
+  }
 
   const raw = typeof text === 'string' ? stripCodeFences(text.trim()).trim() : ''
   if (!raw) {

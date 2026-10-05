@@ -99,9 +99,9 @@ describe('structuredChat', () => {
     expect(second.messages).toEqual(base.messages)
   })
 
-  it('remembers the base URL and skips json_schema on later calls', async () => {
+  it('remembers the endpoint and skips json_schema on later calls', async () => {
     hoisted.chat
-      .mockRejectedValueOnce(rejection('Unsupported parameter: response_format', 'response_format'))
+      .mockRejectedValueOnce(rejection("'response_format' type json_schema is not supported"))
       .mockResolvedValueOnce('{"sentiment":"positive","confidence":1}')
       .mockResolvedValueOnce('{"sentiment":"negative","confidence":0}')
 
@@ -113,6 +113,51 @@ describe('structuredChat', () => {
     expect(hoisted.chat.mock.calls[2][0].modelOptions.response_format).toEqual({
       type: 'json_object',
     })
+  })
+
+  it('sends no response_format when the server does not implement the parameter', async () => {
+    hoisted.chat
+      .mockRejectedValueOnce(rejection('Unsupported parameter: response_format', 'response_format'))
+      .mockResolvedValueOnce('```json\n{"sentiment":"positive","confidence":1}\n```')
+      .mockResolvedValueOnce('{"sentiment":"negative","confidence":0}')
+
+    expect(await structuredChat(base)).toEqual({ sentiment: 'positive', confidence: 1 })
+    const retry = hoisted.chat.mock.calls[1][0]
+    expect(retry.outputSchema).toBeUndefined()
+    expect(retry.modelOptions).toEqual({ max_tokens: 500 })
+    expect(retry.systemPrompts.join('\n')).toContain('"confidence"')
+
+    // Remembered: the next call goes straight to the prompt-only request.
+    await structuredChat(base)
+    expect(hoisted.chat).toHaveBeenCalledTimes(3)
+    expect(hoisted.chat.mock.calls[2][0].modelOptions).toEqual({ max_tokens: 500 })
+  })
+
+  it('drops to prompt-only when json_object is rejected too', async () => {
+    hoisted.chat
+      .mockRejectedValueOnce(rejection('json_schema is not supported'))
+      .mockRejectedValueOnce(rejection('json_object is not supported', 'response_format'))
+      .mockResolvedValueOnce('{"sentiment":"positive","confidence":1}')
+
+    await structuredChat(base)
+
+    expect(hoisted.chat).toHaveBeenCalledTimes(3)
+    expect(hoisted.chat.mock.calls[1][0].modelOptions.response_format).toEqual({
+      type: 'json_object',
+    })
+    expect(hoisted.chat.mock.calls[2][0].modelOptions.response_format).toBeUndefined()
+  })
+
+  it('keys the memory by model as well as base URL', async () => {
+    hoisted.chat
+      .mockRejectedValueOnce(rejection('json_schema is not supported'))
+      .mockResolvedValueOnce('{"sentiment":"positive","confidence":1}')
+      .mockResolvedValueOnce({ sentiment: 'negative', confidence: 0 })
+
+    await structuredChat(base)
+    await structuredChat({ ...base, model: 'other-model' })
+
+    expect(hoisted.chat.mock.calls[2][0].outputSchema).toBe(Schema)
   })
 
   it('does not carry the memory to a different base URL', async () => {
