@@ -138,16 +138,9 @@ export async function openRealtimeListener(
       } finally {
         await sender.end({ timeout: 5 }).catch(() => {})
       }
-      const ok = await delivered
-      if (!ok) {
-        log.error(
-          { workspace: input.label },
-          'realtime listener did NOT receive its own probe notify — SSE streams on this ' +
-            'replica will show nothing written on another replica. A pooled DSN produces ' +
-            'exactly this: the registration is accepted and nothing is ever delivered.'
-        )
-      }
-      return ok
+      // A pooled DSN produces a false here: the registration is accepted and
+      // nothing is ever delivered. The caller reports it.
+      return await delivered
     },
   }
 }

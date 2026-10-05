@@ -118,7 +118,7 @@ describe('startSsoTestFn', () => {
   })
 
   it('returns testId + authorizeUrl when preconditions met (legacy sso provider)', async () => {
-    hoisted.listIdentityProviders.mockResolvedValue([ssoProvider])
+    hoisted.listIdentityProviders.mockResolvedValue([{ ...ssoProvider, redirectStyle: 'legacy' }])
     hoisted.getIdentityProviderCredentials.mockResolvedValue({ clientSecret: 'secret' })
     hoisted.safeFetch.mockResolvedValue(
       new Response(
@@ -140,9 +140,10 @@ describe('startSsoTestFn', () => {
 
     expect(result.testId).toMatch(/^ssotest_/)
     expect(result.authorizeUrl).toMatch(/^https:\/\/idp\/auth\?/)
-    // Redirect URI is the provider's own production callback.
-    expect(result.authorizeUrl).toMatch(
-      /redirect_uri=https%3A%2F%2Fqb\.test%2Fapi%2Fauth%2Fcallback%2Fsso/
+    // Redirect URI is the one production sends for this provider: a legacy
+    // provider sends the URL its IdP already has.
+    expect(new URL(result.authorizeUrl).searchParams.get('redirect_uri')).toBe(
+      'https://qb.test/api/auth/oauth2/callback/sso'
     )
     // PKCE is mandatory for OAuth 2.1 IdPs and ignored by IdPs that don't
     // support it — the authorize URL must carry an S256 challenge pair.
@@ -150,9 +151,14 @@ describe('startSsoTestFn', () => {
     expect(result.authorizeUrl).toMatch(/code_challenge_method=S256/)
     expect(hoisted.cacheSet).toHaveBeenCalledTimes(1)
 
-    // Session persisted to the KV store must carry the registrationId.
-    const [, session] = hoisted.cacheSet.mock.calls[0] as [string, { registrationId: string }]
+    // Session persisted to the KV store must carry the registrationId, and the
+    // same redirect URI for the callback's token exchange.
+    const [, session] = hoisted.cacheSet.mock.calls[0] as [
+      string,
+      { registrationId: string; redirectUri: string },
+    ]
     expect(session.registrationId).toBe('sso')
+    expect(session.redirectUri).toBe('https://qb.test/api/auth/oauth2/callback/sso')
   })
 
   it('requests the provider-configured scopes (mirrors production) instead of a hardcoded set', async () => {
@@ -385,14 +391,19 @@ describe('startSsoTestFn', () => {
       authorizeUrl: string
     }
 
-    // Redirect URI must be the provider's OWN callback, not the legacy sso path.
-    expect(result.authorizeUrl).toMatch(
-      /redirect_uri=https%3A%2F%2Fqb\.test%2Fapi%2Fauth%2Fcallback%2Foidc_abc123/
+    // Redirect URI must be the provider's OWN callback; no recorded style is
+    // the current path.
+    expect(new URL(result.authorizeUrl).searchParams.get('redirect_uri')).toBe(
+      'https://qb.test/api/auth/callback/oidc_abc123'
     )
 
-    // Session must carry the correct registrationId.
-    const [, session] = hoisted.cacheSet.mock.calls[0] as [string, { registrationId: string }]
+    // Session must carry the correct registrationId and the same redirect URI.
+    const [, session] = hoisted.cacheSet.mock.calls[0] as [
+      string,
+      { registrationId: string; redirectUri: string },
+    ]
     expect(session.registrationId).toBe('oidc_abc123')
+    expect(session.redirectUri).toBe('https://qb.test/api/auth/callback/oidc_abc123')
   })
 
   it('forwards stored profile paths through the shared identity mapping adapter', async () => {

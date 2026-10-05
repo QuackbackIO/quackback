@@ -36,6 +36,7 @@ vi.mock('@/lib/server/audit/log', () => ({
 vi.mock('@/lib/server/domains/principals/bootstrap-admin', () => ({
   findHumanAdmin: vi.fn(),
   isOpenToBootstrapClaim: vi.fn(),
+  isSetupOpenToClaim: vi.fn(async () => true),
 }))
 
 vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({

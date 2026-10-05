@@ -22,6 +22,7 @@ import { getWorkspaceScope, runWithWorkspaceScope } from '@/lib/server/workspace
 import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 import type { GenericOAuthConfig } from './build-oauth-configs'
 import { guardBetterAuthUserCreation } from './signup-policy'
+import { assignSessionScope } from './session-audience'
 import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
 import { workspaceAuthTrustedOrigins } from './trusted-origins'
 import { ensureMcpOauthResource } from './ensure-mcp-oauth-resource'
@@ -273,11 +274,16 @@ async function createAuth() {
     return minted
   }
 
-  const providerRows = await listIdentityProviders()
+  // The same row the build takes auth_config_version from, so the redirect
+  // styles match the version this instance is cached under.
+  const providerRows = await listIdentityProviders({
+    authConfig: workspaceSettings?.settings?.authConfig ?? null,
+  })
   const oidcConfigs = await buildGenericOAuthConfigs({
     providers: providerRows,
     creds: getIdentityProviderCredentials,
     tierAllowsOidc: tierLimits.features.customOidcProvider,
+    baseUrl: config.baseUrl,
     discovery: (discoveryUrl) => fetchJson(discoveryUrl),
     fetchUserInfo: (url, accessToken) => fetchJson(url, { authorization: `Bearer ${accessToken}` }),
     // Observe-then-enforce: log the discrepancy so its real rate is known
@@ -305,31 +311,18 @@ async function createAuth() {
   // Observed, not enforced. Withdrawing it outright would stop existing
   // password users linking on their first SSO sign-in and start returning
   // "account not linked" — a regression for providers that are behaving
-  // perfectly well. So log which providers would lose it, size the blast radius
-  // from real installations, and flip afterwards. Two of the predicate's inputs
-  // (whether the provider asserts a verified address, and an admin override)
-  // also need a column that has not landed yet.
-  const { allowsAutoLinking } = await import('./provider-trust')
-  for (const c of oidcConfigs) {
-    trustedProviders.push(c.providerId)
-    const row = providerRows.find((p) => p.registrationId === c.providerId)
-    if (
-      row &&
-      !allowsAutoLinking({
-        lastSuccessfulTestAt: row.lastSuccessfulTestAt,
-        detailsChangedAt: row.detailsChangedAt,
-        // Not yet persisted; assumed true so the observation isolates the
-        // connection-test signal rather than flagging every provider.
-        assertsVerifiedEmail: true,
-        trustOverride: null,
-      })
-    ) {
-      log.warn(
-        { registrationId: c.providerId },
-        'provider would lose auto-linking under derived trust (no fresh connection test)'
-      )
-    }
-  }
+  // perfectly well. So note which providers the derived predicate would not
+  // trust, size the population from real installations, and flip afterwards.
+  // Two of the predicate's inputs (whether the provider asserts a verified
+  // address, and an admin override) also need a column that has not landed yet.
+  const { oidcTrustedProviderIds } = await import('./provider-trust')
+  trustedProviders.push(
+    ...oidcTrustedProviderIds(
+      oidcConfigs.map((c) => c.providerId),
+      providerRows,
+      log
+    )
+  )
 
   // Layer A registration filter: an OAuth provider is registered on
   // the Better-Auth instance only if creds exist AND `authConfig.oauth`
@@ -400,6 +393,7 @@ async function createAuth() {
   // Per-endpoint hooks for Layer B/C enforcement. Imported lazily here
   // to keep the createAuth() module-loading dependency graph clean.
   const { hooksBefore, hooksAfter } = await import('./hooks')
+  const { betterAuthIpAddressOptions } = await import('./client-ip')
 
   const instance = betterAuth({
     hooks: {
@@ -558,6 +552,9 @@ async function createAuth() {
     },
 
     advanced: {
+      // The client address comes from the app's own trusted resolution, never
+      // from a header the client can write. See `./client-ip`.
+      ipAddress: betterAuthIpAddressOptions,
       // Use TypeID format for user IDs to match our schema
       database: {
         generateId: ({ model }) => {
@@ -627,8 +624,10 @@ async function createAuth() {
               if (!isAnonymous) {
                 const { ensureAutoSubscribed } =
                   await import('@/lib/server/domains/changelog/changelog-subscription.service')
+                const { logSettingsReadError } =
+                  await import('@/lib/server/domains/settings/settings-log')
                 ensureAutoSubscribed(createdPrincipal.id as PrincipalId).catch((err) =>
-                  log.error({ err }, 'failed to auto-subscribe to changelog on signup')
+                  logSettingsReadError(log, err, 'failed to auto-subscribe to changelog on signup')
                 )
               }
             }
@@ -637,12 +636,7 @@ async function createAuth() {
       },
       session: {
         create: {
-          // Only the widget's lazy anonymous mint; everything else is a dashboard sign-in.
-          before: async (sessionData, context) => {
-            if (context?.path === '/sign-in/anonymous') {
-              return { data: { ...sessionData, scope: 'widget' } }
-            }
-          },
+          before: assignSessionScope,
         },
       },
     },
@@ -938,7 +932,8 @@ export const auth = {
         return async (...args: unknown[]) => {
           const authInstance = await getAuth()
           const api = authInstance.api as Record<string, (...args: unknown[]) => unknown>
-          return api[prop as string](...args)
+          const { withTrustedClientIpArgs } = await import('./client-ip')
+          return api[prop as string](...withTrustedClientIpArgs(args))
         }
       },
     })
@@ -950,7 +945,8 @@ export const auth = {
       log.debug({ method: request.method, path: url.pathname }, 'magic-link request')
     }
     const authInstance = await getAuth()
-    const response = await authInstance.handler(request)
+    const { withTrustedClientIpRequest } = await import('./client-ip')
+    const response = await authInstance.handler(withTrustedClientIpRequest(request))
     if (isMagicLink) {
       log.debug({ status: response.status }, 'magic-link response')
     }

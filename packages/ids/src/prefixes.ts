@@ -232,6 +232,24 @@ export type EntityType = keyof typeof ID_PREFIXES
  */
 export const ID_PREFIX_ALIASES: Readonly<Record<string, IdPrefix>> = {
   kb_article: 'article',
+  // Feedback entities, serialized under a `post_` namespace.
+  status: 'post_status',
+  tag: 'post_tag',
+  comment: 'post_comment',
+  vote: 'post_vote',
+  reaction: 'post_comment_reaction',
+  comment_edit: 'post_comment_edit',
+  note: 'post_note',
+  activity: 'post_activity',
+  merge_sug: 'post_merge_sug',
+  linked_entity: 'post_external_link',
+  // Messenger entities, serialized under a `conversation_` namespace.
+  chat_msg: 'conversation_msg',
+  chat_tag: 'conversation_tag',
+  chat_msg_mention: 'conversation_msg_mention',
+  // Help center entities, serialized under a `kb_` namespace.
+  category: 'kb_category',
+  article_feedback: 'kb_article_feedback',
 }
 
 /**

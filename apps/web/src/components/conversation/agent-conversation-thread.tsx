@@ -2201,6 +2201,18 @@ export function AgentConversationThread({
           </div>
         )}
 
+        {/* Inbox translation past the AI allowance: it keeps running (and
+            counting), so this is a quiet one-line notice, not a block. */}
+        {inboxTranslation.overAllowanceNotice && (
+          <p
+            role="status"
+            className="flex items-center gap-2 border-t border-border/50 px-4 py-1.5 text-xs text-muted-foreground sm:px-5"
+          >
+            <LanguageIcon className="h-3.5 w-3.5 shrink-0" />
+            {inboxTranslation.overAllowanceNotice}
+          </p>
+        )}
+
         {/* Composer — no top border: the composer should feel like a
             continuation of the thread, not a separate panel. Horizontal
             padding matches the message rows' `px-5` so the composer and the

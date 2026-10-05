@@ -60,6 +60,12 @@ function createUpdateChain() {
   return chain
 }
 
+const mockCancelPendingAutoTranslations = vi.fn(async (..._args: unknown[]) => {})
+vi.mock('../help-center-translate-jobs', () => ({
+  HELP_CENTER_TRANSLATE_QUEUE: 'help-center-translate',
+  cancelPendingAutoTranslations: (...args: unknown[]) => mockCancelPendingAutoTranslations(...args),
+}))
+
 vi.mock('@/lib/server/db', () => ({
   db: {
     query: {
@@ -172,16 +178,26 @@ describe('article translations', () => {
       { locale: 'fr', status: 'draft', updatedAt: new Date('2026-01-03') },
     ])
 
-    const statuses = await getArticleTranslationStatuses('article_1' as KbArticleId, [
-      'de',
-      'fr',
-      'es',
-    ])
+    const statuses = await getArticleTranslationStatuses(
+      'article_1' as KbArticleId,
+      ['de', 'fr', 'es'],
+      ['es']
+    )
 
     expect(statuses).toEqual([
-      { locale: 'de', status: 'published', updatedAt: new Date('2026-01-02') },
-      { locale: 'fr', status: 'draft', updatedAt: new Date('2026-01-03') },
-      { locale: 'es', status: 'untranslated', updatedAt: null },
+      {
+        locale: 'de',
+        status: 'published',
+        updatedAt: new Date('2026-01-02'),
+        autoTranslatePaused: false,
+      },
+      {
+        locale: 'fr',
+        status: 'draft',
+        updatedAt: new Date('2026-01-03'),
+        autoTranslatePaused: false,
+      },
+      { locale: 'es', status: 'untranslated', updatedAt: null, autoTranslatePaused: true },
     ])
   })
 })

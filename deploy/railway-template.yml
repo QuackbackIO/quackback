@@ -38,6 +38,9 @@ services:
       BASE_URL: https://${{RAILWAY_PUBLIC_DOMAIN}}
       PORT: '3000'
       NODE_ENV: production
+      # Railway's edge always proxies, so one hop supplies the client IP. Use '2'
+      # when Railway's optional CDN is enabled in front of it.
+      TRUSTED_PROXY_HOPS: '1'
       S3_ENDPOINT: ${{Bucket.ENDPOINT}}
       S3_BUCKET: ${{Bucket.BUCKET}}
       S3_REGION: ${{Bucket.REGION}}
@@ -53,6 +56,7 @@ services:
       - EMAIL_SES_ACCESS_KEY_ID
       - EMAIL_SES_SECRET_ACCESS_KEY
       - EMAIL_SES_REGION
+      - EMAIL_RESEND_API_KEY
       - EMAIL_FROM
       - GITHUB_CLIENT_ID
       - GITHUB_CLIENT_SECRET

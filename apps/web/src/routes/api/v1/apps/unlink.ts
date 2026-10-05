@@ -20,7 +20,7 @@ export const Route = createFileRoute('/api/v1/apps/unlink')({
 
       POST: async ({ request }) => {
         try {
-          await withApiKeyAuth(request, { permission: PERMISSIONS.INTEGRATION_MANAGE })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.POST_VOTE_ON_BEHALF })
 
           const body = await request.json()
           const parsed = unlinkSchema.safeParse(body)

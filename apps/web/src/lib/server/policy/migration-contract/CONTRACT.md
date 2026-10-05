@@ -6,15 +6,15 @@ Regenerate with `bunx vitest run apps/web/src/lib/server/policy/migration-contra
 
 ## Summary
 
-Migrations scanned: 271. Migrations with destructive DDL: 38.
+Migrations scanned: 272. Migrations with destructive DDL: 38.
 
 | Kind | Occurrences |
 | --- | --- |
 | DROP COLUMN | 23 |
 | DROP TABLE | 21 |
-| DROP CONSTRAINT | 15 |
+| DROP CONSTRAINT | 17 |
 | RENAME COLUMN | 15 |
-| RENAME TO (table) | 13 |
+| RENAME TO (table) | 14 |
 | SET NOT NULL | 4 |
 | ALTER COLUMN TYPE | 2 |
 | DROP DEFAULT | 1 |
@@ -46,7 +46,7 @@ Migrations scanned: 271. Migrations with destructive DDL: 38.
 | 0127_conversation_tags_rename.sql | RENAME TO (table) conversation_tags -> conversation_tag_assignments; RENAME COLUMN conversation_tag_assignments.chat_tag_id -> conversation_tag_id; RENAME TO (table) chat_tags -> conversation_tags; RENAME TO (table) post_tags -> post_tag_assignments; RENAME TO (table) tags -> post_tags; RENAME TO (table) comment_reactions -> post_comment_reactions; RENAME TO (table) comment_edit_history -> post_comment_edit_history; RENAME TO (table) votes -> post_votes; RENAME TO (table) comments -> post_comments; RENAME TO (table) chat_messages -> conversation_messages; RENAME TO (table) chat_message_mentions -> conversation_message_mentions; RENAME COLUMN conversation_message_mentions.chat_message_id -> conversation_message_id; RENAME TO (table) chat_message_reactions -> conversation_message_reactions; RENAME COLUMN conversation_message_reactions.chat_message_id -> conversation_message_id; RENAME TO (table) chat_message_flags -> conversation_message_flags; RENAME COLUMN conversation_message_flags.chat_message_id -> conversation_message_id; RENAME TO (table) merge_suggestions -> post_merge_suggestions | grandfathered |
 | 0196_assistant_config_v2.sql | SET NOT NULL settings.assistant_config; SET NOT NULL settings.assistant_config_revision; DROP CONSTRAINT assistant_guidance_rules.assistant_guidance_rules_title_length_check; DROP CONSTRAINT assistant_guidance_rules.assistant_guidance_rules_body_length_check; RENAME COLUMN assistant_guidance_rules.title -> name; RENAME COLUMN assistant_guidance_rules.body -> instruction; RENAME COLUMN assistant_guidance_rules.surfaces -> channels; RENAME COLUMN assistant_guidance_rules.position -> priority; DROP COLUMN assistant_guidance_rules.category | grandfathered |
 | 0197_remove_data_connectors.sql | DROP TABLE data_connectors | grandfathered |
-| 0199_drop_roadmap_curation.sql | DROP TABLE post_roadmaps; DROP COLUMN roadmaps.is_public | grandfathered |
+| 0199_drop_roadmap_curation.sql | DROP CONSTRAINT post_roadmaps.post_roadmaps_post_id_posts_id_fk; DROP CONSTRAINT post_roadmaps.post_roadmaps_roadmap_id_roadmaps_id_fk; RENAME TO (table) post_roadmaps -> post_roadmaps_archived; DROP TABLE post_roadmaps_archived; DROP COLUMN roadmaps.is_public | grandfathered |
 | 0200_assistant_drop_channels_ai_label.sql | DROP COLUMN assistant_guidance_rules.channels | grandfathered |
 | 0204_assistant_config_v3.sql | SET NOT NULL assistant_guidance_rules.agent; DROP COLUMN assistant_guidance_rules.roles | grandfathered |
 | 0217_drop_feedback_pipeline.sql | DROP COLUMN post_votes.feedback_suggestion_id; DROP TABLE pipeline_log; DROP TABLE feedback_signals; DROP TABLE feedback_suggestions; DROP TABLE raw_feedback_items; DROP TABLE feedback_sources; DROP TABLE external_user_mappings; DROP TABLE slack_channel_monitors | grandfathered |
@@ -60,7 +60,7 @@ Migrations scanned: 271. Migrations with destructive DDL: 38.
 | 0279_better_auth_17.sql | DROP CONSTRAINT oauth_client_resource.oauth_client_resource_resource_id_oauth_resource_id_fk | annotated (safe-after 0.13.2) |
 | 0285_integration_link_scope.sql | DROP CONSTRAINT post_external_links.post_external_links_type_external_post_unique; DROP CONSTRAINT ticket_external_links.ticket_external_links_type_external_ticket_unique | annotated (safe-after 0.13.3) |
 | 0288_kb_translations_dutch_search.sql | DROP COLUMN kb_article_translations.search_vector | annotated (safe-after 0.13.2) |
-| 0292_workspace_copilot.sql | DROP CONSTRAINT conversation_messages.conversation_messages_parent_check | annotated (safe-after 0.13.2) |
+| 0293_workspace_copilot.sql | DROP CONSTRAINT conversation_messages.conversation_messages_parent_check | annotated (safe-after 0.13.2) |
 
 ## Grandfathered (29)
 

@@ -365,9 +365,10 @@ describe('replayGateVerdict', () => {
       '0288_kb_translations_dutch_search',
       '0289_identity_provider_id_token_nonce',
       '0290_files',
-      '0291_test_customer',
-      '0292_workspace_copilot',
-      '0294_validate_workspace_copilot_checks',
+      '0291_legacy_surface_switches',
+      '0292_test_customer',
+      '0293_workspace_copilot',
+      '0295_validate_workspace_copilot_checks',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)
