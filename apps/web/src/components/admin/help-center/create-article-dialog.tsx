@@ -74,23 +74,30 @@ export function CreateArticleDialog({
     [form]
   )
 
+  // A draft that saved but did not publish: a retry publishes it, never a second copy.
+  const [savedDraftId, setSavedDraftId] = useState<string | null>(null)
+
   const save = (publish: boolean) =>
     form.handleSubmit(async (data) => {
       setSaveError(null)
-      let articleId: string | null = null
+      let articleId = savedDraftId
       try {
-        const newArticle = await createArticleMutation.mutateAsync({
-          categoryId: data.categoryId,
-          title: data.title,
-          content: data.content,
-          contentJson: contentJson as TiptapContent | null,
-        })
-        articleId = newArticle.id
-        if (publish) await publishArticleMutation.mutateAsync(newArticle.id as KbArticleId)
+        if (!articleId) {
+          const newArticle = await createArticleMutation.mutateAsync({
+            categoryId: data.categoryId,
+            title: data.title,
+            content: data.content,
+            contentJson: contentJson as TiptapContent | null,
+          })
+          articleId = newArticle.id
+        }
+        if (publish) await publishArticleMutation.mutateAsync(articleId as KbArticleId)
       } catch (error) {
-        setSaveError(error instanceof Error ? error.message : String(error))
-        // A draft that saved but did not publish is still worth opening.
-        if (!articleId) return
+        const message = error instanceof Error ? error.message : String(error)
+        if (articleId) setSavedDraftId(articleId)
+        // Stay open, so whoever clicked Publish sees it is not live yet.
+        setSaveError(articleId ? `Saved as a draft, but not published: ${message}` : message)
+        return
       }
       handleOpenChange(false)
       void navigate({ to: '/admin/help-center', search: { article: articleId } })
@@ -111,6 +118,7 @@ export function CreateArticleDialog({
       createArticleMutation.reset()
       publishArticleMutation.reset()
       setSaveError(null)
+      setSavedDraftId(null)
     }
   }
 

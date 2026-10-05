@@ -9,6 +9,7 @@ const calls = vi.hoisted(() => ({
   created: [] as unknown[],
   published: [] as unknown[],
   canManage: true,
+  publishFailures: 0,
   navigate: vi.fn(),
 }))
 
@@ -30,22 +31,30 @@ vi.mock('@/lib/client/mutations/help-center', () => {
   })
   return {
     useCreateArticle: mutation(calls.created, () => ({ id: 'kb_article_1' })),
-    usePublishArticle: mutation(calls.published, (id) => ({ id })),
+    usePublishArticle: mutation(calls.published, (id) => {
+      if (calls.publishFailures > 0) {
+        calls.publishFailures -= 1
+        throw new Error('Publishing is unavailable')
+      }
+      return { id }
+    }),
   }
 })
 vi.mock('../help-center-form-fields', () => ({
   HelpCenterFormFields: ({
     form,
     onContentChange,
+    error,
   }: {
     form: { setValue: (k: string, v: string) => void }
     onContentChange: (d: { json: () => object; markdown: () => string }) => void
+    error?: string
   }) => {
     useEffect(() => {
       form.setValue('title', 'Getting started')
       onContentChange({ json: () => ({ type: 'doc' }), markdown: () => 'Hello' })
     }, [form, onContentChange])
-    return null
+    return error ? <p role="alert">{error}</p> : null
   },
 }))
 vi.mock('../help-center-metadata-sidebar', () => ({
@@ -60,6 +69,8 @@ afterEach(() => {
   calls.created.length = 0
   calls.published.length = 0
   calls.canManage = true
+  calls.publishFailures = 0
+  calls.navigate.mockReset()
 })
 
 it('publishes the new article in one step', async () => {
@@ -81,4 +92,24 @@ it('offers Publish only to someone who may publish', async () => {
   render(<CreateArticleDialog open onOpenChange={() => {}} />)
   expect(await screen.findByRole('button', { name: 'Save draft' })).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Publish' })).toBeNull()
+})
+
+it('keeps a failed publish in view, and publishes the saved draft on retry', async () => {
+  calls.publishFailures = 1
+  const onOpenChange = vi.fn()
+  render(<CreateArticleDialog open onOpenChange={onOpenChange} />)
+  const user = userEvent.setup()
+  await user.click(await screen.findByRole('button', { name: 'Publish' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Saved as a draft, but not published: Publishing is unavailable'
+  )
+  expect(onOpenChange).not.toHaveBeenCalledWith(false)
+  expect(calls.navigate).not.toHaveBeenCalled()
+
+  await user.click(screen.getByRole('button', { name: 'Publish' }))
+  await waitFor(() => expect(calls.navigate).toHaveBeenCalledTimes(1))
+  // The draft saved the first time: the retry publishes it, never a second copy.
+  expect(calls.created).toHaveLength(1)
+  expect(calls.published).toEqual(['kb_article_1', 'kb_article_1'])
+  expect(onOpenChange).toHaveBeenCalledWith(false)
 })
