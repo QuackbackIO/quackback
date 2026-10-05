@@ -3,6 +3,7 @@
  */
 import { afterAll, afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createId, type PrincipalId, type UserId } from '@quackback/ids'
+import type { BoardAccess } from '@/lib/shared/db-types'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
   boards,
@@ -165,14 +166,14 @@ it('names the idea when a customer posted before anyone voted', async () => {
   })
 })
 
-const TEAM_ACCESS = {
+const TEAM_ACCESS: BoardAccess = {
   view: 'team',
   vote: 'team',
   comment: 'team',
   submit: 'team',
   segments: { view: [], vote: [], comment: [], submit: [] },
   moderation: { anonPosts: 'inherit', signedPosts: 'inherit', comments: 'inherit' },
-} as const
+}
 
 it('names the teammate idea the private-board win counted, on the setup board only', async () => {
   const owner = await person(
