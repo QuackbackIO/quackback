@@ -76,14 +76,16 @@ export async function runHelpCenterTranslate(job: ClaimedJob): Promise<void> {
   const data = job.payload as unknown as HelpCenterTranslateJob
   switch (data.type) {
     case 'translate-article': {
+      // The baseline a park would protect is read before anything else, so
+      // an edit saved while this job runs (even between the allowance check
+      // and the park) is newer than it and makes a released job skip. A job
+      // already carrying a baseline keeps its first one across re-parks.
+      const baseline = data.guard ?? (await snapshotTranslation(data.articleId, data.locale))
       const pause = await translateArticleForLocale(data.articleId as KbArticleId, data.locale, {
         guard: data.guard,
       })
       if (pause) {
-        // Keep the first snapshot across re-parks, so a change made while
-        // parked is never absorbed into a later one.
-        const guard = data.guard ?? (await snapshotTranslation(data.articleId, data.locale))
-        await parkPausedTranslation(data.articleId, data.locale, pause.pausedUntil, guard)
+        await parkPausedTranslation(data.articleId, data.locale, pause.pausedUntil, baseline)
       }
       return
     }

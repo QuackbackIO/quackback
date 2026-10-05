@@ -32,15 +32,23 @@ const state = vi.hoisted(() => ({
   exhausted: true,
   windowEnd: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
   modelCalls: 0,
+  /** Runs once, right after the allowance check returns. */
+  afterBudgetCheck: null as null | (() => Promise<void>),
 }))
 
 vi.mock('@/lib/server/domains/ai/ai-budget', () => ({
-  getAiBudgetStatus: async () => ({
-    cap: 1000,
-    used: state.exhausted ? 1000 : 0,
-    exhausted: state.exhausted,
-    window: { kind: 'month', start: new Date(0), end: state.windowEnd },
-  }),
+  getAiBudgetStatus: async () => {
+    const status = {
+      cap: 1000,
+      used: state.exhausted ? 1000 : 0,
+      exhausted: state.exhausted,
+      window: { kind: 'month', start: new Date(0), end: state.windowEnd },
+    }
+    const hook = state.afterBudgetCheck
+    state.afterBudgetCheck = null
+    if (hook) await hook()
+    return status
+  },
 }))
 vi.mock('@/lib/server/config', () => ({
   config: { openaiApiKey: 'test-key', openaiBaseUrl: 'http://127.0.0.1:9/v1' },
@@ -150,6 +158,7 @@ describe.skipIf(!fixture.available)('parked auto-translate never replaces manual
     await fixture.begin()
     state.exhausted = true
     state.modelCalls = 0
+    state.afterBudgetCheck = null
   })
   afterEach(fixture.rollback)
   afterAll(fixture.close)
@@ -244,5 +253,24 @@ describe.skipIf(!fixture.available)('parked auto-translate never replaces manual
     await upsertArticleTranslation(manual(articleId))
     await runHelpCenterTranslate(job({ type: 'translate-article', articleId, locale: 'de' }))
     expect((await translation(articleId, 'de'))?.content).toBe('AUTO body')
+  })
+
+  it('an edit saved between the allowance check and the park is not absorbed', async () => {
+    const articleId = await seedArticle()
+    // The editor saves while the job is between finding the allowance used
+    // up and parking. The park must not treat that edit as its baseline.
+    state.afterBudgetCheck = async () => {
+      await upsertArticleTranslation(manual(articleId))
+    }
+    await runHelpCenterTranslate(job({ type: 'translate-article', articleId, locale: 'de' }))
+
+    state.exhausted = false
+    await runHelpCenterTranslateResume(job({}))
+    for (const { payload } of await pendingFor(articleId)) {
+      await runHelpCenterTranslate(job(payload))
+    }
+
+    expect(state.modelCalls).toBe(0)
+    expect((await translation(articleId, 'de'))?.content).toBe('Von Hand geschrieben.')
   })
 })
