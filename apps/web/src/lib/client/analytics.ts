@@ -18,3 +18,41 @@ export async function track(event: string, properties?: Record<string, unknown>)
     // Analytics must never break the flow it observes
   }
 }
+
+/** An absolute URL without its query string or fragment; anything else as is. */
+function withoutQuery(value: unknown): unknown {
+  if (typeof value !== 'string' || !/^https?:\/\//i.test(value)) return value
+  try {
+    const url = new URL(value)
+    url.search = ''
+    url.hash = ''
+    return url.toString()
+  } catch {
+    return value
+  }
+}
+
+function scrubObject(props: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(props)) out[key] = withoutQuery(value)
+  return out
+}
+
+/**
+ * Strips the query string and fragment from every URL an event carries
+ * (`$current_url`, `$referrer` and their person-property copies). A sign-in
+ * link, an OAuth callback or an emailed link can hold a credential there, and
+ * nothing in a query string is worth sending. Campaign parameters are already
+ * their own properties by the time an event reaches this.
+ */
+export function scrubEventUrls<T extends { properties?: Record<string, unknown> }>(event: T): T {
+  if (!event.properties) return event
+  const properties = scrubObject(event.properties)
+  for (const key of ['$set', '$set_once']) {
+    const nested = event.properties[key]
+    if (nested && typeof nested === 'object') {
+      properties[key] = scrubObject(nested as Record<string, unknown>)
+    }
+  }
+  return { ...event, properties }
+}

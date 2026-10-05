@@ -5,7 +5,7 @@ import { useRouterState } from '@tanstack/react-router'
 import type { PostHog } from 'posthog-js'
 import { isSyntheticAnonEmail } from '@/lib/shared/anonymous-email'
 import { analyticsDistinctId } from '@/lib/shared/analytics-identity'
-import { setAnalyticsClient } from '@/lib/client/analytics'
+import { scrubEventUrls, setAnalyticsClient } from '@/lib/client/analytics'
 import {
   useProductAnalyticsConfig,
   useSessionContext,
@@ -17,9 +17,11 @@ import {
  * The team's own path through the product: signing up, onboarding and the
  * admin app. Portal, widget, help center and status visitors are the
  * workspace's customers and are never tracked, and neither is the shared
- * sign-in page they use.
+ * sign-in page they use. Neither are pages whose URL is a credential (the
+ * sign-in handoff, an invitation link): identity by email joins the funnel
+ * without them.
  */
-const TRACKED_ROUTE_PREFIXES = ['/admin', '/onboarding', '/auth/open-handoff', '/complete-signup']
+const TRACKED_ROUTE_PREFIXES = ['/admin', '/onboarding']
 
 /** The same paths as URLs, matched on a segment boundary. */
 function isTrackedPath(pathname: string): boolean {
@@ -101,29 +103,32 @@ export function ProductAnalytics() {
           session_recording: { maskAllInputs: true, maskTextSelector: '*' },
           // The SDK records a client-side navigation before React re-renders,
           // so the URL itself decides, not this component's state.
-          before_send: (event) => (isTrackedPath(window.location.pathname) ? event : null),
+          before_send: (event) =>
+            event && isTrackedPath(window.location.pathname) ? scrubEventUrls(event) : null,
         })
       } else if (config.sessionRecording) {
         posthog.startSessionRecording()
       }
       loaded = posthog
-      setAnalyticsClient(posthog)
+      // Who this is is settled before explicit events can be sent, so none is
+      // filed under whoever this browser identified before.
       const identified = posthog.get_property('$user_state') === 'identified'
       if (!distinctId) {
         // Signed out on a tracked page: whoever this browser last identified
         // is not who is here now.
         if (identified) posthog.reset()
-        return
+      } else {
+        // One browser, a different person: their events must not join the
+        // previous person's profile.
+        if (identified && posthog.get_distinct_id() !== distinctId) {
+          posthog.reset()
+        }
+        posthog.identify(distinctId, { email: distinctId, name, role })
+        if (config.workspaceId) {
+          posthog.group('workspace', config.workspaceId, { name: workspaceName })
+        }
       }
-      // One browser, a different person: their events must not join the
-      // previous person's profile.
-      if (identified && posthog.get_distinct_id() !== distinctId) {
-        posthog.reset()
-      }
-      posthog.identify(distinctId, { email: distinctId, name, role })
-      if (config.workspaceId) {
-        posthog.group('workspace', config.workspaceId, { name: workspaceName })
-      }
+      setAnalyticsClient(posthog)
     })
     return () => {
       cancelled = true

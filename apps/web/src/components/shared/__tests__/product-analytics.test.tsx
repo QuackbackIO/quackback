@@ -151,7 +151,6 @@ describe('ProductAnalytics', () => {
 
   it.each([
     [['__root__', '/onboarding', '/onboarding/_layout', '/onboarding/_layout/workspace']],
-    [['__root__', '/auth/open-handoff']],
     [['__root__', '/admin/signup']],
   ])('runs on the signup and onboarding path %j', async (ids) => {
     route.ids = ids
@@ -164,7 +163,10 @@ describe('ProductAnalytics', () => {
     [['__root__', '/widget']],
     [['__root__', '/hc', '/hc/$']],
     [['__root__', '/auth/login']],
-  ])('never loads for visitors on %j', async (ids) => {
+    // These URLs carry a credential: a one-time sign-in token, an invitation.
+    [['__root__', '/auth/open-handoff']],
+    [['__root__', '/complete-signup/$id']],
+  ])('never loads for visitors or on credential-bearing pages: %j', async (ids) => {
     route.ids = ids
     render(<ProductAnalytics />)
     await new Promise((r) => setTimeout(r, 0))
@@ -205,7 +207,15 @@ describe('ProductAnalytics', () => {
     expect(beforeSend(event)).toBe(event)
     // The SDK records a client-side navigation before React re-renders, so the
     // URL itself is the gate, not component state.
-    for (const path of ['/', '/b/ideas', '/hc/guide', '/auth/login', '/administrator']) {
+    for (const path of [
+      '/',
+      '/b/ideas',
+      '/hc/guide',
+      '/auth/login',
+      '/administrator',
+      '/auth/open-handoff',
+      '/complete-signup/inv_1',
+    ]) {
       window.history.pushState({}, '', path)
       expect(beforeSend(event)).toBeNull()
     }
@@ -224,5 +234,44 @@ describe('ProductAnalytics', () => {
     route.ids = ['__root__', '/admin', '/admin/feedback']
     view.rerender(<ProductAnalytics />)
     await waitFor(() => expect(posthog.startSessionRecording).toHaveBeenCalled())
+  })
+
+  it('strips query strings and fragments from every URL an event carries', async () => {
+    render(<ProductAnalytics />)
+    await waitFor(() => expect(posthog.init).toHaveBeenCalled())
+    const beforeSend = initOptions().before_send as (e: unknown) => {
+      properties: Record<string, unknown>
+    }
+    window.history.pushState({}, '', '/admin/inbox?token=secret#otp=1')
+    const out = beforeSend({
+      event: '$pageview',
+      properties: {
+        $current_url: 'https://acme.example.com/admin/inbox?token=secret#otp=1',
+        $referrer: 'https://mail.example.com/?ott=abc',
+        $referring_domain: 'mail.example.com',
+        utm_source: 'newsletter',
+        $set: { $current_url: 'https://acme.example.com/admin/inbox?token=secret' },
+        $set_once: { $initial_current_url: 'https://acme.example.com/onboarding?ott=abc' },
+      },
+    })
+    expect(out.properties).toMatchObject({
+      $current_url: 'https://acme.example.com/admin/inbox',
+      $referrer: 'https://mail.example.com/',
+      $referring_domain: 'mail.example.com',
+      utm_source: 'newsletter',
+      $set: { $current_url: 'https://acme.example.com/admin/inbox' },
+      $set_once: { $initial_current_url: 'https://acme.example.com/onboarding' },
+    })
+  })
+
+  it('settles who this is before explicit events can be sent', async () => {
+    posthog.get_property.mockReturnValue('identified')
+    posthog.get_distinct_id.mockReturnValue('previous@example.com')
+    posthog.reset.mockImplementation(() => track('probe'))
+    render(<ProductAnalytics />)
+    await waitFor(() => expect(posthog.identify).toHaveBeenCalled())
+    // A track() made during the reset had no client yet, so it was dropped
+    // rather than filed under the previous person.
+    expect(posthog.capture).not.toHaveBeenCalled()
   })
 })
