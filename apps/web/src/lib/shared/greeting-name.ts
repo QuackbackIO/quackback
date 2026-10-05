@@ -40,6 +40,9 @@ export function accountDisplayName(
  * name their ideas and comments carry: the name they gave, else one from
  * their email address, else the address itself.
  */
-export function shownName(name: string | null | undefined, email: string | null | undefined): string {
+export function shownName(
+  name: string | null | undefined,
+  email: string | null | undefined
+): string {
   return accountDisplayName(name, email) ?? (name?.trim() || email || '')
 }

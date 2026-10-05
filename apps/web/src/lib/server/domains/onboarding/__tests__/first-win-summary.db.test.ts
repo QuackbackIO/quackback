@@ -152,8 +152,18 @@ it('names the article a signed-out visitor found helpful', async () => {
     })
     .returning()
   await testDb.insert(helpCenterArticleFeedback).values([
-    { articleId: article!.id, principalId: owner, helpful: true, createdAt: new Date('2026-10-01T09:00:00Z') },
-    { articleId: article!.id, principalId: null, helpful: true, createdAt: new Date('2026-10-01T10:00:00Z') },
+    {
+      articleId: article!.id,
+      principalId: owner,
+      helpful: true,
+      createdAt: new Date('2026-10-01T09:00:00Z'),
+    },
+    {
+      articleId: article!.id,
+      principalId: null,
+      helpful: true,
+      createdAt: new Date('2026-10-01T10:00:00Z'),
+    },
   ])
   expect(await firstWinSummary(state(['help_center']))).toEqual({
     kind: 'helpful',

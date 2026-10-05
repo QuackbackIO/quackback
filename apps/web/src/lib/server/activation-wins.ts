@@ -158,10 +158,7 @@ export async function detectFirstWin(state: SetupState | null): Promise<FirstWin
     const [row] = await db
       .select({ reachedAt: helpCenterArticleFeedback.createdAt })
       .from(helpCenterArticleFeedback)
-      .innerJoin(
-        helpCenterArticles,
-        eq(helpCenterArticles.id, helpCenterArticleFeedback.articleId)
-      )
+      .innerJoin(helpCenterArticles, eq(helpCenterArticles.id, helpCenterArticleFeedback.articleId))
       .leftJoin(principal, eq(principal.id, helpCenterArticleFeedback.principalId))
       .where(winRules.helpfulVote)
       .orderBy(asc(helpCenterArticleFeedback.createdAt))

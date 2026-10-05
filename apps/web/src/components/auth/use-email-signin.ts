@@ -36,8 +36,14 @@ const codeErrors = defineMessages({
     id: 'portal.auth.otp.error.invalid',
     defaultMessage: "That code isn't right. Check the email and try again, or send a new code.",
   },
-  expired: { id: 'portal.auth.otp.error.expired', defaultMessage: 'That code expired. Send a new one.' },
-  tooMany: { id: 'portal.auth.otp.error.tooMany', defaultMessage: 'Too many tries. Send a new code.' },
+  expired: {
+    id: 'portal.auth.otp.error.expired',
+    defaultMessage: 'That code expired. Send a new one.',
+  },
+  tooMany: {
+    id: 'portal.auth.otp.error.tooMany',
+    defaultMessage: 'Too many tries. Send a new code.',
+  },
 })
 
 /**
