@@ -29,7 +29,7 @@ cd quackback
 
 # Copy and configure environment
 cp .env.prod.example .env
-# Edit .env — fill in every value (generate secrets with: openssl rand -base64 32)
+# Edit .env: fill in every value (generate secrets with: openssl rand -base64 32)
 
 # Start the application (app + Postgres + Silo object storage)
 docker compose -f docker-compose.prod.yml up -d
@@ -391,7 +391,7 @@ docker compose -f docker-compose.prod.yml exec postgres \
 git pull
 docker compose -f docker-compose.prod.yml pull
 
-# 3. Restart — migrations run automatically on startup
+# 3. Restart: migrations run automatically on startup
 docker compose -f docker-compose.prod.yml up -d
 ```
 
@@ -407,12 +407,12 @@ There is no rolling upgrade and no downgrade: new migrations are not reversible,
 
    Then take a Postgres dump and an offline snapshot of object storage by following [Migrating the bundled MinIO to Silo](#migrating-the-bundled-minio-to-silo) (it also covers the MinIO to Silo change). When both are saved, run `docker compose -f docker-compose.prod.yml down` (still without `-v`). Never run the old and new versions against the same database.
 
-2. **Update the files.** Pull the new source, set `QUACKBACK_TAG` in `.env`, and make these `.env` changes:
-   - Delete the `REDIS_URL` line. Redis and Dragonfly are no longer used.
-   - Remove `MINIO_IMAGE_TAG` and `MC_IMAGE_TAG`.
+2. **Update the files.** Pull the new source with `git pull` (or download the new `docker-compose.prod.yml`, `.env.prod.example` and the `docker/postgres/` directory), set `QUACKBACK_TAG` in `.env`, and make these `.env` changes. Do this whole step before step 5: some of these settings are checked only after the migrations have run.
+   - If your `.env` has a `REDIS_URL` line, delete it. Redis and Dragonfly are no longer used. The 0.13 compose file set it for you, so most installs have none.
+   - If you set `MINIO_IMAGE_TAG` or `MC_IMAGE_TAG`, remove them.
    - Set `SECRET_KEY` to the value your 0.13 instance used. The compose file refuses to start without it.
    - Set `TRUSTED_PROXY_HOPS`. Behind nginx, Caddy, Traefik or a Cloudflare tunnel, set it to `1` (`2` for a CDN plus a proxy). Left at `0` behind a proxy, every client shares the proxy's IP and one rate-limit bucket, and the app logs a warning. Keep `0` if clients connect directly. See [Reverse Proxy](#reverse-proxy).
-   - Keep exactly one email sending provider: `EMAIL_SMTP_HOST`, the `EMAIL_SES_*` keys or `EMAIL_RESEND_API_KEY`. With more than one set, the app will not start. If a Resend key is there only to receive inbound mail while SMTP or SES sends, add `EMAIL_INBOUND_PROVIDER=resend`.
+   - Keep exactly one email sending provider: `EMAIL_SMTP_HOST`, the `EMAIL_SES_*` keys or `EMAIL_RESEND_API_KEY`. With more than one set, the app will not start; it stops after the migrations have run, so check this now. If a Resend key is there only to receive inbound mail while SMTP or SES sends, add `EMAIL_INBOUND_PROVIDER=resend`.
 
 3. **Check your database.** `DATABASE_URL` must be a direct or session-mode connection, not a transaction pooler (for example a pooler on port 6543), because realtime uses `LISTEN`/`NOTIFY`. Use PostgreSQL 14 or newer with pgvector 0.5 or newer and the `pg_trgm` extension.
 
@@ -431,6 +431,7 @@ There is no rolling upgrade and no downgrade: new migrations are not reversible,
 6. **Remove the unused Dragonfly volume** once the app is healthy:
 
    ```bash
+   docker volume ls | grep dragonfly   # the project name defaults to the directory name
    docker volume rm <project>_dragonfly_data
    ```
 
@@ -452,7 +453,8 @@ docker image inspect "$(cat "$SILO_MIGRATION_BACKUP/image-id.txt")" \
 docker image save "$(cat "$SILO_MIGRATION_BACKUP/image-id.txt")" \
   > "$SILO_MIGRATION_BACKUP/server-image.tar"
 
-# Keep PostgreSQL running; stop writers before backing up both datastores.
+# Keep PostgreSQL running; stop writers before backing up both datastores
+# (stopping an already-stopped service is harmless).
 docker compose -f docker-compose.prod.yml stop app minio
 docker compose -f docker-compose.prod.yml exec -T postgres \
   sh -c 'exec pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' \
@@ -465,7 +467,21 @@ Keep this backup private: it includes credentials and IAM state. Rehearse restor
 
 After the backup and restore check, continue with the remaining steps of [Upgrading from 0.13](#upgrading-from-013), or the usual pull/start steps above if you are not coming from 0.13. Confirm the `minio` service is healthy and `minio-init` exits successfully, then download an existing attachment and exercise a new upload through Quackback. The production bucket should still deny anonymous direct downloads. Keep the backup and previous image until these checks pass.
 
-If recovery is needed, stop application writes and restore the pre-upgrade snapshot into a fresh volume using the saved configuration and old image. Account for uploads and credential changes made after the snapshot. Avoid an in-place image downgrade, running old and new servers against the same volume, or `docker compose down -v`, which deletes the data volumes.
+If recovery is needed, stop application writes and restore the pre-upgrade snapshot into a fresh volume using the saved configuration and old image. Account for uploads and credential changes made after the snapshot. Avoid an in-place image downgrade or running old and new servers against the same volume. This sequence restores both the database and storage from the backup above; it deletes the current volumes, so only run it when you mean to roll back:
+
+```bash
+docker compose -f docker-compose.prod.yml down
+docker volume rm <project>_postgres_data <project>_minio_data
+cp "$SILO_MIGRATION_BACKUP/compose-before.yml" docker-compose.prod.yml
+cp "$SILO_MIGRATION_BACKUP/environment.env" .env
+docker compose -f docker-compose.prod.yml create
+docker compose -f docker-compose.prod.yml up -d postgres
+docker compose -f docker-compose.prod.yml exec -T postgres \
+  sh -c 'pg_restore --no-owner -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+  < "$SILO_MIGRATION_BACKUP/database.dump"
+docker cp - quackback-minio:/data < "$SILO_MIGRATION_BACKUP/data.tar"
+docker compose -f docker-compose.prod.yml up -d
+```
 
 ### Docker Run
 
