@@ -88,7 +88,7 @@ export function ArticleTranslationsDialog({
             <DialogTitle>Translations</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            No additional locales are enabled yet. Enable one under Help Center settings &gt;
+            No additional locales are enabled yet. Enable one under Help center settings &gt;
             Domains &amp; languages.
           </p>
         </DialogContent>

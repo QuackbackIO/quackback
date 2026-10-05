@@ -127,7 +127,7 @@ export function HeaderLinksCard({ links: initialLinks }: { links: HelpCenterHead
         open={removing !== null}
         onOpenChange={(open) => !open && setRemoving(null)}
         title="Delete link?"
-        description="This link is removed from the Help Center header."
+        description="This link is removed from the help center header."
         confirmLabel="Delete link"
         variant="destructive"
         onConfirm={() => {

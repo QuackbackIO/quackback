@@ -36,7 +36,7 @@ export const SETTINGS_CARD_FIELD_COPY: Record<string, string> = {
   welcomeMessage: 'Welcome message',
   supportInbox: 'Support inbox',
   supportTickets: 'Tickets',
-  helpCenter: 'Help Center',
+  helpCenter: 'Help center',
   statusPage: 'Status page',
   timezone: 'Timezone',
   intervals: 'Weekly hours',

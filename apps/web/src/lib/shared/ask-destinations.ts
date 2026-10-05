@@ -55,7 +55,7 @@ const PRODUCTS: ProductDestination[] = [
   },
   {
     href: '/admin/help-center',
-    label: 'Help Center',
+    label: 'Help center',
     product: 'helpCenter',
     permissions: [PERMISSIONS.HELP_CENTER_MANAGE],
   },

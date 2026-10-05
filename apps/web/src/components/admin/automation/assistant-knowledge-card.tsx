@@ -34,7 +34,7 @@ const SOURCE_META = {
     labelId: 'automation.knowledge.source.helpCenter.label',
     label: 'Help center',
     descriptionId: 'automation.knowledge.source.helpCenter.description',
-    description: 'Published Help Center articles.',
+    description: 'Published help center articles.',
     readiness: 'ready',
   },
   posts: {

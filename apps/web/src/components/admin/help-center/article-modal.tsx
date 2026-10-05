@@ -171,7 +171,7 @@ export function ArticleModalContent({ articleId, onClose }: ArticleModalContentP
     <Form {...form}>
       <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} className="flex h-full flex-col">
         <ModalHeader
-          section="Help Center"
+          section="Help center"
           title={article.title}
           onClose={onClose}
           viewUrl={publicArticleUrl}

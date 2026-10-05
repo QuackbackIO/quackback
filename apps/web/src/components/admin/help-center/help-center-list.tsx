@@ -144,7 +144,7 @@ export function HelpCenterList() {
   return (
     <>
       <InboxLayout
-        headerTitle="Help Center"
+        headerTitle="Help center"
         filters={
           <HelpCenterFiltersPanel
             status={filters.status}
