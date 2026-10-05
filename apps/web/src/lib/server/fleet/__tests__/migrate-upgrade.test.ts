@@ -133,6 +133,11 @@ describe('upgrading a database at the last released schema', () => {
     expect(macros!.n).toBe(0)
   })
 
+  it('opts the upgraded workspace out of the AI spam filter', async () => {
+    const [row] = await sql.unsafe(`SELECT spam_filter_config FROM settings WHERE slug = 'acme'`)
+    expect(JSON.parse(row!.spam_filter_config)).toEqual({ trustedSenders: [], aiClassifier: false })
+  })
+
   it('archives curated roadmap rows as inert data instead of dropping them', async () => {
     const [legacy] = await sql.unsafe(`SELECT to_regclass('post_roadmaps')::text AS t`)
     expect(legacy!.t).toBeNull()
