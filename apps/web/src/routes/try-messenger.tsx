@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { IntlProvider, FormattedMessage, useIntl } from 'react-intl'
 import { z } from 'zod'
-import { DEFAULT_LOCALE, loadWidgetMessages } from '@/lib/shared/i18n'
+import { DEFAULT_LOCALE, loadTryMessengerPageMessages } from '@/lib/shared/i18n'
 import { onIntlError } from '@/lib/client/intl-error'
 import {
   TestCustomerFrame,
@@ -24,7 +24,7 @@ export const Route = createFileRoute('/try-messenger')({
   validateSearch: searchSchema,
   loader: async ({ context }) => {
     const locale = context.acceptLanguageLocale ?? DEFAULT_LOCALE
-    return { locale, messages: await loadWidgetMessages(locale) }
+    return { locale, messages: await loadTryMessengerPageMessages(locale) }
   },
   head: () => ({ meta: [{ name: 'robots', content: 'noindex' }] }),
   component: TryMessengerRoot,

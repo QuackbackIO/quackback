@@ -277,6 +277,25 @@ export async function loadSheetMessages(locale: SupportedLocale): Promise<Record
   return subset
 }
 
+/**
+ * The prefix of the Try Messenger phone page's strings (`/try-messenger`, opened
+ * from the code on the Try Messenger sheet). Neither the Messenger nor the
+ * portal renders them, so only that page seeds them.
+ */
+const TRY_MESSENGER_PAGE_PREFIX = 'widget.test.'
+
+/** The Try Messenger phone page's strings in a locale. */
+export async function loadTryMessengerPageMessages(
+  locale: SupportedLocale
+): Promise<Record<string, string>> {
+  const all = await loadMessages(locale)
+  const subset: Record<string, string> = {}
+  for (const [key, value] of Object.entries(all)) {
+    if (key.startsWith(TRY_MESSENGER_PAGE_PREFIX)) subset[key] = value
+  }
+  return subset
+}
+
 /** The prefix of the unsubscribe page's strings, which no other page renders. */
 const UNSUBSCRIBE_MESSAGE_PREFIX = 'unsubscribe.'
 
@@ -295,8 +314,8 @@ export async function loadUnsubscribeMessages(
 /**
  * The catalog an admin page seeds: everything but the strings that load with
  * a lazy surface (the file viewer, the product tour, Copilot and search, the
- * setup sheets), the wizard's and the unsubscribe page's own, and email copy (formatted on the
- * server, never rendered).
+ * setup sheets) or with their own page (the wizard, the unsubscribe and Try
+ * Messenger pages), and email copy (formatted on the server, never rendered).
  */
 export function adminSeedMessages(all: Record<string, string>): Record<string, string> {
   const subset: Record<string, string> = {}
@@ -304,6 +323,7 @@ export function adminSeedMessages(all: Record<string, string>): Record<string, s
     if (isViewerMessage(key) || isTourMessage(key) || isAskMessage(key)) continue
     if (isSheetMessage(key)) continue
     if (key.startsWith('email.') || key.startsWith(UNSUBSCRIBE_MESSAGE_PREFIX)) continue
+    if (key.startsWith(TRY_MESSENGER_PAGE_PREFIX)) continue
     if (WIZARD_ONLY_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))) continue
     subset[key] = value
   }
@@ -329,7 +349,7 @@ export async function loadWidgetMessages(locale: SupportedLocale): Promise<Recor
   const all = await loadMessages(locale)
   const subset: Record<string, string> = {}
   for (const [key, value] of Object.entries(all)) {
-    if (isViewerMessage(key)) continue
+    if (isViewerMessage(key) || key.startsWith(TRY_MESSENGER_PAGE_PREFIX)) continue
     if (WIDGET_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))) subset[key] = value
   }
   return subset
@@ -414,7 +434,7 @@ export async function loadPortalMessages(locale: SupportedLocale): Promise<Recor
   const all = await loadMessages(locale)
   const subset: Record<string, string> = {}
   for (const [key, value] of Object.entries(all)) {
-    if (isViewerMessage(key)) continue
+    if (isViewerMessage(key) || key.startsWith(TRY_MESSENGER_PAGE_PREFIX)) continue
     if (PORTAL_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))) subset[key] = value
   }
   return subset

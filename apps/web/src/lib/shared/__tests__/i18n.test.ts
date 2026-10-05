@@ -19,6 +19,7 @@ import {
   loadUnsubscribeMessages,
   isSheetMessage,
   loadSheetMessages,
+  loadTryMessengerPageMessages,
 } from '../i18n'
 
 describe('normalizeLocale', () => {
@@ -268,5 +269,23 @@ describe('setup sheet strings', () => {
     expect(sheets['onboarding.test.badge']).toBe(all['onboarding.test.badge'])
     expect(Object.keys(sheets).length).toBeGreaterThan(40)
     expect(Object.keys(sheets).every(isSheetMessage)).toBe(true)
+  })
+})
+
+describe('the Try Messenger phone page strings', () => {
+  it('are seeded by that page alone', async () => {
+    const [all, widget, portal, page] = await Promise.all([
+      loadMessages('de'),
+      loadWidgetMessages('de'),
+      loadPortalMessages('de'),
+      loadTryMessengerPageMessages('de'),
+    ])
+    const isPage = (key: string) => key.startsWith('widget.test.')
+    for (const seeded of [widget, portal, adminSeedMessages(all)]) {
+      expect(Object.keys(seeded).filter(isPage)).toEqual([])
+    }
+    expect(page['widget.test.sessionBanner']).toBe(all['widget.test.sessionBanner'])
+    expect(Object.keys(page).length).toBeGreaterThan(4)
+    expect(Object.keys(page).every(isPage)).toBe(true)
   })
 })
