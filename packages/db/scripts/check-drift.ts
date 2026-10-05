@@ -204,8 +204,9 @@ const EXEMPTIONS: { reason: string; pattern: RegExp; optional?: boolean }[] = [
     // HNSW cosine indexes over embedding columns (migrations 0203 + 0209).
     // drizzle-kit cannot round-trip an hnsw partial index (vector_cosine_ops
     // opclass + partial predicate), so it emits a spurious drop/create pair for
-    // every one. Each listed index is created by a migration, so a genuinely
-    // unmigrated hnsw index (a new, unlisted name) still fails the check.
+    // every one. Each listed index is created by a migration or by
+    // CONCURRENT_INDEX_SPECS, so a genuinely unbuilt hnsw index (a new,
+    // unlisted name) still fails the check.
     reason:
       'hnsw vector_cosine_ops partial index is not faithfully round-tripped by drizzle-kit; drop half of the spurious pair',
     pattern:
@@ -379,10 +380,11 @@ async function main(): Promise<number> {
     console.log('Applying all migrations to the scratch database...')
     // The same code path production boot uses (migrate + system seed); the
     // seed's DML cannot affect the DDL diff.
-    // Concurrent indexes and the post-condition sweep are deliberately off:
-    // this check diffs DDL that drizzle-kit can express, while concurrent
-    // indexes are raw-SQL-owned and verified separately by schema operations.
-    await runMigrations(scratchUrl(), { concurrentIndexes: false, verify: false })
+    // The concurrent index step runs too, because the HNSW and trigram indexes
+    // exist only through it (no migration builds them), and every booted
+    // database has run it. The post-condition sweep is off: it is verified
+    // separately by schema operations.
+    await runMigrations(scratchUrl(), { verify: false })
 
     console.log('Diffing live schema against the Drizzle TS schema...')
     // pushSchema reads `.rows` off execute() results, but the postgres-js

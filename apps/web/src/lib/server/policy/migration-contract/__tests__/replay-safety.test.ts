@@ -292,10 +292,16 @@ describe('the real corpus', () => {
     // by lineage-double-apply and migrator-gap-heal.
     // 0288 rebuilds kb_article_translations.search_vector only while its
     // expression lacks the Dutch config, so a second run changes nothing.
+    // 0199 drops the roadmap archive only while it exists and holds no rows;
+    // a populated archive, or none at all, makes the block do nothing.
+    // 0209 drops a trigram index only while it has no partial predicate; the
+    // partial copy the concurrent build creates is never dropped.
     const vouching = files.filter(
       (f) => assessReplaySafety(f, readFileSync(join(MIGRATIONS_DIR, f), 'utf8')).vouched.length > 0
     )
     expect(vouching).toEqual([
+      '0199_drop_roadmap_curation.sql',
+      '0209_drift_repair.sql',
       '0253_event_dispatch_owner.sql',
       '0256_workspace_key_columns.sql',
       '0259_channel_threads.sql',

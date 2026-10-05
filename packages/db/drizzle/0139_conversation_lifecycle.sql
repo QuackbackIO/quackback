@@ -47,11 +47,12 @@ CREATE INDEX "conversations_last_message_at_id_idx" ON "conversations" ("last_me
 
 -- 5. Trigram search (D17): the inbox visitor-name + message-content search is
 --    ILIKE '%term%', which a btree can't serve. GIN trigram indexes make it
---    sargable. These are SQL-only: drizzle-kit cannot express the gin_trgm_ops
---    operator class, so the drift check carries a matching exemption for each.
+--    sargable. The indexes themselves (conversation_messages_content_trgm_idx,
+--    principal_display_name_trgm_idx) are not built here: building them inside
+--    the migration transaction locks and scans both tables for the whole
+--    upgrade. They are built CONCURRENTLY after the migrations commit, from
+--    CONCURRENT_INDEX_SPECS in packages/db/src/schema-ops.ts.
 CREATE EXTENSION IF NOT EXISTS pg_trgm;--> statement-breakpoint
-CREATE INDEX "conversation_messages_content_trgm_idx" ON "conversation_messages" USING gin ("content" gin_trgm_ops);--> statement-breakpoint
-CREATE INDEX "principal_display_name_trgm_idx" ON "principal" USING gin ("display_name" gin_trgm_ops);--> statement-breakpoint
 
 -- 6. Sweeper index: the timer-snooze wake pass scans only rows with a due
 --    wake time, so a partial index over just the timer-snoozed rows keeps the
