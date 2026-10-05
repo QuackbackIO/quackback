@@ -1325,7 +1325,7 @@ function ticketEventCopy(p: SendTicketEventEmailParams): TicketEmailCopy {
           subject: `Your ticket ${p.ticketLabel} was closed`,
           heading: 'Your ticket was closed',
           intro: `${p.ticketLabel} "${p.title}" has been closed by the ${p.workspaceName} team.`,
-          note: 'If you have a follow-up, reply on the ticket thread — replying reopens it.',
+          note: 'If you have a follow-up, reply on the ticket thread. Replying reopens it.',
           ctaLabel: 'View your ticket',
           reason: requesterReason,
         }

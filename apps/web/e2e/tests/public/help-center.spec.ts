@@ -781,7 +781,7 @@ test.describe('Help Center - Article Feedback Widget', () => {
     await yesBtn.click()
 
     // After voting helpful the subtitle changes to the confirmation copy
-    await expect(page.getByText('Thanks — glad it landed.')).toBeVisible({ timeout: 5000 })
+    await expect(page.getByText('Thanks, glad it helped.')).toBeVisible({ timeout: 5000 })
   })
 
   test('clicking thumbs-down shows a confirmation message', async ({ page }) => {
@@ -808,7 +808,7 @@ test.describe('Help Center - Article Feedback Widget', () => {
 
     await yesBtn.click()
     // Wait for state to settle
-    await expect(page.getByText('Thanks — glad it landed.')).toBeVisible({ timeout: 5000 })
+    await expect(page.getByText('Thanks, glad it helped.')).toBeVisible({ timeout: 5000 })
 
     // Selected state: the button gets bg-primary/10 and border-primary/20 classes
     // We check via the class attribute rather than computed styles
@@ -825,12 +825,12 @@ test.describe('Help Center - Article Feedback Widget', () => {
 
     // First click — registers vote
     await yesBtn.click()
-    await expect(page.getByText('Thanks — glad it landed.')).toBeVisible({ timeout: 5000 })
+    await expect(page.getByText('Thanks, glad it helped.')).toBeVisible({ timeout: 5000 })
 
     // Second click on the same button — should be a no-op per component logic
     await yesBtn.click()
     // Confirmation copy must still be visible (vote was not reversed)
-    await expect(page.getByText('Thanks — glad it landed.')).toBeVisible()
+    await expect(page.getByText('Thanks, glad it helped.')).toBeVisible()
     // And the "Was this helpful?" prompt text should be gone (replaced by the confirmation)
     const subtitleEl = page.locator('p.text-xs.text-muted-foreground')
     await expect(subtitleEl).not.toHaveText('Your feedback shapes what we write next.')

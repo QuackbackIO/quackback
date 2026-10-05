@@ -32,7 +32,7 @@ export function VerifyAddressEmail({ code, workspaceName, logoUrl }: VerifyAddre
         <Text style={utils.code}>{code}</Text>
       </Section>
       <Text style={{ ...typography.footer, textAlign: 'center' }}>
-        If you didn&apos;t ask for this, ignore it — nothing changes without the code.
+        If you didn&apos;t ask for this, ignore it. Nothing changes without the code.
       </Text>
       <TransactionalFooter>
         You&rsquo;re receiving this because someone entered this address on an account. It

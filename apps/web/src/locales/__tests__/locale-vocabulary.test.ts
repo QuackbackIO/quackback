@@ -25,3 +25,12 @@ describe('one word per product in each language', () => {
     }
   )
 })
+
+describe('punctuation', () => {
+  it.each(catalogues)('$locale has no em dashes', ({ messages }) => {
+    const dashed = Object.entries(messages)
+      .filter(([, text]) => text.includes('\u2014'))
+      .map(([key]) => key)
+    expect(dashed).toEqual([])
+  })
+})
