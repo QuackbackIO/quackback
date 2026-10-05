@@ -28,7 +28,7 @@ import type { AssistantWriteToolPolicy } from './assistant.toolspec'
 import type { AssistantSurface } from '@/lib/shared/assistant/surfaces'
 import { buildPlatformPolicyMessage } from './assistant.platform-policy'
 
-export const ASSISTANT_PROMPT_VERSION = 'support-agent-v6' as const
+export const ASSISTANT_PROMPT_VERSION = 'support-agent-v7' as const
 
 export type {
   AssistantAttributeCatalogueEntry,

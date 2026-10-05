@@ -696,7 +696,7 @@ describe('runAssistantTurn', () => {
       proposedActions: [],
       identity: DEFAULT_RUNTIME_CONFIG.config.identity,
       trace: {
-        promptVersion: 'support-agent-v6',
+        promptVersion: 'support-agent-v7',
         configRevision: 1,
         role: 'customer_support',
         tone: 'balanced',
@@ -1666,7 +1666,7 @@ describe('runAssistantTurn', () => {
       ticketId: null,
       surface: 'widget',
       role: 'customer_support',
-      promptVersion: 'support-agent-v6',
+      promptVersion: 'support-agent-v7',
       configRevision: 1,
       tone: 'balanced',
       responseLength: 'balanced',
@@ -1755,7 +1755,7 @@ describe('runAssistantTurn', () => {
       internalSourced: false,
       proposedActions: [],
       identity: DEFAULT_RUNTIME_CONFIG.config.identity,
-      trace: expect.objectContaining({ promptVersion: 'support-agent-v6', configRevision: 1 }),
+      trace: expect.objectContaining({ promptVersion: 'support-agent-v7', configRevision: 1 }),
     })
     // Salvaged on the first attempt; no retry needed.
     expect(mockChat).toHaveBeenCalledTimes(1)
@@ -2378,7 +2378,7 @@ describe('runAssistantTurn: V2 prompt and config snapshot', () => {
     expect(result).toMatchObject({
       identity,
       trace: {
-        promptVersion: 'support-agent-v6',
+        promptVersion: 'support-agent-v7',
         configRevision: 12,
         role: 'customer_support',
         tone: 'warm',
@@ -2387,7 +2387,7 @@ describe('runAssistantTurn: V2 prompt and config snapshot', () => {
       },
     })
     expect(lastLoggedMetadata).toMatchObject({
-      promptVersion: 'support-agent-v6',
+      promptVersion: 'support-agent-v7',
       configRevision: 12,
       role: 'customer_support',
       tone: 'warm',
