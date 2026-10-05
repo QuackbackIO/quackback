@@ -21,7 +21,23 @@ const state = vi.hoisted(() => ({
   exhausted: true,
   windowEnd: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
   translated: [] as Array<{ articleId: string; locale: string }>,
+  /** Runs right after the resume sweep inserts replacement jobs. */
+  afterReplacementInsert: null as null | (() => Promise<void>),
 }))
+
+// A seam at the moment the replacement rows exist: a competing worker can
+// claim one from here on, so whatever it sees must already be consistent.
+vi.mock('@/lib/server/jobs/job-queue', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/server/jobs/job-queue')>()
+  return {
+    ...real,
+    enqueueJobs: async (...args: Parameters<typeof real.enqueueJobs>) => {
+      const out = await real.enqueueJobs(...args)
+      if (state.afterReplacementInsert) await state.afterReplacementInsert()
+      return out
+    },
+  }
+})
 
 vi.mock('@/lib/server/domains/ai/ai-budget', () => ({
   getAiBudgetStatus: async () => ({
@@ -87,6 +103,7 @@ describe.skipIf(!fixture.available)('help center auto-translate at the AI allowa
     await fixture.begin()
     state.exhausted = true
     state.translated = []
+    state.afterReplacementInsert = null
   })
   afterEach(fixture.rollback)
   afterAll(fixture.close)
@@ -139,5 +156,25 @@ describe.skipIf(!fixture.available)('help center auto-translate at the AI allowa
     await runHelpCenterTranslate(job({ type: 'translate-article', articleId: id, locale: 'de' }))
     expect(state.translated).toEqual([{ articleId: id, locale: 'de' }])
     expect(await rowsFor(id)).toHaveLength(0)
+  })
+
+  it('a replacement claimed at once can park again: the release is atomic', async () => {
+    const id = articleId()
+    const payload = { type: 'translate-article', articleId: id, locale: 'de' }
+    await runHelpCenterTranslate(job(payload))
+
+    // Allowance comes back, the sweep releases the item, and before it
+    // returns a worker claims the replacement just as the allowance runs out
+    // again. That worker must be able to park the item; if the old parked
+    // row still held the dedupe key the item would be dropped.
+    state.exhausted = false
+    state.afterReplacementInsert = async () => {
+      state.afterReplacementInsert = null
+      state.exhausted = true
+      await runHelpCenterTranslate(job(payload))
+    }
+    await runHelpCenterTranslateResume(job({}))
+
+    expect(await listPausedTranslationLocales(id)).toEqual(['de'])
   })
 })
