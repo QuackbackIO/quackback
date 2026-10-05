@@ -1,4 +1,6 @@
 <p align="center">
+
+[![Deploy to Railyard](https://app.railyard.run/deploy/badge)](https://app.railyard.run/deploy?repo=https://github.com/QuackbackIO/quackback)
   <a href="https://quackback.io">
     <img src=".github/logo.svg" alt="Quackback Logo" width="80" height="80" />
   </a>
