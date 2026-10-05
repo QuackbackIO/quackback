@@ -4,6 +4,7 @@ import { ChatBubbleOvalLeftEllipsisIcon } from '@heroicons/react/24/outline'
 import { EmptyState } from '@/components/shared/empty-state'
 import { Button } from '@/components/ui/button'
 import type { PortalNavItem } from './portal-header-nav'
+import { usePortalNavItems } from './use-portal-nav-items'
 
 /**
  * The portal home when the visitor can see no board. A workspace that runs
@@ -62,4 +63,13 @@ export function PortalNoBoards({ orgName, items }: { orgName: string; items: Por
       }
     />
   )
+}
+
+/**
+ * The empty home for the current viewer. It reads the nav itself so that only
+ * the empty state, never the whole feed, follows the preview's nav draft.
+ */
+export function ViewerPortalNoBoards({ orgName }: { orgName: string }) {
+  const items = usePortalNavItems()
+  return <PortalNoBoards orgName={orgName} items={items} />
 }

@@ -29,7 +29,7 @@ vi.mock('@/lib/server/functions/subscriptions', () => ({
   processUnsubscribeTokenFn: (...args: unknown[]) => fns.process(...args),
 }))
 vi.mock('@/lib/server/functions/locale', () => ({
-  loadPortalIntl: async () => ({ locale: 'en', messages: {} }),
+  loadUnsubscribeIntl: async () => ({ locale: 'en', messages: {} }),
 }))
 
 import { Route } from '../unsubscribe'

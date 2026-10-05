@@ -1,5 +1,10 @@
 import { createServerFn } from '@tanstack/react-start'
-import { resolveLocale, loadPortalMessages, type SupportedLocale } from '@/lib/shared/i18n'
+import {
+  resolveLocale,
+  loadPortalMessages,
+  loadUnsubscribeMessages,
+  type SupportedLocale,
+} from '@/lib/shared/i18n'
 
 /**
  * Resolve the portal locale from the request's Accept-Language header.
@@ -31,5 +36,18 @@ export async function loadPortalIntl(): Promise<{
 }> {
   const locale = await getPortalLocaleFn()
   const messages = await loadPortalMessages(locale)
+  return { locale, messages }
+}
+
+/**
+ * The unsubscribe page's locale and strings. It renders only its own copy, so
+ * it seeds that slice instead of the portal's.
+ */
+export async function loadUnsubscribeIntl(): Promise<{
+  locale: SupportedLocale
+  messages: Record<string, string>
+}> {
+  const locale = await getPortalLocaleFn()
+  const messages = await loadUnsubscribeMessages(locale)
   return { locale, messages }
 }
