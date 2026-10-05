@@ -412,6 +412,7 @@ There is no rolling upgrade and no downgrade: new migrations are not reversible,
    - Remove `MINIO_IMAGE_TAG` and `MC_IMAGE_TAG`.
    - Set `SECRET_KEY` to the value your 0.13 instance used. The compose file refuses to start without it.
    - Set `TRUSTED_PROXY_HOPS`. Behind nginx, Caddy, Traefik or a Cloudflare tunnel, set it to `1` (`2` for a CDN plus a proxy). Left at `0` behind a proxy, every client shares the proxy's IP and one rate-limit bucket, and the app logs a warning. Keep `0` if clients connect directly. See [Reverse Proxy](#reverse-proxy).
+   - Keep exactly one email sending provider: `EMAIL_SMTP_HOST`, the `EMAIL_SES_*` keys or `EMAIL_RESEND_API_KEY`. With more than one set, the app will not start. If a Resend key is there only to receive inbound mail while SMTP or SES sends, add `EMAIL_INBOUND_PROVIDER=resend`.
 
 3. **Check your database.** `DATABASE_URL` must be a direct or session-mode connection, not a transaction pooler (for example a pooler on port 6543), because realtime uses `LISTEN`/`NOTIFY`. Use PostgreSQL 14 or newer with pgvector 0.5 or newer and the `pg_trgm` extension.
 
