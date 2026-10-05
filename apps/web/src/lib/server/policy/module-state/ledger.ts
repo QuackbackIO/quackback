@@ -600,6 +600,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'identical for every workspace.',
   },
   {
+    file: 'apps/web/src/lib/server/domains/api/rate-limit.ts',
+    name: 'warnedForwardedHeaders',
+    category: 'process-lifetime',
+    reason:
+      'Warn-once latch for the missing TRUSTED_PROXY_HOPS setting. It holds a single boolean about the ' +
+      'PROCESS and no workspace data: TRUSTED_PROXY_HOPS is process configuration, so the condition ' +
+      'it describes has no workspace dimension, and sharing the latch across workspaces costs one ' +
+      'suppressed duplicate log line.',
+  },
+  {
     file: 'apps/web/src/lib/server/domains/conversation/conversation.email-imap-queue.ts',
     name: 'warnedPooled',
     category: 'process-lifetime',
