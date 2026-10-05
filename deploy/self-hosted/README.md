@@ -13,6 +13,7 @@ Deploy Quackback on your own infrastructure with full control over your data.
 - [Scaling Out](#scaling-out)
 - [Enterprise Edition](#enterprise-edition)
 - [Upgrading](#upgrading)
+  - [Upgrading from 0.13](#upgrading-from-013)
 - [Troubleshooting](#troubleshooting)
 
 ---
@@ -338,8 +339,9 @@ With a single replica, migrations run automatically on startup. With multiple re
 docker run --rm \
   --network <your-compose-network> \
   -e DATABASE_URL="postgresql://postgres:password@postgres:5432/quackback" \
+  --entrypoint bun \
   ghcr.io/quackbackio/quackback:latest \
-  bun /app/migrate.mjs
+  /app/migrate.mjs
 
 # Then roll out the new image to web and worker replicas
 ```
@@ -390,6 +392,25 @@ docker compose -f docker-compose.prod.yml pull
 # 3. Restart — migrations run automatically on startup
 docker compose -f docker-compose.prod.yml up -d
 ```
+
+#### Upgrading from 0.13
+
+Read this before moving a 0.13 stack to 0.14.
+
+1. **Back up first.** Take a Postgres dump and a copy of your object storage. There is no rolling upgrade and no downgrade: new migrations are not reversible, so rollback means restoring the backup.
+2. **Stop the old container** before starting the new one. Do not run both versions against the same database.
+3. **Redis and Dragonfly are no longer used.** Let the old stack drain, then remove the leftovers and delete the `REDIS_URL` line from `.env`:
+
+   ```bash
+   docker compose -f docker-compose.prod.yml up -d --remove-orphans
+   docker volume rm <project>_dragonfly_data
+   ```
+
+4. **Object storage.** The bundled MinIO is replaced by Silo. Follow [Migrating the bundled MinIO to Silo](#migrating-the-bundled-minio-to-silo) instead of repeating the steps here.
+5. **Set `TRUSTED_PROXY_HOPS`.** Behind nginx, Caddy, Traefik or a Cloudflare tunnel, set it to `1` (`2` for a CDN plus a proxy) in `.env`. Left at `0`, every client shares the proxy's IP and one rate-limit bucket, and the app logs a warning. Keep `0` if clients connect directly. See [Reverse Proxy](#reverse-proxy).
+6. **`SECRET_KEY` is required.** The compose file refuses to start without it. Keep the value your 0.13 instance used.
+7. **The first start runs many migrations** and can take several minutes. Do not interrupt it; wait for the app healthcheck to pass.
+8. **Database requirements.** `DATABASE_URL` must be a direct or session-mode connection, not a transaction pooler (for example a pooler on port 6543), because realtime uses `LISTEN`/`NOTIFY`. Use PostgreSQL 14 or newer with pgvector 0.5 or newer and the `pg_trgm` extension.
 
 #### Migrating the bundled MinIO to Silo
 

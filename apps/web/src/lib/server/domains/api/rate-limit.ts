@@ -12,6 +12,25 @@ import { API_MONTH_BUCKET_KEY, secondsUntilNextUtcMonth } from './monthly-usage'
 import { isIP } from 'node:net'
 import { config } from '@/lib/server/config'
 import { getRequestIP } from '@tanstack/react-start/server'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'rate-limit' })
+
+// One warning per process is enough to tell the operator; a per-request log
+// would flood the output of every proxied deployment.
+let warnedForwardedHeaders = false
+
+const FORWARDING_HEADERS = ['x-forwarded-for', 'cf-connecting-ip', 'x-real-ip'] as const
+
+function warnIfForwardedHeaders(headers: Headers): void {
+  if (warnedForwardedHeaders) return
+  if (!FORWARDING_HEADERS.some((name) => headers.has(name))) return
+  warnedForwardedHeaders = true
+  log.warn(
+    {},
+    'Request carries forwarding headers but TRUSTED_PROXY_HOPS is 0, so every client behind the proxy shares one rate-limit bucket. Set TRUSTED_PROXY_HOPS to the number of reverse proxies in front of Quackback (1 for a single proxy).'
+  )
+}
 
 // Configuration
 const WINDOW_SECONDS = 60 // 1 minute
@@ -118,6 +137,7 @@ export function getClientIp(source: Request | Headers): string {
   })()
 
   if (trustedHops === 0) {
+    warnIfForwardedHeaders(headers)
     try {
       const peer = getRequestIP()
       if (peer && isIP(peer)) return peer
