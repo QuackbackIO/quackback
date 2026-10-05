@@ -1,6 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { cn } from '@/lib/shared/utils'
-import { HOST_VISIBLE_MESSAGE } from '@/lib/client/hooks/use-host-visible'
+
+/**
+ * The frame's `HOST_VISIBLE_MESSAGE` (see `use-host-visible`), spelled out:
+ * importing it would split that module out of the Messenger's own chunk, and
+ * every Messenger load would fetch it on its own.
+ */
+const HOST_VISIBLE_MESSAGE = 'quackback:visible'
 
 export type TestCustomerFrameStatus = 'connecting' | 'ready' | 'expired'
 

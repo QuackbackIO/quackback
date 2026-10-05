@@ -3,6 +3,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import { TestCustomerFrame } from '../test-customer-frame'
+import { HOST_VISIBLE_MESSAGE } from '@/lib/client/hooks/use-host-visible'
 
 function setup(getToken: () => Promise<string | null>) {
   const onStatusChange = vi.fn()
@@ -179,7 +180,7 @@ describe('TestCustomerFrame', () => {
         )
       })
     const shown = () =>
-      postMessage.mock.calls.filter(([m]) => (m as { type?: string }).type === 'quackback:visible')
+      postMessage.mock.calls.filter(([m]) => (m as { type?: string }).type === HOST_VISIBLE_MESSAGE)
     // Not signed in yet: nothing to catch up on.
     view.rerender(<TestCustomerFrame {...props} visible={false} />)
     view.rerender(<TestCustomerFrame {...props} visible />)
@@ -191,6 +192,6 @@ describe('TestCustomerFrame', () => {
     view.rerender(<TestCustomerFrame {...props} visible={false} />)
     expect(shown()).toHaveLength(0)
     view.rerender(<TestCustomerFrame {...props} visible />)
-    expect(shown()).toEqual([[{ type: 'quackback:visible' }, window.location.origin]])
+    expect(shown()).toEqual([[{ type: HOST_VISIBLE_MESSAGE }, window.location.origin]])
   })
 })
