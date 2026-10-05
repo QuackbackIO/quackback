@@ -1598,6 +1598,7 @@
   "onboarding.win.who.domain": "来自 {domain} 的用户",
   "onboarding.win.who.teammate": "一位团队成员",
   "onboarding.win.who.customer": "一位客户",
+  "onboarding.win.who.visitor": "一位访客",
   "onboarding.win.votes": "{count, plural, other {# 票}}",
   "onboarding.win.next": "下一步：{step}",
   "onboarding.tour.take": "开始导览",

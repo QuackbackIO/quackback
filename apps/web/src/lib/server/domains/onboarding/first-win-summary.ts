@@ -14,9 +14,7 @@ import {
   eq,
   helpCenterArticleFeedback,
   helpCenterArticles,
-  inArray,
   isNull,
-  or,
   posts,
   principal,
   sql,
@@ -25,11 +23,14 @@ import {
   type SetupState,
 } from '@/lib/server/db'
 import { notTestPrincipal } from '@/lib/server/test-data'
+import { winOutcome, winRules } from '@/lib/server/activation-wins'
 
 export interface FirstWinSummary {
   kind: 'idea' | 'teamIdea' | 'conversation' | 'helpful' | 'subscriber'
   /** The person's name, when they gave one. */
   name: string | null
+  /** A signed-out visitor, who left no name or email. */
+  visitor?: boolean
   /** Their email's domain, which names their company. */
   domain: string | null
   /** The idea or article title, or the start of the message. */
@@ -40,11 +41,6 @@ export interface FirstWinSummary {
   /** Where the team sees it. */
   href: string
 }
-
-const outside = and(
-  or(eq(principal.role, 'user'), eq(principal.type, 'anonymous')),
-  notTestPrincipal(principal.id)
-)!
 
 function domainOf(email: string | null | undefined): string | null {
   if (!email || email.startsWith('temp-')) return null
@@ -65,8 +61,7 @@ function snippet(text: string | null): string | null {
 
 /** The record that made the workspace's first win, or null when there is none to name. */
 export async function firstWinSummary(state: SetupState | null): Promise<FirstWinSummary | null> {
-  const primary = state?.goals?.[0] ?? state?.useCase ?? 'product_feedback'
-  const outcome = primary === 'product_feedback' && state?.feedbackPrivate ? 'internal' : primary
+  const outcome = winOutcome(state)
   const who = {
     displayName: principal.displayName,
     userName: user.name,
@@ -79,13 +74,7 @@ export async function firstWinSummary(state: SetupState | null): Promise<FirstWi
       .from(conversations)
       .innerJoin(principal, eq(principal.id, conversations.visitorPrincipalId))
       .leftJoin(user, eq(user.id, principal.userId))
-      .where(
-        and(
-          inArray(conversations.source, ['widget', 'email']),
-          sql`coalesce(${conversations.customAttributes}->>'test', 'false') <> 'true'`,
-          notTestPrincipal(conversations.visitorPrincipalId)
-        )
-      )
+      .where(winRules.customerConversation)
       .orderBy(asc(conversations.createdAt))
       .limit(1)
     if (!row) return null
@@ -111,7 +100,7 @@ export async function firstWinSummary(state: SetupState | null): Promise<FirstWi
       .from(statusSubscriptions)
       .innerJoin(principal, eq(principal.id, statusSubscriptions.principalId))
       .leftJoin(user, eq(user.id, principal.userId))
-      .where(and(isNull(statusSubscriptions.unsubscribedAt), outside))
+      .where(winRules.selfServeSubscriber)
       .orderBy(asc(statusSubscriptions.createdAt))
       .limit(1)
     if (!row) return null
@@ -131,19 +120,15 @@ export async function firstWinSummary(state: SetupState | null): Promise<FirstWi
         at: helpCenterArticleFeedback.createdAt,
         articleId: helpCenterArticles.id,
         title: helpCenterArticles.title,
+        principalId: helpCenterArticleFeedback.principalId,
         ...who,
       })
       .from(helpCenterArticleFeedback)
       .innerJoin(helpCenterArticles, eq(helpCenterArticles.id, helpCenterArticleFeedback.articleId))
-      .innerJoin(principal, eq(principal.id, helpCenterArticleFeedback.principalId))
+      // A signed-out reader's vote has no principal and still names the article.
+      .leftJoin(principal, eq(principal.id, helpCenterArticleFeedback.principalId))
       .leftJoin(user, eq(user.id, principal.userId))
-      .where(
-        and(
-          eq(helpCenterArticleFeedback.helpful, true),
-          isNull(helpCenterArticles.deletedAt),
-          outside
-        )
-      )
+      .where(winRules.helpfulVote)
       .orderBy(asc(helpCenterArticleFeedback.createdAt))
       .limit(1)
     if (!row) return null
@@ -151,6 +136,7 @@ export async function firstWinSummary(state: SetupState | null): Promise<FirstWi
       kind: 'helpful',
       name: nameOf(row.displayName, row.userName),
       domain: domainOf(row.email),
+      ...(row.principalId === null ? { visitor: true } : {}),
       subject: row.title,
       at: row.at.toISOString(),
       href: `/admin/help-center?article=${row.articleId}`,
@@ -171,13 +157,14 @@ export async function firstWinSummary(state: SetupState | null): Promise<FirstWi
     .innerJoin(boards, eq(boards.id, posts.boardId))
     .leftJoin(user, eq(user.id, principal.userId))
     .where(
-      and(
-        isNull(posts.deletedAt),
-        sql`coalesce(${posts.widgetMetadata}->>'onboardingGenerated', 'false') <> 'true'`,
-        outcome === 'internal'
-          ? and(sql`${boards.access}->>'view' = 'team'`, notTestPrincipal(principal.id))
-          : outside
-      )
+      outcome === 'internal'
+        ? and(
+            isNull(posts.deletedAt),
+            sql`coalesce(${posts.widgetMetadata}->>'onboardingGenerated', 'false') <> 'true'`,
+            sql`${boards.access}->>'view' = 'team'`,
+            notTestPrincipal(principal.id)
+          )
+        : winRules.outsideIdea
     )
     .orderBy(asc(posts.createdAt))
     .limit(1)

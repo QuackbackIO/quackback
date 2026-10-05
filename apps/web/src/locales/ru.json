@@ -1598,6 +1598,7 @@
   "onboarding.win.who.domain": "Кто-то из {domain}",
   "onboarding.win.who.teammate": "Коллега",
   "onboarding.win.who.customer": "Клиент",
+  "onboarding.win.who.visitor": "Посетитель",
   "onboarding.win.votes": "{count, plural, one {# голос} few {# голоса} many {# голосов} other {# голоса}}",
   "onboarding.win.next": "Дальше: {step}",
   "onboarding.tour.take": "Пройти тур",

@@ -1598,6 +1598,7 @@
   "onboarding.win.who.domain": "Someone from {domain}",
   "onboarding.win.who.teammate": "A teammate",
   "onboarding.win.who.customer": "A customer",
+  "onboarding.win.who.visitor": "A visitor",
   "onboarding.win.votes": "{count, plural, one {# vote} other {# votes}}",
   "onboarding.win.next": "Next: {step}",
   "onboarding.tour.take": "Take tour",

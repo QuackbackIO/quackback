@@ -8,6 +8,9 @@ import {
   boards,
   conversationMessages,
   conversations,
+  helpCenterArticleFeedback,
+  helpCenterArticles,
+  helpCenterCategories,
   posts,
   principal,
   statusSubscriptions,
@@ -114,6 +117,52 @@ it('names the first subscriber outside the team', async () => {
     name: 'Dev',
     domain: 'northwind.example',
     href: '/admin/status?view=subscribers',
+  })
+})
+
+it('never names a subscriber the team added, only one who subscribed themselves', async () => {
+  const ana = await person('user', 'Ana', `ana-${createId('user')}@northwind.example`)
+  const bo = await person('user', 'Bo', `bo-${createId('user')}@contoso.example`)
+  await testDb.insert(statusSubscriptions).values([
+    { principalId: ana, source: 'admin', createdAt: new Date('2026-10-01T09:00:00Z') },
+    { principalId: bo, source: 'self_serve', createdAt: new Date('2026-10-01T10:00:00Z') },
+  ])
+  expect(await firstWinSummary(state(['status_page']))).toMatchObject({
+    kind: 'subscriber',
+    name: 'Bo',
+    domain: 'contoso.example',
+  })
+})
+
+it('names the article a signed-out visitor found helpful', async () => {
+  const owner = await person('admin', 'Sam Rivera', `sam-${createId('user')}@acme.example`)
+  const [category] = await testDb
+    .insert(helpCenterCategories)
+    .values({ name: 'General', slug: `general-${createId('kb_category').slice(-6)}` })
+    .returning()
+  const [article] = await testDb
+    .insert(helpCenterArticles)
+    .values({
+      categoryId: category!.id,
+      title: 'How do I reset my password?',
+      slug: `reset-${createId('kb_category').slice(-6)}`,
+      content: 'Hello',
+      principalId: owner,
+      publishedAt: new Date('2026-10-01T08:00:00Z'),
+    })
+    .returning()
+  await testDb.insert(helpCenterArticleFeedback).values([
+    { articleId: article!.id, principalId: owner, helpful: true, createdAt: new Date('2026-10-01T09:00:00Z') },
+    { articleId: article!.id, principalId: null, helpful: true, createdAt: new Date('2026-10-01T10:00:00Z') },
+  ])
+  expect(await firstWinSummary(state(['help_center']))).toEqual({
+    kind: 'helpful',
+    name: null,
+    domain: null,
+    visitor: true,
+    subject: 'How do I reset my password?',
+    at: '2026-10-01T10:00:00.000Z',
+    href: `/admin/help-center?article=${article!.id}`,
   })
 })
 

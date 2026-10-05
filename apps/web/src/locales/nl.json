@@ -1598,6 +1598,7 @@
   "onboarding.win.who.domain": "Iemand van {domain}",
   "onboarding.win.who.teammate": "Een teamgenoot",
   "onboarding.win.who.customer": "Een klant",
+  "onboarding.win.who.visitor": "Een bezoeker",
   "onboarding.win.votes": "{count, plural, one {# stem} other {# stemmen}}",
   "onboarding.win.next": "Volgende: {step}",
   "onboarding.tour.take": "Rondleiding starten",

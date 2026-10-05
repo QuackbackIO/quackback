@@ -44,6 +44,9 @@ function useWho(summary: FirstWinSummary): string {
       { domain: summary.domain }
     )
   }
+  if (summary.visitor) {
+    return intl.formatMessage({ id: 'onboarding.win.who.visitor', defaultMessage: 'A visitor' })
+  }
   return summary.kind === 'teamIdea'
     ? intl.formatMessage({ id: 'onboarding.win.who.teammate', defaultMessage: 'A teammate' })
     : intl.formatMessage({ id: 'onboarding.win.who.customer', defaultMessage: 'A customer' })

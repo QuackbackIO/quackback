@@ -73,66 +73,88 @@ const notGeneratedPost = and(
   sql`coalesce(${posts.widgetMetadata}->>'onboardingGenerated', 'false') <> 'true'`,
   notTestPrincipal(posts.principalId)
 )!
-const externalPrincipal = and(
+
+/** A person outside the team: a customer or a signed-out visitor, never a test customer. */
+const outsidePerson = and(
   or(eq(principal.role, 'user'), eq(principal.type, 'anonymous')),
   notTestPrincipal(principal.id)
-)
+)!
+
+/**
+ * The win rules, as where clauses. Home's celebration card names the record
+ * with these same clauses, so the card and the win can never disagree.
+ */
+export const winRules = {
+  outsidePerson,
+  /**
+   * A conversation the customer opened, by Messenger or email: its first
+   * message is theirs. One a teammate starts does not count. Keyed on
+   * `source` alone, deliberately: `channel` is current state (a thread
+   * promotes to 'email' when the customer replies by mail) and this is
+   * evaluated at read time, so filtering on it would un-reach a genuine win.
+   */
+  customerConversation: and(
+    inArray(conversations.source, ['widget', 'email']),
+    sql`(select ${conversationMessages.senderType} from ${conversationMessages}
+      where ${conversationMessages.conversationId} = ${conversations.id}
+      order by ${conversationMessages.createdAt} asc, ${conversationMessages.id} asc
+      limit 1) = 'visitor'`,
+    isNotNull(conversations.visitorPrincipalId),
+    sql`coalesce(${conversations.customAttributes}->>'onboardingGenerated', 'false') <> 'true'`,
+    sql`coalesce(${conversations.customAttributes}->>'test', 'false') <> 'true'`,
+    notTestPrincipal(conversations.visitorPrincipalId)
+  )!,
+  /** A customer subscribing themselves; subscribers the team adds or imports do not count. Joins principal. */
+  selfServeSubscriber: and(
+    eq(statusSubscriptions.source, 'self_serve'),
+    isNull(statusSubscriptions.unsubscribedAt),
+    outsidePerson
+  )!,
+  /**
+   * A visitor finding an article helpful; publishing one is the team's own
+   * act. A signed-out visitor's vote carries no principal and still counts,
+   * so principal must be LEFT joined.
+   */
+  helpfulVote: and(
+    eq(helpCenterArticleFeedback.helpful, true),
+    isNull(helpCenterArticles.deletedAt),
+    or(isNull(helpCenterArticleFeedback.principalId), outsidePerson)
+  )!,
+  /** An idea by someone outside the team, never one onboarding wrote. Joins principal. */
+  outsideIdea: and(isNull(posts.deletedAt), outsidePerson, notGeneratedPost)!,
+}
+
+/** The outcome whose win counts: the primary goal, or the private team board. */
+export function winOutcome(state: SetupState | null): OnboardingOutcome {
+  const primary = state?.goals?.[0] ?? state?.useCase ?? 'product_feedback'
+  return primary === 'product_feedback' && state?.feedbackPrivate ? 'internal' : primary
+}
 
 /** Query the first real outcome; onboarding-generated/test records never qualify. */
 export async function detectFirstWin(state: SetupState | null): Promise<FirstWinResult> {
-  const primary = state?.goals?.[0] ?? state?.useCase ?? 'product_feedback'
-  const outcome = primary === 'product_feedback' && state?.feedbackPrivate ? 'internal' : primary
+  const outcome = winOutcome(state)
   if (outcome === 'customer_support') {
     const [row] = await db
       .select({ reachedAt: conversations.createdAt })
       .from(conversations)
-      .where(
-        and(
-          // Keyed on `source` alone, deliberately. `channel` is now current
-          // state (a thread promotes to 'email' when the customer replies by
-          // mail), and this is evaluated at read time — so filtering on it would
-          // silently UN-REACH a genuine first win the moment that customer
-          // answered from their inbox. `source` is immutable provenance, which
-          // is the question this actually asks.
-          // A conversation the customer opened, by Messenger or email: its
-          // first message is theirs. One a teammate starts does not count.
-          inArray(conversations.source, ['widget', 'email']),
-          sql`(select ${conversationMessages.senderType} from ${conversationMessages}
-            where ${conversationMessages.conversationId} = ${conversations.id}
-            order by ${conversationMessages.createdAt} asc, ${conversationMessages.id} asc
-            limit 1) = 'visitor'`,
-          isNotNull(conversations.visitorPrincipalId),
-          sql`coalesce(${conversations.customAttributes}->>'onboardingGenerated', 'false') <> 'true'`,
-          sql`coalesce(${conversations.customAttributes}->>'test', 'false') <> 'true'`,
-          notTestPrincipal(conversations.visitorPrincipalId)
-        )
-      )
+      .where(winRules.customerConversation)
       .orderBy(asc(conversations.createdAt))
       .limit(1)
     return { reached: Boolean(row), reachedAt: row?.reachedAt.toISOString() ?? null }
   }
 
   if (outcome === 'status_page') {
-    // A customer subscribing themselves; services the team adds do not count.
     const [row] = await db
       .select({ reachedAt: statusSubscriptions.createdAt })
       .from(statusSubscriptions)
       .innerJoin(principal, eq(principal.id, statusSubscriptions.principalId))
-      .where(
-        and(
-          eq(statusSubscriptions.source, 'self_serve'),
-          isNull(statusSubscriptions.unsubscribedAt),
-          externalPrincipal
-        )
-      )
+      .where(winRules.selfServeSubscriber)
       .orderBy(asc(statusSubscriptions.createdAt))
       .limit(1)
     return { reached: Boolean(row), reachedAt: row?.reachedAt.toISOString() ?? null }
   }
 
   if (outcome === 'help_center') {
-    // A visitor finding an article helpful; publishing one is the team's own
-    // act. A signed-out visitor's vote carries no principal and still counts.
     const [row] = await db
       .select({ reachedAt: helpCenterArticleFeedback.createdAt })
       .from(helpCenterArticleFeedback)
@@ -141,13 +163,7 @@ export async function detectFirstWin(state: SetupState | null): Promise<FirstWin
         eq(helpCenterArticles.id, helpCenterArticleFeedback.articleId)
       )
       .leftJoin(principal, eq(principal.id, helpCenterArticleFeedback.principalId))
-      .where(
-        and(
-          eq(helpCenterArticleFeedback.helpful, true),
-          isNull(helpCenterArticles.deletedAt),
-          or(isNull(helpCenterArticleFeedback.principalId), externalPrincipal)
-        )
-      )
+      .where(winRules.helpfulVote)
       .orderBy(asc(helpCenterArticleFeedback.createdAt))
       .limit(1)
     return { reached: Boolean(row), reachedAt: row?.reachedAt.toISOString() ?? null }
@@ -197,7 +213,7 @@ export async function detectFirstWin(state: SetupState | null): Promise<FirstWin
       .select({ reachedAt: posts.createdAt })
       .from(posts)
       .innerJoin(principal, eq(principal.id, posts.principalId))
-      .where(and(isNull(posts.deletedAt), externalPrincipal, notGeneratedPost))
+      .where(winRules.outsideIdea)
       .orderBy(asc(posts.createdAt))
       .limit(1),
     db
@@ -205,7 +221,7 @@ export async function detectFirstWin(state: SetupState | null): Promise<FirstWin
       .from(postVotes)
       .innerJoin(principal, eq(principal.id, postVotes.principalId))
       .innerJoin(posts, eq(posts.id, postVotes.postId))
-      .where(and(isNull(posts.deletedAt), externalPrincipal, notGeneratedPost))
+      .where(and(isNull(posts.deletedAt), outsidePerson, notGeneratedPost))
       .orderBy(asc(postVotes.createdAt))
       .limit(1),
   ])

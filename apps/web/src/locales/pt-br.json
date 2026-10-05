@@ -1598,6 +1598,7 @@
   "onboarding.win.who.domain": "Alguém de {domain}",
   "onboarding.win.who.teammate": "Um colega",
   "onboarding.win.who.customer": "Um cliente",
+  "onboarding.win.who.visitor": "Um visitante",
   "onboarding.win.votes": "{count, plural, one {# voto} other {# votos}}",
   "onboarding.win.next": "A seguir: {step}",
   "onboarding.tour.take": "Fazer o tour",

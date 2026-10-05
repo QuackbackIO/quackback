@@ -1598,6 +1598,7 @@
   "onboarding.win.who.domain": "شخص من {domain}",
   "onboarding.win.who.teammate": "زميل",
   "onboarding.win.who.customer": "عميل",
+  "onboarding.win.who.visitor": "زائر",
   "onboarding.win.votes": "{count, plural, zero {لا أصوات} one {صوت واحد} two {صوتان} few {# أصوات} many {# صوتًا} other {# صوت}}",
   "onboarding.win.next": "التالي: {step}",
   "onboarding.tour.take": "ابدأ الجولة",
