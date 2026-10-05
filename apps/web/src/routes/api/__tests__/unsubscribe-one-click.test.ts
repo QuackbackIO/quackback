@@ -17,8 +17,9 @@ vi.mock('@/lib/server/domains/subscriptions/subscription.service', () => ({
 
 import { Route } from '../unsubscribe'
 
-type Handlers = { POST: (args: { request: Request }) => Promise<Response> }
-const { POST } = (Route as unknown as { options: { server: { handlers: Handlers } } }).options
+type Handler = (args: { request: Request }) => Promise<Response> | Response
+type Handlers = { GET: Handler; POST: Handler }
+const { GET, POST } = (Route as unknown as { options: { server: { handlers: Handlers } } }).options
   .server.handlers
 
 const TOKEN = '6f1c1c47-3c0e-4d55-9a43-0d2a4f1c9b10'
@@ -54,6 +55,26 @@ describe('POST /api/unsubscribe (one-click)', () => {
   it('rejects a missing or malformed token without touching the database', async () => {
     expect((await POST({ request: oneClick('') })).status).toBe(400)
     expect((await POST({ request: oneClick('?token=../../etc') })).status).toBe(400)
+    expect(spend).not.toHaveBeenCalled()
+  })
+})
+
+describe('GET /api/unsubscribe (clients without one-click)', () => {
+  const open = (query: string) =>
+    GET({ request: new Request(`https://acme.quackback.test/api/unsubscribe${query}`) })
+
+  it('sends the person to the confirm page with the token, without spending it', async () => {
+    const res = await open(`?token=${TOKEN}`)
+
+    expect(res.status).toBe(303)
+    expect(res.headers.get('location')).toBe(`/unsubscribe?token=${TOKEN}`)
+    expect(spend).not.toHaveBeenCalled()
+  })
+
+  it('carries nothing but the token to the confirm page', async () => {
+    const res = await open(`?token=${TOKEN}&next=https://evil.example`)
+    expect(res.headers.get('location')).toBe(`/unsubscribe?token=${TOKEN}`)
+    expect((await open('')).headers.get('location')).toBe('/unsubscribe')
     expect(spend).not.toHaveBeenCalled()
   })
 })

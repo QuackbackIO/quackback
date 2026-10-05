@@ -516,8 +516,9 @@ async function dispatch(
  * RFC 2369 / RFC 8058 headers for an email's unsubscribe link, so the mail
  * client's own unsubscribe button works. A token link to the `/unsubscribe`
  * page (which only asks for confirmation on GET) is offered as one-click
- * against the POST endpoint beside it, `/api/unsubscribe`, with the same
- * token. Any other link is offered as a plain link without one-click.
+ * against the endpoint beside it, `/api/unsubscribe`, with the same token: a
+ * POST there unsubscribes, a GET from a client without one-click lands on the
+ * confirm page. Any other link is offered as a plain link without one-click.
  */
 export function listUnsubscribeHeaders(unsubscribeUrl: string | undefined): Record<string, string> {
   if (!unsubscribeUrl) return {}

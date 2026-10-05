@@ -42,10 +42,7 @@ import {
   finishIdentityOnboarding,
   mutateSetupStateAtomic,
 } from '@/lib/server/setup-state'
-import {
-  applyOnboardingGoals,
-  setupGoals,
-} from '@/lib/server/onboarding-board'
+import { applyOnboardingGoals, setupGoals } from '@/lib/server/onboarding-board'
 import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/identity-projection'
 
 const log = logger.child({ component: 'onboarding' })
@@ -250,6 +247,11 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
       } else {
         await ensureBootstrapAdmin(session.user.id as UserId)
       }
+      // Whoever sets the workspace up is its owner, recorded once.
+      const setupBy = await db.query.principal.findFirst({
+        where: eq(principal.userId, session.user.id as UserId),
+        columns: { id: true },
+      })
 
       if (data.userName) {
         await db
@@ -268,6 +270,7 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
           {
             ...DEFAULT_SETUP_STATE,
             goals,
+            ...(setupBy && { ownerPrincipalId: setupBy.id }),
             steps: { ...DEFAULT_SETUP_STATE.steps, workspace: true },
           },
           useCase
@@ -344,8 +347,14 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
             .set(updatePayload)
             .where(eq(settings.id, row.id))
             .returning()
+          const ownerPrincipalId = current.ownerPrincipalId ?? setupBy?.id
           const next = finishIdentityOnboarding(
-            { ...current, goals: selectedGoals, feedbackPrivate: privateFeedback },
+            {
+              ...current,
+              goals: selectedGoals,
+              feedbackPrivate: privateFeedback,
+              ...(ownerPrincipalId && { ownerPrincipalId }),
+            },
             goal
           )
           await applyOnboardingGoals(tx, updated!, next)
@@ -426,7 +435,12 @@ export const ensureOnboardingHomeReadyFn = createServerFn({ method: 'POST' }).ha
     }
     const firstLanding = !next.activationHandoffSeenAt
     if (firstLanding) {
-      next = { ...next, activationHandoffSeenAt: now }
+      // A provisioned workspace has no setup step; its owner is whoever lands first.
+      next = {
+        ...next,
+        activationHandoffSeenAt: now,
+        ownerPrincipalId: next.ownerPrincipalId ?? caller.id,
+      }
     }
     return { state: next, value: { modulesChanged, firstLanding } }
   })

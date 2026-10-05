@@ -40,7 +40,8 @@ import {
 } from '@/lib/server/domains/posts/post.public.utils'
 import { createPost } from '@/lib/server/domains/posts/post.service'
 import { voteOnPost } from '@/lib/server/domains/posts/post.voting'
-import { checkAnonPostRateLimit, checkAnonVoteRateLimit } from '@/lib/server/utils/anon-rate-limit'
+import { checkAnonVoteRateLimit, reserveAnonPostSlot } from '@/lib/server/utils/anon-rate-limit'
+import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import { getPostPermissions } from '@/lib/server/domains/posts/post.permissions'
 import { userEditPost, softDeletePost } from '@/lib/server/domains/posts/post.user-actions'
 import { getPublicBoardById } from '@/lib/server/domains/boards/board.public'
@@ -318,12 +319,10 @@ export const userDeletePostFn = createServerFn({ method: 'POST' })
     return { id: postId }
   })
 
-/** The caller's address, as the anonymous rate limits key on it. */
+/** The caller's address, resolved through the trusted-proxy rules, as the
+ *  anonymous rate limits key on it. */
 function clientIp(): string {
-  const headers = getRequestHeaders()
-  return (
-    headers.get('x-forwarded-for')?.split(',')[0]?.trim() || headers.get('x-real-ip') || '0.0.0.0'
-  )
+  return getClientIp(getRequestHeaders())
 }
 
 /**
@@ -436,7 +435,7 @@ export const runCreatePublicPost = createServerOnlyFn(async function runCreatePu
     }
     // Boards can take ideas without an account, so cap how many one address
     // can post in an hour, across every anonymous identity it mints.
-    if (!actor.testFeedback?.canSubmit && !(await checkAnonPostRateLimit(clientIp()))) {
+    if (!actor.testFeedback?.canSubmit && !(await reserveAnonPostSlot(clientIp()))) {
       throw new Error('Too many ideas, please try again later')
     }
   } else if (!principalRecord) {

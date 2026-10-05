@@ -362,6 +362,11 @@ export interface SetupState {
     startingPoint: StartingPointState | null
   }
   completedAt?: string
+  /**
+   * The principal who set the workspace up. Recorded once and never moved, so
+   * the owner stays the owner whatever role they hold later.
+   */
+  ownerPrincipalId?: string
   /** ICP outcome for setup and activation personalization. */
   useCase?: OnboardingOutcome
   /** Ordered products selected during setup; the first is the activation goal. */
@@ -521,6 +526,10 @@ export function normalizeSetupStateV2(value: unknown): SetupState | null {
         startingPoint,
       },
       ...(asIsoString(value.completedAt) ? { completedAt: value.completedAt as string } : {}),
+      ...(typeof value.ownerPrincipalId === 'string' &&
+      value.ownerPrincipalId.startsWith('principal_')
+        ? { ownerPrincipalId: value.ownerPrincipalId }
+        : {}),
       ...(useCase ? { useCase } : {}),
       ...intent,
       ...(asIsoString(value.workspaceDetailsSeenAt)

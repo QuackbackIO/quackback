@@ -25,7 +25,9 @@ export function TitleInput<T extends FieldValues = FieldValues>({
               type="text"
               aria-label={placeholder}
               placeholder={placeholder}
-              className="w-full text-lg sm:text-xl font-semibold bg-transparent border-0 outline-none placeholder:text-muted-foreground/50"
+              // Borderless, so focus is a neutral underline in the ring colour,
+              // reserved transparent so focusing does not shift the layout.
+              className="w-full text-lg sm:text-xl font-semibold bg-transparent border-x-0 border-t-0 border-b-2 border-transparent outline-none transition-colors placeholder:text-muted-foreground/50 focus-visible:border-ring"
               autoFocus={autoFocus}
               {...field}
             />
