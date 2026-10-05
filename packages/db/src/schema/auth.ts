@@ -500,7 +500,7 @@ export const settings = pgTable('settings', {
    * spam classification entirely. aiClassifier: whether new conversations go
    * to the AI classifier (absent reads as on).
    */
-  spamFilterConfig: text('spam_filter_config').default('{"trustedSenders":[],"aiClassifier":true}'),
+  spamFilterConfig: text('spam_filter_config'),
   /**
    * Help center configuration (JSON)
    * Structure: { enabled, homepageTitle, homepageDescription, seo }

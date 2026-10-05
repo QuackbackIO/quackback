@@ -273,6 +273,9 @@ describe('the real corpus', () => {
     // of any hole below them is refused, which is the capability
     // `migrator-gap-heal.test.ts` exercises.
     //
+    // 0239 adds spam_filter_config only while the column is absent and stamps
+    // the rows that existed at that moment in the same branch, so a second
+    // run finds the column and does nothing.
     // 0269 wraps two WHERE-null-or-empty UPDATEs in a DO block so a stored blob
     // makes the second run write zero rows. A bare UPDATE at the tip would
     // collapse that same window.
@@ -299,15 +302,13 @@ describe('the real corpus', () => {
     // 0291 rewrites only feature_flags blobs that lack the `feedback` key and
     // its last UPDATE adds that key to every such blob, so a second run
     // selects no rows and skips the cache DELETE.
-    // 0292 stamps aiClassifier onto spam_filter_config rows without the key;
-    // the column default it sets gives every later row the key, so a second
-    // run selects no rows.
     const vouching = files.filter(
       (f) => assessReplaySafety(f, readFileSync(join(MIGRATIONS_DIR, f), 'utf8')).vouched.length > 0
     )
     expect(vouching).toEqual([
       '0199_drop_roadmap_curation.sql',
       '0209_drift_repair.sql',
+      '0239_spam_filter_config.sql',
       '0253_event_dispatch_owner.sql',
       '0256_workspace_key_columns.sql',
       '0259_channel_threads.sql',
@@ -323,7 +324,6 @@ describe('the real corpus', () => {
       '0285_integration_link_scope.sql',
       '0288_kb_translations_dutch_search.sql',
       '0291_legacy_surface_switches.sql',
-      '0292_spam_ai_classifier_opt_in.sql',
     ])
   })
 
