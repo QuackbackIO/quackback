@@ -30,3 +30,14 @@ describe('admin feedback search', () => {
     })
   })
 })
+
+describe('admin feedback status filter', () => {
+  it('keeps a hand-written single status, so a shared deep link survives sign-in', () => {
+    expect((parseFeedbackSearch({ status: 'open' }) as { status?: string[] }).status).toEqual([
+      'open',
+    ])
+    expect(
+      (parseFeedbackSearch({ status: ['open', 'planned'] }) as { status?: string[] }).status
+    ).toEqual(['open', 'planned'])
+  })
+})

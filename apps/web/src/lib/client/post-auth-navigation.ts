@@ -16,7 +16,10 @@ import { isTeamCallback } from '@/lib/shared/routing'
  */
 export function navigateAfterAuth(callbackUrl: string, clientNavigate: () => void): void {
   if (isTeamCallback(callbackUrl)) {
-    window.location.assign(callbackUrl)
+    // A server redirect to sign-in cannot see the deep link's hash, but the
+    // browser carries it onto the sign-in page: put it back on the way out.
+    const hash = window.location.hash
+    window.location.assign(callbackUrl.includes('#') || !hash ? callbackUrl : callbackUrl + hash)
   } else {
     clientNavigate()
   }
