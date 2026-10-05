@@ -14,6 +14,7 @@ import {
 } from '@/lib/shared/launch-checklist'
 import { launchTaskWhy } from '@/lib/shared/launch-outcomes'
 import { cn } from '@/lib/shared/utils'
+import { buttonVariants } from '@/components/ui/button'
 import { LaunchStepAction } from './launch-step-action'
 import { LaunchTaskLabel, launchTaskMessage } from './launch-task-label'
 import { LaunchTaskLink } from './launch-task-link'
@@ -146,8 +147,6 @@ export function HomeNextStep({
   const why = launchTaskWhy(next)
   // A status page grows by services: offered beside sharing it even after
   // setup seeded the first one, to anyone who may add one.
-  // A status page grows by services: offered beside sharing it even after
-  // setup seeded the first one, to anyone who may add one.
   const service =
     path.goal === 'status' && status.permissions?.settingsManage !== false
       ? buildLaunchTasks(status).find((task) => task.id === 'add-status-service' && !task.isSkipped)
@@ -209,7 +208,7 @@ export function HomeNextStep({
             {service ? (
               <LaunchTaskLink
                 task={service}
-                className="inline-flex h-8 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
               >
                 <LaunchTaskLabel task={service} />
               </LaunchTaskLink>

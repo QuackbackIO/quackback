@@ -38,6 +38,8 @@ vi.mock('@/lib/server/functions/activation', () => ({
 vi.mock('@/lib/client/plg-events', () => ({ recordPlgEvent: vi.fn() }))
 
 import { HomeNextStep } from '../home-next-step'
+import { buttonVariants } from '@/components/ui/button'
+import { cn } from '@/lib/shared/utils'
 
 const status: LaunchStatus = {
   hasBoards: true,
@@ -173,10 +175,10 @@ describe("Home's next step", () => {
     })
     const card = screen.getByRole('region', { name: 'Share your status page' })
     expect(within(card).getByRole('button', { name: 'Copy status link' })).toBeVisible()
-    expect(within(card).getByRole('link', { name: 'Add a service' })).toHaveAttribute(
-      'href',
-      '/admin/status'
-    )
+    const add = within(card).getByRole('link', { name: 'Add a service' })
+    expect(add).toHaveAttribute('href', '/admin/status')
+    // Drawn like every other secondary action, not a hand-made outline.
+    expect(add.className).toBe(cn(buttonVariants({ variant: 'outline', size: 'sm' })))
   })
 
   it('offers no test the person cannot run', () => {
