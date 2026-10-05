@@ -2,18 +2,17 @@ import { db } from '@/lib/server/db'
 import { sql } from 'drizzle-orm'
 
 /**
- * Sum of total_tokens (input + output) for successful chat-completion
- * calls in the current calendar month. Backs the aiTokensPerMonth tier
- * quota. Embeddings are excluded (call_type != 'chat_completion').
+ * Sum of total_tokens (input + output) for successful AI calls in the
+ * current calendar month: chat completions and embeddings both count toward
+ * the aiTokensPerMonth allowance.
  *
- * Served by the partial index ai_usage_log_month_chat_idx on created_at
- * with WHERE call_type='chat_completion' AND status='success'.
+ * Served by ai_usage_log_created_idx on created_at; the table keeps 90 days.
  */
 export async function aiTokensThisMonth(): Promise<number> {
   return aiTokensInUtcMonth(new Date())
 }
 
-/** Sum successful chat-completion tokens in the UTC month containing `at`. */
+/** Sum successful AI tokens in the UTC month containing `at`. */
 export async function aiTokensInUtcMonth(at: Date): Promise<number> {
   return aiTokensInWindow(utcMonthStart(at), utcNextMonthStart(at))
 }
@@ -28,7 +27,7 @@ export async function aiTokensInWindow(start: Date, end: Date): Promise<number> 
     FROM ai_usage_log
     WHERE created_at >= ${start.toISOString()}::timestamptz
       AND created_at < ${end.toISOString()}::timestamptz
-      AND call_type = 'chat_completion'
+      AND call_type IN ('chat_completion', 'embedding')
       AND status = 'success'
   `)
   const rows = result as unknown as Array<{ total: string | number }>
