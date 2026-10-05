@@ -628,8 +628,10 @@ async function createAuth() {
               if (!isAnonymous) {
                 const { ensureAutoSubscribed } =
                   await import('@/lib/server/domains/changelog/changelog-subscription.service')
+                const { logSettingsError } =
+                  await import('@/lib/server/domains/settings/settings-log')
                 ensureAutoSubscribed(createdPrincipal.id as PrincipalId).catch((err) =>
-                  log.error({ err }, 'failed to auto-subscribe to changelog on signup')
+                  logSettingsError(log, err, 'failed to auto-subscribe to changelog on signup')
                 )
               }
             }

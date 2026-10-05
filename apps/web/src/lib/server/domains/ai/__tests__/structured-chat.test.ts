@@ -9,7 +9,10 @@ import { z } from 'zod'
 
 const hoisted = vi.hoisted(() => ({
   chat: vi.fn(),
-  cfg: { openaiBaseUrl: 'https://llm.internal/v1' as string | null, aiRequireParameters: undefined },
+  cfg: {
+    openaiBaseUrl: 'https://llm.internal/v1' as string | null,
+    aiRequireParameters: undefined,
+  },
 }))
 
 vi.mock('@tanstack/ai', () => ({ chat: hoisted.chat }))
@@ -182,8 +185,14 @@ describe('structuredChat', () => {
 describe('isResponseFormatRejection', () => {
   it('matches the 400 shapes servers use for a response_format they do not support', () => {
     expect(isResponseFormatRejection(rejection('x', 'response_format'))).toBe(true)
-    expect(isResponseFormatRejection(rejection("Invalid parameter: 'response_format' of type 'json_schema' is not supported"))).toBe(true)
-    expect(isResponseFormatRejection(rejection('This model does not support json_schema'))).toBe(true)
+    expect(
+      isResponseFormatRejection(
+        rejection("Invalid parameter: 'response_format' of type 'json_schema' is not supported")
+      )
+    ).toBe(true)
+    expect(isResponseFormatRejection(rejection('This model does not support json_schema'))).toBe(
+      true
+    )
     expect(isResponseFormatRejection(rejection('Unsupported value: response_format'))).toBe(true)
     expect(
       isResponseFormatRejection(
@@ -196,7 +205,11 @@ describe('isResponseFormatRejection', () => {
   })
 
   it('does not match other 400s, other statuses or non-errors', () => {
-    expect(isResponseFormatRejection(rejection('Unsupported parameter: max_completion_tokens', 'max_completion_tokens'))).toBe(false)
+    expect(
+      isResponseFormatRejection(
+        rejection('Unsupported parameter: max_completion_tokens', 'max_completion_tokens')
+      )
+    ).toBe(false)
     expect(isResponseFormatRejection(rejection('context length exceeded'))).toBe(false)
     expect(
       isResponseFormatRejection(Object.assign(new Error('response_format'), { status: 500 }))

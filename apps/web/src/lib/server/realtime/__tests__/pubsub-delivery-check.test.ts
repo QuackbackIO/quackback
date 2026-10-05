@@ -37,7 +37,7 @@ vi.mock('../pg-listener', () => ({
       close: async () => {},
       verify: async () => {
         hoisted.verifyCalls += 1
-        if (hoisted.throws) throw new Error("sender connection refused")
+        if (hoisted.throws) throw new Error('sender connection refused')
         return await new Promise<boolean>((resolve) => {
           if (hoisted.delivers) {
             input.onPayload('__verify__probe')

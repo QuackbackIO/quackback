@@ -26,6 +26,8 @@ import {
 } from '@/lib/shared/assistant/config'
 import { isWidgetMessengerEnabled } from '@/lib/shared/support-surfaces'
 
+import { logSettingsError } from './settings-log'
+
 const log = logger.child({ component: 'settings-widget' })
 export const WIDGET_OBSERVATION_THROTTLE_MS = 15 * 60 * 1000
 
@@ -184,7 +186,7 @@ export async function getWidgetConfig(
     const org = await readSettingsRow(freshness)
     return parseWidgetConfig(org.widgetConfig)
   } catch (error) {
-    log.error({ err: error }, 'get widget config failed')
+    logSettingsError(log, error, 'get widget config failed')
     wrapDbError('fetch widget config', error)
   }
 }
@@ -210,7 +212,7 @@ export async function updateWidgetConfig(input: UpdateWidgetConfigInput): Promis
     await invalidateSettingsCache()
     return updated
   } catch (error) {
-    log.error({ err: error }, 'update widget config failed')
+    logSettingsError(log, error, 'update widget config failed')
     wrapDbError('update widget config', error)
   }
 }
@@ -348,7 +350,7 @@ export async function getPublicWidgetConfig(): Promise<PublicWidgetConfig> {
     const flags = resolveFeatureFlags(org.featureFlags)
     return projectPublicWidgetConfig(config, flags, identity)
   } catch (error) {
-    log.error({ err: error }, 'get public widget config failed')
+    logSettingsError(log, error, 'get public widget config failed')
     wrapDbError('fetch public widget config', error)
   }
 }
@@ -396,7 +398,7 @@ export async function saveWidgetHeroImageKey(key: string): Promise<void> {
     }
     await updateWidgetConfig({ home: { heroImageKey: key, headerStyle: 'image' } })
   } catch (error) {
-    log.error({ err: error }, 'save widget hero image key failed')
+    logSettingsError(log, error, 'save widget hero image key failed')
     wrapDbError('save widget hero image key', error)
   }
 }
@@ -416,7 +418,7 @@ export async function deleteWidgetHeroImage(): Promise<void> {
     }
     await updateWidgetConfig({ home: { heroImageKey: '', headerStyle: 'plain' } })
   } catch (error) {
-    log.error({ err: error }, 'delete widget hero image failed')
+    logSettingsError(log, error, 'delete widget hero image failed')
     wrapDbError('delete widget hero image', error)
   }
 }
@@ -432,7 +434,7 @@ export async function getWidgetSecret(): Promise<string | null> {
     const org = await requireSettings()
     return org.widgetSecret ?? null
   } catch (error) {
-    log.error({ err: error }, 'get widget secret failed')
+    logSettingsError(log, error, 'get widget secret failed')
     wrapDbError('fetch widget secret', error)
   }
 }
@@ -465,7 +467,7 @@ export async function ensureWidgetSecret(): Promise<string> {
     }
     return again.widgetSecret
   } catch (error) {
-    log.error({ err: error }, 'ensure widget secret failed')
+    logSettingsError(log, error, 'ensure widget secret failed')
     wrapDbError('ensure widget secret', error)
   }
 }
@@ -480,7 +482,7 @@ export async function regenerateWidgetSecret(): Promise<string> {
     await invalidateSettingsCache()
     return secret
   } catch (error) {
-    log.error({ err: error }, 'regenerate widget secret failed')
+    logSettingsError(log, error, 'regenerate widget secret failed')
     wrapDbError('regenerate widget secret', error)
   }
 }
