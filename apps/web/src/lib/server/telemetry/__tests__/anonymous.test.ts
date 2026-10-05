@@ -71,6 +71,12 @@ describe('aiProviderOf', () => {
     expect(aiProviderOf('k', 'https://llm.internal.example/v1')).toBe('other')
     expect(aiProviderOf('k', 'not a url')).toBe('other')
   })
+
+  it('matches a provider domain only on a label boundary', () => {
+    expect(aiProviderOf('k', 'https://evilgoogleapis.com/v1')).toBe('other')
+    expect(aiProviderOf('k', 'https://notopenrouter.ai/v1')).toBe('other')
+    expect(aiProviderOf('k', 'https://myazure.com/v1')).toBe('other')
+  })
 })
 
 describe('aiFeatureOf', () => {

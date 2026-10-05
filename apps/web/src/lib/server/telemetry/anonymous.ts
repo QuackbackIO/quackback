@@ -91,6 +91,11 @@ export type AiProvider = 'none' | 'openai' | 'openrouter' | 'azure' | 'google' |
 const PRIVATE_HOST_RE =
   /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1\]?$|host\.docker\.internal$)|\.local$/
 
+/** `host` is `domain` or a subdomain of it, never merely a name ending in it. */
+function onDomain(host: string, domain: string): boolean {
+  return host === domain || host.endsWith(`.${domain}`)
+}
+
 /**
  * The model provider behind the configured OpenAI-compatible endpoint, as a
  * fixed label. The base URL itself never leaves the box: a self-hosted
@@ -106,9 +111,9 @@ export function aiProviderOf(apiKey: string | undefined, baseUrl: string | undef
     return 'other'
   }
   if (host === 'api.openai.com') return 'openai'
-  if (host === 'openrouter.ai' || host.endsWith('.openrouter.ai')) return 'openrouter'
-  if (host.endsWith('.openai.azure.com') || host.endsWith('.azure.com')) return 'azure'
-  if (host.endsWith('googleapis.com')) return 'google'
+  if (onDomain(host, 'openrouter.ai')) return 'openrouter'
+  if (onDomain(host, 'azure.com')) return 'azure'
+  if (onDomain(host, 'googleapis.com')) return 'google'
   if (PRIVATE_HOST_RE.test(host)) return 'local'
   return 'other'
 }
