@@ -148,7 +148,7 @@ const RAIL_ITEMS: RailItem[] = [
     tour: 'nav-support',
   },
   {
-    label: 'Help Center',
+    label: 'Help center',
     labelId: 'admin.nav.helpCenter',
     href: '/admin/help-center',
     icon: ENTITY_ICONS.article,

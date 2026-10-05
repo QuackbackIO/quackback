@@ -177,7 +177,7 @@ export function OverviewDashboard({
                     {(item) => <DeskRow key={item.id} item={item} />}
                   </ModuleCard>
                   <ModuleCard
-                    title="Help Center"
+                    title="Help center"
                     items={helpCenter}
                     error={helpError}
                     onRetry={() => void overview.refetch()}

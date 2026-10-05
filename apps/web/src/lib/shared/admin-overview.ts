@@ -85,7 +85,7 @@ export function buildOverviewMetrics(input: OverviewMetricsInput): OverviewMetri
     const n = input.feedback.reviewCount
     metrics.push({
       key: 'feedback',
-      label: n === 1 ? 'feedback post' : 'feedback posts',
+      label: n === 1 ? 'idea' : 'ideas',
       detail: 'to review',
       count: n,
       link: input.feedback.reviewLink,
@@ -96,7 +96,7 @@ export function buildOverviewMetrics(input: OverviewMetricsInput): OverviewMetri
     const n = input.feedback.completeCount
     metrics.push({
       key: 'complete',
-      label: n === 1 ? 'feedback post' : 'feedback posts',
+      label: n === 1 ? 'idea' : 'ideas',
       detail: 'with no changelog',
       count: n,
       link: input.feedback.completeLink,

@@ -16,7 +16,7 @@ const { state } = vi.hoisted(() => {
       },
       {
         key: 'feedback',
-        label: 'feedback posts',
+        label: 'ideas',
         detail: 'to review',
         count: 30,
         link: { to: '/admin/feedback' },
@@ -24,7 +24,7 @@ const { state } = vi.hoisted(() => {
       },
       {
         key: 'complete',
-        label: 'feedback posts',
+        label: 'ideas',
         detail: 'with no changelog',
         count: 6,
         link: { to: '/admin/feedback' },
@@ -151,8 +151,8 @@ describe('OverviewDashboard', () => {
 
     expect(screen.getByText('3')).toBeInTheDocument()
     expect(screen.getByText('Conversations waiting for reply')).toBeInTheDocument()
-    expect(screen.getByText('Feedback posts to review')).toBeInTheDocument()
-    expect(screen.getByText('Feedback posts with no changelog')).toBeInTheDocument()
+    expect(screen.getByText('Ideas to review')).toBeInTheDocument()
+    expect(screen.getByText('Ideas with no changelog')).toBeInTheDocument()
     expect(screen.getByText('Help center articles in draft')).toBeInTheDocument()
     expect(screen.getByText('Support')).toBeInTheDocument()
     expect(screen.getByText('Feedback')).toBeInTheDocument()
@@ -217,7 +217,7 @@ describe('OverviewDashboard', () => {
     const { container } = render(<OverviewDashboard />)
     expect(container.querySelector('aside')).toBeNull()
     expect(screen.queryByText('Changelog', { selector: 'h2' })).not.toBeInTheDocument()
-    expect(screen.queryByText('Help Center', { selector: 'h2' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Help center', { selector: 'h2' })).not.toBeInTheDocument()
     expect(screen.queryByText('No new votes this week.')).not.toBeInTheDocument()
   })
 
@@ -252,7 +252,7 @@ describe('OverviewDashboard', () => {
     expect(screen.queryByText('Publishing')).not.toBeInTheDocument()
     expect(screen.queryByText('Momentum')).not.toBeInTheDocument()
     expect(screen.getByText('Changelog', { selector: 'h2' })).toBeInTheDocument()
-    expect(screen.getByText('Help Center', { selector: 'h2' })).toBeInTheDocument()
+    expect(screen.getByText('Help center', { selector: 'h2' })).toBeInTheDocument()
     expect(screen.getByText('September updates')).toBeInTheDocument()
     expect(screen.getByText('Environment Variables')).toBeInTheDocument()
     expect(screen.getByText('Environment Variables').closest('a')).toHaveAttribute(
@@ -291,7 +291,7 @@ describe('OverviewDashboard', () => {
     render(<OverviewDashboard />)
     expect(screen.getByText('Changelog', { selector: 'h2' })).toBeInTheDocument()
     expect(screen.getByText('Couldn’t load this section.')).toBeInTheDocument()
-    expect(screen.getByText('Help Center', { selector: 'h2' })).toBeInTheDocument()
+    expect(screen.getByText('Help center', { selector: 'h2' })).toBeInTheDocument()
     expect(screen.getByText('Environment Variables')).toBeInTheDocument()
     expect(screen.queryByText('Feedback', { selector: 'h2' })).not.toBeInTheDocument()
   })

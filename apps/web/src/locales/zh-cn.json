@@ -251,7 +251,7 @@
   "portal.feedback.toolbar.clearSearch": "清除搜索",
   "portal.feedback.filter.clearAll": "清除全部",
   "portal.feedback.sidebar.boards": "看板",
-  "portal.feedback.sidebar.viewAllPosts": "查看所有帖子",
+  "portal.feedback.sidebar.viewAllPosts": "查看所有想法",
   "portal.feedback.sidebar.poweredBy": "由 {brand} 提供支持",
   "portal.feedback.similarPosts.heading": "相似想法",
   "portal.postDetail.comments": "{count, plural, other {# 条评论}}",

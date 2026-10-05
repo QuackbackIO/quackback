@@ -179,7 +179,7 @@ const ALL_ON = {
 }
 
 describe('buildRailItems', () => {
-  it('orders Home, Feedback, Roadmap, Changelog, Support, Help Center, Status, Analytics, Users', () => {
+  it('orders Home, Feedback, Roadmap, Changelog, Support, Help center, Status, Analytics, Users', () => {
     const items = buildRailItems(ALL_ON)
     expect(items.map((i) => [i.label, i.href])).toEqual([
       ['Home', '/admin'],
@@ -187,7 +187,7 @@ describe('buildRailItems', () => {
       ['Roadmap', '/admin/roadmap'],
       ['Changelog', '/admin/changelog'],
       ['Support', '/admin/inbox'],
-      ['Help Center', '/admin/help-center'],
+      ['Help center', '/admin/help-center'],
       ['Status', '/admin/status'],
       ['Analytics', '/admin/analytics'],
       ['Users', '/admin/users'],
@@ -443,7 +443,7 @@ describe('AdminSidebar: language', () => {
     const rail = document.querySelector('aside nav[data-tour="products"]') as HTMLElement
     expect(rail.textContent).toContain(de['admin.nav.home'])
     expect(rail.textContent).toContain(de['admin.nav.helpCenter'])
-    expect(rail.textContent).not.toContain('Help Center')
+    expect(rail.textContent).not.toContain('Help center')
     expect(document.querySelector('aside')?.textContent).toContain(de['admin.nav.settings'])
     expect(document.querySelector('aside')?.textContent).not.toContain('View portal')
     expect(document.querySelector('aside')?.getAttribute('lang')).toBe('de')

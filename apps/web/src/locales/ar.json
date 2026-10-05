@@ -251,7 +251,7 @@
   "portal.feedback.toolbar.clearSearch": "مسح البحث",
   "portal.feedback.filter.clearAll": "مسح الكل",
   "portal.feedback.sidebar.boards": "الفئات",
-  "portal.feedback.sidebar.viewAllPosts": "عرض جميع المنشورات",
+  "portal.feedback.sidebar.viewAllPosts": "عرض جميع الأفكار",
   "portal.feedback.sidebar.poweredBy": "مدعوم بواسطة {brand}",
   "portal.feedback.similarPosts.heading": "أفكار مشابهة",
   "portal.postDetail.comments": "{count, plural, zero {لا تعليقات} one {تعليق واحد} two {تعليقان} few {# تعليقات} many {# تعليقًا} other {# تعليق}}",

@@ -251,7 +251,7 @@
   "portal.feedback.toolbar.clearSearch": "Limpar pesquisa",
   "portal.feedback.filter.clearAll": "Limpar tudo",
   "portal.feedback.sidebar.boards": "Quadros",
-  "portal.feedback.sidebar.viewAllPosts": "Ver todos os posts",
+  "portal.feedback.sidebar.viewAllPosts": "Ver todas as ideias",
   "portal.feedback.sidebar.poweredBy": "Desenvolvido por {brand}",
   "portal.feedback.similarPosts.heading": "Ideias semelhantes",
   "portal.postDetail.comments": "{count, plural, one {# comentário} other {# comentários}}",

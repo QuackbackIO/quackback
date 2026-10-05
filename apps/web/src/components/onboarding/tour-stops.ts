@@ -110,7 +110,7 @@ const COPY = {
     },
   },
   'help-center': {
-    lead: { id: 'onboarding.tour.stop.helpCenter.lead', defaultMessage: 'Help Center.' },
+    lead: { id: 'onboarding.tour.stop.helpCenter.lead', defaultMessage: 'Help center.' },
     line: {
       id: 'onboarding.tour.stop.helpCenter.line',
       defaultMessage: 'Write an answer once. Copilot and Quinn reuse it.',

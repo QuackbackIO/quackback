@@ -251,7 +251,7 @@
   "portal.feedback.toolbar.clearSearch": "Wyczyść wyszukiwanie",
   "portal.feedback.filter.clearAll": "Wyczyść wszystko",
   "portal.feedback.sidebar.boards": "Tablice",
-  "portal.feedback.sidebar.viewAllPosts": "Zobacz wszystkie wpisy",
+  "portal.feedback.sidebar.viewAllPosts": "Zobacz wszystkie pomysły",
   "portal.feedback.sidebar.poweredBy": "Obsługiwane przez {brand}",
   "portal.feedback.similarPosts.heading": "Podobne pomysły",
   "portal.postDetail.comments": "{count, plural, one {# komentarz} few {# komentarze} many {# komentarzy} other {# komentarza}}",

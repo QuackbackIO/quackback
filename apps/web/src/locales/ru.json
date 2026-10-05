@@ -251,7 +251,7 @@
   "portal.feedback.toolbar.clearSearch": "Очистить поиск",
   "portal.feedback.filter.clearAll": "Сбросить всё",
   "portal.feedback.sidebar.boards": "Категории",
-  "portal.feedback.sidebar.viewAllPosts": "Все предложения",
+  "portal.feedback.sidebar.viewAllPosts": "Все идеи",
   "portal.feedback.sidebar.poweredBy": "На базе {brand}",
   "portal.feedback.similarPosts.heading": "Похожие предложения",
   "portal.postDetail.comments": "{count, plural, one {# комментарий} few {# комментария} many {# комментариев} other {# комментария}}",

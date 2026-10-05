@@ -251,7 +251,7 @@
   "portal.feedback.toolbar.clearSearch": "Zoekopdracht wissen",
   "portal.feedback.filter.clearAll": "Alles wissen",
   "portal.feedback.sidebar.boards": "Borden",
-  "portal.feedback.sidebar.viewAllPosts": "Alle posts bekijken",
+  "portal.feedback.sidebar.viewAllPosts": "Alle ideeën bekijken",
   "portal.feedback.sidebar.poweredBy": "Mogelijk gemaakt door {brand}",
   "portal.feedback.similarPosts.heading": "Vergelijkbare ideeën",
   "portal.postDetail.comments": "{count, plural, one {# reactie} other {# reacties}}",
