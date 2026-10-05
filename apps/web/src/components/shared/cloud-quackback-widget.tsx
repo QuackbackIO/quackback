@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { useIntl } from 'react-intl'
 import { isSyntheticAnonEmail } from '@/lib/shared/anonymous-email'
 import { useCloudEnabled, useSessionContext } from '@/lib/client/hooks/use-root-context'
 
@@ -36,6 +37,7 @@ export function openHelpLauncher() {
  */
 export function CloudQuackbackWidget({ launcherHidden = false }: { launcherHidden?: boolean }) {
   const cloudEnabled = useCloudEnabled()
+  const { locale } = useIntl()
   const session = useSessionContext()
   const booted = useRef(false)
   const hidden = useRef(false)
@@ -55,10 +57,11 @@ export function CloudQuackbackWidget({ launcherHidden = false }: { launcherHidde
     installStub()
     loadSdk()
     if (!booted.current) {
-      window.Quackback?.('init')
+      // The team member's language names the frame and fills the panel.
+      window.Quackback?.('init', { locale })
       booted.current = true
     }
-  }, [cloudEnabled])
+  }, [cloudEnabled, locale])
 
   // A full-screen view hides the launcher; it comes back only if it hid it.
   useEffect(() => {
