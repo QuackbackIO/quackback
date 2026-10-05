@@ -442,3 +442,17 @@ describe('knowledge search guidance per role', () => {
     }
   })
 })
+
+describe('dash-free replies', () => {
+  it('tells Quinn and Copilot never to write em dashes', () => {
+    for (const overrides of [
+      {},
+      { role: 'workspace_assistant' as const, agentKind: 'copilot' as const },
+      { role: 'copilot_qa' as const },
+    ]) {
+      expect(joined(overrides)).toContain(
+        'Never use em dashes or en dashes as punctuation in a reply'
+      )
+    }
+  })
+})
