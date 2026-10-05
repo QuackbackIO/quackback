@@ -104,6 +104,7 @@ function makeProvider(overrides: Partial<IdentityProvider> = {}): IdentityProvid
     autoCreateUsers: true,
     autoProvisionRole: 'member',
     claimMapping: null,
+    redirectStyle: 'current',
     showButton: false,
     logoKey: null,
     logoUrl: null,

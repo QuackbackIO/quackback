@@ -147,8 +147,9 @@ async function getEmailDependentPassthroughKeys(): Promise<string[]> {
  * `identity_provider` table (NOT the static AUTH_PROVIDERS map). Each
  * button's `id` is the provider's `registrationId`, so a click drives
  * `signIn.social({ provider: registrationId })` →
- * `/api/auth/callback/<registrationId>`. A return to the pre-1.7
- * `/api/auth/oauth2/callback/<registrationId>` URL is rewritten onto that path.
+ * `/api/auth/callback/<registrationId>`. A return to the legacy
+ * `/api/auth/oauth2/callback/<registrationId>` URL, which providers on the
+ * legacy redirect style send, is rewritten onto that path.
  *
  * A provider yields a button only when it is BOTH:
  *   - button-eligible (`shouldRenderPublicButton`): no verified domain,

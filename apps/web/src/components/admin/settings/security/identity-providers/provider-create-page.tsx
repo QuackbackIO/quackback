@@ -115,6 +115,7 @@ export function ProviderCreatePage({
           draft={draft}
           onChange={setDraft}
           registrationId={registrationId}
+          redirectStyle="current"
           baseUrl={baseUrl}
           disabled={saving}
           existing={false}

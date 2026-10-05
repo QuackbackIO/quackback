@@ -23,9 +23,12 @@ import {
   eq,
   identityProvider,
   isNull,
+  settings,
   ssoVerifiedDomain,
   type IdentityProviderClaimMapping,
 } from '@/lib/server/db'
+import type { Database, Transaction } from '@/lib/server/db'
+import { oidcRedirectStyleFrom, type OidcRedirectStyle } from '@/lib/shared/oidc-redirect'
 import type { IdentityProviderId, UserId } from '@quackback/ids'
 import { parseSsoTestCapture, type SsoTestCapture } from '@/lib/shared/sso-test-capture'
 import {
@@ -95,6 +98,9 @@ export interface IdentityProvider {
   autoCreateUsers: boolean
   autoProvisionRole: Role | null
   claimMapping: IdentityProviderClaimMapping | null
+  /** Which callback URL sign-in sends as the redirect URI. `legacy` for any
+   *  provider created before this was recorded; see `oidc-redirect.ts`. */
+  redirectStyle: OidcRedirectStyle
   showButton: boolean
   /** S3 storage key for the uploaded provider logo, or null. */
   logoKey: string | null
@@ -241,10 +247,78 @@ function rowToVerifiedDomain(row: typeof ssoVerifiedDomain.$inferSelect): Verifi
   }
 }
 
+/**
+ * The recorded redirect styles, keyed by registrationId, from the raw
+ * `settings.auth_config` JSON. Read directly rather than through the settings
+ * cache so a write in the same request is seen.
+ */
+async function readRedirectStyles(
+  exec: Database | Transaction
+): Promise<Record<string, OidcRedirectStyle>> {
+  const [row] = await exec.select({ authConfig: settings.authConfig }).from(settings).limit(1)
+  return parseRedirectStyles(parseAuthConfigJson(row?.authConfig ?? null))
+}
+
+function parseAuthConfigJson(json: string | null): Record<string, unknown> {
+  if (!json) return {}
+  try {
+    const parsed: unknown = JSON.parse(json)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {}
+  } catch {
+    return {}
+  }
+}
+
+function parseRedirectStyles(
+  authConfig: Record<string, unknown>
+): Record<string, OidcRedirectStyle> {
+  const raw = authConfig.oidcRedirectStyles
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const styles: Record<string, OidcRedirectStyle> = {}
+  for (const [registrationId, value] of Object.entries(raw)) {
+    styles[registrationId] = oidcRedirectStyleFrom(value)
+  }
+  return styles
+}
+
+/**
+ * Record (or with `null`, forget) a provider's redirect style inside the
+ * caller's transaction. Rewrites only the `oidcRedirectStyles` key of the
+ * stored JSON and leaves every other key exactly as stored, under a row lock
+ * so a concurrent write to the same blob cannot be lost. A workspace with no
+ * settings row has nothing to record against and is left alone.
+ */
+async function writeRedirectStyle(
+  tx: Transaction,
+  registrationId: string,
+  style: OidcRedirectStyle | null
+): Promise<void> {
+  const [row] = await tx
+    .select({ id: settings.id, authConfig: settings.authConfig })
+    .from(settings)
+    .limit(1)
+    .for('update')
+  if (!row) return
+  const stored = parseAuthConfigJson(row.authConfig)
+  const styles = parseRedirectStyles(stored)
+  if (style) {
+    styles[registrationId] = style
+  } else {
+    delete styles[registrationId]
+  }
+  await tx
+    .update(settings)
+    .set({ authConfig: JSON.stringify({ ...stored, oidcRedirectStyles: styles }) })
+    .where(eq(settings.id, row.id))
+}
+
 function rowToIdentityProvider(
   row: typeof identityProvider.$inferSelect,
   domains: VerifiedDomain[],
-  configured: boolean
+  configured: boolean,
+  redirectStyles: Record<string, OidcRedirectStyle>
 ): IdentityProvider {
   return {
     id: row.id,
@@ -267,6 +341,7 @@ function rowToIdentityProvider(
     autoCreateUsers: row.autoCreateUsers,
     autoProvisionRole: row.autoProvisionRole,
     claimMapping: row.claimMapping ?? null,
+    redirectStyle: oidcRedirectStyleFrom(redirectStyles[row.registrationId]),
     showButton: row.showButton,
     logoKey: row.logoKey,
     logoUrl: offHostPublicUrl(row.logoKey),
@@ -290,10 +365,11 @@ function rowToIdentityProvider(
  */
 export async function listIdentityProviders(): Promise<IdentityProvider[]> {
   try {
-    const [providers, domains, configuredTypes] = await Promise.all([
+    const [providers, domains, configuredTypes, redirectStyles] = await Promise.all([
       db.select().from(identityProvider).orderBy(identityProvider.createdAt),
       db.select().from(ssoVerifiedDomain).orderBy(ssoVerifiedDomain.createdAt),
       getConfiguredIntegrationTypes(),
+      readRedirectStyles(db),
     ])
 
     const byProvider = new Map<string, VerifiedDomain[]>()
@@ -311,7 +387,8 @@ export async function listIdentityProviders(): Promise<IdentityProvider[]> {
       rowToIdentityProvider(
         p,
         byProvider.get(p.id) ?? [],
-        configuredTypes.has(`${AUTH_CREDENTIAL_PREFIX}${p.registrationId}`)
+        configuredTypes.has(`${AUTH_CREDENTIAL_PREFIX}${p.registrationId}`),
+        redirectStyles
       )
     )
   } catch (error) {
@@ -532,6 +609,9 @@ export async function upsertIdentityProvider(
             showButton: input.showButton ?? false,
           })
           .returning()
+        // A provider created now registers the sign-in library's own callback
+        // URL, so record that. Providers that predate the record read legacy.
+        await writeRedirectStyle(tx, row!.registrationId, 'current')
       }
       await bumpAuthConfigVersionInTx(tx)
       return row
@@ -540,11 +620,12 @@ export async function upsertIdentityProvider(
     resetAuth()
     await invalidateSettingsCache()
 
-    const [domains, configured] = await Promise.all([
+    const [domains, configured, redirectStyles] = await Promise.all([
       listDomainsForProvider(saved.id),
       hasPlatformCredentials(`${AUTH_CREDENTIAL_PREFIX}${saved.registrationId}`),
+      readRedirectStyles(db),
     ])
-    return rowToIdentityProvider(saved, domains, configured)
+    return rowToIdentityProvider(saved, domains, configured, redirectStyles)
   } catch (error) {
     log.error({ err: error }, 'upsert identity provider failed')
     wrapDbError('upsert identity provider', error)
@@ -594,6 +675,7 @@ export async function deleteIdentityProvider(id: IdentityProviderId): Promise<vo
         .where(eq(identityProvider.id, id))
         .returning({ registrationId: identityProvider.registrationId })
       if (!row) return null
+      await writeRedirectStyle(tx, row.registrationId, null)
       await bumpAuthConfigVersionInTx(tx)
       return row
     })
@@ -609,6 +691,58 @@ export async function deleteIdentityProvider(id: IdentityProviderId): Promise<vo
     if (error instanceof ValidationError) throw error
     log.error({ err: error }, 'delete identity provider failed')
     wrapDbError('delete identity provider', error)
+  }
+}
+
+/**
+ * Switch which callback URL a provider sends as its redirect URI. Sign-in
+ * reads it at registration, so the write bumps the auth config version. It
+ * also restamps `detailsChangedAt`: a test made through the old URL says
+ * nothing about whether the IdP accepts the new one. Returns the updated
+ * provider, or null when it does not exist.
+ */
+export async function setIdentityProviderRedirectStyle(
+  id: IdentityProviderId,
+  style: OidcRedirectStyle
+): Promise<IdentityProvider | null> {
+  log.info({ id, style }, 'set identity provider redirect style')
+  try {
+    const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
+    const { resetAuth } = await import('@/lib/server/auth')
+
+    const saved = await db.transaction(async (tx) => {
+      const [existing] = await tx
+        .select({ registrationId: identityProvider.registrationId })
+        .from(identityProvider)
+        .where(eq(identityProvider.id, id))
+      if (!existing) return null
+      const current = oidcRedirectStyleFrom((await readRedirectStyles(tx))[existing.registrationId])
+      if (current === style) {
+        const [row] = await tx.select().from(identityProvider).where(eq(identityProvider.id, id))
+        return row ?? null
+      }
+      await writeRedirectStyle(tx, existing.registrationId, style)
+      const [row] = await tx
+        .update(identityProvider)
+        .set({ detailsChangedAt: new Date() })
+        .where(eq(identityProvider.id, id))
+        .returning()
+      await bumpAuthConfigVersionInTx(tx)
+      return row ?? null
+    })
+    if (!saved) return null
+
+    resetAuth()
+    await invalidateSettingsCache()
+    const [domains, configured, redirectStyles] = await Promise.all([
+      listDomainsForProvider(saved.id),
+      hasPlatformCredentials(`${AUTH_CREDENTIAL_PREFIX}${saved.registrationId}`),
+      readRedirectStyles(db),
+    ])
+    return rowToIdentityProvider(saved, domains, configured, redirectStyles)
+  } catch (error) {
+    log.error({ err: error }, 'set identity provider redirect style failed')
+    wrapDbError('set identity provider redirect style', error)
   }
 }
 
@@ -794,11 +928,12 @@ export async function saveIdentityProviderClaimMapping(
 
     resetAuth()
     await invalidateSettingsCache()
-    const [domains, configured] = await Promise.all([
+    const [domains, configured, redirectStyles] = await Promise.all([
       listDomainsForProvider(saved.id),
       hasPlatformCredentials(`${AUTH_CREDENTIAL_PREFIX}${saved.registrationId}`),
+      readRedirectStyles(db),
     ])
-    return rowToIdentityProvider(saved, domains, configured)
+    return rowToIdentityProvider(saved, domains, configured, redirectStyles)
   } catch (error) {
     if (error instanceof ValidationError || error instanceof ConflictError) throw error
     log.error({ err: error }, 'save identity provider claim mapping failed')
