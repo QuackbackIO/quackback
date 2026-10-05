@@ -41,9 +41,7 @@ export async function runHelpCenterTranslateResume(_job: ClaimedJob): Promise<vo
       AND status = 'pending'
       AND payload->>'paused' = 'true'
   `)
-  const parked = getExecuteRows<{ id: string | number; article_id: string; locale: string }>(
-    result
-  )
+  const parked = getExecuteRows<{ id: string | number; article_id: string; locale: string }>(result)
   if (parked.length === 0) return
 
   const unique = new Map(parked.map((r) => [`${r.article_id}:${r.locale}`, r]))

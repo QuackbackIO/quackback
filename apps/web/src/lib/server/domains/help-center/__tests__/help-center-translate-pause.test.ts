@@ -74,7 +74,11 @@ async function rowsFor(id: string) {
     ORDER BY id
   `)
   return Array.from(
-    result as unknown as Iterable<{ payload: Record<string, unknown>; run_at: Date | string; status: string }>
+    result as unknown as Iterable<{
+      payload: Record<string, unknown>
+      run_at: Date | string
+      status: string
+    }>
   )
 }
 

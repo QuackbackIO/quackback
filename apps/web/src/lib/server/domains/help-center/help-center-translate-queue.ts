@@ -25,8 +25,8 @@
  * It parks a pending row (`paused: true`) that runs when the allowance window
  * ends, one row per article and locale per window. The hourly resume sweep
  * releases parked rows early once allowance is back, for example after an
- * upgrade (`help-center-translate-resume.ts`). The parked rows are also what the editor reads to show an item as
- * paused.
+ * upgrade (`help-center-translate-resume.ts`). The parked rows are also what
+ * the editor reads to show an item as paused.
  */
 import { db, sql } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
@@ -49,7 +49,7 @@ export interface HelpCenterTranslateJob {
 /** The logical queue name. Matches the definition in `jobs/definitions.ts`. */
 export const HELP_CENTER_TRANSLATE_QUEUE = 'help-center-translate'
 
-/** Was BullMQ's `attempts: 3`; the definition carries the same number. */
+/** Attempts per translate job, shared with the resume sweep. */
 export const TRANSLATE_JOB_ATTEMPTS = 3
 
 export async function enqueueHelpCenterTranslateJob(data: HelpCenterTranslateJob): Promise<void> {
@@ -80,9 +80,12 @@ export async function runHelpCenterTranslate(job: ClaimedJob): Promise<void> {
   }
 }
 
-
 /** Park an item until `until`; repeats within one window collapse to one row. */
-async function parkPausedTranslation(articleId: string, locale: string, until: Date): Promise<void> {
+async function parkPausedTranslation(
+  articleId: string,
+  locale: string,
+  until: Date
+): Promise<void> {
   await enqueueJob({
     queue: HELP_CENTER_TRANSLATE_QUEUE,
     payload: { type: 'translate-article', articleId, locale, paused: true },

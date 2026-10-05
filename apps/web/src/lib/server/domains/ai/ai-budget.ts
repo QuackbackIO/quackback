@@ -21,7 +21,10 @@ export interface AiBudgetWindow {
   end: Date
 }
 
-type TrialFields = Pick<CloudConfig, 'enabled' | 'trialActive' | 'trialStartedAt' | 'trialExpiresAt'>
+type TrialFields = Pick<
+  CloudConfig,
+  'enabled' | 'trialActive' | 'trialStartedAt' | 'trialExpiresAt'
+>
 
 function parseDate(value: string | null): Date | null {
   if (!value) return null

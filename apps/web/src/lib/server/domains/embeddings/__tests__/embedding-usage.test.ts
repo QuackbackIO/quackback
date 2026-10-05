@@ -113,10 +113,16 @@ describe.skipIf(!fixture.available)('embedding usage accounting', () => {
   })
 
   it('counts embedding tokens toward the allowance', async () => {
-    const before = await aiTokensInWindow(new Date(Date.now() - 60_000), new Date(Date.now() + 60_000))
+    const before = await aiTokensInWindow(
+      new Date(Date.now() - 60_000),
+      new Date(Date.now() + 60_000)
+    )
     await generateEmbedding('count me')
     await embeddingRows('embedding_query')
-    const after = await aiTokensInWindow(new Date(Date.now() - 60_000), new Date(Date.now() + 60_000))
+    const after = await aiTokensInWindow(
+      new Date(Date.now() - 60_000),
+      new Date(Date.now() + 60_000)
+    )
     expect(after - before).toBe(7)
   })
 })

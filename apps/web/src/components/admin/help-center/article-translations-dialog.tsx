@@ -126,15 +126,14 @@ export function ArticleTranslationsDialog({
               }
             </span>
           )}
-          {locale &&
-            statusesQuery.data?.find((s) => s.locale === locale)?.autoTranslatePaused && (
-              <span className="text-xs text-muted-foreground">
-                <FormattedMessage
-                  id="admin.helpCenter.autoTranslatePaused"
-                  defaultMessage="Paused: AI allowance used up"
-                />
-              </span>
-            )}
+          {locale && statusesQuery.data?.find((s) => s.locale === locale)?.autoTranslatePaused && (
+            <span className="text-xs text-muted-foreground">
+              <FormattedMessage
+                id="admin.helpCenter.autoTranslatePaused"
+                defaultMessage="Paused: AI allowance used up"
+              />
+            </span>
+          )}
         </div>
 
         {locale && (

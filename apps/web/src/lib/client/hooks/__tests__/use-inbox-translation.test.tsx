@@ -84,7 +84,10 @@ function agentMessage(
 beforeEach(() => {
   vi.clearAllMocks()
   hoisted.getMyLanguagePreferenceFn.mockResolvedValue({ language: 'en' })
-  hoisted.translateConversationMessagesFn.mockResolvedValue({ translations: {}, overAllowance: false })
+  hoisted.translateConversationMessagesFn.mockResolvedValue({
+    translations: {},
+    overAllowance: false,
+  })
   hoisted.setInboxTranslationEnabledFn.mockResolvedValue({ ok: true })
   hoisted.dismissInboxTranslationSuggestionFn.mockResolvedValue({ ok: true })
 })

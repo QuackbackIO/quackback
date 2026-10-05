@@ -107,20 +107,14 @@ describe('aiBudgetWindow', () => {
   })
 
   it('starts the first post-trial month at the trial end', () => {
-    const w = aiBudgetWindow(
-      { ...TRIAL, trialActive: false },
-      new Date('2026-11-20T12:00:00Z')
-    )
+    const w = aiBudgetWindow({ ...TRIAL, trialActive: false }, new Date('2026-11-20T12:00:00Z'))
     expect(w.kind).toBe('month')
     expect(w.start.toISOString()).toBe(TRIAL.trialExpiresAt)
     expect(w.end.toISOString()).toBe('2026-12-01T00:00:00.000Z')
   })
 
   it('resumes plain calendar months after that', () => {
-    const w = aiBudgetWindow(
-      { ...TRIAL, trialActive: false },
-      new Date('2026-12-03T12:00:00Z')
-    )
+    const w = aiBudgetWindow({ ...TRIAL, trialActive: false }, new Date('2026-12-03T12:00:00Z'))
     expect(w.kind).toBe('month')
     expect(w.start.toISOString()).toBe('2026-12-01T00:00:00.000Z')
   })
