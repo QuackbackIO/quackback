@@ -13,6 +13,11 @@ import { isIP } from 'node:net'
 import { config } from '@/lib/server/config'
 import { getRequestIP } from '@tanstack/react-start/server'
 import { logger } from '@/lib/server/logger'
+import {
+  EDGE_CLIENT_IP_HEADER,
+  edgeClientIp,
+  hostnameOnly,
+} from '@/lib/server/workspaces/saas-edge-host'
 
 const log = logger.child({ component: 'rate-limit' })
 
@@ -85,6 +90,16 @@ export async function checkRateLimit(
   return { allowed: true, remaining: Math.max(0, maxRequests - count) }
 }
 
+function requestHostname(source: Request | Headers, headers: Headers): string | null {
+  const host = hostnameOnly(headers.get('host'))
+  if (host || source instanceof Headers) return host
+  try {
+    return hostnameOnly(new URL(source.url).hostname)
+  } catch {
+    return null
+  }
+}
+
 /**
  * Extract client IP from request headers.
  *
@@ -116,6 +131,14 @@ export async function checkRateLimit(
  *   whether such a header was set by a trusted hop or relayed unmodified
  *   from the client, so honoring them would reopen the same spoofing gap.
  *
+ * Both modes yield to a visitor address signed by the trusted edge proxy that
+ * serves custom hostnames (see `edgeClientIp` in workspaces/saas-edge-host):
+ * that proxy is the TCP peer and the last X-Forwarded-For hop of every such
+ * request, so either rule alone would put all of its visitors in one bucket.
+ * The signed address is honored only with QUACKBACK_SAAS_EDGE_SECRET set and
+ * a verified customer host on the same request; otherwise both headers are
+ * ignored and the rules above apply unchanged.
+ *
  * Known limitation: getRequestIP() depends on the platform exposing the
  * socket peer address. That is true for the built Nitro/Bun server this
  * project ships (`bun run start`), but not guaranteed for every dev/test
@@ -125,6 +148,10 @@ export async function checkRateLimit(
  */
 export function getClientIp(source: Request | Headers): string {
   const headers = source instanceof Headers ? source : source.headers
+  if (headers.has(EDGE_CLIENT_IP_HEADER)) {
+    const edge = edgeClientIp(headers, requestHostname(source, headers))
+    if (edge) return edge
+  }
   // Startup validates config before serving traffic. Unit-level consumers may
   // intentionally load this helper without a complete runtime environment;
   // fail closed to direct-peer semantics in that case.

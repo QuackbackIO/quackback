@@ -14,6 +14,7 @@
  * The Worker (`quackback-cp/workers/saas-origin`) is the only signer.
  */
 import { createHmac, timingSafeEqual } from 'node:crypto'
+import { isIP } from 'node:net'
 
 export const CUSTOMER_HOST_HEADER = 'x-quackback-customer-host'
 export const CUSTOMER_HOST_SIG_HEADER = 'x-quackback-customer-host-sig'
@@ -51,6 +52,30 @@ function trustedOriginHosts(env: NodeJS.ProcessEnv = process.env): Set<string> {
 }
 
 /**
+ * The customer hostname a signed edge request carries, or null when the
+ * request did not arrive as a trusted origin or the signature does not verify.
+ */
+export function verifiedCustomerHost(
+  requestHost: string | null,
+  headers: Headers,
+  env: NodeJS.ProcessEnv = process.env
+): string | null {
+  if (!requestHost || !trustedOriginHosts(env).has(requestHost)) return null
+  const customer = hostnameOnly(headers.get(CUSTOMER_HOST_HEADER))
+  const secret = env.QUACKBACK_SAAS_EDGE_SECRET?.trim() ?? ''
+  const sig = headers.get(CUSTOMER_HOST_SIG_HEADER)
+  if (
+    customer &&
+    customer !== requestHost &&
+    customer.includes('.') &&
+    verifyCustomerHostSignature(secret, customer, sig)
+  ) {
+    return customer
+  }
+  return null
+}
+
+/**
  * Workspace hostname for this request. Custom-host traffic arrives as a
  * trusted origin plus a signed customer-host header; everything else uses Host.
  */
@@ -60,19 +85,67 @@ export function requestWorkspaceHost(
 ): string | null {
   const host =
     hostnameOnly(request.headers.get('host')) ?? hostnameOnly(new URL(request.url).hostname)
-  const trusted = trustedOriginHosts(env)
-  if (host && trusted.has(host)) {
-    const customer = hostnameOnly(request.headers.get(CUSTOMER_HOST_HEADER))
-    const secret = env.QUACKBACK_SAAS_EDGE_SECRET?.trim() ?? ''
-    const sig = request.headers.get(CUSTOMER_HOST_SIG_HEADER)
-    if (
-      customer &&
-      customer !== host &&
-      customer.includes('.') &&
-      verifyCustomerHostSignature(secret, customer, sig)
-    ) {
-      return customer
-    }
-  }
-  return host
+  return verifiedCustomerHost(host, request.headers, env) ?? host
+}
+
+/*
+ * Visitor address for custom-host traffic.
+ *
+ * The trusted edge proxy that serves custom hostnames is itself the TCP peer
+ * of every such request, so neither the socket address nor X-Forwarded-For
+ * names the visitor. The proxy signs the visitor address it observed:
+ *
+ *   x-quackback-edge-client-ip:     the address (IPv4 or IPv6 text)
+ *   x-quackback-edge-client-ip-sig: `<unixSeconds>.<hex>`, where hex is
+ *     HMAC-SHA256(QUACKBACK_SAAS_EDGE_SECRET,
+ *                 `ip-v1:<customerHost>:<ip>:<unixSeconds>`)
+ *
+ * The signature binds the address to the customer host the same request
+ * carries, so it is trusted only alongside a verified customer host, and only
+ * within EDGE_CLIENT_IP_MAX_SKEW_SECONDS of the signing time.
+ */
+export const EDGE_CLIENT_IP_HEADER = 'x-quackback-edge-client-ip'
+export const EDGE_CLIENT_IP_SIG_HEADER = 'x-quackback-edge-client-ip-sig'
+export const EDGE_CLIENT_IP_PREFIX = 'ip-v1:'
+export const EDGE_CLIENT_IP_MAX_SKEW_SECONDS = 300
+
+const EDGE_CLIENT_IP_SIG_PATTERN = /^([1-9]\d{0,14})\.([0-9a-f]{64})$/
+
+export function signEdgeClientIp(
+  secret: string,
+  customerHost: string,
+  ip: string,
+  unixSeconds: number
+): string {
+  return createHmac('sha256', secret)
+    .update(`${EDGE_CLIENT_IP_PREFIX}${customerHost}:${ip}:${unixSeconds}`)
+    .digest('hex')
+}
+
+/**
+ * The signed visitor address on this request, or null when any part of it
+ * fails: no secret, no address header, an unverified customer host, a bad or
+ * stale signature, or an address that does not parse. Callers fall back to
+ * their usual resolution on null.
+ */
+export function edgeClientIp(
+  headers: Headers,
+  requestHost: string | null,
+  env: NodeJS.ProcessEnv = process.env,
+  nowMs: number = Date.now()
+): string | null {
+  const ip = headers.get(EDGE_CLIENT_IP_HEADER)
+  if (!ip) return null
+  const secret = env.QUACKBACK_SAAS_EDGE_SECRET?.trim() ?? ''
+  if (!secret) return null
+  const match = EDGE_CLIENT_IP_SIG_PATTERN.exec(headers.get(EDGE_CLIENT_IP_SIG_HEADER) ?? '')
+  if (!match) return null
+  const unixSeconds = Number(match[1])
+  if (Math.abs(nowMs / 1000 - unixSeconds) > EDGE_CLIENT_IP_MAX_SKEW_SECONDS) return null
+  if (!isIP(ip)) return null
+  const customer = verifiedCustomerHost(requestHost, headers, env)
+  if (!customer) return null
+  const expected = Buffer.from(signEdgeClientIp(secret, customer, ip, unixSeconds), 'utf8')
+  const given = Buffer.from(match[2]!, 'utf8')
+  return expected.length === given.length && timingSafeEqual(expected, given) ? ip : null
 }
