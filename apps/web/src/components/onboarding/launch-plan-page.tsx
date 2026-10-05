@@ -66,6 +66,8 @@ export function LaunchPlanPage({
       status={status}
       next={task.id === path.next?.id}
       canSkip={canSkip && !onPath}
+      // A path step skipped before it joined the path can still be restored.
+      canUndo={canSkip}
       pending={resolution.isPending}
       firstWinAction={firstWinAction}
       onSkip={(resolved) =>
@@ -194,6 +196,7 @@ function LaunchPlanRow({
   status,
   next,
   canSkip,
+  canUndo,
   pending,
   firstWinAction,
   onSkip,
@@ -202,7 +205,10 @@ function LaunchPlanRow({
   task: LaunchTask
   status: LaunchStatus
   next: boolean
+  /** May skip this open step. */
   canSkip: boolean
+  /** May restore this step once skipped. */
+  canUndo: boolean
   pending: boolean
   firstWinAction?: ReactNode
   onSkip: (skipped: boolean) => void
@@ -286,7 +292,7 @@ function LaunchPlanRow({
           <FormattedMessage id="onboarding.launch.skip" defaultMessage="Skip" />
         </Button>
       ) : null}
-      {task.isSkipped && canSkip ? (
+      {task.isSkipped && canUndo ? (
         <Button variant="ghost" size="sm" disabled={pending} onClick={() => onSkip(false)}>
           <FormattedMessage id="onboarding.launch.undoSkip" defaultMessage="Undo skip" />
         </Button>

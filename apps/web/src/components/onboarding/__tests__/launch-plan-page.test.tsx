@@ -174,6 +174,25 @@ describe('Launch plan page', () => {
     )
   })
 
+  it('lets a path step skipped before it joined the path be restored', async () => {
+    hoisted.status = {
+      ...status,
+      taskResolutions: {
+        product_feedback: { 'distribute-feedback': { resolution: 'dismissed', resolvedAt: AT } },
+      },
+    }
+    mount()
+    const share = row('Share your board link')
+    expect(within(share).getByText('Skipped')).toBeVisible()
+    expect(within(share).queryByRole('button', { name: /^Skip/ })).toBeNull()
+    fireEvent.click(within(share).getByRole('button', { name: 'Undo skip' }))
+    await waitFor(() =>
+      expect(hoisted.resolutions).toEqual([
+        { data: { taskId: 'distribute-feedback', resolution: null } },
+      ])
+    )
+  })
+
   it('stays open with every chore done until a customer acts', () => {
     hoisted.status = {
       ...status,
