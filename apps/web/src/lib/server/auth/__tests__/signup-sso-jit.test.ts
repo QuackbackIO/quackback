@@ -63,6 +63,8 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
 vi.mock('@/lib/server/domains/principals/bootstrap-admin', () => ({
   findHumanAdmin: (...a: unknown[]) => hoisted.findHumanAdmin(...a),
   isOpenToBootstrapClaim: (...a: unknown[]) => hoisted.isOpenToBootstrapClaim(...a),
+  // Setup still open; a finished install is covered against real Postgres.
+  isSetupOpenToClaim: async () => true,
 }))
 
 vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
@@ -102,6 +104,7 @@ function makeProvider(overrides: Partial<IdentityProvider> = {}): IdentityProvid
     autoCreateUsers: true,
     autoProvisionRole: 'member',
     claimMapping: null,
+    redirectStyle: 'current',
     showButton: false,
     logoKey: null,
     logoUrl: null,

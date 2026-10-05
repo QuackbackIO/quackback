@@ -33,7 +33,10 @@ vi.mock('@tanstack/react-start', () => ({
 }))
 
 vi.mock('@tanstack/react-start/server', () => ({
-  getRequestHeaders: () => ({ 'x-forwarded-for': '203.0.113.7' }),
+  // The client also writes the private client-IP header Better Auth trusts;
+  // nothing it forwards may carry that copy.
+  getRequestHeaders: () =>
+    new Headers({ 'x-forwarded-for': '9.9.9.9', 'x-quackback-client-ip': '9.9.9.9' }),
 }))
 
 const hoisted = vi.hoisted(() => ({
@@ -304,5 +307,32 @@ describe('widget-scoped sessions cannot change email', () => {
       /Widget sessions/
     )
     expect(hoisted.changeEmailEmailOTP).not.toHaveBeenCalled()
+  })
+})
+
+describe('headers forwarded to Better Auth', () => {
+  /** The client-IP header each Better Auth call received. */
+  const forwardedIps = (fn: ReturnType<typeof vi.fn>) =>
+    fn.mock.calls.map(([arg]) => (arg as { headers: Headers }).headers.get('x-quackback-client-ip'))
+
+  it('carry the resolved client address, never the client-supplied one', async () => {
+    accountIs(REAL)
+    await call(sendCurrentAddressCodeFn)
+
+    accountIs(REAL)
+    await call(requestEmailChangeFn, { email: 'new@example.com', currentCode: '123456' })
+
+    hoisted.findFirst.mockReset()
+    hoisted.findFirst.mockResolvedValueOnce(undefined)
+    await call(confirmEmailChangeFn, { email: REAL, code: '123456' })
+
+    for (const fn of [
+      hoisted.sendVerificationOTP,
+      hoisted.checkVerificationOTP,
+      hoisted.requestEmailChangeEmailOTP,
+      hoisted.changeEmailEmailOTP,
+    ]) {
+      expect(forwardedIps(fn)).toEqual(['203.0.113.7'])
+    }
   })
 })

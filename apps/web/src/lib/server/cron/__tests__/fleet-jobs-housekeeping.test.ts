@@ -5,7 +5,7 @@
  * next hourly tick, and a migrator-stage failure must fail the job (sweep
  * bodies already log-and-continue).
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const TWENTY_THREE_HOURS = 23 * 60 * 60 * 1000
 
@@ -122,6 +122,7 @@ function reject(label: string) {
 }
 
 beforeEach(() => {
+  vi.stubEnv('QUACKBACK_TENANCY', 'pooled')
   lockNow.ms = 1_700_000_000_000
   lockStore.clear()
   for (const fn of [
@@ -146,6 +147,10 @@ beforeEach(() => {
     fn.mockResolvedValue(fn === runReconcilePass ? emptyPass() : undefined)
   }
   enrolActiveWorkspaces.mockResolvedValue(0)
+})
+
+afterEach(() => {
+  vi.unstubAllEnvs()
 })
 
 describe('housekeeping', () => {

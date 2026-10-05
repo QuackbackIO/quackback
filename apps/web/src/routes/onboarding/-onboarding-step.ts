@@ -10,6 +10,9 @@ interface OnboardingStateInput {
    *  False on a workspace a control plane created; null when nobody asked,
    *  because there was no session to route. */
   setupOpenToClaim?: boolean | null
+  /** Why a caller who is not admin cannot claim setup: `provisioned`, or
+   *  `setupComplete` for a finished workspace with no human admin left. */
+  setupClosedReason?: 'provisioned' | 'setupComplete' | null
   setupState: SetupState | null
   principalRecord: { id: string; role: string } | null
   /** Cloud platform hostname, used to skip the in-product name/URL form
@@ -59,10 +62,11 @@ export function mayForwardCompletedSetup(input: {
 }
 
 /**
- * Whether this caller has nothing to finish here, for the two reasons that mean
- * the same thing to them: somebody else already owns setup, or this is a
+ * Whether this caller has nothing to finish here, for the reasons that mean
+ * the same thing to them: somebody else already owns setup, this is a
  * workspace a control plane created and its owner is recorded there rather than
- * decided by who arrives.
+ * decided by who arrives, or setup is already finished and nobody claims it by
+ * arriving.
  *
  * One predicate, exported, because two places need the answer — the router and
  * the terminal page it routes to — and a terminal page that disagrees with its
@@ -72,6 +76,7 @@ export function mayForwardCompletedSetup(input: {
 export function isSetupBlocked(state: OnboardingStateInput): boolean {
   if (isAdmin(state.principalRecord?.role)) return false
   if (state.setupClaimedByOther) return true
+  if (state.setupClosedReason === 'setupComplete') return true
   return state.setupOpenToClaim === false
 }
 

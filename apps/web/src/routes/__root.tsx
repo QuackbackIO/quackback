@@ -22,6 +22,7 @@ import { DefaultErrorPage } from '@/components/shared/error-page'
 import { DocumentHead, DocumentScripts } from '@/components/shared/document-head'
 import { OttHandler } from '@/components/shared/ott-handler'
 import { VisitorBeacon } from '@/components/shared/visitor-beacon'
+import { ProductAnalytics } from '@/components/shared/product-analytics'
 import { documentLocale, htmlLangDir } from '@/lib/shared/document-locale'
 import { normalizeLocale, DEFAULT_LOCALE, type SupportedLocale } from '@/lib/shared/i18n'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
@@ -45,6 +46,7 @@ export interface RouterContext {
   updateBannerDismissedVersion?: BootstrapData['updateBannerDismissedVersion']
   billingEnabled?: boolean
   cloudEnabled?: boolean
+  productAnalytics?: BootstrapData['productAnalytics']
 }
 
 // Paths that are allowed before onboarding is complete
@@ -151,6 +153,7 @@ function RootComponent() {
     <RootDocument>
       <OttHandler />
       <VisitorBeacon />
+      <ProductAnalytics />
       <Outlet />
     </RootDocument>
   )

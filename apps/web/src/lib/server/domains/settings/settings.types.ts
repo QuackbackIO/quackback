@@ -11,6 +11,7 @@ import type { OfficeHoursConfig } from '@/lib/shared/conversation/types'
 import type { WidgetTranslations } from '@/lib/shared/widget/translations'
 import type { StatusSettings } from '@/lib/shared/status-settings'
 import type { OidcSignInButton } from '@/lib/shared/oidc-sign-in-button'
+import type { OidcRedirectStyle } from '@/lib/shared/oidc-redirect'
 // Vite aliases this to a no-op stub for the client bundle (see
 // logger.client-stub.ts), so it is safe for this otherwise client-bundled
 // module to import it for the one server-side parse-failure log below.
@@ -126,6 +127,14 @@ export interface AuthConfig {
    * existing workspaces pre-migration aren't suddenly locked out.
    */
   twoFactor?: { required: boolean }
+  /**
+   * Which callback URL each OIDC provider sends as its redirect URI, keyed by
+   * the provider's `registrationId`. A provider with no entry is `current`; see
+   * `lib/shared/oidc-redirect.ts`. `legacy` is stamped by migration 0279 and the
+   * custom-oidc startup backfill for providers registered before the callback
+   * moved; an admin switch changes it and deleting the provider removes it.
+   */
+  oidcRedirectStyles?: Record<string, OidcRedirectStyle>
 }
 
 /**

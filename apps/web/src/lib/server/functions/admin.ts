@@ -18,6 +18,7 @@ import { db, invitation, principal, user, eq, and, gt } from '@/lib/server/db'
 import {
   findHumanAdmin,
   isOpenToBootstrapClaim,
+  isSetupOpenToClaim,
 } from '@/lib/server/domains/principals/bootstrap-admin'
 import { isAdmin } from '@/lib/shared/roles'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -615,6 +616,7 @@ export const checkOnboardingState = createServerFn({ method: 'GET' }).handler(as
       // caller to route. A boolean here would be a fact nobody checked, and the
       // wrong one is the one that lets someone through.
       setupOpenToClaim: null,
+      setupClosedReason: null,
       hasSettings: false,
       setupState: null,
       isOnboardingComplete: false,
@@ -637,6 +639,15 @@ export const checkOnboardingState = createServerFn({ method: 'GET' }).handler(as
   // is decided — so a caller who is not already one has nothing to finish here.
   // Reported, never acted on: the promoter decides again under its own lock.
   const setupOpenToClaim = await isOpenToBootstrapClaim(db)
+  // Why a caller who is not already admin cannot claim setup here, matching the
+  // claim screen and the promoter: provisioned first, then a finished setup.
+  // Kept apart from `setupOpenToClaim`, which the workspace step reads as
+  // "created by a control plane"; a finished self-hosted install is not that.
+  const setupClosedReason: 'provisioned' | 'setupComplete' | null = !setupOpenToClaim
+    ? 'provisioned'
+    : !(await isSetupOpenToClaim(db))
+      ? 'setupComplete'
+      : null
 
   // Get settings to check setup state
   const currentSettings = await getSettings()
@@ -653,6 +664,7 @@ export const checkOnboardingState = createServerFn({ method: 'GET' }).handler(as
       is_complete: isOnboardingComplete,
       claimed_by_other: setupClaimedByOther,
       open_to_claim: setupOpenToClaim,
+      closed_reason: setupClosedReason,
     },
     'check onboarding state'
   )
@@ -666,6 +678,7 @@ export const checkOnboardingState = createServerFn({ method: 'GET' }).handler(as
       : null,
     setupClaimedByOther,
     setupOpenToClaim,
+    setupClosedReason,
     hasSettings: !!currentSettings,
     setupState,
     isOnboardingComplete,

@@ -92,6 +92,12 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   inArray: vi.fn(),
 }))
 
+const mockCancelPendingAutoTranslations = vi.fn(async (..._args: unknown[]) => {})
+vi.mock('../help-center-translate-jobs', () => ({
+  HELP_CENTER_TRANSLATE_QUEUE: 'help-center-translate',
+  cancelPendingAutoTranslations: (...args: unknown[]) => mockCancelPendingAutoTranslations(...args),
+}))
+
 vi.mock('@/lib/server/markdown-tiptap', () => ({
   markdownToTiptapJson: vi.fn(() => ({ type: 'doc', content: [] })),
   contentJsonToMarkdown: (_json: unknown, fallback: string) => fallback,

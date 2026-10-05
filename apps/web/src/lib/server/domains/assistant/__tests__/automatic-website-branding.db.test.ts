@@ -343,7 +343,7 @@ describe('automatic website branding (real Postgres)', () => {
     expect(await getAutomaticWebsiteBrandingStatus(actor)).toMatchObject({ status: 'eligible' })
   })
 
-  it('never looks up a workspace marked as existing by migration 0293', async () => {
+  it('never looks up a workspace marked as existing by migration 0294', async () => {
     await setRow({
       metadata: JSON.stringify({
         brandingLookup: {

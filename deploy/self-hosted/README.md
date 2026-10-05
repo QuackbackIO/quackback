@@ -13,6 +13,7 @@ Deploy Quackback on your own infrastructure with full control over your data.
 - [Scaling Out](#scaling-out)
 - [Enterprise Edition](#enterprise-edition)
 - [Upgrading](#upgrading)
+  - [Upgrading from 0.13](#upgrading-from-013)
 - [Troubleshooting](#troubleshooting)
 
 ---
@@ -28,7 +29,7 @@ cd quackback
 
 # Copy and configure environment
 cp .env.prod.example .env
-# Edit .env — fill in every value (generate secrets with: openssl rand -base64 32)
+# Edit .env: fill in every value (generate secrets with: openssl rand -base64 32)
 
 # Start the application (app + Postgres + Silo object storage)
 docker compose -f docker-compose.prod.yml up -d
@@ -93,15 +94,17 @@ docker pull ghcr.io/quackbackio/quackback:latest-enterprise
 
 ### Optional
 
-| Variable                           | Description                                                                                                                                                                                                                                                | Default      |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
-| `PORT`                             | Server port                                                                                                                                                                                                                                                | `3000`       |
-| `NODE_ENV`                         | Environment                                                                                                                                                                                                                                                | `production` |
-| `QUACKBACK_ROLE`                   | Process role: `all`, `web`, or `worker` (see [Scaling Out](#scaling-out))                                                                                                                                                                                  | `all`        |
-| `SKIP_MIGRATIONS`                  | Skip the startup migration step (run migrations out-of-band instead)                                                                                                                                                                                       | `false`      |
-| `EMAIL_SES_ACCESS_KEY_ID`          | Amazon SES sending key id; needs `EMAIL_SES_SECRET_ACCESS_KEY` and `EMAIL_SES_REGION` too                                                                                                                                                                  | -            |
-| `EMAIL_SES_IDENTITY_ACCESS_KEY_ID` | Separate SES key id used only to verify a customer-owned sending domain; needs `EMAIL_SES_IDENTITY_SECRET_ACCESS_KEY`. Grant `ses:CreateEmailIdentity`, `ses:GetEmailIdentity`, `ses:PutEmailIdentityMailFromAttributes` and NOT `ses:DeleteEmailIdentity` | -            |
-| `EMAIL_FROM`                       | From address for emails                                                                                                                                                                                                                                    | -            |
+| Variable                           | Description                                                                                                                                                                                                                                                              | Default      |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------ |
+| `PORT`                             | Server port                                                                                                                                                                                                                                                              | `3000`       |
+| `NODE_ENV`                         | Environment                                                                                                                                                                                                                                                              | `production` |
+| `QUACKBACK_ROLE`                   | Process role: `all`, `web`, or `worker` (see [Scaling Out](#scaling-out))                                                                                                                                                                                                | `all`        |
+| `SKIP_MIGRATIONS`                  | Skip the startup migration step (run migrations out-of-band instead)                                                                                                                                                                                                     | `false`      |
+| `EMAIL_SMTP_HOST`                  | SMTP server for outbound email; with `EMAIL_SMTP_PORT`, `EMAIL_SMTP_USER`, `EMAIL_SMTP_PASS`                                                                                                                                                                             | -            |
+| `EMAIL_RESEND_API_KEY`             | Resend API key for outbound email (`RESEND_API_KEY` also works). Also fetches inbound mail bodies when receiving through Resend                                                                                                                                          | -            |
+| `EMAIL_SES_ACCESS_KEY_ID`          | Amazon SES sending key id; needs `EMAIL_SES_SECRET_ACCESS_KEY` and `EMAIL_SES_REGION` too                                                                                                                                                                                | -            |
+| `EMAIL_SES_IDENTITY_ACCESS_KEY_ID` | Separate SES key id used only to verify a customer-owned sending domain; needs `EMAIL_SES_IDENTITY_SECRET_ACCESS_KEY`. Grant `ses:CreateEmailIdentity`, `ses:GetEmailIdentity`, `ses:PutEmailIdentityMailFromAttributes` and NOT `ses:DeleteEmailIdentity`               | -            |
+| `EMAIL_FROM`                       | From address for emails. Configure exactly one sending provider (SMTP, Amazon SES or Resend): with more than one set, the app refuses to start and names the variables. A Resend key kept only for inbound mail beside SMTP or SES needs `EMAIL_INBOUND_PROVIDER=resend` | -            |
 
 ### Integrations (Optional)
 
@@ -243,6 +246,14 @@ server {
 }
 ```
 
+This config sets `X-Real-IP` to the address nginx saw and overwrites any copy the client sent, so you can tell Quackback to read the client IP from it instead of counting hops:
+
+```bash
+TRUSTED_CLIENT_IP_HEADER=x-real-ip
+```
+
+Use `TRUSTED_CLIENT_IP_HEADER` when your proxy sets one authoritative client-IP header (`X-Real-IP` as above, `CF-Connecting-IP` behind Cloudflare), especially when requests pass through more proxies than you can count. Use `TRUSTED_PROXY_HOPS` when you know the exact number of proxies that append to `X-Forwarded-For`. Only name a header your proxy always sets or overwrites, and keep the app port unreachable except through the proxy; a header passed through from clients lets them spoof their IP.
+
 Quackback accepts MP4 and WebM feedback videos up to 100 MB. If another proxy,
 load balancer, or hosting platform sits in front of Quackback, set its request
 body limit above 100 MB as well. Image uploads remain limited to 5 MB.
@@ -338,8 +349,9 @@ With a single replica, migrations run automatically on startup. With multiple re
 docker run --rm \
   --network <your-compose-network> \
   -e DATABASE_URL="postgresql://postgres:password@postgres:5432/quackback" \
+  --entrypoint bun \
   ghcr.io/quackbackio/quackback:latest \
-  bun /app/migrate.mjs
+  /app/migrate.mjs
 
 # Then roll out the new image to web and worker replicas
 ```
@@ -387,9 +399,49 @@ docker compose -f docker-compose.prod.yml exec postgres \
 git pull
 docker compose -f docker-compose.prod.yml pull
 
-# 3. Restart — migrations run automatically on startup
+# 3. Restart: migrations run automatically on startup
 docker compose -f docker-compose.prod.yml up -d
 ```
+
+#### Upgrading from 0.13
+
+There is no rolling upgrade and no downgrade: new migrations are not reversible, so rollback means restoring your backup. Nothing below starts the new stack until step 5, so finish steps 1 to 4 first.
+
+1. **Stop the old stack and back up.** With your existing 0.13 files still in place, stop the app so nothing writes. Do not use `-v`; the volumes must stay:
+
+   ```bash
+   docker compose -f docker-compose.prod.yml stop app
+   ```
+
+   Then take a Postgres dump and an offline snapshot of object storage by following [Migrating the bundled MinIO to Silo](#migrating-the-bundled-minio-to-silo) (it also covers the MinIO to Silo change). When both are saved, run `docker compose -f docker-compose.prod.yml down` (still without `-v`). Never run the old and new versions against the same database.
+
+2. **Update the files.** Pull the new source with `git pull` (or download the new `docker-compose.prod.yml`, `.env.prod.example` and the `docker/postgres/` directory), set `QUACKBACK_TAG` in `.env`, and make these `.env` changes. Do this whole step before step 5: some of these settings are checked only after the migrations have run.
+   - If your `.env` has a `REDIS_URL` line, delete it. Redis and Dragonfly are no longer used. The 0.13 compose file set it for you, so most installs have none.
+   - If you set `MINIO_IMAGE_TAG` or `MC_IMAGE_TAG`, remove them.
+   - Set `SECRET_KEY` to the value your 0.13 instance used. The compose file refuses to start without it.
+   - Set `TRUSTED_PROXY_HOPS`. Behind nginx, Caddy, Traefik or a Cloudflare tunnel, set it to `1` (`2` for a CDN plus a proxy). Left at `0` behind a proxy, every client shares the proxy's IP and one rate-limit bucket, and the app logs a warning. Keep `0` if clients connect directly. If your proxy sets a single client-IP header such as `X-Real-IP`, you can set `TRUSTED_CLIENT_IP_HEADER` instead. See [Reverse Proxy](#reverse-proxy).
+   - Keep exactly one email sending provider: `EMAIL_SMTP_HOST`, the `EMAIL_SES_*` keys or `EMAIL_RESEND_API_KEY`. With more than one set, the app will not start; it stops after the migrations have run, so check this now. If a Resend key is there only to receive inbound mail while SMTP or SES sends, add `EMAIL_INBOUND_PROVIDER=resend`.
+
+3. **Check your database.** `DATABASE_URL` must be a direct or session-mode connection, not a transaction pooler (for example a pooler on port 6543), because realtime uses `LISTEN`/`NOTIFY`. Use PostgreSQL 14 or newer with pgvector 0.5 or newer and the `pg_trgm` extension.
+
+4. **Pull the new image.**
+
+   ```bash
+   docker compose -f docker-compose.prod.yml pull
+   ```
+
+5. **Start once.** The first start runs many migrations and can take several minutes. Do not interrupt it; wait for the app healthcheck to pass.
+
+   ```bash
+   docker compose -f docker-compose.prod.yml up -d --remove-orphans
+   ```
+
+6. **Remove the unused Dragonfly volume** once the app is healthy:
+
+   ```bash
+   docker volume ls | grep dragonfly   # the project name defaults to the directory name
+   docker volume rm <project>_dragonfly_data
+   ```
 
 #### Migrating the bundled MinIO to Silo
 
@@ -409,7 +461,8 @@ docker image inspect "$(cat "$SILO_MIGRATION_BACKUP/image-id.txt")" \
 docker image save "$(cat "$SILO_MIGRATION_BACKUP/image-id.txt")" \
   > "$SILO_MIGRATION_BACKUP/server-image.tar"
 
-# Keep PostgreSQL running; stop writers before backing up both datastores.
+# Keep PostgreSQL running; stop writers before backing up both datastores
+# (stopping an already-stopped service is harmless).
 docker compose -f docker-compose.prod.yml stop app minio
 docker compose -f docker-compose.prod.yml exec -T postgres \
   sh -c 'exec pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' \
@@ -420,9 +473,28 @@ tar -tf "$SILO_MIGRATION_BACKUP/data.tar" > /dev/null
 
 Keep this backup private: it includes credentials and IAM state. Rehearse restoring the archive into a fresh volume with the recorded old image and saved configuration before proceeding. Preserve file ownership and any external encryption keys. Object-format compatibility does not guarantee that old software understands new IAM or bucket metadata; see [Silo migration and recovery guidance](https://silo.pgsty.com/compatibility/migration/#rollback).
 
-After the backup and restore check, follow the usual pull/start steps above. Confirm the `minio` service is healthy and `minio-init` exits successfully, then download an existing attachment and exercise a new upload through Quackback. The production bucket should still deny anonymous direct downloads. Keep the backup and previous image until these checks pass.
+After the backup and restore check, continue with the remaining steps of [Upgrading from 0.13](#upgrading-from-013), or the usual pull/start steps above if you are not coming from 0.13. Confirm the `minio` service is healthy and `minio-init` exits successfully, then download an existing attachment and exercise a new upload through Quackback. The production bucket should still deny anonymous direct downloads. Keep the backup and previous image until these checks pass.
 
-If recovery is needed, stop application writes and restore the pre-upgrade snapshot into a fresh volume using the saved configuration and old image. Account for uploads and credential changes made after the snapshot. Avoid an in-place image downgrade, running old and new servers against the same volume, or `docker compose down -v`, which deletes the data volumes.
+If recovery is needed, stop application writes and restore the pre-upgrade snapshot into a fresh volume using the saved configuration and old image. Account for uploads and credential changes made after the snapshot. Avoid an in-place image downgrade or running old and new servers against the same volume. This sequence restores both the database and storage from the backup above; it deletes the current volumes, so only run it when you mean to roll back:
+
+```bash
+docker compose -f docker-compose.prod.yml down
+docker volume rm <project>_postgres_data <project>_minio_data
+cp "$SILO_MIGRATION_BACKUP/compose-before.yml" docker-compose.prod.yml
+cp "$SILO_MIGRATION_BACKUP/environment.env" .env
+# Pin the release you are returning to. A restored QUACKBACK_TAG=latest would
+# start the newer image you already pulled and migrate the database forward again.
+sed -i 's/^QUACKBACK_TAG=.*/QUACKBACK_TAG=0.13.2/' .env
+docker image load < "$SILO_MIGRATION_BACKUP/server-image.tar"
+docker compose -f docker-compose.prod.yml create
+docker compose -f docker-compose.prod.yml up -d --wait postgres
+# "already exists" errors for the vector and pg_cron extensions are harmless.
+docker compose -f docker-compose.prod.yml exec -T postgres \
+  sh -c 'pg_restore --no-owner -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+  < "$SILO_MIGRATION_BACKUP/database.dump"
+docker cp - quackback-minio:/data < "$SILO_MIGRATION_BACKUP/data.tar"
+docker compose -f docker-compose.prod.yml up -d
+```
 
 ### Docker Run
 
@@ -500,7 +572,9 @@ GRANT ALL PRIVILEGES ON DATABASE quackback TO your_user;
 
 ### Email Not Sending
 
-Verify Resend configuration:
+Check the startup log. With no provider configured, emails are logged instead of sent. With more than one configured (SMTP, Amazon SES and Resend), the app exits at startup with an error naming the variables in conflict: remove all but one.
+
+For Resend, test the API key directly:
 
 ```bash
 # Test API key
@@ -527,7 +601,7 @@ curl -X POST 'https://api.resend.com/emails' \
 Deploys Quackback + PostgreSQL (with pgvector) + S3-compatible storage bucket to Railway. After deploying:
 
 1. **Find your OTP code**: If email is not configured, login codes appear in Railway's deployment logs
-2. **Configure email** (recommended): Add SMTP or Amazon SES credentials in the service's environment variables
+2. **Configure email** (recommended): Add SMTP, Amazon SES or Resend credentials (one of them) in the service's environment variables
 3. **Custom domain**: Add a custom domain in Railway, then update the `BASE_URL` environment variable to match
 
 File uploads (logos, avatars, changelog images) work out of the box via the included Railway storage bucket.

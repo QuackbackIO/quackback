@@ -23,6 +23,7 @@ import {
   normalizeTokenAuthInput,
 } from '@/lib/shared/oidc-request'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
+import type { OidcRedirectStyle } from '@/lib/shared/oidc-redirect'
 import { IDP_KIND_NAMES, inferIdpKind, type IdpKind } from '../idp-shortcuts'
 import { ConnectionOptions } from './connection-options'
 import {
@@ -114,6 +115,8 @@ export function ConnectionFields({
   draft,
   onChange,
   registrationId,
+  redirectStyle,
+  redirectAction,
   baseUrl,
   disabled,
   existing,
@@ -122,6 +125,10 @@ export function ConnectionFields({
   draft: ConnectionDraft
   onChange: (next: ConnectionDraft) => void
   registrationId: string
+  /** Which callback URL this provider sends; the callout shows exactly that. */
+  redirectStyle: OidcRedirectStyle
+  /** Shown under the redirect URI, e.g. the switch off the legacy URL. */
+  redirectAction?: React.ReactNode
   baseUrl: string | undefined
   disabled: boolean
   /** True on the detail page: the provider is shown as a summary with a Change
@@ -175,7 +182,9 @@ export function ConnectionFields({
 
       {/* Register this first, then read the credentials the IdP hands back
           into the two fields below it. */}
-      <RedirectUriCallout uri={redirectUriFor(baseUrl, registrationId)} />
+      <RedirectUriCallout uri={redirectUriFor(baseUrl, registrationId, redirectStyle)}>
+        {redirectAction}
+      </RedirectUriCallout>
 
       <div className="space-y-2">
         <Label htmlFor="idp-client-id">Client ID</Label>
