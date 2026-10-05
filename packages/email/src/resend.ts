@@ -5,7 +5,7 @@
  * the request it builds is the thing worth testing, and a client handed in as a
  * parameter lets that be read without a network.
  */
-import type { CreateEmailOptions, CreateEmailResponse } from 'resend'
+import type { CreateEmailOptions, CreateEmailRequestOptions, CreateEmailResponse } from 'resend'
 import type { EmailAttachment } from './attachment'
 
 export interface ResendSendRequest {
@@ -18,11 +18,18 @@ export interface ResendSendRequest {
   /** Threading and any extra headers, already in header form. */
   headers?: Record<string, string>
   attachments?: EmailAttachment[]
+  /** Sent as the Idempotency-Key header, so a retried send is delivered once. */
+  idempotencyKey?: string
 }
 
 /** The slice of the SDK client this rung uses. */
 export interface ResendSendClient {
-  emails: { send(payload: CreateEmailOptions): Promise<CreateEmailResponse> }
+  emails: {
+    send(
+      payload: CreateEmailOptions,
+      options?: CreateEmailRequestOptions
+    ): Promise<CreateEmailResponse>
+  }
 }
 
 export class ResendEmailError extends Error {
@@ -45,15 +52,29 @@ export class ResendEmailError extends Error {
  * timeout and a server error are about the moment; every other status is about
  * the message and a second attempt gets the same answer.
  */
-function statusIsRetryable(status: number | null): boolean {
+function isRetryable(status: number | null, name: string | null): boolean {
+  // Another attempt with the same idempotency key is still in flight. Trying
+  // again later returns that attempt's outcome, so this is about the moment.
+  if (name === 'concurrent_idempotent_requests') return true
   if (status === null) return true
   if (status === 408 || status === 429) return true
   return status >= 500
 }
 
+/**
+ * Resend assigns the wire Message-ID itself and reports only its own email id,
+ * so a Message-ID of ours is not sent: it would claim an id the recipient may
+ * never see. In-Reply-To and References are ours to set and keep the thread.
+ */
+function withoutMessageId(headers: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(headers).filter(([name]) => name.toLowerCase() !== 'message-id')
+  )
+}
+
 /** The SDK payload for one message. Optional parts are omitted, not nulled. */
 export function buildResendPayload(request: ResendSendRequest): CreateEmailOptions {
-  const headers = request.headers ?? {}
+  const headers = withoutMessageId(request.headers ?? {})
   return {
     from: request.from,
     to: request.to,
@@ -85,7 +106,10 @@ export async function sendViaResend(
 ): Promise<{ id: string | null }> {
   let response: CreateEmailResponse
   try {
-    response = await client.emails.send(buildResendPayload(request))
+    response = await client.emails.send(
+      buildResendPayload(request),
+      request.idempotencyKey ? { idempotencyKey: request.idempotencyKey } : undefined
+    )
   } catch (error) {
     throw new ResendEmailError(
       `Resend email send failed: ${error instanceof Error ? error.message : 'request failed'}`,
@@ -100,7 +124,7 @@ export async function sendViaResend(
       `Resend email send failed: ${message} (${name})`,
       statusCode,
       name,
-      statusIsRetryable(statusCode)
+      isRetryable(statusCode, name)
     )
   }
   return { id: response.data?.id ?? null }

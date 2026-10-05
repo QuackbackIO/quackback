@@ -19,6 +19,7 @@ import { createLogger } from '@quackback/logger'
 import { isSyntheticAnonEmail } from './anon'
 import { applyDisplayName, sendViaSes } from './ses'
 import { sendViaResend } from './resend'
+import { currentEmailIdempotencyKey } from './idempotency'
 import { EmailConfigError, resendApiKey, resolveEmailProvider } from './provider'
 import type { EmailProvider } from './provider'
 export {
@@ -28,6 +29,7 @@ export {
 } from './provider'
 export type { EmailProvider } from './provider'
 export { ResendEmailError } from './resend'
+export { withEmailIdempotencyKey } from './idempotency'
 import type { EmailAttachment } from './attachment'
 export type { EmailAttachment } from './attachment'
 export { MAX_EMAIL_ATTACHMENT_BYTES } from './attachment'
@@ -122,7 +124,7 @@ export type EmailResult = {
    * Who owns the outbound `Message-ID` for this send, in three states.
    *
    * - **absent** — we set it, so the caller's own minted id is what went on the
-   *   wire and is what a reply will quote. Every rung but SES.
+   *   wire and is what a reply will quote. SMTP.
    * - **a string** — the transport generated the id and told us which one, in
    *   whatever form the transport reports it. Store THIS, not the minted one:
    *   the minted one was never sent. It is not necessarily the literal token a
@@ -133,6 +135,7 @@ export type EmailResult = {
    *   There is nothing to store, and no reply can be matched back by
    *   `Message-ID`. Callers must not fall back to their minted id here; it would
    *   record an id that exists nowhere and can only ever produce a miss.
+   *   Resend: its send response names only its own email id.
    */
   messageId?: string | null
 }
@@ -438,9 +441,12 @@ async function dispatch(
   }
 
   if (provider === 'resend') {
-    // Our Message-ID goes out as a header, as on SMTP, so the minted id is the
-    // one a reply quotes. The plus-addressed Reply-To carries the reply home
-    // regardless, and In-Reply-To and References keep the client threading.
+    // Resend assigns the wire Message-ID and the send response names only its
+    // own email id, so the result reports the id as the transport's and
+    // undisclosed (null): nothing records the minted id as one a reply could
+    // quote. The plus-addressed Reply-To carries the reply home, and
+    // In-Reply-To and References keep the recipient's client threading.
+    const idempotencyKey = currentEmailIdempotencyKey()
     try {
       const result = await sendViaResend(
         {
@@ -454,6 +460,7 @@ async function dispatch(
           ...(options.attachments && options.attachments.length > 0
             ? { attachments: options.attachments }
             : {}),
+          ...(idempotencyKey ? { idempotencyKey } : {}),
         },
         getResendClient()
       )
@@ -465,7 +472,7 @@ async function dispatch(
         to: options.to,
         subject: options.subject,
         status: 'sent',
-        messageId: options.messageId ?? null,
+        messageId: null,
         providerMessageId: result.id,
         billable,
         ...entityIds(options),
@@ -485,7 +492,7 @@ async function dispatch(
       })
       throw error
     }
-    return { sent: true }
+    return { sent: true, messageId: null }
   }
 
   // SMTP is the last rung: console, SES and Resend all returned above.

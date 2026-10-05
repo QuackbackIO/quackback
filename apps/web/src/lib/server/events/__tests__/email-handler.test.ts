@@ -43,6 +43,7 @@ import { emailHook } from '../handlers/email'
 // moment the shape changes, which is how the classification regression this
 // guards against went unnoticed.
 import { SesEmailError } from '@quackback/email/ses'
+import { currentEmailIdempotencyKey } from '@quackback/email/idempotency'
 import {
   sendStatusChangeEmail,
   sendNewCommentEmail,
@@ -107,6 +108,39 @@ describe('emailHook', () => {
   beforeEach(() => {
     emailBudgetAvailable.mockReset()
     emailBudgetAvailable.mockResolvedValue(true)
+  })
+
+  describe('idempotency', () => {
+    // The key a provider dedupes on, read from inside the send exactly as the
+    // transport reads it.
+    async function keyFor(jobId: string | undefined): Promise<string | undefined> {
+      let seen: string | undefined
+      mockStatusChangeEmail.mockImplementationOnce(async () => {
+        seen = currentEmailIdempotencyKey()
+        return { sent: true }
+      })
+      await emailHook.run(
+        statusChangedEvent,
+        baseTarget,
+        { ...baseConfig, previousStatus: 'open', newStatus: 'in_progress' },
+        jobId === undefined ? undefined : { jobId }
+      )
+      return seen
+    }
+
+    it('sends the same key on every attempt of one hook job, and a new one per job', async () => {
+      const first = await keyFor('evt-1:email:user@example.com')
+      const retry = await keyFor('evt-1:email:user@example.com')
+      const other = await keyFor('evt-2:email:user@example.com')
+      expect(first).toMatch(/^qb-[0-9a-f]{64}$/)
+      expect(retry).toBe(first)
+      expect(other).toMatch(/^qb-[0-9a-f]{64}$/)
+      expect(other).not.toBe(first)
+    })
+
+    it('sends no key for a run with no job id', async () => {
+      expect(await keyFor(undefined)).toBeUndefined()
+    })
   })
 
   describe('when email is configured (sent: true)', () => {

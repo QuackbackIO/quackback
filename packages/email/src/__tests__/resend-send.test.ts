@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { getEmailProvider, sendRawEmail, sendStatusChangeEmail } from '../index'
 import { ResendEmailError } from '../resend'
+import { withEmailIdempotencyKey } from '../idempotency'
 import { sendingAs } from './brands'
 
 /**
@@ -90,7 +91,6 @@ describe('resend sending', () => {
       replyTo: 'reply+abc@in.acme.test',
       headers: {
         'Auto-Submitted': 'auto-replied',
-        'Message-ID': '<minted@acme.test>',
         'In-Reply-To': '<theirs@example.test>',
         References: '<first@example.test> <theirs@example.test>',
       },
@@ -100,7 +100,11 @@ describe('resend sending', () => {
     expect(payload.attachments[0].contentType).toBe('text/plain')
     expect(Buffer.isBuffer(payload.attachments[0].content)).toBe(true)
     expect(payload.attachments[0].content.toString('utf8')).toBe('file body')
-    expect(result).toEqual({ sent: true })
+    // Resend assigns the wire Message-ID itself, so ours is not sent and the
+    // result says the id is the transport's and undisclosed: nothing records
+    // the minted id as one a reply could quote.
+    expect(payload.headers).not.toHaveProperty('Message-ID')
+    expect(result).toEqual({ sent: true, messageId: null })
     expect(resendKeys.at(-1)).toBe('re_test')
   })
 
@@ -113,6 +117,8 @@ describe('resend sending', () => {
       html: '<p>x</p>',
     })
     const payload = resendSend.mock.calls[0][0]
+    // Outside an idempotency scope there is no key to send.
+    expect(resendSend.mock.calls[0][1]?.idempotencyKey).toBeUndefined()
     expect(payload).not.toHaveProperty('replyTo')
     expect(payload).not.toHaveProperty('headers')
     expect(payload).not.toHaveProperty('attachments')
@@ -135,6 +141,54 @@ describe('resend sending', () => {
     expect(payload.html).toMatch(/Dark mode/)
     expect(payload.text).toMatch(/Dark mode/)
     expect(payload).not.toHaveProperty('react')
+  })
+
+  it('sends one idempotency key for every attempt of one send, and a new one per send', async () => {
+    process.env.EMAIL_RESEND_API_KEY = 're_test'
+    const send = () =>
+      sendRawEmail({
+        from: sendingAs('a@acme.test'),
+        to: 'c@example.test',
+        subject: 's',
+        html: '<p>x</p>',
+      })
+    resendSend.mockResolvedValueOnce({
+      data: null,
+      error: { name: 'internal_server_error', message: 'later', statusCode: 500 },
+      headers: null,
+    })
+    // One logical send, retried inside its scope as a caller's retry loop does.
+    await withEmailIdempotencyKey('send-1', async () => {
+      await send().catch(() => undefined)
+      await send()
+    })
+    await withEmailIdempotencyKey('send-2', send)
+
+    const keys = resendSend.mock.calls.map((call) => call[1]?.idempotencyKey)
+    expect(keys).toHaveLength(3)
+    expect(keys[0]).toMatch(/^qb-[0-9a-f]{64}$/)
+    expect(keys[1]).toBe(keys[0])
+    expect(keys[2]).toMatch(/^qb-[0-9a-f]{64}$/)
+    expect(keys[2]).not.toBe(keys[0])
+    // The raw scope value never reaches the provider.
+    expect(keys[0]).not.toContain('send-1')
+  })
+
+  it('retries a concurrent request on the same key rather than failing it', async () => {
+    process.env.EMAIL_RESEND_API_KEY = 're_test'
+    resendSend.mockResolvedValueOnce({
+      data: null,
+      error: { name: 'concurrent_idempotent_requests', message: 'in flight', statusCode: 409 },
+      headers: null,
+    })
+    await expect(
+      sendRawEmail({
+        from: sendingAs('a@acme.test'),
+        to: 'c@example.test',
+        subject: 's',
+        html: '<p>x</p>',
+      })
+    ).rejects.toMatchObject({ retryable: true, status: 409 })
   })
 
   it('throws a permanent error for a rejected message', async () => {

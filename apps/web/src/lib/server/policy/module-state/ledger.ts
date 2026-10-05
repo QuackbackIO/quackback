@@ -536,6 +536,18 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'passed per call, so it holds nothing of any workspace.',
   },
   {
+    file: 'packages/email/src/idempotency.ts',
+    name: 'scope',
+    category: 'process-lifetime',
+    reason:
+      "The AsyncLocalStorage instance carrying one logical send's idempotency key. " +
+      'withEmailIdempotencyKey opens a new store per send (a hook job id, or a fresh uuid around ' +
+      "the conversation retry loop), so concurrent workspaces and sends never read each other's " +
+      'key, and the instance itself holds no value outside those contexts. Only dispatch reads it, ' +
+      'at send time; work armed inside a send that later sends mail of its own would inherit the ' +
+      'key, and nothing inside either scope does.',
+  },
+  {
     file: 'packages/email/src/ses.ts',
     name: 'cachedClient',
     category: 'fleet-wide',
