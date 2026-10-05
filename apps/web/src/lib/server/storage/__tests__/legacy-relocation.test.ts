@@ -174,6 +174,7 @@ const {
   MAX_SINGLE_COPY_BYTES,
   RELOCATION_FIRST_ATTEMPT_MS,
   RELOCATION_RETRY_MS,
+  RECONCILE_GRACE_MS,
 } = await import('../legacy-relocation')
 const { withWorkspace } = await import('@/lib/server/__tests__/workspace-scope')
 const { openLegacyRelocationBucket, LegacyRelocationRefused } = await import('../s3')
@@ -207,7 +208,7 @@ describe('single-workspace relocation', () => {
 
     const outcome = await runLegacyStorageRelocation()
 
-    expect(outcome.status).toBe('done')
+    expect(outcome.status).toBe('reconciling')
     expect(bucket.get(`${NS}logos/brand.png`)).toMatchObject({
       body: 'logo-bytes',
       contentType: 'image/png',
@@ -244,7 +245,7 @@ describe('single-workspace relocation', () => {
     const outcome = await runLegacyStorageRelocation()
 
     for (const key of keys) expect(bucket.get(`${NS}${key}`)?.body).toBe(key)
-    expect(outcome.status === 'done' && outcome.marker.copied).toBe(10)
+    expect('marker' in outcome && outcome.marker.copied).toBe(10)
   })
 
   it('skips a destination that already holds the same object', async () => {
@@ -254,7 +255,7 @@ describe('single-workspace relocation', () => {
     const outcome = await runLegacyStorageRelocation()
 
     expect(copies()).toHaveLength(0)
-    expect(outcome.status === 'done' && outcome.marker.alreadyPresent).toBe(1)
+    expect('marker' in outcome && outcome.marker.alreadyPresent).toBe(1)
   })
 
   it('never overwrites a namespaced object that differs from the original', async () => {
@@ -265,7 +266,7 @@ describe('single-workspace relocation', () => {
 
     expect(copies()).toHaveLength(0)
     expect(bucket.get(`${NS}logos/brand.png`)?.body).toBe('written-by-new-build')
-    expect(outcome.status === 'done' && outcome.marker.conflicting).toBe(1)
+    expect('marker' in outcome && outcome.marker.conflicting).toBe(1)
   })
 
   it('never overwrites a destination written after the namespace was listed', async () => {
@@ -283,7 +284,7 @@ describe('single-workspace relocation', () => {
 
     expect(bucket.get(`${NS}logos/brand.png`)?.body).toBe('written-by-new-build')
     expect(copies()).toHaveLength(0)
-    expect(outcome.status === 'done' && outcome.marker.conflicting).toBe(1)
+    expect('marker' in outcome && outcome.marker.conflicting).toBe(1)
   })
 
   it('refuses atomically when the destination appears between the re-check and the copy', async () => {
@@ -298,7 +299,7 @@ describe('single-workspace relocation', () => {
 
     expect(copies()[0]?.input.IfNoneMatch).toBe('*')
     expect(bucket.get(`${NS}logos/brand.png`)?.body).toBe('written-by-new-build')
-    expect(outcome.status === 'done' && outcome.marker).toMatchObject({ conflicting: 1, copied: 0 })
+    expect('marker' in outcome && outcome.marker).toMatchObject({ conflicting: 1, copied: 0 })
   })
 
   it('copies without the condition on a provider that rejects it', async () => {
@@ -310,7 +311,7 @@ describe('single-workspace relocation', () => {
 
     expect(bucket.get(`${NS}logos/a.png`)?.body).toBe('a')
     expect(bucket.get(`${NS}logos/b.png`)?.body).toBe('b')
-    expect(outcome.status === 'done' && outcome.marker.copied).toBe(2)
+    expect('marker' in outcome && outcome.marker.copied).toBe(2)
   })
 
   it('leaves objects over the single-copy limit for the manual command', async () => {
@@ -320,34 +321,54 @@ describe('single-workspace relocation', () => {
     const outcome = await runLegacyStorageRelocation()
 
     expect(copies().map((c) => c.input.Key)).toEqual([`${NS}logos/small.png`])
-    expect(outcome.status === 'done' && outcome.marker.oversized).toBe(1)
+    expect('marker' in outcome && outcome.marker.oversized).toBe(1)
   })
 
-  it('records completion with counts, and a second run touches nothing', async () => {
+  it('records the first complete pass, reconciles for the grace period, then stops', async () => {
+    const t0 = Date.parse('2026-10-05T12:00:00Z')
     put('logos/brand.png', 'logo')
 
-    await runLegacyStorageRelocation()
+    const first = await runLegacyStorageRelocation(() => t0)
+    expect(first.status).toBe('reconciling')
     expect(kv.get(LEGACY_RELOCATION_MARKER_KEY)).toMatchObject({
       copied: 1,
       bareObjects: 1,
       failed: 0,
       namespace: NS,
-      finishedAt: expect.any(String),
+      firstCompletedAt: new Date(t0).toISOString(),
+      lateCopies: 0,
+    })
+    expect(kv.get(LEGACY_RELOCATION_MARKER_KEY)).not.toHaveProperty('finishedAt')
+
+    // An older replica still serving during a rolling upgrade writes a bare key.
+    put('avatars/late.png', 'late')
+    sent.length = 0
+    const later = await runLegacyStorageRelocation(() => t0 + RECONCILE_GRACE_MS / 2)
+
+    expect(later.status).toBe('reconciling')
+    expect(copies().map((c) => c.input.Key)).toEqual([`${NS}avatars/late.png`])
+    expect(kv.get(LEGACY_RELOCATION_MARKER_KEY)).toMatchObject({ copied: 1, lateCopies: 1 })
+
+    const last = await runLegacyStorageRelocation(() => t0 + RECONCILE_GRACE_MS)
+    expect(last.status).toBe('done')
+    expect(kv.get(LEGACY_RELOCATION_MARKER_KEY)).toMatchObject({
+      finishedAt: new Date(t0 + RECONCILE_GRACE_MS).toISOString(),
     })
 
     sent.length = 0
-    put('avatars/after-marker.png', 'late')
-    const second = await runLegacyStorageRelocation()
+    put('avatars/after-final.png', 'too late')
+    const after = await runLegacyStorageRelocation(() => t0 + 2 * RECONCILE_GRACE_MS)
 
-    expect(second.status).toBe('already-done')
+    expect(after.status).toBe('already-done')
     expect(sent).toHaveLength(0)
-    expect(bucket.has(`${NS}avatars/after-marker.png`)).toBe(false)
+    expect(bucket.has(`${NS}avatars/after-final.png`)).toBe(false)
   })
 
-  it('marks an empty bucket done quietly', async () => {
+  it('records an empty bucket without anything to copy', async () => {
     const outcome = await runLegacyStorageRelocation()
-    expect(outcome.status).toBe('done')
+    expect(outcome.status).toBe('reconciling')
     expect(kv.get(LEGACY_RELOCATION_MARKER_KEY)).toMatchObject({ bareObjects: 0, copied: 0 })
+    expect(copies()).toHaveLength(0)
   })
 
   it('leaves the marker unset after a failed copy, and the next run resumes', async () => {
@@ -367,7 +388,7 @@ describe('single-workspace relocation', () => {
     sent.length = 0
     const second = await runLegacyStorageRelocation()
 
-    expect(second.status).toBe('done')
+    expect(second.status).toBe('reconciling')
     expect(copies().map((c) => c.input.Key)).toEqual([`${NS}logos/b.png`])
     expect(kv.get(LEGACY_RELOCATION_MARKER_KEY)).toMatchObject({ copied: 1, alreadyPresent: 2 })
   })
@@ -429,7 +450,7 @@ describe('the boot-time arming', () => {
     vi.useRealTimers()
   })
 
-  it('runs on a single-workspace boot, then stops once done', async () => {
+  it('runs on a single-workspace boot, reconciles through the grace period, then stops', async () => {
     put('logos/a.png', 'a')
 
     disarm = armLegacyStorageRelocation()
@@ -439,6 +460,14 @@ describe('the boot-time arming', () => {
 
     expect(bucket.get(`${NS}logos/a.png`)?.body).toBe('a')
     expect(kv.has(LEGACY_RELOCATION_MARKER_KEY)).toBe(true)
+
+    // A bare key written within the grace period is picked up by an hourly pass.
+    put('avatars/late.png', 'late')
+    await vi.advanceTimersByTimeAsync(RELOCATION_RETRY_MS)
+    expect(bucket.get(`${NS}avatars/late.png`)?.body).toBe('late')
+
+    await vi.advanceTimersByTimeAsync(RECONCILE_GRACE_MS)
+    expect(kv.get(LEGACY_RELOCATION_MARKER_KEY)).toHaveProperty('finishedAt')
 
     sent.length = 0
     await vi.advanceTimersByTimeAsync(RELOCATION_RETRY_MS * 3)

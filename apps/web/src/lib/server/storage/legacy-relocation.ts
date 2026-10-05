@@ -19,8 +19,13 @@
  *   and logged, never overwritten. Each copy re-checks its destination and is
  *   conditional (`If-None-Match: *`) where the provider honours that; the
  *   residual window on providers that ignore it is described at the copy.
- * - **Once.** Completion is recorded in `kv_store` with the counts; a run with
- *   any failed copy leaves the marker unset so the next attempt retries.
+ * - **Once, after a grace period.** The first complete pass is recorded in
+ *   `kv_store` with its counts. During a rolling upgrade a replica of the
+ *   older build can keep writing bare keys after that pass, so cheap
+ *   reconciling passes (identical destinations are skipped) continue hourly
+ *   until {@link RECONCILE_GRACE_MS} after it, and only then is the marker
+ *   final. A pass with any failed copy records nothing, so the next attempt
+ *   retries.
  *
  * Never runs under pooled tenancy: there the bucket is shared and a bare key is
  * nobody's. `openLegacyRelocationBucket()` refuses that independently.
@@ -75,15 +80,29 @@ export interface RelocationCounts {
   failed: number
 }
 
+/**
+ * Counts are those of the first complete pass; `lateCopies` sums what the
+ * reconciling passes after it copied. `finishedAt` is set once the grace period
+ * has passed, and from then on nothing runs again.
+ */
 export interface RelocationMarker extends RelocationCounts {
-  finishedAt: string
   namespace: string
+  firstCompletedAt: string
+  lateCopies: number
+  finishedAt?: string
 }
+
+/**
+ * How long reconciling passes continue after the first complete one: long
+ * enough for an older build's replicas to drain during a rolling upgrade.
+ */
+export const RECONCILE_GRACE_MS = 24 * 60 * 60 * 1000
 
 export type RelocationOutcome =
   | { status: 'not-applicable'; reason: 'pooled' | 'no-storage' }
   | { status: 'already-done'; marker: RelocationMarker }
   | { status: 'locked' }
+  | { status: 'reconciling'; marker: RelocationMarker }
   | { status: 'done'; marker: RelocationMarker }
   | { status: 'incomplete'; counts: RelocationCounts }
 
@@ -112,8 +131,13 @@ async function listAll(
 
 /** Copy every bare object into the namespace. Exported for tests. */
 export async function relocateBareObjects(
-  bucket: LegacyRelocationBucket
+  bucket: LegacyRelocationBucket,
+  { quiet = false }: { quiet?: boolean } = {}
 ): Promise<RelocationCounts> {
+  // A reconciling pass repeats the same findings every hour; only failures
+  // stay loud on it.
+  const notice = quiet ? log.debug.bind(log) : log.info.bind(log)
+  const warn = quiet ? log.debug.bind(log) : log.warn.bind(log)
   const counts: RelocationCounts = {
     bareObjects: 0,
     copied: 0,
@@ -193,7 +217,7 @@ export async function relocateBareObjects(
     const bare = objects.filter((o) => !o.key.startsWith(`${WORKSPACE_NAMESPACE_ROOT}/`))
     if (bare.length > 0 && !started) {
       started = true
-      log.info(
+      notice(
         { namespace: bucket.namespace },
         'copying files stored before the workspace layout into it; originals are kept'
       )
@@ -204,24 +228,24 @@ export async function relocateBareObjects(
     const before = counts.bareObjects
     counts.bareObjects += bare.length
     if (Math.floor(counts.bareObjects / PROGRESS_EVERY) > Math.floor(before / PROGRESS_EVERY)) {
-      log.info({ ...counts }, 'storage relocation progress')
+      notice({ ...counts }, 'storage relocation progress')
     }
   })
 
   if (counts.conflicting > 0) {
-    log.warn(
+    warn(
       { count: counts.conflicting, sample: samples.conflicting },
       'storage relocation left existing namespaced objects untouched where they differ from the original'
     )
   }
   if (counts.oversized > 0) {
-    log.warn(
+    warn(
       { count: counts.oversized, sample: samples.oversized, limitBytes: MAX_SINGLE_COPY_BYTES },
       'storage relocation skipped objects too large for a single copy; copy them with the command in s3.ts'
     )
   }
   if (counts.uncomposable > 0) {
-    log.warn(
+    warn(
       { count: counts.uncomposable, sample: samples.uncomposable },
       'storage relocation skipped keys that cannot be stored under the workspace layout'
     )
@@ -236,24 +260,27 @@ export async function relocateBareObjects(
 }
 
 /**
- * Run the relocation once per install, under a cross-replica lock.
+ * Run one relocation pass, under a cross-replica lock, unless the marker is
+ * final.
  *
  * Returns what happened so the caller can stop re-arming it. Throws only for
  * failures it cannot count (a listing error, the database), which also leave
- * the marker unset.
+ * the marker as it was.
  */
-export async function runLegacyStorageRelocation(): Promise<RelocationOutcome> {
+export async function runLegacyStorageRelocation(
+  now: () => number = Date.now
+): Promise<RelocationOutcome> {
   if (config.isPooledTenancy) return { status: 'not-applicable', reason: 'pooled' }
 
   const prior = await kvGet<RelocationMarker>(LEGACY_RELOCATION_MARKER_KEY)
-  if (prior) return { status: 'already-done', marker: prior }
+  if (prior?.finishedAt) return { status: 'already-done', marker: prior }
 
   let outcome: RelocationOutcome = { status: 'locked' }
   await withSweepLock(LOCK_NAME, LOCK_TTL_MS, async () => {
-    // Re-read under the lock: another replica may have finished meanwhile.
-    const finished = await kvGet<RelocationMarker>(LEGACY_RELOCATION_MARKER_KEY)
-    if (finished) {
-      outcome = { status: 'already-done', marker: finished }
+    // Re-read under the lock: another replica may have run a pass meanwhile.
+    const current = await kvGet<RelocationMarker>(LEGACY_RELOCATION_MARKER_KEY)
+    if (current?.finishedAt) {
+      outcome = { status: 'already-done', marker: current }
       return
     }
 
@@ -263,35 +290,51 @@ export async function runLegacyStorageRelocation(): Promise<RelocationOutcome> {
       return
     }
 
-    const counts = await relocateBareObjects(bucket)
+    const counts = await relocateBareObjects(bucket, { quiet: current !== null })
     if (counts.failed > 0) {
       outcome = { status: 'incomplete', counts }
       return
     }
 
-    const marker: RelocationMarker = {
-      ...counts,
-      namespace: bucket.namespace,
-      finishedAt: new Date().toISOString(),
+    const at = now()
+    const marker: RelocationMarker = current
+      ? { ...current, lateCopies: current.lateCopies + counts.copied }
+      : {
+          ...counts,
+          namespace: bucket.namespace,
+          firstCompletedAt: new Date(at).toISOString(),
+          lateCopies: 0,
+        }
+    if (at - Date.parse(marker.firstCompletedAt) >= RECONCILE_GRACE_MS) {
+      marker.finishedAt = new Date(at).toISOString()
     }
     await kvSet(LEGACY_RELOCATION_MARKER_KEY, marker, MARKER_TTL_SECONDS)
-    if (counts.bareObjects > 0) {
-      log.info({ ...marker }, 'storage relocation finished')
+
+    if (!current && counts.bareObjects > 0) {
+      log.info({ ...marker }, 'storage relocation copied existing files; reconciling for a day')
+    } else if (current && counts.copied > 0) {
+      log.info(
+        { copied: counts.copied },
+        'storage relocation copied files written since the last pass'
+      )
+    } else {
+      log.debug({ ...counts }, 'storage relocation pass found nothing new')
     }
-    outcome = { status: 'done', marker }
+    outcome = { status: marker.finishedAt ? 'done' : 'reconciling', marker }
   })
   return outcome
 }
 
 /** Delay before the first attempt, so it does not compete with boot. */
 export const RELOCATION_FIRST_ATTEMPT_MS = 20_000
-/** Re-attempt cadence until an attempt reports the work settled. */
+/** Cadence of retries and of reconciling passes until the marker is final. */
 export const RELOCATION_RETRY_MS = 60 * 60 * 1000
 
 /**
  * Schedule the relocation on this process: once shortly after boot, then
- * hourly until an attempt finishes, finds it already done, or finds nothing to
- * do. An interrupted or partly failed run therefore resumes without a restart.
+ * hourly until the marker is final or there is nothing to do here. An
+ * interrupted or partly failed run therefore resumes without a restart, and
+ * bare keys an older replica writes during a rolling upgrade are picked up.
  *
  * The timers are armed with no ambient context. A timer inherits the async
  * context it was created in, and the workspace scope travels in that context,
@@ -312,7 +355,8 @@ export function armLegacyStorageRelocation({
     const attempt = async () => {
       try {
         const outcome = await runLegacyStorageRelocation()
-        if (outcome.status !== 'incomplete' && outcome.status !== 'locked') disarm()
+        if (outcome.status === 'done' || outcome.status === 'already-done') disarm()
+        if (outcome.status === 'not-applicable') disarm()
       } catch (err) {
         log.error({ err }, 'storage relocation attempt failed; it retries within the hour')
       }

@@ -144,7 +144,7 @@ describe.skipIf(!enabled)('legacy relocation against a real S3 server', () => {
     const { runLegacyStorageRelocation } = await import('../legacy-relocation')
     const outcome = await runLegacyStorageRelocation()
 
-    expect(outcome.status).toBe('done')
+    expect(outcome.status).toBe('reconciling')
     const keys = new Set(await allKeys())
     for (const key of bare) {
       expect(keys.has(key)).toBe(true)
@@ -161,7 +161,7 @@ describe.skipIf(!enabled)('legacy relocation against a real S3 server', () => {
     // A second pass finds every destination present and copies nothing.
     kv.clear()
     const again = await runLegacyStorageRelocation()
-    expect(again.status === 'done' && again.marker).toMatchObject({
+    expect('marker' in again && again.marker).toMatchObject({
       copied: 0,
       alreadyPresent: bare.length,
     })

@@ -48,8 +48,10 @@
  * outside `w/` to `w/<workspace TypeID>/<key>` with server-side CopyObject,
  * keeps the originals (so a restored older database backup still finds its
  * files), skips destinations already present, and records completion in
- * `kv_store`. Until it finishes, pre-existing assets 404; it runs in the
- * background and re-attempts hourly until done, so readiness never waits on it.
+ * `kv_store`. Until its first pass finishes, pre-existing assets 404; it runs
+ * in the background so readiness never waits on it, and keeps reconciling
+ * hourly for a day afterwards so bare keys an older replica writes during a
+ * rolling upgrade are picked up too.
  *
  * It reaches the bucket root through {@link openLegacyRelocationBucket}, which
  * refuses under pooled tenancy and inside any workspace scope. Listing and
