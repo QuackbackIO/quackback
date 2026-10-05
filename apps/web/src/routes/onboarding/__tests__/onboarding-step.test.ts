@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mayForwardCompletedSetup, pickOnboardingStep } from '../-onboarding-step'
+import { isSetupBlocked, mayForwardCompletedSetup, pickOnboardingStep } from '../-onboarding-step'
 import { DEFAULT_SETUP_STATE, type SetupState } from '@/lib/shared/db-types'
 
 function state(overrides: Partial<SetupState> = {}): SetupState {
@@ -79,6 +79,23 @@ describe('pickOnboardingStep V2', () => {
         },
       })
     ).toBe('/onboarding/no-access')
+  })
+
+  // A finished self-hosted install whose human admins are gone. Not
+  // provisioned, so `setupOpenToClaim` stays true, but the workspace step
+  // refuses the claim, so a non-admin who signs in must not be routed there.
+  it('routes a non-admin on a finished install with no admin to the terminal page', () => {
+    const state = {
+      setupClaimedByOther: false,
+      setupOpenToClaim: true,
+      setupClosedReason: 'setupComplete' as const,
+      setupState: null,
+      principalRecord: { id: 'p_visitor', role: 'user' },
+    }
+    expect(isSetupBlocked(state)).toBe(true)
+    expect(pickOnboardingStep({ session: { userId: 'u_visitor' }, state })).toBe(
+      '/onboarding/no-access'
+    )
   })
 
   // The control: one fact different, and the same caller belongs in the wizard.
