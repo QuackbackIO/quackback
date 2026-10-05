@@ -10,7 +10,7 @@ import type { PostId, BoardId } from '@quackback/ids'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { getEmbeddingModel } from '@/lib/server/domains/ai/models'
 import { withRetry } from '@/lib/server/domains/ai/retry'
-import { withUsageLogging } from '@/lib/server/domains/ai/usage-log'
+import { embeddingUsage, withUsageLogging } from '@/lib/server/domains/ai/usage-log'
 import { isTestPost } from '@/lib/server/test-data'
 import { logger } from '@/lib/server/logger'
 
@@ -18,10 +18,14 @@ const log = logger.child({ component: 'embeddings' })
 
 const EMBEDDING_DIMENSIONS = 1536
 
+/** Step recorded for embedding calls whose caller gave no log context. */
+const DEFAULT_EMBEDDING_STEP = 'embedding_query'
+
 /**
  * Generate embedding for text using OpenAI.
- * When logContext is provided, usage is recorded to ai_usage_log. `signal`
- * cancels the provider request and any retry, and the call then returns null.
+ * Every call is recorded to ai_usage_log, under the caller's step when a
+ * logContext is given. `signal` cancels the provider request and any retry,
+ * and the call then returns null.
  */
 export async function generateEmbedding(
   text: string,
@@ -41,40 +45,25 @@ export async function generateEmbedding(
   const truncated = text.slice(0, 8000)
 
   try {
-    if (logContext) {
-      const response = await withUsageLogging(
-        {
-          pipelineStep: logContext.pipelineStep,
-          callType: 'embedding',
-          model,
-          postId: logContext.postId,
-          rawFeedbackItemId: logContext.rawFeedbackItemId,
-          signalId: logContext.signalId,
-        },
-        () =>
-          withRetry(
-            () =>
-              openai.embeddings.create(
-                { model, input: truncated, dimensions: EMBEDDING_DIMENSIONS },
-                { signal: opts.signal }
-              ),
-            { signal: opts.signal }
-          ),
-        (r) => ({
-          inputTokens: r.usage?.prompt_tokens ?? 0,
-          totalTokens: r.usage?.total_tokens ?? 0,
-        })
-      )
-      return response.data[0]?.embedding ?? null
-    }
-
-    const { result: response } = await withRetry(
+    const response = await withUsageLogging(
+      {
+        pipelineStep: logContext?.pipelineStep ?? DEFAULT_EMBEDDING_STEP,
+        callType: 'embedding',
+        model,
+        postId: logContext?.postId,
+        rawFeedbackItemId: logContext?.rawFeedbackItemId,
+        signalId: logContext?.signalId,
+      },
       () =>
-        openai.embeddings.create(
-          { model, input: truncated, dimensions: EMBEDDING_DIMENSIONS },
+        withRetry(
+          () =>
+            openai.embeddings.create(
+              { model, input: truncated, dimensions: EMBEDDING_DIMENSIONS },
+              { signal: opts.signal }
+            ),
           { signal: opts.signal }
         ),
-      { signal: opts.signal }
+      (r) => embeddingUsage(r, truncated)
     )
     return response.data[0]?.embedding ?? null
   } catch (error) {

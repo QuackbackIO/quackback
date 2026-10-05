@@ -7,14 +7,20 @@ function TransportValue({ children }: { children: string }) {
   return <span className="text-sm">{children}</span>
 }
 
+const OUTBOUND_LABEL = {
+  ses: 'Amazon SES',
+  smtp: 'SMTP',
+  resend: 'Resend',
+  console: 'Not configured',
+} as const
+
 /** Read-only env probe: outbound provider, from-address, inbound domain. */
 export function EmailTransportCard() {
   const { data } = useQuery(channelSettingsQueries.emailStatus())
 
   if (!data) return null
 
-  const outboundLabel =
-    data.provider === 'smtp' ? 'SMTP' : data.provider === 'ses' ? 'Amazon SES' : 'Not configured'
+  const outboundLabel = OUTBOUND_LABEL[data.provider]
 
   return (
     <SettingsCard

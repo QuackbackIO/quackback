@@ -13,13 +13,27 @@ vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
 }))
 
 vi.mock('@/lib/server/db', async (importOriginal) => {
-  const tx = { update: hoisted.mockDbUpdate }
+  const tx = {
+    update: hoisted.mockDbUpdate,
+    // The read a read-modify-write takes under the row lock. Only the locking
+    // form is faked, so an unlocked read fails here.
+    select: () => ({
+      from: () => ({
+        limit: () => ({
+          for: async (strength: string) => {
+            if (strength !== 'update') throw new Error(`unexpected lock: ${strength}`)
+            return [{ id: 's1', authConfig: '{"oauth":{}}' }]
+          },
+        }),
+      }),
+    }),
+  }
   return {
     // Spread the real db module so tables/operators stay current; override only what this suite drives.
     ...(await importOriginal<typeof import('@/lib/server/db')>()),
     db: {
       update: hoisted.mockDbUpdate,
-      transaction: async (fn: (tx: { update: typeof hoisted.mockDbUpdate }) => unknown) => fn(tx),
+      transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
     },
     eq: vi.fn(),
   }

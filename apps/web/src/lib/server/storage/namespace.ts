@@ -48,7 +48,7 @@
  * fails throws. It never falls back to the un-namespaced key, because in a
  * shared bucket that key is nobody's namespace.
  */
-import type { WorkspaceId } from '@quackback/ids'
+import { isTypeId, type WorkspaceId } from '@quackback/ids'
 
 /**
  * Segment 0 of every object name this application writes.
@@ -102,6 +102,17 @@ export class StorageNamespaceViolation extends Error {
 /** Everything every object name for `workspaceId` begins with. */
 export function workspaceNamespace(workspaceId: WorkspaceId): string {
   return `${WORKSPACE_NAMESPACE_ROOT}/${workspaceId}/`
+}
+
+/**
+ * Whether an object name lies inside *some* workspace's namespace:
+ * `w/<valid workspace TypeID>/<rest>`. A stored key can itself begin with `w/`
+ * (upload prefixes are caller-chosen), so the literal root alone does not make
+ * a name namespaced; the second segment has to be a workspace id.
+ */
+export function isWorkspaceNamespacedName(objectName: string): boolean {
+  const [root, id, ...rest] = objectName.split('/')
+  return root === WORKSPACE_NAMESPACE_ROOT && rest.length > 0 && !!id && isTypeId(id, 'workspace')
 }
 
 /**

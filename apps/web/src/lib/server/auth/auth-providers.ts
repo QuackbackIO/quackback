@@ -224,10 +224,9 @@ export function getAuthProviderByProviderId(id: string): AuthProviderDefinition 
 }
 
 /**
- * Path to register at the IdP. Better Auth 1.7 sends every provider,
- * including generic OIDC, to `/api/auth/callback/<id>`.
- * `/api/auth/oauth2/callback/<id>` is still accepted and rewritten so a
- * return to the pre-1.7 URL can finish.
+ * Path to register at the IdP for a social provider: `/api/auth/callback/<id>`.
+ * OIDC identity providers choose theirs per provider; see
+ * `lib/shared/oidc-redirect.ts`.
  */
 export function authProviderCallbackPath(providerId: string): string {
   return `/api/auth/callback/${providerId}`

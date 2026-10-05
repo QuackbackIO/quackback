@@ -84,6 +84,9 @@ vi.mock('@/components/ui/input-otp', () => ({
 }))
 
 import { AccountStep, type AccountStepProps } from '../-account-step'
+const track = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/client/analytics', () => ({ track }))
+
 import { postAuthSuccess } from '@/lib/client/hooks/use-auth-broadcast'
 
 const OWNER_EMAIL = 'jane.doe@acme.example'
@@ -104,7 +107,7 @@ function provisioned(): AccountStepProps {
     ssoEnabled: false,
     // A control plane created this one, so arriving is never how its admin is
     // decided — true whether or not its owner has signed in yet.
-    claim: { claimed: true, setupComplete: false, openToClaim: false },
+    claim: { claimed: true, setupComplete: false, openToClaim: false, closedReason: 'provisioned' },
     workspaceName: 'Acme',
     authConfig: {
       found: true,
@@ -124,7 +127,12 @@ function provisioned(): AccountStepProps {
  */
 function provisionedOwnerless(): AccountStepProps {
   const props = provisioned()
-  props.claim = { claimed: false, setupComplete: false, openToClaim: false }
+  props.claim = {
+    claimed: false,
+    setupComplete: false,
+    openToClaim: false,
+    closedReason: 'provisioned',
+  }
   return props
 }
 
@@ -137,7 +145,7 @@ function provisionedOwnerless(): AccountStepProps {
 function selfHosted(): AccountStepProps {
   return {
     ssoEnabled: false,
-    claim: { claimed: false, setupComplete: false, openToClaim: true },
+    claim: { claimed: false, setupComplete: false, openToClaim: true, closedReason: null },
     workspaceName: undefined,
     authConfig: {
       found: false,
@@ -244,14 +252,24 @@ describe('account step — someone who is not the owner', () => {
     cleanup()
 
     const done = provisioned()
-    done.claim = { claimed: true, setupComplete: true, openToClaim: false }
+    done.claim = {
+      claimed: true,
+      setupComplete: true,
+      openToClaim: false,
+      closedReason: 'provisioned',
+    }
     renderStep(done)
     expect(screen.getByRole('link', { name: /request access/i })).toBeInTheDocument()
   })
 
   it('still refuses passwords when setup is finished', () => {
     const props = provisioned()
-    props.claim = { claimed: true, setupComplete: true, openToClaim: false }
+    props.claim = {
+      claimed: true,
+      setupComplete: true,
+      openToClaim: false,
+      closedReason: 'provisioned',
+    }
     const { container } = renderStep(props)
 
     expect(container.querySelector('input[type="password"]')).toBeNull()
@@ -284,6 +302,35 @@ describe('account step — a provisioned workspace nobody has claimed', () => {
     expect(screen.queryByText(/already has an owner/i)).toBeNull()
     expect(container.innerHTML).not.toContain(OWNER_EMAIL)
     expect(container.innerHTML).not.toContain('acme.example')
+  })
+})
+
+// A finished install whose human admins are all gone. The workspace step
+// refuses to hand it to anyone, so this screen must not offer a first-user
+// signup either, and it must not claim the workspace was made for someone.
+describe('account step — a finished install with no admin left', () => {
+  function finishedOwnerless(): AccountStepProps {
+    const props = selfHosted()
+    props.workspaceName = 'Acme'
+    props.authConfig.found = true
+    props.authConfig.oauth = { ...DEFAULT_AUTH_CONFIG.oauth, google: true }
+    props.authConfig.registeredAuthProviders = ['google']
+    props.claim = {
+      claimed: false,
+      setupComplete: true,
+      openToClaim: false,
+      closedReason: 'setupComplete',
+    }
+    return props
+  }
+
+  it('offers sign-in only and says the workspace is already set up', () => {
+    renderStep(finishedOwnerless())
+
+    expect(screen.getByText(/already set up/i)).toBeInTheDocument()
+    expect(screen.queryByText(/created for a specific account/i)).toBeNull()
+    expect(screen.queryByRole('button', { name: /sign up with google/i })).toBeNull()
+    expect(screen.getByRole('button', { name: /sign in with google/i })).toBeInTheDocument()
   })
 })
 
@@ -372,5 +419,19 @@ describe('account step — after a sign-in completes', () => {
     act(() => postAuthSuccess())
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/onboarding' }))
+  })
+
+  it('records an account created only where one is created', async () => {
+    renderStep(selfHosted())
+    act(() => postAuthSuccess())
+    await waitFor(() => expect(track).toHaveBeenCalledWith('onboarding_account_created'))
+  })
+
+  it('records an owner signing in to a claimed workspace as a sign-in', async () => {
+    track.mockClear()
+    renderStep(provisioned())
+    act(() => postAuthSuccess())
+    await waitFor(() => expect(track).toHaveBeenCalledWith('onboarding_signed_in'))
+    expect(track).not.toHaveBeenCalledWith('onboarding_account_created')
   })
 })

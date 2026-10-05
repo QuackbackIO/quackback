@@ -1,7 +1,7 @@
 /**
  * Configuration that must be right before this process does anything at all.
  *
- * A deliberately tiny leaf module — it imports the two validators and a logger
+ * A deliberately small leaf module — it imports the validators and a logger
  * and nothing else — so it can be the **first statement** in `server.ts`, above
  * the eager DB/Redis warmup. That placement is the point: an earlier version
  * asserted inside `logStartupBanner()`, which runs *after* the warmup fires, so
@@ -33,7 +33,9 @@
  * coverage — which is worse than no branch, because it invites the reader to
  * believe the case is handled somewhere.
  */
+import { assertEmailProviderConfigured } from '@quackback/email/provider'
 import { logger } from '@/lib/server/logger'
+import { validateRuntimeConfig } from '@/lib/server/config'
 import { assertSchemaFloorConfigured } from '@/lib/server/fleet/schema-floor'
 import { assertProcessRoleConfigured } from '@/lib/server/process-role'
 
@@ -42,14 +44,21 @@ const log = logger.child({ component: 'boot-config' })
 /**
  * Validate the environment, or exit non-zero.
  *
- * `exit` is injected so the behaviour can be tested without ending the test
- * runner; production callers pass nothing.
+ * `exit` and the runtime config validator are injected so the behaviour can be
+ * tested without ending the test runner or reading its environment; production
+ * callers pass nothing. The runtime config validator reads `process.env`, the
+ * same environment `env` defaults to.
  */
 export function assertBootConfigurationOrExit(
-  deps: { env?: NodeJS.ProcessEnv; exit?: (code: number) => never } = {}
+  deps: {
+    env?: NodeJS.ProcessEnv
+    exit?: (code: number) => never
+    validateRuntimeConfig?: () => void
+  } = {}
 ): void {
   const env = deps.env ?? process.env
   const exit = deps.exit ?? ((code: number) => process.exit(code))
+  const validateConfig = deps.validateRuntimeConfig ?? validateRuntimeConfig
 
   // Skipped during the build: the server entry is evaluated to generate the
   // route manifest, in an environment that is not the one it will run in, so a
@@ -59,6 +68,12 @@ export function assertBootConfigurationOrExit(
   try {
     assertProcessRoleConfigured(env)
     assertSchemaFloorConfigured(env)
+    // Two outbound mail providers is a choice the operator has not made; the
+    // message names the variables in conflict.
+    assertEmailProviderConfigured(env)
+    // Every required runtime setting. Its own issues are logged where they are
+    // found, by path and code, before it throws.
+    validateConfig()
   } catch (err) {
     // The message names the variable and what is wrong with it. This is a boot
     // log on a process that is about to die, not an HTTP response, so it is the

@@ -2,7 +2,10 @@ import { useState } from 'react'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { channelSettingsQueries } from '@/lib/client/queries/channel-settings'
-import { useUpdateSpamFilterConfig } from '@/lib/client/mutations/settings'
+import {
+  useUpdateSpamAiClassifier,
+  useUpdateSpamFilterConfig,
+} from '@/lib/client/mutations/settings'
 import { useUpdateEmailAutoAck } from '@/lib/client/mutations/channel-settings'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { moduleCrumb } from '@/components/admin/settings/settings-nav-sections'
@@ -30,10 +33,36 @@ export function EmailChannelPage() {
     >
       <EmailTransportCard />
       <EmailChannelSettings />
+      <AiSpamFilterCard />
       <TrustedSendersSection />
       <AutoAckCard />
       <EmailActivityCard />
     </SettingsPage>
+  )
+}
+
+function AiSpamFilterCard() {
+  const query = useQuery(settingsQueries.spamFilterConfig())
+  const update = useUpdateSpamAiClassifier()
+  const enabled = update.isPending ? update.variables : (query.data?.aiClassifier ?? false)
+  return (
+    <SettingsCard title="Spam filter">
+      <SettingRows>
+        <SettingRow
+          label="AI spam filter"
+          description="Moves obvious spam in new email and Messenger conversations to Spam. Filed spam is deleted after 30 days."
+          htmlFor="ai-spam-filter"
+          control={
+            <Switch
+              id="ai-spam-filter"
+              checked={enabled}
+              disabled={query.isLoading}
+              onCheckedChange={(checked) => update.mutate(checked)}
+            />
+          }
+        />
+      </SettingRows>
+    </SettingsCard>
   )
 }
 

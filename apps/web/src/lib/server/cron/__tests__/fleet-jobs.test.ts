@@ -96,7 +96,7 @@ describe('the worker arms the sweep schedule under either tenancy mode', () => {
     expect(jobWorker).toBeGreaterThan(-1)
     expect(fn).not.toContain('startRelayTier')
     expect(scheduleStart).toBeGreaterThan(jobWorker)
-    expect(fn).not.toMatch(/if\s*\(\s*config\.isPooledTenancy\s*\)/)
+    expect(fn).not.toMatch(/if\s*\(\s*!config\.isPooledTenancy\s*\)\s*return/)
   })
 })
 

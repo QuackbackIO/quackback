@@ -34,6 +34,7 @@ import { useWidgetFileUpload } from '../use-widget-file-upload'
 import { WidgetSessionError } from '../use-widget-image-upload'
 import { authClient } from '@/lib/client/auth-client'
 import { uploadFile } from '@/lib/client/files/upload-file'
+import { SESSION_AUDIENCE_HEADER } from '@/lib/shared/roles'
 
 const mintAnon = vi.mocked(authClient.signIn.anonymous)
 const mockUpload = vi.mocked(uploadFile)
@@ -98,6 +99,20 @@ describe('useWidgetFileUpload — session guard', () => {
     expect(opts.endpoint).toBe('/api/widget/files')
     expect(opts.headers).toEqual({ Authorization: 'Bearer anon-fresh' })
     expect(readPersistedToken()).toBe('anon-fresh')
+  })
+
+  // The widget's mint must stay unmarked: the server tags an unmarked
+  // anonymous mint as widget, the scope site surfaces refuse.
+  it('mints without cookies and without claiming the portal audience', async () => {
+    mintSucceedsWith('anon-fresh')
+    const { result } = renderHook(() => useWidgetFileUpload(), { wrapper })
+
+    await result.current.upload(txtFile(), {})
+
+    expect(mintAnon).toHaveBeenCalledTimes(1)
+    const [opts] = mintAnon.mock.calls[0] as [{ fetchOptions?: RequestInit } | undefined]
+    expect(opts?.fetchOptions?.credentials).toBe('omit')
+    expect(new Headers(opts?.fetchOptions?.headers).has(SESSION_AUDIENCE_HEADER)).toBe(false)
   })
 
   it('does not upload when no session can be established', async () => {
