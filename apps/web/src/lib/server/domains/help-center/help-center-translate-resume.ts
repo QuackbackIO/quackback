@@ -9,7 +9,8 @@ import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { enqueueJobs, type ClaimedJob } from '@/lib/server/jobs/job-queue'
 import { getAiBudgetStatus } from '@/lib/server/domains/ai/ai-budget'
 import { logger } from '@/lib/server/logger'
-import { HELP_CENTER_TRANSLATE_QUEUE, TRANSLATE_JOB_ATTEMPTS } from './help-center-translate-queue'
+import { TRANSLATE_JOB_ATTEMPTS } from './help-center-translate-queue'
+import { HELP_CENTER_TRANSLATE_QUEUE } from './help-center-translate-jobs'
 
 const log = logger.child({ component: 'help-center-translate-resume' })
 
@@ -44,16 +45,27 @@ export async function runHelpCenterTranslateResume(_job: ClaimedJob): Promise<vo
       WHERE queue = ${HELP_CENTER_TRANSLATE_QUEUE}
         AND status = 'pending'
         AND payload->>'paused' = 'true'
-      RETURNING payload->>'articleId' AS article_id, payload->>'locale' AS locale
+      RETURNING payload->>'articleId' AS article_id, payload->>'locale' AS locale,
+        payload->'guard' AS guard
     `)
-    const parked = getExecuteRows<{ article_id: string; locale: string }>(result)
+    const parked = getExecuteRows<{
+      article_id: string
+      locale: string
+      guard: Record<string, unknown> | null
+    }>(result)
     if (parked.length === 0) return 0
 
     const unique = new Map(parked.map((r) => [`${r.article_id}:${r.locale}`, r]))
     await enqueueJobs(
       [...unique.values()].map((r) => ({
         queue: HELP_CENTER_TRANSLATE_QUEUE,
-        payload: { type: 'translate-article', articleId: r.article_id, locale: r.locale },
+        payload: {
+          type: 'translate-article',
+          articleId: r.article_id,
+          locale: r.locale,
+          // The released job still refuses to replace a manual change.
+          ...(r.guard ? { guard: r.guard } : {}),
+        },
         maxAttempts: TRANSLATE_JOB_ATTEMPTS,
       })),
       { executor: tx }

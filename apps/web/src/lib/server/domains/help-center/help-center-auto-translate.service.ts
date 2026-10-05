@@ -21,7 +21,7 @@ import { getChatModel } from '@/lib/server/domains/ai/models'
 import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import { getHelpCenterConfig } from '@/lib/server/domains/settings/settings.service'
 import { getArticleById } from './help-center.article.service'
-import { upsertArticleTranslation } from './help-center-translations.service'
+import { getArticleTranslation, upsertArticleTranslation } from './help-center-translations.service'
 import { logger } from '@/lib/server/logger'
 import type { KbArticleId } from '@quackback/ids'
 import type { HelpCenterArticleWithCategory } from './help-center.types'
@@ -79,6 +79,23 @@ Example output:
   return { system, user }
 }
 
+/** A parked job's snapshot of the translation it may replace. */
+export interface ParkedTranslationGuard {
+  /** The translation's updated_at when parked, or null when there was none. */
+  translationUpdatedAt: string | null
+}
+
+/** True when the translation still is what the parked job saw. */
+async function translationUnchanged(
+  articleId: KbArticleId,
+  locale: string,
+  guard: ParkedTranslationGuard
+): Promise<boolean> {
+  const row = await getArticleTranslation(articleId, locale)
+  const current = row ? row.updatedAt.toISOString() : null
+  return current === guard.translationUpdatedAt
+}
+
 /** Returned instead of translating when the AI allowance is used up. */
 export interface AutoTranslatePause {
   /** When the allowance window ends; the caller retries no later than this. */
@@ -93,7 +110,8 @@ export interface AutoTranslatePause {
  */
 export async function translateArticleForLocale(
   articleId: KbArticleId,
-  locale: string
+  locale: string,
+  opts: { guard?: ParkedTranslationGuard } = {}
 ): Promise<AutoTranslatePause | undefined> {
   const model = getChatModel('helpCenterTranslate')
   if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) {
@@ -108,6 +126,13 @@ export async function translateArticleForLocale(
       'auto-translate paused: AI allowance used up'
     )
     return { pausedUntil: budget.window.end }
+  }
+
+  // A job that was parked must not replace a translation a person changed
+  // while it waited. Checked before the model call and again before writing.
+  if (opts.guard && !(await translationUnchanged(articleId, locale, opts.guard))) {
+    log.info({ article_id: articleId, locale }, 'auto-translate skipped: translation changed')
+    return
   }
 
   const helpCenterConfig = await getHelpCenterConfig()
@@ -151,14 +176,22 @@ export async function translateArticleForLocale(
     return
   }
 
-  await upsertArticleTranslation({
-    articleId,
-    locale,
-    title: parsed.title,
-    description: parsed.description || undefined,
-    content: parsed.content,
-    contentJson: markdownToTiptapJson(parsed.content),
-  })
+  if (opts.guard && !(await translationUnchanged(articleId, locale, opts.guard))) {
+    log.info({ article_id: articleId, locale }, 'auto-translate skipped: translation changed')
+    return
+  }
+
+  await upsertArticleTranslation(
+    {
+      articleId,
+      locale,
+      title: parsed.title,
+      description: parsed.description || undefined,
+      content: parsed.content,
+      contentJson: markdownToTiptapJson(parsed.content),
+    },
+    { source: 'auto' }
+  )
   log.info({ article_id: articleId, locale }, 'auto-translate: draft translation written')
 }
 

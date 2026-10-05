@@ -13,6 +13,7 @@ import {
 } from '@/lib/server/db'
 import type { KbArticleId, KbCategoryId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
+import { cancelPendingAutoTranslations } from './help-center-translate-jobs'
 import type {
   HelpCenterArticleTranslation,
   HelpCenterCategoryTranslation,
@@ -63,10 +64,17 @@ export async function getPublishedArticleTranslation(
   return row && row.status === 'published' ? row : null
 }
 
-/** Create-or-update; a fresh translation always starts as a draft. */
+/**
+ * Create-or-update a translation; a fresh one always starts as a draft. A
+ * manual write (the default) also drops pending auto-translate jobs for that
+ * locale, so a job parked at the AI allowance can never later replace it.
+ * Auto-translate passes `source: 'auto'`.
+ */
 export async function upsertArticleTranslation(
-  input: UpsertArticleTranslationInput
+  input: UpsertArticleTranslationInput,
+  opts: { source?: 'manual' | 'auto' } = {}
 ): Promise<HelpCenterArticleTranslation> {
+  if (opts.source !== 'auto') await cancelPendingAutoTranslations(input.articleId, input.locale)
   const [row] = await db
     .insert(helpCenterArticleTranslations)
     .values({
@@ -96,6 +104,7 @@ export async function setArticleTranslationStatus(
   locale: string,
   status: 'draft' | 'published'
 ): Promise<HelpCenterArticleTranslation> {
+  await cancelPendingAutoTranslations(articleId, locale)
   const [row] = await db
     .update(helpCenterArticleTranslations)
     .set({ status, updatedAt: new Date() })
@@ -119,6 +128,7 @@ export async function deleteArticleTranslation(
   articleId: KbArticleId,
   locale: string
 ): Promise<void> {
+  await cancelPendingAutoTranslations(articleId, locale)
   await db
     .delete(helpCenterArticleTranslations)
     .where(

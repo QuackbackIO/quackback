@@ -60,6 +60,12 @@ function createUpdateChain() {
   return chain
 }
 
+const mockCancelPendingAutoTranslations = vi.fn(async (..._args: unknown[]) => {})
+vi.mock('../help-center-translate-jobs', () => ({
+  HELP_CENTER_TRANSLATE_QUEUE: 'help-center-translate',
+  cancelPendingAutoTranslations: (...args: unknown[]) => mockCancelPendingAutoTranslations(...args),
+}))
+
 vi.mock('@/lib/server/db', () => ({
   db: {
     query: {

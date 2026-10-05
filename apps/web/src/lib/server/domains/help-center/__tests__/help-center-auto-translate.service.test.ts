@@ -184,7 +184,8 @@ describe('translateArticleForLocale', () => {
         title: 'Rückerstattungen',
         description: 'Wie man eine bekommt',
         content: 'Kontaktieren Sie den Quackback-Support.',
-      })
+      }),
+      { source: 'auto' }
     )
   })
 

@@ -34,7 +34,12 @@ import { enqueueJob, type ClaimedJob } from '@/lib/server/jobs/job-queue'
 import { TerminalJobError } from '@/lib/server/jobs/definitions'
 import { logger } from '@/lib/server/logger'
 import type { KbArticleId } from '@quackback/ids'
-import { translateArticleForLocale } from './help-center-auto-translate.service'
+import {
+  translateArticleForLocale,
+  type ParkedTranslationGuard,
+} from './help-center-auto-translate.service'
+import { getArticleTranslation } from './help-center-translations.service'
+import { HELP_CENTER_TRANSLATE_QUEUE } from './help-center-translate-jobs'
 
 const log = logger.child({ component: 'help-center-translate-queue' })
 
@@ -44,10 +49,14 @@ export interface HelpCenterTranslateJob {
   locale: string
   /** Set on a row parked because the AI allowance was used up. */
   paused?: true
+  /**
+   * The translation as it stood when the job was first parked. A job carrying
+   * it skips the write if a person changed the translation since.
+   */
+  guard?: ParkedTranslationGuard
 }
 
-/** The logical queue name. Matches the definition in `jobs/definitions.ts`. */
-export const HELP_CENTER_TRANSLATE_QUEUE = 'help-center-translate'
+export { HELP_CENTER_TRANSLATE_QUEUE }
 
 /** Attempts per translate job, shared with the resume sweep. */
 export const TRANSLATE_JOB_ATTEMPTS = 3
@@ -67,8 +76,15 @@ export async function runHelpCenterTranslate(job: ClaimedJob): Promise<void> {
   const data = job.payload as unknown as HelpCenterTranslateJob
   switch (data.type) {
     case 'translate-article': {
-      const pause = await translateArticleForLocale(data.articleId as KbArticleId, data.locale)
-      if (pause) await parkPausedTranslation(data.articleId, data.locale, pause.pausedUntil)
+      const pause = await translateArticleForLocale(data.articleId as KbArticleId, data.locale, {
+        guard: data.guard,
+      })
+      if (pause) {
+        // Keep the first snapshot across re-parks, so a change made while
+        // parked is never absorbed into a later one.
+        const guard = data.guard ?? (await snapshotTranslation(data.articleId, data.locale))
+        await parkPausedTranslation(data.articleId, data.locale, pause.pausedUntil, guard)
+      }
       return
     }
     default:
@@ -80,15 +96,24 @@ export async function runHelpCenterTranslate(job: ClaimedJob): Promise<void> {
   }
 }
 
+async function snapshotTranslation(
+  articleId: string,
+  locale: string
+): Promise<ParkedTranslationGuard> {
+  const row = await getArticleTranslation(articleId as KbArticleId, locale)
+  return { translationUpdatedAt: row ? row.updatedAt.toISOString() : null }
+}
+
 /** Park an item until `until`; repeats within one window collapse to one row. */
 async function parkPausedTranslation(
   articleId: string,
   locale: string,
-  until: Date
+  until: Date,
+  guard: ParkedTranslationGuard
 ): Promise<void> {
   await enqueueJob({
     queue: HELP_CENTER_TRANSLATE_QUEUE,
-    payload: { type: 'translate-article', articleId, locale, paused: true },
+    payload: { type: 'translate-article', articleId, locale, paused: true, guard },
     dedupeKey: `paused:${articleId}:${locale}:${until.toISOString()}`,
     runAt: until,
     maxAttempts: TRANSLATE_JOB_ATTEMPTS,

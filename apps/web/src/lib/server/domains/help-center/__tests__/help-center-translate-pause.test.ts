@@ -8,6 +8,7 @@
  * up), and leaves them parked while it is not.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import { sql } from '@/lib/server/db'
 import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
@@ -65,7 +66,7 @@ const fixture = await createDbTestFixture({
   probe: async (db) => void (await db.execute(sql`SELECT payload FROM job_queue LIMIT 0`)),
 })
 
-const articleId = () => `article_test_${Math.random().toString(36).slice(2, 10)}`
+const articleId = () => createId('kb_article')
 
 function job(payload: Record<string, unknown>): ClaimedJob {
   return {
