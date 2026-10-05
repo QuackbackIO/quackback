@@ -187,6 +187,28 @@ describe('Launch plan page', () => {
     expect(within(row('A customer posts an idea')).getByText('Next')).toBeVisible()
   })
 
+  it('falls back to the feedback path when the primary module is turned off', () => {
+    const modules = ['supportInbox', 'helpCenter', 'statusPage'] as const
+    const goals = {
+      supportInbox: 'customer_support',
+      helpCenter: 'help_center',
+      statusPage: 'status_page',
+    } as const
+    for (const module of modules) {
+      hoisted.status = {
+        ...status,
+        goals: [goals[module]],
+        features: { ...status.features!, [module]: false },
+      }
+      mount()
+      expect(screen.getByText('Step 2 of 3')).toBeVisible()
+      expect(
+        within(row('Share your board link')).getByRole('button', { name: 'Copy board link' })
+      ).toBeVisible()
+      cleanup()
+    }
+  })
+
   it('replays the tour', () => {
     mount()
     fireEvent.click(screen.getByRole('button', { name: 'Replay the tour' }))

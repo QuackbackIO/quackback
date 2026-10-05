@@ -603,14 +603,26 @@ const isDone = (task: LaunchTask) => task.isCompleted || task.isReady
  */
 export function launchPath(status: LaunchStatus): LaunchPath {
   const outcome = launchOutcome(status)
-  const tasks = buildLaunchTasks(status)
-  const win = tasks.find((task) => task.classification === 'first_win')!
   const preferred = PATH_GOAL[outcome]
-  // A goal whose module is off has no step to show; feedback is always there.
-  const goalStepFor = (goal: LaunchPathGoal) =>
+  const stepIn = (tasks: LaunchTask[], goal: LaunchPathGoal) =>
     GOAL_STEP[goal].map((id) => tasks.find((task) => task.id === id)).find(Boolean)
-  const goal = goalStepFor(preferred) ? preferred : 'feedback'
-  const goalStep = goalStepFor(goal) ?? tasks.find((task) => task.id === 'create-board')!
+  let tasks = buildLaunchTasks(status)
+  // A goal whose module is off has no step to show: the plan falls back to
+  // feedback, built as a real goal so its board steps are in the plan.
+  if (!stepIn(tasks, preferred)) {
+    const withFeedback = buildLaunchTasks(status, [
+      ...(status.goals ?? [launchResolutionKey(status)]),
+      'product_feedback',
+    ])
+    const feedback = withFeedback.filter(
+      (task) => GOAL_STEP.feedback.includes(task.id) && !tasks.some((t) => t.id === task.id)
+    )
+    tasks = [...feedback, ...tasks]
+  }
+  const win = tasks.find((task) => task.classification === 'first_win')!
+  const goal = stepIn(tasks, preferred) ? preferred : 'feedback'
+  // A feedback goal always builds create-board, so a step is always found.
+  const goalStep = stepIn(tasks, goal)!
   const complete = win.isCompleted
   const step = complete || isDone(goalStep) ? 3 : 2
   const goalOpen = !isDone(goalStep) && !goalStep.isSkipped && goalStep.availability !== 'blocked'

@@ -88,6 +88,36 @@ describe('the launch path', () => {
     }
   })
 
+  it('falls back to a real feedback step when the primary module is turned off', () => {
+    const cases: [
+      NonNullable<LaunchStatus['goals']>,
+      'supportInbox' | 'helpCenter' | 'statusPage',
+    ][] = [
+      [['customer_support'], 'supportInbox'],
+      [['help_center'], 'helpCenter'],
+      [['status_page'], 'statusPage'],
+    ]
+    for (const [goals, module] of cases) {
+      const features = { ...base.features!, [module]: false }
+      const shared = launchPath({ ...base, goals, features })
+      expect(shared.goal).toBe('feedback')
+      expect(shared.steps[0].id).toBe('distribute-feedback')
+      expect(shared.next?.id).toBe('distribute-feedback')
+      expect(shared.step).toBe(2)
+
+      const boardless = launchPath({
+        ...base,
+        goals,
+        features,
+        hasBoards: false,
+        hasPublicBoard: false,
+      })
+      expect(boardless.steps[0].id).toBe('create-board')
+      expect(boardless.next?.id).toBe('create-board')
+      expect(ids(boardless.later)).not.toContain('create-board')
+    }
+  })
+
   it('keeps an existing private team board on its own path', () => {
     const path = launchPath({ ...base, goals: ['product_feedback'], feedbackPrivate: true })
     expect(path.goal).toBe('private')

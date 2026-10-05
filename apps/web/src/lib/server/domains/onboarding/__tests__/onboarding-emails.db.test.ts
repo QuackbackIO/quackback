@@ -64,7 +64,12 @@ function setupState(completedAt: Date, goals: string[]) {
 }
 
 async function seedWorkspace(
-  opts: { createdAt?: Date; completedAt?: Date; goals?: string[] } = {}
+  opts: {
+    createdAt?: Date
+    completedAt?: Date
+    goals?: string[]
+    featureFlags?: Record<string, boolean>
+  } = {}
 ) {
   const now = new Date()
   await testDb.delete(settings)
@@ -73,7 +78,7 @@ async function seedWorkspace(
     slug: `acme-${createId('workspace')}`,
     createdAt: opts.createdAt ?? now,
     setupState: setupState(opts.completedAt ?? now, opts.goals ?? ['customer_support']),
-    featureFlags: JSON.stringify({ supportInbox: true }),
+    featureFlags: JSON.stringify(opts.featureFlags ?? { supportInbox: true }),
   })
 }
 
@@ -248,6 +253,17 @@ describe.skipIf(!fixture.available)('setup emails (real DB)', () => {
       url: 'https://acme.quackback.test/',
       text: 'acme.quackback.test',
     })
+  })
+
+  it('falls back to the feedback step when the primary module is turned off', async () => {
+    for (const goal of ['customer_support', 'help_center', 'status_page']) {
+      mail.welcome.mockClear()
+      await testDb.delete(onboardingEmails).where(eq(onboardingEmails.principalId, owner))
+      await seedWorkspace({ goals: [goal], featureFlags: {} })
+      expect(await sendOnboardingEmail('welcome', owner)).toEqual({ sent: true })
+      const params = mail.welcome.mock.calls[0][0] as { paragraphs: string[] }
+      expect(params.paragraphs).toContain('Your next step: Create a feedback board.')
+    }
   })
 
   it('writes in the language the owner chose, else the one their browser asked for', async () => {

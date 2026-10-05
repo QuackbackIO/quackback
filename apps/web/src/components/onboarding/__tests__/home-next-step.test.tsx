@@ -102,6 +102,25 @@ describe("Home's next step", () => {
     )
   })
 
+  it('falls back to sharing the board when the primary module is turned off', () => {
+    const modules = ['supportInbox', 'helpCenter', 'statusPage'] as const
+    const goals = {
+      supportInbox: 'customer_support',
+      helpCenter: 'help_center',
+      statusPage: 'status_page',
+    } as const
+    for (const module of modules) {
+      mount({
+        ...status,
+        goals: [goals[module]],
+        features: { ...status.features!, [module]: false },
+      })
+      const card = screen.getByRole('region', { name: 'Share your board link' })
+      expect(card).toHaveTextContent('Launch plan · Step 2 of 3')
+      cleanup()
+    }
+  })
+
   it('shows the three-step path to a first idea and what comes later', () => {
     mount()
     const path = screen.getByRole('region', { name: 'Your path to a first idea' })
