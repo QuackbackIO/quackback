@@ -40,7 +40,11 @@ export function aiBudgetWindow(cloud: TrialFields, now: Date = new Date()): AiBu
 
   const trialStart = parseDate(cloud.trialStartedAt)
   const trialEnd = parseDate(cloud.trialExpiresAt)
-  if (cloud.trialActive && trialStart && trialEnd && trialStart < trialEnd) {
+  // A purchase during the trial clears trialActive but keeps the trial dates.
+  // The trial's allowance still runs to its scheduled end, so a purchase never
+  // moves trial tokens onto the paid month's allowance.
+  const withinTrialSpan = !!trialStart && !!trialEnd && trialStart <= now && now < trialEnd
+  if ((cloud.trialActive || withinTrialSpan) && trialStart && trialEnd && trialStart < trialEnd) {
     return { kind: 'trial', start: trialStart, end: trialEnd }
   }
 

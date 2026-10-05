@@ -181,3 +181,50 @@ describe('enforceAiTokenBudget window selection', () => {
     expect(state.counterCalls).toBe(0)
   })
 })
+
+describe('a purchase in the middle of a trial', () => {
+  // Purchasing ends trialActive (subscriptionStatus is set) but the stored
+  // trial dates stay, so the window must not fall back to the calendar month.
+  const PURCHASED = { ...TRIAL, trialActive: false }
+
+  it('keeps the trial window until the scheduled trial end', () => {
+    const w = aiBudgetWindow(PURCHASED, new Date('2026-11-02T12:00:00Z'))
+    expect(w.kind).toBe('trial')
+    expect(w.start.toISOString()).toBe(TRIAL.trialStartedAt)
+    expect(w.end.toISOString()).toBe(TRIAL.trialExpiresAt)
+  })
+
+  it('starts the next period at the scheduled trial end', () => {
+    const w = aiBudgetWindow(PURCHASED, new Date('2026-11-09T12:00:00Z'))
+    expect(w.kind).toBe('month')
+    expect(w.start.toISOString()).toBe(TRIAL.trialExpiresAt)
+  })
+
+  it('still measures one allowance across the month boundary after paying', async () => {
+    vi.useFakeTimers({ now: new Date('2026-11-02T12:00:00Z'), toFake: ['Date'] })
+    state.cap = 1000
+    state.cloud = { ...PURCHASED }
+    state.rows = [
+      { at: '2026-10-27T10:00:00Z', tokens: 900 },
+      { at: '2026-11-01T10:00:00Z', tokens: 200 },
+    ]
+    await expect(enforceAiTokenBudget()).rejects.toThrow(TierLimitError)
+  })
+
+  it('does not charge trial tokens to the period after the scheduled end', async () => {
+    vi.useFakeTimers({ now: new Date('2026-11-20T12:00:00Z'), toFake: ['Date'] })
+    state.cap = 1000
+    state.cloud = { ...PURCHASED }
+    state.rows = [
+      { at: '2026-11-02T10:00:00Z', tokens: 900 },
+      { at: '2026-11-15T10:00:00Z', tokens: 200 },
+    ]
+    await expect(enforceAiTokenBudget()).resolves.toBeUndefined()
+  })
+
+  it('self-hosted ignores stored trial dates', () => {
+    const w = aiBudgetWindow({ ...PURCHASED, enabled: false }, new Date('2026-11-02T12:00:00Z'))
+    expect(w.kind).toBe('month')
+    expect(w.start.toISOString()).toBe('2026-11-01T00:00:00.000Z')
+  })
+})
