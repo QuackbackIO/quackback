@@ -9,8 +9,9 @@
  * lands in a single bucket every other header-less caller shares, so a few
  * wrong passwords lock everybody out of sign-in.
  *
- * Instead the app resolves the address once, with `getClientIp` (socket peer
- * when TRUSTED_PROXY_HOPS is 0, the trusted hop otherwise), and hands it to
+ * Instead the app resolves the address once, with `getClientIp` (the
+ * operator's TRUSTED_CLIENT_IP_HEADER when set, else the socket peer when
+ * TRUSTED_PROXY_HOPS is 0 and the trusted hop otherwise), and hands it to
  * Better Auth in a private header that Better Auth is configured to read and
  * nothing else. `withTrustedClientIp` drops whatever copy of that header the
  * client sent before writing the resolved one. `auth.handler` and the `auth.api`

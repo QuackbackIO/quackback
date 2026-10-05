@@ -8,7 +8,7 @@
  * stops reading `ipAddressHeaders` (or starts reading something else first)
  * fails here.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { betterAuth } from 'better-auth'
 import { memoryAdapter } from 'better-auth/adapters/memory'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
@@ -19,7 +19,7 @@ import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const { proxyConfig, mockGetRequestIP } = vi.hoisted(() => ({
-  proxyConfig: { hops: 0 },
+  proxyConfig: { hops: 0, header: undefined as string | undefined },
   mockGetRequestIP: vi.fn(),
 }))
 
@@ -27,6 +27,9 @@ vi.mock('@/lib/server/config', () => ({
   config: {
     get trustedProxyHops() {
       return proxyConfig.hops
+    },
+    get trustedClientIpHeader() {
+      return proxyConfig.header
     },
   },
 }))
@@ -42,9 +45,11 @@ import {
   withTrustedClientIpArgs,
   withTrustedClientIpRequest,
 } from '../client-ip'
+import { signCustomerHost, signEdgeClientIp } from '@/lib/server/workspaces/saas-edge-host'
 
 beforeEach(() => {
   proxyConfig.hops = 0
+  proxyConfig.header = undefined
   mockGetRequestIP.mockReset()
 })
 
@@ -74,11 +79,76 @@ describe('withTrustedClientIp', () => {
     expect(headers.has(CLIENT_IP_HEADER)).toBe(false)
   })
 
+  it('uses the operator-trusted client address header when configured', () => {
+    proxyConfig.header = 'x-real-ip'
+    proxyConfig.hops = 1
+    mockGetRequestIP.mockReturnValue('10.0.0.1')
+    const request = withTrustedClientIpRequest(
+      new Request('https://acme.example/api/auth/sign-in/email', {
+        method: 'POST',
+        headers: {
+          'x-forwarded-for': '9.9.9.9, 10.0.0.3',
+          'x-real-ip': '198.51.100.4',
+          [CLIENT_IP_HEADER]: '9.9.9.9',
+        },
+        body: '{}',
+      })
+    )
+    expect(request.headers.get(CLIENT_IP_HEADER)).toBe('198.51.100.4')
+  })
+
   it('leaves the caller headers untouched', () => {
     mockGetRequestIP.mockReturnValue('203.0.113.7')
     const original = new Headers({ [CLIENT_IP_HEADER]: '9.9.9.9' })
     withTrustedClientIp(original)
     expect(original.get(CLIENT_IP_HEADER)).toBe('9.9.9.9')
+  })
+})
+
+describe('a visitor address signed by the custom-host edge proxy', () => {
+  const secret = 'edge-test-secret'
+  const origin = 'origin.up.example'
+  const customer = 'feedback.customer.test'
+  const nowS = Math.floor(Date.now() / 1000)
+
+  function edgeRequestHeaders(ipSig: string): Record<string, string> {
+    return {
+      host: origin,
+      'x-forwarded-for': '9.9.9.9, 10.0.0.2',
+      'x-quackback-customer-host': customer,
+      'x-quackback-customer-host-sig': signCustomerHost(secret, customer),
+      'x-quackback-edge-client-ip': '198.51.100.23',
+      'x-quackback-edge-client-ip-sig': ipSig,
+      [CLIENT_IP_HEADER]: '9.9.9.9',
+    }
+  }
+
+  beforeEach(() => {
+    vi.stubEnv('QUACKBACK_SAAS_EDGE_SECRET', secret)
+    vi.stubEnv('QUACKBACK_SAAS_RAILWAY_ORIGIN', origin)
+    mockGetRequestIP.mockReturnValue('10.0.0.2')
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('reaches Better Auth through the private header', () => {
+    const sig = `${nowS}.${signEdgeClientIp(secret, customer, '198.51.100.23', nowS)}`
+    const request = withTrustedClientIpRequest(
+      new Request(`https://${origin}/api/auth/sign-in/email`, {
+        method: 'POST',
+        headers: edgeRequestHeaders(sig),
+        body: '{}',
+      })
+    )
+    expect(request.headers.get(CLIENT_IP_HEADER)).toBe('198.51.100.23')
+  })
+
+  it('is ignored when its signature does not verify', () => {
+    const sig = `${nowS}.${signEdgeClientIp('wrong', customer, '198.51.100.23', nowS)}`
+    const headers = withTrustedClientIp(edgeRequestHeaders(sig))
+    expect(headers.get(CLIENT_IP_HEADER)).toBe('10.0.0.2')
   })
 })
 
