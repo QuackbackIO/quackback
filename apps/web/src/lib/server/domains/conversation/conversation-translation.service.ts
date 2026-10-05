@@ -227,6 +227,11 @@ async function callInboxTranslationModel<T>(
   // chat() can't infer the structured-output type through the generic
   // `z.ZodType<T>` (it resolves to `unknown`), so assert the validated result
   // back to T — the schema the caller passed IS the T contract.
+  const usage = createUsageLoggingMiddleware({
+    pipelineStep: PIPELINE_STEP,
+    model,
+    metadata: { stage, ...metadata },
+  })
   const result = await chat({
     adapter: openaiCompatibleText(model, {
       baseURL: config.openaiBaseUrl!,
@@ -237,14 +242,11 @@ async function callInboxTranslationModel<T>(
     outputSchema,
     stream: false,
     modelOptions: { ...structuredOutputProviderOptions() },
-    middleware: [
-      createUsageLoggingMiddleware({
-        pipelineStep: PIPELINE_STEP,
-        model,
-        metadata: { stage, ...metadata },
-      }),
-    ],
+    middleware: [usage],
   })
+  // The over-allowance flag is read right after these calls; wait for this
+  // call's usage row so a call that crosses the cap is counted.
+  await usage.settled()
   return result as T
 }
 
