@@ -474,10 +474,15 @@ docker compose -f docker-compose.prod.yml down
 docker volume rm <project>_postgres_data <project>_minio_data
 cp "$SILO_MIGRATION_BACKUP/compose-before.yml" docker-compose.prod.yml
 cp "$SILO_MIGRATION_BACKUP/environment.env" .env
+# Pin the release you are returning to. A restored QUACKBACK_TAG=latest would
+# start the newer image you already pulled and migrate the database forward again.
+sed -i 's/^QUACKBACK_TAG=.*/QUACKBACK_TAG=0.13.2/' .env
+docker image load < "$SILO_MIGRATION_BACKUP/server-image.tar"
 docker compose -f docker-compose.prod.yml create
-docker compose -f docker-compose.prod.yml up -d postgres
+docker compose -f docker-compose.prod.yml up -d --wait postgres
+# "already exists" errors for the vector and pg_cron extensions are harmless.
 docker compose -f docker-compose.prod.yml exec -T postgres \
-  sh -c 'pg_restore --no-owner -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+  sh -c 'pg_restore --no-owner -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
   < "$SILO_MIGRATION_BACKUP/database.dump"
 docker cp - quackback-minio:/data < "$SILO_MIGRATION_BACKUP/data.tar"
 docker compose -f docker-compose.prod.yml up -d
