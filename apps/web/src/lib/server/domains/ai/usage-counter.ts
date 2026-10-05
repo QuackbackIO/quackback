@@ -2,9 +2,10 @@ import { db } from '@/lib/server/db'
 import { sql } from 'drizzle-orm'
 
 /**
- * Sum of total_tokens (input + output) for successful AI calls in the
- * current calendar month: chat completions and embeddings both count toward
- * the aiTokensPerMonth allowance.
+ * Sum of total_tokens (input + output) for successful chat completions in the
+ * current calendar month, the usage the aiTokensPerMonth allowance and the
+ * usage report measure. Embeddings are recorded in ai_usage_log for visibility
+ * but do not count toward the allowance.
  *
  * Served by ai_usage_log_created_idx on created_at; the table keeps 90 days.
  */
@@ -27,7 +28,7 @@ export async function aiTokensInWindow(start: Date, end: Date): Promise<number> 
     FROM ai_usage_log
     WHERE created_at >= ${start.toISOString()}::timestamptz
       AND created_at < ${end.toISOString()}::timestamptz
-      AND call_type IN ('chat_completion', 'embedding')
+      AND call_type = 'chat_completion'
       AND status = 'success'
   `)
   const rows = result as unknown as Array<{ total: string | number }>

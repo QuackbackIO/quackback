@@ -31,13 +31,13 @@ describe('aiTokensThisMonth', () => {
     expect(await aiTokensThisMonth()).toBe(987654321)
   })
 
-  it('issues a SUM query over chat and embedding calls that succeeded this month', async () => {
+  it('issues a SUM query over chat completions that succeeded this month, leaving embeddings out', async () => {
     hoisted.mockExecute.mockResolvedValue([{ total: 0 }])
     await aiTokensThisMonth()
     const sqlArg = hoisted.mockExecute.mock.calls[0]?.[0]
     const text = JSON.stringify(sqlArg)
-    expect(text).toContain('chat_completion')
-    expect(text).toContain("'embedding'")
+    expect(text).toContain("call_type = 'chat_completion'")
+    expect(text).not.toContain("'embedding'")
     expect(text).toContain('success')
     expect(text).toContain('total_tokens')
     expect(text).toContain('created_at')
