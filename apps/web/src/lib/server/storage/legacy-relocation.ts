@@ -16,7 +16,9 @@
  *   skipped, so an interrupted run resumes by simply running again.
  * - **Never clobbers.** A destination that holds a *different* object was
  *   written under the namespace by the running build and wins; it is counted
- *   and logged, never overwritten.
+ *   and logged, never overwritten. Each copy re-checks its destination and is
+ *   conditional (`If-None-Match: *`) where the provider honours that; the
+ *   residual window on providers that ignore it is described at the copy.
  * - **Once.** Completion is recorded in `kv_store` with the counts; a run with
  *   any failed copy leaves the marker unset so the next attempt retries.
  *
@@ -25,6 +27,7 @@
  */
 import { config } from '@/lib/server/config'
 import { kvGet, kvSet } from '@/lib/server/kv/pg-kv'
+import { runWithoutLogContext } from '@/lib/server/log-context'
 import { logger } from '@/lib/server/logger'
 import { withSweepLock } from '@/lib/server/sweep-lock'
 import { WORKSPACE_NAMESPACE_ROOT } from './namespace'
@@ -146,10 +149,13 @@ export async function relocateBareObjects(
       note('uncomposable', source.key)
       return
     }
-    const present = existing.get(destination)
-    if (present) {
+    const classify = (present: ListedObject) => {
       if (sameObject(source, present)) counts.alreadyPresent += 1
       else note('conflicting', source.key)
+    }
+    const listed = existing.get(destination)
+    if (listed) {
+      classify(listed)
       return
     }
     if (source.size > MAX_SINGLE_COPY_BYTES) {
@@ -157,7 +163,24 @@ export async function relocateBareObjects(
       return
     }
     try {
-      await bucket.copy(source.key, destination)
+      // The snapshot above is from before the scan, and the running build may
+      // have written this destination since. Look again immediately before
+      // copying, and copy with `If-None-Match: *` so a provider that honours
+      // conditional copies refuses atomically. On a provider that ignores the
+      // condition, a write landing between this HEAD and the copy is still
+      // overwritten; that window is one request long and needs a newly
+      // uploaded object to reuse a bare key's random name.
+      const now = await bucket.head(destination)
+      if (now) {
+        classify(now)
+        return
+      }
+      if ((await bucket.copyIfAbsent(source.key, destination)) === 'exists') {
+        const raced = await bucket.head(destination)
+        if (raced) classify(raced)
+        else note('failed', source.key)
+        return
+      }
       counts.copied += 1
     } catch (err) {
       note('failed', source.key)
@@ -258,4 +281,44 @@ export async function runLegacyStorageRelocation(): Promise<RelocationOutcome> {
     outcome = { status: 'done', marker }
   })
   return outcome
+}
+
+/** Delay before the first attempt, so it does not compete with boot. */
+export const RELOCATION_FIRST_ATTEMPT_MS = 20_000
+/** Re-attempt cadence until an attempt reports the work settled. */
+export const RELOCATION_RETRY_MS = 60 * 60 * 1000
+
+/**
+ * Schedule the relocation on this process: once shortly after boot, then
+ * hourly until an attempt finishes, finds it already done, or finds nothing to
+ * do. An interrupted or partly failed run therefore resumes without a restart.
+ *
+ * The timers are armed with no ambient context. A timer inherits the async
+ * context it was created in, and the workspace scope travels in that context,
+ * so arming from inside a scope would otherwise make every attempt run as that
+ * workspace and be refused. Every attempt catches and logs its own failure; no
+ * rejection escapes a timer. Returns a function that cancels both timers.
+ */
+export function armLegacyStorageRelocation({
+  firstAttemptMs = RELOCATION_FIRST_ATTEMPT_MS,
+  retryMs = RELOCATION_RETRY_MS,
+}: { firstAttemptMs?: number; retryMs?: number } = {}): () => void {
+  return runWithoutLogContext(() => {
+    let interval: ReturnType<typeof setInterval> | undefined
+    const disarm = () => {
+      clearTimeout(first)
+      clearInterval(interval)
+    }
+    const attempt = async () => {
+      try {
+        const outcome = await runLegacyStorageRelocation()
+        if (outcome.status !== 'incomplete' && outcome.status !== 'locked') disarm()
+      } catch (err) {
+        log.error({ err }, 'storage relocation attempt failed; it retries within the hour')
+      }
+    }
+    const first = setTimeout(() => void attempt(), firstAttemptMs)
+    interval = setInterval(() => void attempt(), retryMs)
+    return disarm
+  })
 }

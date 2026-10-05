@@ -32,8 +32,16 @@ vi.mock('@/lib/server/db', () => ({
 
 /** `kv_store`, as far as the marker is concerned. */
 const kv = new Map<string, unknown>()
+/** Make the next marker read fail, as a database outage would. */
+let kvReadFailures = 0
 vi.mock('@/lib/server/kv/pg-kv', () => ({
-  kvGet: async (key: string) => (kv.has(key) ? structuredClone(kv.get(key)) : null),
+  kvGet: async (key: string) => {
+    if (kvReadFailures > 0) {
+      kvReadFailures -= 1
+      throw new Error('connection refused')
+    }
+    return kv.has(key) ? structuredClone(kv.get(key)) : null
+  },
   kvSet: async (key: string, value: unknown, seconds: number) => {
     if (!(seconds > 0)) throw new Error('ttl must be positive')
     kv.set(key, structuredClone(value))
@@ -60,6 +68,18 @@ interface StoredObject {
 const bucket = new Map<string, StoredObject>()
 const sent: Array<{ kind: string; input: Record<string, unknown> }> = []
 const failCopiesOf = new Set<string>()
+/**
+ * How the provider treats `If-None-Match: *` on a copy: honour it (412 when
+ * the destination exists), ignore it (as the local Silo does), or reject the
+ * header with 501.
+ */
+let conditionalCopy: 'honour' | 'ignore' | 'reject' = 'honour'
+/** Runs after each command completes, to stage a concurrent writer. */
+let afterCommand: ((cmd: { kind: string; input: Record<string, unknown> }) => void) | undefined
+
+function s3Error(name: string, status: number): Error {
+  return Object.assign(new Error(name), { name, $metadata: { httpStatusCode: status } })
+}
 const PAGE_SIZE = 3
 
 function put(key: string, body: string, extra: Partial<StoredObject> = {}) {
@@ -82,40 +102,11 @@ vi.mock('@aws-sdk/client-s3', () => ({
     return {
       send: async (cmd: { kind: string; input: Record<string, unknown> }) => {
         sent.push(cmd)
-        const input = cmd.input
-        if (input.Bucket !== BUCKET) throw new Error(`NoSuchBucket: ${String(input.Bucket)}`)
-        if (cmd.kind === 'ListObjectsV2') {
-          const prefix = (input.Prefix as string | undefined) ?? ''
-          const keys = [...bucket.keys()].filter((k) => k.startsWith(prefix)).sort()
-          const after = input.ContinuationToken as string | undefined
-          const from = after ? keys.findIndex((k) => k > after) : 0
-          const page = from < 0 ? [] : keys.slice(from, from + PAGE_SIZE)
-          const truncated = from >= 0 && from + PAGE_SIZE < keys.length
-          return {
-            Contents: page.map((Key) => {
-              const o = bucket.get(Key)!
-              return { Key, Size: o.size, ETag: o.etag }
-            }),
-            IsTruncated: truncated,
-            NextContinuationToken: truncated ? page[page.length - 1] : undefined,
-          }
+        try {
+          return await handle(cmd)
+        } finally {
+          afterCommand?.(cmd)
         }
-        if (cmd.kind === 'CopyObject') {
-          const source = decodeURIComponent(String(input.CopySource))
-          if (!source.startsWith(`${BUCKET}/`)) throw new Error(`bad CopySource ${source}`)
-          const sourceKey = source.slice(BUCKET.length + 1)
-          if (failCopiesOf.has(sourceKey)) throw new Error('InternalError')
-          const original = bucket.get(sourceKey)
-          if (!original) throw new Error(`NoSuchKey: ${sourceKey}`)
-          const keepMetadata = input.MetadataDirective === 'COPY'
-          bucket.set(String(input.Key), {
-            ...original,
-            contentType: keepMetadata ? original.contentType : 'binary/octet-stream',
-            metadata: keepMetadata ? original.metadata : undefined,
-          })
-          return {}
-        }
-        throw new Error(`unexpected command ${cmd.kind}`)
       },
       destroy: vi.fn(),
     }
@@ -125,10 +116,66 @@ vi.mock('@aws-sdk/client-s3', () => ({
   DeleteObjectCommand: command('DeleteObject'),
   ListObjectsV2Command: command('ListObjectsV2'),
   CopyObjectCommand: command('CopyObject'),
+  HeadObjectCommand: command('HeadObject'),
 }))
 
-const { runLegacyStorageRelocation, LEGACY_RELOCATION_MARKER_KEY, MAX_SINGLE_COPY_BYTES } =
-  await import('../legacy-relocation')
+async function handle(cmd: { kind: string; input: Record<string, unknown> }): Promise<unknown> {
+  const input = cmd.input
+  if (input.Bucket !== BUCKET) throw new Error(`NoSuchBucket: ${String(input.Bucket)}`)
+  if (cmd.kind === 'ListObjectsV2') {
+    const prefix = (input.Prefix as string | undefined) ?? ''
+    const keys = [...bucket.keys()].filter((k) => k.startsWith(prefix)).sort()
+    const after = input.ContinuationToken as string | undefined
+    const from = after ? keys.findIndex((k) => k > after) : 0
+    const page = from < 0 ? [] : keys.slice(from, from + PAGE_SIZE)
+    const truncated = from >= 0 && from + PAGE_SIZE < keys.length
+    return {
+      Contents: page.map((Key) => {
+        const o = bucket.get(Key)!
+        return { Key, Size: o.size, ETag: o.etag }
+      }),
+      IsTruncated: truncated,
+      NextContinuationToken: truncated ? page[page.length - 1] : undefined,
+    }
+  }
+  if (cmd.kind === 'CopyObject') {
+    const source = decodeURIComponent(String(input.CopySource))
+    if (!source.startsWith(`${BUCKET}/`)) throw new Error(`bad CopySource ${source}`)
+    const sourceKey = source.slice(BUCKET.length + 1)
+    if (failCopiesOf.has(sourceKey)) throw new Error('InternalError')
+    if (input.IfNoneMatch !== undefined) {
+      if (conditionalCopy === 'reject') throw s3Error('NotImplemented', 501)
+      if (conditionalCopy === 'honour' && bucket.has(String(input.Key))) {
+        throw s3Error('PreconditionFailed', 412)
+      }
+    }
+    const original = bucket.get(sourceKey)
+    if (!original) throw new Error(`NoSuchKey: ${sourceKey}`)
+    const keepMetadata = input.MetadataDirective === 'COPY'
+    bucket.set(String(input.Key), {
+      ...original,
+      contentType: keepMetadata ? original.contentType : 'binary/octet-stream',
+      metadata: keepMetadata ? original.metadata : undefined,
+    })
+    return {}
+  }
+  if (cmd.kind === 'HeadObject') {
+    const o = bucket.get(String(input.Key))
+    if (!o) throw s3Error('NotFound', 404)
+    return { ContentLength: o.size, ETag: o.etag }
+  }
+  throw new Error(`unexpected command ${cmd.kind}`)
+}
+
+const {
+  armLegacyStorageRelocation,
+  runLegacyStorageRelocation,
+  LEGACY_RELOCATION_MARKER_KEY,
+  MAX_SINGLE_COPY_BYTES,
+  RELOCATION_FIRST_ATTEMPT_MS,
+  RELOCATION_RETRY_MS,
+} = await import('../legacy-relocation')
+const { withWorkspace } = await import('@/lib/server/__tests__/workspace-scope')
 const { openLegacyRelocationBucket, LegacyRelocationRefused } = await import('../s3')
 
 const copies = () => sent.filter((c) => c.kind === 'CopyObject')
@@ -138,7 +185,10 @@ beforeEach(() => {
   sent.length = 0
   kv.clear()
   failCopiesOf.clear()
+  conditionalCopy = 'honour'
+  afterCommand = undefined
   lockHeldElsewhere = false
+  kvReadFailures = 0
   mockConfig.isPooledTenancy = false
   mockConfig.s3Bucket = BUCKET
   mockConfig.s3Region = 'us-east-1'
@@ -216,6 +266,51 @@ describe('single-workspace relocation', () => {
     expect(copies()).toHaveLength(0)
     expect(bucket.get(`${NS}logos/brand.png`)?.body).toBe('written-by-new-build')
     expect(outcome.status === 'done' && outcome.marker.conflicting).toBe(1)
+  })
+
+  it('never overwrites a destination written after the namespace was listed', async () => {
+    put('logos/brand.png', 'old')
+    // The running build writes the destination once the namespace snapshot is
+    // taken, before the copy reaches it.
+    afterCommand = (cmd) => {
+      if (cmd.kind === 'ListObjectsV2' && cmd.input.Prefix === NS) {
+        put(`${NS}logos/brand.png`, 'written-by-new-build')
+      }
+    }
+    conditionalCopy = 'ignore'
+
+    const outcome = await runLegacyStorageRelocation()
+
+    expect(bucket.get(`${NS}logos/brand.png`)?.body).toBe('written-by-new-build')
+    expect(copies()).toHaveLength(0)
+    expect(outcome.status === 'done' && outcome.marker.conflicting).toBe(1)
+  })
+
+  it('refuses atomically when the destination appears between the re-check and the copy', async () => {
+    put('logos/brand.png', 'old')
+    afterCommand = (cmd) => {
+      if (cmd.kind === 'HeadObject' && cmd.input.Key === `${NS}logos/brand.png`) {
+        if (!bucket.has(`${NS}logos/brand.png`)) put(`${NS}logos/brand.png`, 'written-by-new-build')
+      }
+    }
+
+    const outcome = await runLegacyStorageRelocation()
+
+    expect(copies()[0]?.input.IfNoneMatch).toBe('*')
+    expect(bucket.get(`${NS}logos/brand.png`)?.body).toBe('written-by-new-build')
+    expect(outcome.status === 'done' && outcome.marker).toMatchObject({ conflicting: 1, copied: 0 })
+  })
+
+  it('copies without the condition on a provider that rejects it', async () => {
+    put('logos/a.png', 'a')
+    put('logos/b.png', 'b')
+    conditionalCopy = 'reject'
+
+    const outcome = await runLegacyStorageRelocation()
+
+    expect(bucket.get(`${NS}logos/a.png`)?.body).toBe('a')
+    expect(bucket.get(`${NS}logos/b.png`)?.body).toBe('b')
+    expect(outcome.status === 'done' && outcome.marker.copied).toBe(2)
   })
 
   it('leaves objects over the single-copy limit for the manual command', async () => {
@@ -318,5 +413,77 @@ describe('pooled tenancy', () => {
     vi.stubEnv('QUACKBACK_TENANCY', 'pooled')
     await expect(openLegacyRelocationBucket()).rejects.toBeInstanceOf(LegacyRelocationRefused)
     expect(sent).toHaveLength(0)
+  })
+})
+
+describe('the boot-time arming', () => {
+  let disarm: (() => void) | undefined
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    disarm?.()
+    disarm = undefined
+    vi.useRealTimers()
+  })
+
+  it('runs on a single-workspace boot, then stops once done', async () => {
+    put('logos/a.png', 'a')
+
+    disarm = armLegacyStorageRelocation()
+    await vi.advanceTimersByTimeAsync(RELOCATION_FIRST_ATTEMPT_MS - 1)
+    expect(sent).toHaveLength(0)
+    await vi.advanceTimersByTimeAsync(1)
+
+    expect(bucket.get(`${NS}logos/a.png`)?.body).toBe('a')
+    expect(kv.has(LEGACY_RELOCATION_MARKER_KEY)).toBe(true)
+
+    sent.length = 0
+    await vi.advanceTimersByTimeAsync(RELOCATION_RETRY_MS * 3)
+    expect(sent).toHaveLength(0)
+  })
+
+  it('gets past the scope guard even when armed from inside a workspace scope', async () => {
+    put('logos/a.png', 'a')
+
+    // Real timers: a fake timer runs its callback in the context of whoever
+    // advances the clock, which would hide exactly the inheritance at issue.
+    vi.useRealTimers()
+    disarm = withWorkspace('workspace-alpha', () =>
+      armLegacyStorageRelocation({ firstAttemptMs: 1, retryMs: 60_000 })
+    )
+
+    await vi.waitFor(() => expect(kv.has(LEGACY_RELOCATION_MARKER_KEY)).toBe(true), {
+      timeout: 5_000,
+    })
+    expect(bucket.get(`${NS}logos/a.png`)?.body).toBe('a')
+  })
+
+  it('catches a failed attempt and retries it on the next tick', async () => {
+    put('logos/a.png', 'a')
+    kvReadFailures = 1
+
+    disarm = armLegacyStorageRelocation()
+    await vi.advanceTimersByTimeAsync(RELOCATION_FIRST_ATTEMPT_MS)
+    expect(bucket.has(`${NS}logos/a.png`)).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(RELOCATION_RETRY_MS)
+    expect(bucket.get(`${NS}logos/a.png`)?.body).toBe('a')
+    expect(kv.has(LEGACY_RELOCATION_MARKER_KEY)).toBe(true)
+  })
+
+  it('keeps retrying after an incomplete run', async () => {
+    put('logos/a.png', 'a')
+    failCopiesOf.add('logos/a.png')
+
+    disarm = armLegacyStorageRelocation()
+    await vi.advanceTimersByTimeAsync(RELOCATION_FIRST_ATTEMPT_MS)
+    expect(kv.has(LEGACY_RELOCATION_MARKER_KEY)).toBe(false)
+
+    failCopiesOf.clear()
+    await vi.advanceTimersByTimeAsync(RELOCATION_RETRY_MS)
+    expect(kv.has(LEGACY_RELOCATION_MARKER_KEY)).toBe(true)
   })
 })

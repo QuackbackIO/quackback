@@ -356,6 +356,7 @@ interface S3Module {
   DeleteObjectCommand: new (input: BucketKeyInput) => S3Command
   ListObjectsV2Command: new (input: ListObjectsInput) => S3Command
   CopyObjectCommand: new (input: CopyObjectInput) => S3Command
+  HeadObjectCommand: new (input: BucketKeyInput) => S3Command
 }
 
 /** ListObjectsV2 input; used only by {@link openLegacyRelocationBucket}. */
@@ -372,6 +373,7 @@ interface CopyObjectInput {
   Key: string
   CopySource: string
   MetadataDirective: 'COPY'
+  IfNoneMatch?: '*'
 }
 
 /** Typed subset of @aws-sdk/s3-request-presigner exports used by this module. */
@@ -682,8 +684,16 @@ export interface LegacyRelocationBucket {
     prefix: string | undefined,
     continuationToken: string | undefined
   ): Promise<{ objects: ListedObject[]; nextToken?: string }>
-  /** Server-side copy within the bucket, keeping Content-Type and metadata. */
-  copy(fromKey: string, toKey: string): Promise<void>
+  /** The object at `key` as a listing would report it, or null when absent. */
+  head(key: string): Promise<ListedObject | null>
+  /**
+   * Server-side copy within the bucket, keeping Content-Type and metadata,
+   * sent with `If-None-Match: *` so a provider that honours conditional copies
+   * never replaces an existing destination. Resolves `'exists'` when the
+   * provider refused for that reason. A provider that ignores the condition
+   * copies unconditionally, so callers re-check with {@link head} first.
+   */
+  copyIfAbsent(fromKey: string, toKey: string): Promise<'copied' | 'exists'>
 }
 
 /** A workspace-scoped or pooled process asked for the bucket root. */
@@ -709,6 +719,8 @@ export async function openLegacyRelocationBucket(): Promise<LegacyRelocationBuck
 
   const connection = getS3Config()
   const workspaceId = await currentWorkspaceId()
+  /** Set once the provider answers a conditional copy with 501. */
+  let conditionalCopyRejected = false
 
   return {
     namespace: workspaceNamespace(workspaceId),
@@ -739,7 +751,21 @@ export async function openLegacyRelocationBucket(): Promise<LegacyRelocationBuck
       }
     },
 
-    async copy(fromKey, toKey) {
+    async head(key) {
+      const client = await getS3Client(connection)
+      const { HeadObjectCommand } = await getS3Module()
+      try {
+        const response = (await client.send(
+          new HeadObjectCommand({ Bucket: connection.bucket, Key: key })
+        )) as { ContentLength?: number; ETag?: string }
+        return { key, size: response.ContentLength ?? 0, etag: response.ETag }
+      } catch (err) {
+        if (s3StatusCode(err) === 404) return null
+        throw err
+      }
+    },
+
+    async copyIfAbsent(fromKey, toKey) {
       const client = await getS3Client(connection)
       const { CopyObjectCommand } = await getS3Module()
       // CopySource is `<bucket>/<key>`, URL-encoded per segment so the
@@ -747,16 +773,43 @@ export async function openLegacyRelocationBucket(): Promise<LegacyRelocationBuck
       const source = [connection.bucket, ...fromKey.split('/')]
         .map((segment) => encodeURIComponent(segment))
         .join('/')
-      await client.send(
-        new CopyObjectCommand({
-          Bucket: connection.bucket,
-          Key: toKey,
-          CopySource: source,
-          MetadataDirective: 'COPY',
-        })
-      )
+      const send = (conditional: boolean) =>
+        client.send(
+          new CopyObjectCommand({
+            Bucket: connection.bucket,
+            Key: toKey,
+            CopySource: source,
+            MetadataDirective: 'COPY',
+            ...(conditional ? { IfNoneMatch: '*' as const } : {}),
+          })
+        )
+      if (conditionalCopyRejected) {
+        await send(false)
+        return 'copied'
+      }
+      try {
+        await send(true)
+        return 'copied'
+      } catch (err) {
+        const status = s3StatusCode(err)
+        if (status === 412) return 'exists'
+        // A provider that rejects the condition outright rather than ignoring
+        // it. Stop sending it for the rest of this run.
+        if (status === 501) {
+          conditionalCopyRejected = true
+          await send(false)
+          return 'copied'
+        }
+        throw err
+      }
     },
   }
+}
+
+/** The HTTP status an SDK error carries, if any. */
+function s3StatusCode(err: unknown): number | undefined {
+  const meta = (err as { $metadata?: { httpStatusCode?: number } } | null)?.$metadata
+  return meta?.httpStatusCode
 }
 
 // ============================================================================

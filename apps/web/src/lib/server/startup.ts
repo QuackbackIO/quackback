@@ -287,31 +287,10 @@ function startBackgroundProcessing(): void {
   // One-time copy of files stored before the workspace storage layout into it
   // (`storage/legacy-relocation.ts`). Single-workspace only: under pooled
   // tenancy the bucket is shared and a bare key belongs to nobody. Runs in the
-  // background so readiness never waits on a bucket listing, and re-attempts
-  // hourly until it records completion, so an interrupted copy resumes. The
-  // timers are armed outside any inherited log context, like telemetry above.
+  // background so readiness never waits on a bucket listing.
   if (!config.isPooledTenancy) {
-    Promise.all([
-      import('@/lib/server/log-context'),
-      import('@/lib/server/storage/legacy-relocation'),
-    ])
-      .then(([{ runWithoutLogContext }, { runLegacyStorageRelocation }]) =>
-        runWithoutLogContext(async () => {
-          let timer: ReturnType<typeof setInterval> | undefined
-          const attempt = async () => {
-            try {
-              const outcome = await runLegacyStorageRelocation()
-              if (outcome.status !== 'incomplete' && outcome.status !== 'locked') {
-                clearInterval(timer)
-              }
-            } catch (err) {
-              log.error({ err }, 'storage relocation attempt failed; it retries within the hour')
-            }
-          }
-          setTimeout(() => void attempt(), 20_000)
-          timer = setInterval(() => void attempt(), 60 * 60 * 1000)
-        })
-      )
+    import('@/lib/server/storage/legacy-relocation')
+      .then(({ armLegacyStorageRelocation }) => armLegacyStorageRelocation())
       .catch((err) => log.error({ err }, 'failed to arm the storage relocation'))
   }
 
