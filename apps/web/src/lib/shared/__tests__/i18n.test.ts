@@ -21,6 +21,7 @@ import {
   loadSheetMessages,
   isLaunchMessage,
   loadLaunchMessages,
+  loadTryMessengerPageMessages,
 } from '../i18n'
 
 describe('normalizeLocale', () => {
@@ -291,5 +292,23 @@ describe('launch plan strings', () => {
     expect(launch['onboarding.win.generic']).toBe(all['onboarding.win.generic'])
     expect(Object.keys(launch).length).toBeGreaterThan(60)
     expect(Object.keys(launch).every(isLaunchMessage)).toBe(true)
+  })
+})
+
+describe('the Try Messenger phone page strings', () => {
+  it('are seeded by that page alone', async () => {
+    const [all, widget, portal, page] = await Promise.all([
+      loadMessages('de'),
+      loadWidgetMessages('de'),
+      loadPortalMessages('de'),
+      loadTryMessengerPageMessages('de'),
+    ])
+    const isPage = (key: string) => key.startsWith('widget.test.')
+    for (const seeded of [widget, portal, adminSeedMessages(all)]) {
+      expect(Object.keys(seeded).filter(isPage)).toEqual([])
+    }
+    expect(page['widget.test.sessionBanner']).toBe(all['widget.test.sessionBanner'])
+    expect(Object.keys(page).length).toBeGreaterThan(4)
+    expect(Object.keys(page).every(isPage)).toBe(true)
   })
 })
