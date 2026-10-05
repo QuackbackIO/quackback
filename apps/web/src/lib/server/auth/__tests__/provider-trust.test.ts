@@ -73,6 +73,26 @@ describe('oidcTrustedProviderIds', () => {
     expect(log.lines).toHaveLength(2)
   })
 
+  it('keeps one state per provider, so returning to an earlier state reports again', () => {
+    // Only the latest state per row is remembered, which bounds the memory by
+    // provider count rather than by every state a provider has ever been in.
+    const log = recordingLog()
+    const changed = { ...untestedSso, detailsChangedAt: '2026-07-04T00:00:00Z' }
+    oidcTrustedProviderIds(['sso'], [untestedSso], log)
+    oidcTrustedProviderIds(['sso'], [changed], log)
+    oidcTrustedProviderIds(['sso'], [untestedSso], log)
+    expect(log.lines).toHaveLength(3)
+  })
+
+  it('forgets a provider once it is trusted', () => {
+    const log = recordingLog()
+    const passed = { ...stalePortal, lastSuccessfulTestAt: '2026-07-03T00:00:00Z' }
+    oidcTrustedProviderIds(['custom-oidc'], [stalePortal], log)
+    oidcTrustedProviderIds(['custom-oidc'], [passed], log)
+    oidcTrustedProviderIds(['custom-oidc'], [stalePortal], log)
+    expect(log.lines).toHaveLength(2)
+  })
+
   it('does not report a provider whose test postdates its last change', () => {
     const log = recordingLog()
     oidcTrustedProviderIds(['oidc_tested'], rows, log)

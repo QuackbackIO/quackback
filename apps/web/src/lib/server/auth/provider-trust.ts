@@ -63,13 +63,14 @@ export interface TrustObservationLogger {
 }
 
 /**
- * Provider states already reported by this process. The auth instance is
- * rebuilt on every auth_config_version change, so without this the same line
- * repeats on each rebuild. Keyed by the row id (unique across workspaces) plus
- * both timestamps, so a provider is reported again only after its test state
- * actually moves.
+ * The last test state this process reported for each provider row. The auth
+ * instance is rebuilt on every auth_config_version change, so without this the
+ * same line repeats on each rebuild. One entry per row id (unique across
+ * workspaces), holding that row's two timestamps: a provider is reported again
+ * only when its state differs from the one stored, and its entry is dropped
+ * once it is trusted, so the map never holds more than the untested providers.
  */
-const reportedObservations = new Set<string>()
+const reportedObservations = new Map<string, string>()
 
 /** Test seam: forget what has been reported. */
 export function resetTrustObservations(): void {
@@ -106,10 +107,13 @@ export function oidcTrustedProviderIds(
       assertsVerifiedEmail: true,
       trustOverride: null,
     })
-    if (trusted) continue
-    const key = `${row.id}|${row.lastSuccessfulTestAt ?? ''}|${row.detailsChangedAt ?? ''}`
-    if (reportedObservations.has(key)) continue
-    reportedObservations.add(key)
+    if (trusted) {
+      reportedObservations.delete(row.id)
+      continue
+    }
+    const state = `${row.lastSuccessfulTestAt ?? ''}|${row.detailsChangedAt ?? ''}`
+    if (reportedObservations.get(row.id) === state) continue
+    reportedObservations.set(row.id, state)
     log.info(
       {
         registrationId,
