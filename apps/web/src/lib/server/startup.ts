@@ -5,6 +5,7 @@
 import { logger } from '@/lib/server/logger'
 import { getProcessRole, shouldRunWorkers } from './process-role'
 import { config, validateRuntimeConfig } from './config'
+import { logUnusedRedisUrl } from './unused-env'
 
 const log = logger.child({ component: 'startup' })
 
@@ -113,6 +114,8 @@ export function logStartupBanner(): void {
     },
     'server started'
   )
+
+  logUnusedRedisUrl(log)
 
   // One-shot override: run a named fleet job and exit. The live fleet does
   // not use this — hourly and daily sweeps run on the always-on worker — but
