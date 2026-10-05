@@ -1578,6 +1578,7 @@
   "onboarding.win.region": "أول نجاح",
   "onboarding.win.generic": "وصل أول عميل لك",
   "onboarding.win.idea": "{who} نشر فكرة",
+  "onboarding.win.vote": "{who} صوّت لفكرة",
   "onboarding.win.teamIdea": "{who} نشر أول فكرة للفريق",
   "onboarding.win.conversation": "{who} بدأ محادثة",
   "onboarding.win.helpful": "{who} وجد مقالة مفيدة",

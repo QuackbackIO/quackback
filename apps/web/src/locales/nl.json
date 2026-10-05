@@ -1578,6 +1578,7 @@
   "onboarding.win.region": "Eerste succes",
   "onboarding.win.generic": "Je eerste klant is er",
   "onboarding.win.idea": "{who} heeft een idee geplaatst",
+  "onboarding.win.vote": "{who} heeft op een idee gestemd",
   "onboarding.win.teamIdea": "{who} heeft het eerste teamidee geplaatst",
   "onboarding.win.conversation": "{who} is een gesprek gestart",
   "onboarding.win.helpful": "{who} vond een artikel nuttig",

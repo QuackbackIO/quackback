@@ -1578,6 +1578,7 @@
   "onboarding.win.region": "Primer logro",
   "onboarding.win.generic": "Ya tienes tu primer cliente",
   "onboarding.win.idea": "{who} publicó una idea",
+  "onboarding.win.vote": "{who} votó por una idea",
   "onboarding.win.teamIdea": "{who} publicó la primera idea del equipo",
   "onboarding.win.conversation": "{who} inició una conversación",
   "onboarding.win.helpful": "{who} marcó un artículo como útil",

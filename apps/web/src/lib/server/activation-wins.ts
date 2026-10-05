@@ -1,4 +1,4 @@
-import type { BoardId } from '@quackback/ids'
+import type { BoardId, PrincipalId } from '@quackback/ids'
 import {
   db,
   and,
@@ -122,12 +122,57 @@ export const winRules = {
   )!,
   /** An idea by someone outside the team, never one onboarding wrote. Joins principal. */
   outsideIdea: and(isNull(posts.deletedAt), outsidePerson, notGeneratedPost)!,
+  /** A vote by someone outside the team on a real idea. Joins the voter's principal and the post. */
+  outsideVote: and(isNull(posts.deletedAt), outsidePerson, notGeneratedPost)!,
 }
 
 /** The outcome whose win counts: the primary goal, or the private team board. */
 export function winOutcome(state: SetupState | null): OnboardingOutcome {
   const primary = state?.goals?.[0] ?? state?.useCase ?? 'product_feedback'
   return primary === 'product_feedback' && state?.feedbackPrivate ? 'internal' : primary
+}
+
+/** The private team board whose ideas count, and the owner whose own ideas do not. */
+export interface InternalWinScope {
+  boardId: BoardId
+  ownerId: PrincipalId | null
+}
+
+/** Which board and owner a private-board win is judged on. Null with no team board. */
+export async function internalWinScope(state: SetupState | null): Promise<InternalWinScope | null> {
+  const resource = state?.steps.startingPoint
+  const storedBoard =
+    resource?.outcome === 'internal' && resource.resourceType === 'board' && resource.resourceId
+      ? await db.query.boards.findFirst({
+          where: and(eq(boards.id, resource.resourceId as BoardId), isNull(boards.deletedAt)),
+          columns: { id: true },
+        })
+      : null
+  const internalBoard =
+    storedBoard ??
+    (await db.query.boards.findFirst({
+      where: and(isNull(boards.deletedAt), sql`${boards.access}->>'view' = 'team'`),
+      columns: { id: true },
+    }))
+  if (!internalBoard) return null
+  // The owner is the first human admin; their own ideas do not count.
+  const [owner] = await db
+    .select({ id: principal.id })
+    .from(principal)
+    .where(and(eq(principal.role, 'admin'), eq(principal.type, 'user')))
+    .orderBy(asc(principal.createdAt))
+    .limit(1)
+  return { boardId: internalBoard.id as BoardId, ownerId: owner?.id ?? null }
+}
+
+/** A teammate's idea on the scope's board: never the owner's, never one onboarding wrote. */
+export function internalWinPost(scope: InternalWinScope) {
+  return and(
+    eq(posts.boardId, scope.boardId),
+    isNull(posts.deletedAt),
+    notGeneratedPost,
+    scope.ownerId ? ne(posts.principalId, scope.ownerId) : undefined
+  )!
 }
 
 /** Query the first real outcome; onboarding-generated/test records never qualify. */
@@ -167,39 +212,12 @@ export async function detectFirstWin(state: SetupState | null): Promise<FirstWin
   }
 
   if (outcome === 'internal') {
-    const resource = state?.steps.startingPoint
-    const storedBoard =
-      resource?.outcome === 'internal' && resource.resourceType === 'board' && resource.resourceId
-        ? await db.query.boards.findFirst({
-            where: and(eq(boards.id, resource.resourceId as BoardId), isNull(boards.deletedAt)),
-            columns: { id: true },
-          })
-        : null
-    const internalBoard =
-      storedBoard ??
-      (await db.query.boards.findFirst({
-        where: and(isNull(boards.deletedAt), sql`${boards.access}->>'view' = 'team'`),
-        columns: { id: true },
-      }))
-    if (!internalBoard) return { reached: false, reachedAt: null }
-    // The owner is the first human admin; their own ideas do not count.
-    const [owner] = await db
-      .select({ id: principal.id })
-      .from(principal)
-      .where(and(eq(principal.role, 'admin'), eq(principal.type, 'user')))
-      .orderBy(asc(principal.createdAt))
-      .limit(1)
+    const scope = await internalWinScope(state)
+    if (!scope) return { reached: false, reachedAt: null }
     const [row] = await db
       .select({ reachedAt: posts.createdAt })
       .from(posts)
-      .where(
-        and(
-          eq(posts.boardId, internalBoard.id as BoardId),
-          isNull(posts.deletedAt),
-          notGeneratedPost,
-          owner ? ne(posts.principalId, owner.id) : undefined
-        )
-      )
+      .where(internalWinPost(scope))
       .orderBy(asc(posts.createdAt))
       .limit(1)
     return { reached: Boolean(row), reachedAt: row?.reachedAt.toISOString() ?? null }
@@ -218,7 +236,7 @@ export async function detectFirstWin(state: SetupState | null): Promise<FirstWin
       .from(postVotes)
       .innerJoin(principal, eq(principal.id, postVotes.principalId))
       .innerJoin(posts, eq(posts.id, postVotes.postId))
-      .where(and(isNull(posts.deletedAt), outsidePerson, notGeneratedPost))
+      .where(winRules.outsideVote)
       .orderBy(asc(postVotes.createdAt))
       .limit(1),
   ])

@@ -1578,6 +1578,7 @@
   "onboarding.win.region": "首個成果",
   "onboarding.win.generic": "你的第一位客戶來了",
   "onboarding.win.idea": "{who} 發布了一則想法",
+  "onboarding.win.vote": "{who} 為一則想法投了票",
   "onboarding.win.teamIdea": "{who} 發布了第一則團隊想法",
   "onboarding.win.conversation": "{who} 發起了對話",
   "onboarding.win.helpful": "{who} 覺得一篇文章有幫助",

@@ -8,6 +8,7 @@ import { LaunchTaskLink } from './launch-task-link'
 
 const TITLE = {
   idea: { id: 'onboarding.win.idea', defaultMessage: '{who} posted an idea' },
+  vote: { id: 'onboarding.win.vote', defaultMessage: '{who} voted for an idea' },
   teamIdea: { id: 'onboarding.win.teamIdea', defaultMessage: '{who} posted the first team idea' },
   conversation: {
     id: 'onboarding.win.conversation',
@@ -22,6 +23,7 @@ const TITLE = {
 
 const VIEW = {
   idea: { id: 'onboarding.win.view.idea', defaultMessage: 'View idea' },
+  vote: { id: 'onboarding.win.view.idea', defaultMessage: 'View idea' },
   teamIdea: { id: 'onboarding.win.view.idea', defaultMessage: 'View idea' },
   conversation: { id: 'onboarding.win.view.conversation', defaultMessage: 'View conversation' },
   helpful: { id: 'onboarding.win.view.article', defaultMessage: 'See article' },

@@ -6,28 +6,29 @@
  */
 import {
   db,
-  and,
   asc,
-  boards,
   conversationMessages,
   conversations,
   eq,
   helpCenterArticleFeedback,
   helpCenterArticles,
-  isNull,
   posts,
+  postVotes,
   principal,
-  sql,
   statusSubscriptions,
   user,
   type SetupState,
 } from '@/lib/server/db'
-import { notTestPrincipal } from '@/lib/server/test-data'
-import { winOutcome, winRules } from '@/lib/server/activation-wins'
+import {
+  internalWinPost,
+  internalWinScope,
+  winOutcome,
+  winRules,
+} from '@/lib/server/activation-wins'
 import { principalShownName } from '@/lib/shared/greeting-name'
 
 export interface FirstWinSummary {
-  kind: 'idea' | 'teamIdea' | 'conversation' | 'helpful' | 'subscriber'
+  kind: 'idea' | 'vote' | 'teamIdea' | 'conversation' | 'helpful' | 'subscriber'
   /** The person's name, when they gave one. */
   name: string | null
   /** A signed-out visitor, who left no name or email. */
@@ -158,36 +159,66 @@ export async function firstWinSummary(state: SetupState | null): Promise<FirstWi
     }
   }
 
-  // Ideas: by a customer on any board, or by a teammate on a private team board.
-  const [row] = await db
-    .select({
-      id: posts.id,
-      title: posts.title,
-      votes: posts.voteCount,
-      at: posts.createdAt,
-      ...who,
-    })
-    .from(posts)
-    .innerJoin(principal, eq(principal.id, posts.principalId))
-    .innerJoin(boards, eq(boards.id, posts.boardId))
-    .leftJoin(user, eq(user.id, principal.userId))
-    .where(
-      outcome === 'internal'
-        ? and(
-            isNull(posts.deletedAt),
-            sql`coalesce(${posts.widgetMetadata}->>'onboardingGenerated', 'false') <> 'true'`,
-            sql`${boards.access}->>'view' = 'team'`,
-            notTestPrincipal(principal.id)
-          )
-        : winRules.outsideIdea
-    )
-    .orderBy(asc(posts.createdAt))
-    .limit(1)
+  const idea = {
+    id: posts.id,
+    title: posts.title,
+    votes: posts.voteCount,
+    at: posts.createdAt,
+    ...who,
+  }
+
+  // A private team board: a teammate's idea on the board the win is judged on.
+  if (outcome === 'internal') {
+    const scope = await internalWinScope(state)
+    if (!scope) return null
+    const [row] = await db
+      .select(idea)
+      .from(posts)
+      .innerJoin(principal, eq(principal.id, posts.principalId))
+      .leftJoin(user, eq(user.id, principal.userId))
+      .where(internalWinPost(scope))
+      .orderBy(asc(posts.createdAt))
+      .limit(1)
+    if (!row) return null
+    return {
+      kind: 'teamIdea',
+      ...nameOf(row),
+      domain: null,
+      subject: row.title,
+      votes: row.votes,
+      at: row.at.toISOString(),
+      href: `/admin/feedback?post=${row.id}`,
+    }
+  }
+
+  // Ideas: the earlier of a customer's idea and a customer's vote on any idea.
+  const [[posted], [voted]] = await Promise.all([
+    db
+      .select(idea)
+      .from(posts)
+      .innerJoin(principal, eq(principal.id, posts.principalId))
+      .leftJoin(user, eq(user.id, principal.userId))
+      .where(winRules.outsideIdea)
+      .orderBy(asc(posts.createdAt))
+      .limit(1),
+    db
+      .select({ ...idea, at: postVotes.createdAt })
+      .from(postVotes)
+      .innerJoin(posts, eq(posts.id, postVotes.postId))
+      // The voter is who acted.
+      .innerJoin(principal, eq(principal.id, postVotes.principalId))
+      .leftJoin(user, eq(user.id, principal.userId))
+      .where(winRules.outsideVote)
+      .orderBy(asc(postVotes.createdAt))
+      .limit(1),
+  ])
+  const vote = voted && (!posted || voted.at < posted.at)
+  const row = vote ? voted : posted
   if (!row) return null
   return {
-    kind: outcome === 'internal' ? 'teamIdea' : 'idea',
+    kind: vote ? 'vote' : 'idea',
     ...nameOf(row),
-    domain: outcome === 'internal' ? null : domainOf(row.email),
+    domain: domainOf(row.email),
     subject: row.title,
     votes: row.votes,
     at: row.at.toISOString(),

@@ -38,3 +38,29 @@ it('names a signed-out reader as a visitor, with the article and a link to it', 
     '/admin/help-center?article=article_1'
   )
 })
+
+it('says a customer voted, naming the idea they voted for', () => {
+  render(
+    <IntlProvider locale="en" messages={en}>
+      <HomeFirstWin
+        summary={{
+          kind: 'vote',
+          name: 'Ana Silva',
+          domain: 'northwind.example',
+          subject: 'Dark mode',
+          votes: 1,
+          at: '2026-10-01T10:00:00.000Z',
+          href: '/admin/feedback?post=post_1',
+        }}
+        next={null}
+        pending={false}
+        onDismiss={() => {}}
+      />
+    </IntlProvider>
+  )
+  expect(screen.getByText('Ana Silva from northwind.example voted for an idea')).toBeTruthy()
+  expect(screen.getByText('Dark mode · 1 vote')).toBeTruthy()
+  expect(screen.getByRole('link', { name: 'View idea' }).getAttribute('href')).toBe(
+    '/admin/feedback?post=post_1'
+  )
+})

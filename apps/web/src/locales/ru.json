@@ -1578,6 +1578,7 @@
   "onboarding.win.region": "Первый успех",
   "onboarding.win.generic": "Ваш первый клиент уже здесь",
   "onboarding.win.idea": "{who} опубликовал идею",
+  "onboarding.win.vote": "{who} проголосовал за идею",
   "onboarding.win.teamIdea": "{who} опубликовал первую идею команды",
   "onboarding.win.conversation": "{who} начал разговор",
   "onboarding.win.helpful": "{who} отметил статью как полезную",
