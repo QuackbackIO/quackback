@@ -32,6 +32,7 @@ import { TypingDots } from '@/components/shared/typing-dots'
 import { personalizeMessage, firstNameOf } from '@/lib/shared/conversation/personalize'
 import { shownGreeting } from '@/lib/shared/conversation/default-greeting'
 import { useConversationStream } from '@/lib/client/hooks/use-conversation-stream'
+import { useHostVisibleCount } from '@/lib/client/hooks/use-host-visible'
 import { useConversationTyping } from '@/lib/client/hooks/use-conversation-typing'
 import { useAssistantTurn } from '@/lib/client/hooks/use-assistant-turn'
 import {
@@ -818,11 +819,18 @@ export function VisitorConversationThread({
   // Clear unread on the visitor side only when the newest message is from an
   // agent — skip the visitor's own outbound sends (avoids a write + 'read'
   // broadcast on every send).
+  // A host that hid this frame says when it shows it again: catch up on any
+  // reply the live stream missed meanwhile, and read the newest one.
+  const shownAgain = useHostVisibleCount()
+  useEffect(() => {
+    if (shownAgain > 0) void refreshMessages()
+  }, [shownAgain, refreshMessages])
   useMarkReadOnIncoming({
     conversationId,
     messages,
     whenLastFrom: 'agent',
     getHeaders: getAuthHeaders,
+    recheck: shownAgain,
   })
 
   const send = useCallback(async () => {

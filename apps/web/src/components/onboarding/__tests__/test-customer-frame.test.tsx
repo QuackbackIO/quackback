@@ -162,4 +162,35 @@ describe('TestCustomerFrame', () => {
     expect(onStatusChange).toHaveBeenLastCalledWith('ready')
     expect(getToken).toHaveBeenCalledTimes(2)
   })
+
+  it('tells a signed-in frame when its host shows it again', async () => {
+    const props = {
+      getToken: async () => 'customer-abc',
+      open: { view: 'chat' } as const,
+      title: 'Messenger as a test customer',
+    }
+    const view = render(<TestCustomerFrame {...props} visible />)
+    const child = (screen.getByTitle(props.title) as HTMLIFrameElement).contentWindow!
+    const postMessage = vi.spyOn(child, 'postMessage').mockImplementation(() => {})
+    const fromFrame = (data: unknown) =>
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent('message', { data, source: child, origin: window.location.origin })
+        )
+      })
+    const shown = () =>
+      postMessage.mock.calls.filter(([m]) => (m as { type?: string }).type === 'quackback:visible')
+    // Not signed in yet: nothing to catch up on.
+    view.rerender(<TestCustomerFrame {...props} visible={false} />)
+    view.rerender(<TestCustomerFrame {...props} visible />)
+    expect(shown()).toHaveLength(0)
+
+    fromFrame({ type: 'quackback:ready' })
+    await waitFor(() => expect(postMessage).toHaveBeenCalled())
+    fromFrame({ type: 'quackback:test-session', success: true })
+    view.rerender(<TestCustomerFrame {...props} visible={false} />)
+    expect(shown()).toHaveLength(0)
+    view.rerender(<TestCustomerFrame {...props} visible />)
+    expect(shown()).toEqual([[{ type: 'quackback:visible' }, window.location.origin]])
+  })
 })

@@ -265,6 +265,7 @@ function TryMessengerBody({
             open={frameOpen}
             onStatusChange={setStatus}
             onClose={onClose}
+            visible={wide || pane === 'customer'}
             onEvent={(name, payload) => {
               const id = (payload as { id?: unknown } | null)?.id
               if (typeof id !== 'string') return

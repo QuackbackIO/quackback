@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { cn } from '@/lib/shared/utils'
+import { HOST_VISIBLE_MESSAGE } from '@/lib/client/hooks/use-host-visible'
 
 export type TestCustomerFrameStatus = 'connecting' | 'ready' | 'expired'
 
@@ -20,6 +21,8 @@ interface TestCustomerFrameProps {
   /** Escape pressed inside the frame: focus there never reaches the host's own key handling. */
   onClose?: () => void
   title: string
+  /** Whether the host shows the frame; showing it again lets the frame catch up. Defaults to true. */
+  visible?: boolean
   className?: string
 }
 
@@ -35,9 +38,13 @@ export function TestCustomerFrame({
   onEvent,
   onClose,
   title,
+  visible = true,
   className,
 }: TestCustomerFrameProps) {
   const frameRef = useRef<HTMLIFrameElement>(null)
+  // Set once the frame's test session is signed in; only then is there a thread to catch up on.
+  const signedIn = useRef(false)
+  const wasVisible = useRef(visible)
   const latest = useRef({ getToken, open, onStatusChange, onEvent, onClose })
   latest.current = { getToken, open, onStatusChange, onEvent, onClose }
 
@@ -70,6 +77,7 @@ export function TestCustomerFrame({
         activeDocument = documentId
         const version = ++requestVersion
         sessionAcknowledged = false
+        signedIn.current = false
         latest.current.onStatusChange?.('connecting')
         const token = await latest.current.getToken().catch(() => null)
         if (disposed || version !== requestVersion) return
@@ -84,6 +92,7 @@ export function TestCustomerFrame({
         if (activeDocument === null || msg.documentId !== activeDocument || sessionAcknowledged)
           return
         sessionAcknowledged = true
+        signedIn.current = !!msg.success
         if (!msg.success) {
           latest.current.onStatusChange?.('expired')
           return
@@ -106,6 +115,16 @@ export function TestCustomerFrame({
       window.removeEventListener('message', handleMessage)
     }
   }, [])
+
+  useEffect(() => {
+    const shownAgain = visible && !wasVisible.current
+    wasVisible.current = visible
+    if (!shownAgain || !signedIn.current) return
+    frameRef.current?.contentWindow?.postMessage(
+      { type: HOST_VISIBLE_MESSAGE },
+      window.location.origin
+    )
+  }, [visible])
 
   return (
     <iframe

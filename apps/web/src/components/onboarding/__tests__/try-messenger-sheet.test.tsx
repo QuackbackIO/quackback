@@ -145,6 +145,23 @@ describe('TryMessengerSheet', () => {
     expect(screen.getByRole('tablist').className).toContain('lg:hidden')
   })
 
+  it('shows the customer frame again when its tab is chosen, so it reads the reply', async () => {
+    fns.overview.mockResolvedValue({ conversationId: null, testEmailAddress: null })
+    ;(
+      window as unknown as { happyDOM: { setViewport(v: { width: number }): void } }
+    ).happyDOM.setViewport({ width: 390 })
+    renderSheet()
+    const customer = await screen.findByRole('tab', { name: 'Customer' })
+    expect(frame.props!.visible).toBe(true)
+    fireEvent.click(screen.getByRole('tab', { name: 'Inbox' }))
+    expect(frame.props!.visible).toBe(false)
+    fireEvent.click(customer)
+    expect(frame.props!.visible).toBe(true)
+    ;(
+      window as unknown as { happyDOM: { setViewport(v: { width: number }): void } }
+    ).happyDOM.setViewport({ width: 1024 })
+  })
+
   it('moves between the tabs with the arrow keys', async () => {
     fns.overview.mockResolvedValue({ conversationId: null, testEmailAddress: null })
     renderSheet()
