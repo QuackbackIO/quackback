@@ -4,6 +4,7 @@ import { useWidgetAuth } from './widget-auth-provider'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { COMMENT_EDITOR_FEATURES } from '@/components/public/comment-editor-features'
 import type { TiptapContent } from '@/lib/shared/db-types'
+import { shownName } from '@/lib/shared/greeting-name'
 
 interface WidgetUser {
   id: string
@@ -106,7 +107,7 @@ export function WidgetCommentForm({
             <FormattedMessage
               id="widget.commentForm.postingAs"
               defaultMessage="Posting as {name}"
-              values={{ name: user?.name || user?.email }}
+              values={{ name: shownName(user?.name, user?.email) }}
             />
           ) : (
             <FormattedMessage

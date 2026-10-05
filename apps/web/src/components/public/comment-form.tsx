@@ -28,6 +28,7 @@ import { COMMENT_EDITOR_FEATURES } from './comment-editor-features'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { PostId, PostCommentId } from '@quackback/ids'
 import { useSessionContext } from '@/lib/client/hooks/use-root-context'
+import { shownName } from '@/lib/shared/greeting-name'
 
 export type CreateCommentMutation = UseMutationResult<
   unknown,
@@ -90,7 +91,11 @@ export function CommentForm({
   // Get user from session
   // Note: principalId is only available from the server-provided `user` prop, not from client session
   const effectiveUser = session?.user
-    ? { name: session.user.name, email: session.user.email, principalId: user?.principalId }
+    ? {
+        name: shownName(session.user.name, session.user.email),
+        email: session.user.email,
+        principalId: user?.principalId,
+      }
     : user
 
   // Listen for auth success to refetch session (no page reload)
@@ -530,7 +535,7 @@ export function CommentForm({
                   {
                     name: (
                       <span className="font-medium text-foreground">
-                        {effectiveUser?.name || effectiveUser?.email}
+                        {shownName(effectiveUser?.name, effectiveUser?.email)}
                       </span>
                     ),
                   }

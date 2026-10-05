@@ -32,6 +32,7 @@ import type { PublicPostListItem } from '@/lib/shared/types'
 import { cn } from '@/lib/shared/utils'
 import type { PostId, PostStatusId } from '@quackback/ids'
 import { useSessionContext } from '@/lib/client/hooks/use-root-context'
+import { shownName } from '@/lib/shared/greeting-name'
 
 interface FeedbackContainerProps {
   workspaceName: string
@@ -96,7 +97,7 @@ export function FeedbackContainer({
   const [listKey, setListKey] = useState(filterKey)
 
   const effectiveUser = session?.user
-    ? { name: session.user.name, email: session.user.email }
+    ? { name: shownName(session.user.name, session.user.email), email: session.user.email }
     : user
   // A real (non-anonymous) signed-in user. Drives the vote button's authz vs
   // authn copy: a denied real user sees "no access"; a denied anonymous / no-

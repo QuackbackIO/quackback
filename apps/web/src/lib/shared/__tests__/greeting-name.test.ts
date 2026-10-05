@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { accountDisplayName, greetingName } from '../greeting-name'
+import { accountDisplayName, greetingName, shownName } from '../greeting-name'
 
 describe('greetingName', () => {
   it('uses the first name', () => {
@@ -35,5 +35,18 @@ describe('accountDisplayName', () => {
 
   it('gives null when nothing usable is left', () => {
     expect(accountDisplayName('', 'x1@northwind.test')).toBeNull()
+  })
+})
+
+describe('shownName', () => {
+  it('shows a name from the address for an account that signed in by email alone', () => {
+    expect(shownName('', 'ana@northwind.test')).toBe('Ana')
+    expect(shownName(null, 'ana@northwind.test')).toBe('Ana')
+  })
+
+  it('keeps a given name, and falls back to the address only when no name can be made', () => {
+    expect(shownName('Ana Silva', 'ana@northwind.test')).toBe('Ana Silva')
+    expect(shownName('', 'x1@northwind.test')).toBe('x1@northwind.test')
+    expect(shownName(null, null)).toBe('')
   })
 })

@@ -34,3 +34,12 @@ export function accountDisplayName(
   if (given && !given.includes('@')) return given
   return nameFromEmail(given.includes('@') ? given : email)
 }
+
+/**
+ * The name the portal and Messenger show for the signed-in person, the same
+ * name their ideas and comments carry: the name they gave, else one from
+ * their email address, else the address itself.
+ */
+export function shownName(name: string | null | undefined, email: string | null | undefined): string {
+  return accountDisplayName(name, email) ?? (name?.trim() || email || '')
+}
