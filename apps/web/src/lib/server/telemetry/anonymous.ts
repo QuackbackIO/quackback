@@ -150,6 +150,7 @@ export function aiFeatureOf(pipelineStep: string): AiFeature {
   if (
     pipelineStep.startsWith('conversation') ||
     pipelineStep.startsWith('inbox') ||
+    pipelineStep.startsWith('ticket_') ||
     pipelineStep === 'classification' ||
     pipelineStep === 'spam_classification'
   ) {

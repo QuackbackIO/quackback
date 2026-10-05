@@ -84,6 +84,9 @@ vi.mock('@/components/ui/input-otp', () => ({
 }))
 
 import { AccountStep, type AccountStepProps } from '../-account-step'
+const track = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/client/analytics', () => ({ track }))
+
 import { postAuthSuccess } from '@/lib/client/hooks/use-auth-broadcast'
 
 const OWNER_EMAIL = 'jane.doe@acme.example'
@@ -372,5 +375,19 @@ describe('account step — after a sign-in completes', () => {
     act(() => postAuthSuccess())
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/onboarding' }))
+  })
+
+  it('records an account created only where one is created', async () => {
+    renderStep(selfHosted())
+    act(() => postAuthSuccess())
+    await waitFor(() => expect(track).toHaveBeenCalledWith('onboarding_account_created'))
+  })
+
+  it('records an owner signing in to a claimed workspace as a sign-in', async () => {
+    track.mockClear()
+    renderStep(provisioned())
+    act(() => postAuthSuccess())
+    await waitFor(() => expect(track).toHaveBeenCalledWith('onboarding_signed_in'))
+    expect(track).not.toHaveBeenCalledWith('onboarding_account_created')
   })
 })
