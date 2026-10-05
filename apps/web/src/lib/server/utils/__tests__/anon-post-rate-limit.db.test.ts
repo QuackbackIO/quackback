@@ -1,77 +1,58 @@
-import { afterAll, afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { createId, type BoardId, type PrincipalId, type UserId } from '@quackback/ids'
-import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { boards, posts, principal, session, user } from '@/lib/server/db'
+/**
+ * The anonymous idea limit, against a real server: the slot is reserved by one
+ * atomic bucket increment keyed on the submitting address, so a concurrent
+ * burst cannot overshoot it, and moving to another address neither carries the
+ * spend along nor charges the address left behind.
+ */
+import { afterAll, beforeAll, expect, it } from 'vitest'
+import { randomUUID } from 'node:crypto'
+import {
+  cleanupWorkspaces,
+  closeHarness,
+  ensureKvSchema,
+  withRealWorkspace,
+  workspacePair,
+} from '@/lib/server/kv/__tests__/harness'
+import { ANON_POST_RATE_LIMIT, reserveAnonPostSlot } from '../anon-rate-limit'
 
-vi.mock('@/lib/server/db', async (original) => ({
-  ...(await original<typeof import('@/lib/server/db')>()),
-  db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
-}))
+const [T, U] = workspacePair()
 
-import { ANON_POST_RATE_LIMIT, checkAnonPostRateLimit } from '../anon-rate-limit'
-
-const fixture = await createDbTestFixture({
-  probe: async (db) => {
-    await db.select({ id: posts.id }).from(posts).limit(0)
-  },
+beforeAll(ensureKvSchema)
+afterAll(async () => {
+  await cleanupWorkspaces(T, U)
+  await closeHarness()
 })
 
-let board: BoardId
-beforeEach(async () => {
-  expect(fixture.available).toBe(true)
-  await fixture.begin()
-  const [created] = await testDb
-    .insert(boards)
-    .values({ name: 'Ideas', slug: `ideas-${createId('board').slice(-6)}` })
-    .returning()
-  board = created!.id as BoardId
-})
-afterEach(fixture.rollback)
-afterAll(fixture.close)
-
-/** A visitor: their principal plus a session from `ip`. */
-async function visitor(type: 'anonymous' | 'user', ip: string): Promise<PrincipalId> {
-  const userId = createId('user') as UserId
-  const principalId = createId('principal') as PrincipalId
-  await testDb.insert(user).values({ id: userId, name: 'Visitor', email: `${userId}@example.com` })
-  await testDb
-    .insert(principal)
-    .values({ id: principalId, userId, role: 'user', type, createdAt: new Date() })
-  await testDb.insert(session).values({
-    id: createId('user'),
-    token: createId('user'),
-    userId,
-    ipAddress: ip,
-    scope: 'portal',
-    expiresAt: new Date(Date.now() + 86_400_000),
-    updatedAt: new Date(),
-  })
-  return principalId
+/** An address no other run on this machine is using. */
+function address(): string {
+  const [a, b] = [randomUUID().slice(0, 4), randomUUID().slice(0, 4)]
+  return `2001:db8::${a}:${b}`
 }
 
-async function ideas(principalId: PrincipalId, count: number, createdAt = new Date()) {
-  for (let i = 0; i < count; i++) {
-    await testDb
-      .insert(posts)
-      .values({ boardId: board, principalId, title: `Idea ${i}`, content: 'x', createdAt })
+it('admits exactly the limit from a concurrent burst at one address', async () => {
+  const ip = address()
+  const results = await Promise.all(
+    Array.from({ length: 20 }, () => withRealWorkspace(T, () => reserveAnonPostSlot(ip)))
+  )
+  expect(results.filter(Boolean)).toHaveLength(ANON_POST_RATE_LIMIT)
+})
+
+it('charges only the address an idea was submitted from', async () => {
+  const office = address()
+  const home = address()
+  for (let i = 0; i < ANON_POST_RATE_LIMIT; i++) {
+    expect(await withRealWorkspace(T, () => reserveAnonPostSlot(home))).toBe(true)
   }
-}
-
-it('stops anonymous ideas from one address once the hourly limit is reached', async () => {
-  const first = await visitor('anonymous', '203.0.113.7')
-  const second = await visitor('anonymous', '203.0.113.7')
-  await ideas(first, ANON_POST_RATE_LIMIT - 1)
-  expect(await checkAnonPostRateLimit('203.0.113.7')).toBe(true)
-  // A fresh anonymous identity from the same address shares the budget.
-  await ideas(second, 1)
-  expect(await checkAnonPostRateLimit('203.0.113.7')).toBe(false)
-  expect(await checkAnonPostRateLimit('198.51.100.4')).toBe(true)
+  expect(await withRealWorkspace(T, () => reserveAnonPostSlot(home))).toBe(false)
+  // The same visitor moving on does not spend the address they left.
+  expect(await withRealWorkspace(T, () => reserveAnonPostSlot(office))).toBe(true)
 })
 
-it('counts neither older ideas nor ideas from signed-in people', async () => {
-  const anonymous = await visitor('anonymous', '203.0.113.9')
-  const member = await visitor('user', '203.0.113.9')
-  await ideas(anonymous, ANON_POST_RATE_LIMIT, new Date(Date.now() - 2 * 3_600_000))
-  await ideas(member, ANON_POST_RATE_LIMIT)
-  expect(await checkAnonPostRateLimit('203.0.113.9')).toBe(true)
+it('keeps one workspace from spending another workspace budget', async () => {
+  const ip = address()
+  for (let i = 0; i < ANON_POST_RATE_LIMIT; i++) {
+    await withRealWorkspace(T, () => reserveAnonPostSlot(ip))
+  }
+  expect(await withRealWorkspace(T, () => reserveAnonPostSlot(ip))).toBe(false)
+  expect(await withRealWorkspace(U, () => reserveAnonPostSlot(ip))).toBe(true)
 })

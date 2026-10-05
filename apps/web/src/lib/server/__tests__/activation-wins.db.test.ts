@@ -114,8 +114,18 @@ it('counts a helpful vote from someone outside the team as the help center win',
   const tester = await person('user', { testOwner: owner })
   const unhappy = await person('user')
   await testDb.insert(helpCenterArticleFeedback).values([
-    { articleId: article!.id, principalId: owner, helpful: true, createdAt: new Date('2026-02-01') },
-    { articleId: article!.id, principalId: tester, helpful: true, createdAt: new Date('2026-02-02') },
+    {
+      articleId: article!.id,
+      principalId: owner,
+      helpful: true,
+      createdAt: new Date('2026-02-01'),
+    },
+    {
+      articleId: article!.id,
+      principalId: tester,
+      helpful: true,
+      createdAt: new Date('2026-02-02'),
+    },
     {
       articleId: article!.id,
       principalId: unhappy,
@@ -128,7 +138,12 @@ it('counts a helpful vote from someone outside the team as the help center win',
   // A signed-out visitor's vote has no principal: still someone outside the team.
   await testDb
     .insert(helpCenterArticleFeedback)
-    .values({ articleId: article!.id, principalId: null, helpful: true, createdAt: new Date('2026-03-01') })
+    .values({
+      articleId: article!.id,
+      principalId: null,
+      helpful: true,
+      createdAt: new Date('2026-03-01'),
+    })
   expect(await detectFirstWin(state)).toEqual({
     reached: true,
     reachedAt: '2026-03-01T00:00:00.000Z',
@@ -198,6 +213,71 @@ it('counts an idea on a private board only when a teammate other than the owner 
     reached: true,
     reachedAt: '2026-03-01T00:00:00.000Z',
   })
+})
+
+async function teamBoard() {
+  const [board] = await testDb
+    .insert(boards)
+    .values({
+      name: 'Team',
+      slug: `team-${createId('board').slice(-6)}`,
+      access: {
+        view: 'team',
+        vote: 'team',
+        comment: 'team',
+        submit: 'team',
+        segments: { view: [], vote: [], comment: [], submit: [] },
+        moderation: { anonPosts: 'inherit', signedPosts: 'inherit', comments: 'inherit' },
+      },
+    })
+    .returning()
+  return board!.id
+}
+
+it('keeps recognising the recorded owner on a private board after they step down from admin', async () => {
+  // The owner set the workspace up, then handed admin to someone else.
+  const owner = await person('member', { createdAt: new Date('2025-01-01') })
+  const successor = await person('admin', { createdAt: new Date('2025-06-01') })
+  const state: SetupState = {
+    ...goalState('product_feedback'),
+    feedbackPrivate: true,
+    ownerPrincipalId: owner,
+  }
+  const board = await teamBoard()
+  await testDb.insert(posts).values({
+    boardId: board,
+    principalId: owner,
+    title: 'Mine',
+    content: 'x',
+    createdAt: new Date('2026-02-01'),
+  })
+  expect(await detectFirstWin(state)).toEqual({ reached: false, reachedAt: null })
+  await testDb.insert(posts).values({
+    boardId: board,
+    principalId: successor,
+    title: 'Theirs',
+    content: 'x',
+    createdAt: new Date('2026-03-01'),
+  })
+  expect(await detectFirstWin(state)).toEqual({
+    reached: true,
+    reachedAt: '2026-03-01T00:00:00.000Z',
+  })
+})
+
+it('falls back to the earliest teammate, whatever their role now, when no owner was recorded', async () => {
+  const owner = await person('member', { createdAt: new Date('2000-01-01') })
+  await person('admin', { createdAt: new Date('2025-06-01') })
+  const state: SetupState = { ...goalState('product_feedback'), feedbackPrivate: true }
+  const board = await teamBoard()
+  await testDb.insert(posts).values({
+    boardId: board,
+    principalId: owner,
+    title: 'Mine',
+    content: 'x',
+    createdAt: new Date('2026-02-01'),
+  })
+  expect(await detectFirstWin(state)).toEqual({ reached: false, reachedAt: null })
 })
 
 it('counts a conversation a customer starts by email as the support win, not one from GitHub', async () => {

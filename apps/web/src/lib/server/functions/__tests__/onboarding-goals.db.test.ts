@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createId } from '@quackback/ids'
+import { createId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
   boards,
@@ -264,6 +264,7 @@ describe('wizard goals read and write', () => {
   })
 
   // An operator creates the row bare (no flags) and stamps the goals; no wizard runs.
+
   const operatorRow = (createdAt: Date, featureFlags?: string) => ({
     name: 'Acme',
     slug: 'acme',
@@ -274,6 +275,65 @@ describe('wizard goals read and write', () => {
       steps: { core: true, workspace: true, startingPoint: null },
       goals: ['product_feedback'],
     }),
+  })
+
+  it('reports a status publish as a change even when the flag was already on', async () => {
+    // An established workspace whose operator turned the module on but never published it.
+    await testDb.insert(settings).values({
+      name: 'Acme',
+      slug: 'acme',
+      createdAt: new Date(Date.now() - 365 * 86_400_000),
+      setupState: JSON.stringify({
+        version: 2,
+        steps: { core: true, workspace: true, startingPoint: null },
+        goals: ['status_page'],
+      }),
+      featureFlags: JSON.stringify({ ...DEFAULT_FEATURE_FLAGS, statusPage: true }),
+    })
+    expect(await ensureOnboardingHomeReadyFn()).toMatchObject({ modulesChanged: true })
+    const row = await testDb.query.settings.findFirst()
+    expect(resolveStatusSettings(row!.metadata).enabled).toBe(true)
+    expect(await ensureOnboardingHomeReadyFn()).toMatchObject({ modulesChanged: false })
+  })
+
+  it('records who set the workspace up, once, whatever happens to their role later', async () => {
+    const owner = await testDb.query.principal.findFirst({
+      where: eq(principal.userId, (sessionState.current as { user: { id: UserId } }).user.id),
+    })
+    await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme', goals: ['product_feedback'] } })
+    let row = await testDb.query.settings.findFirst()
+    expect(getSetupState(row!.setupState)!.ownerPrincipalId).toBe(owner!.id)
+
+    // A second admin saving the step again does not take the ownership over.
+    const otherId = createId('user')
+    await testDb
+      .insert(user)
+      .values({ id: otherId, name: 'Bo', email: 'bo@example.com', emailVerified: true })
+    await testDb.insert(principal).values({
+      id: createId('principal'),
+      userId: otherId,
+      type: 'user',
+      role: 'admin',
+      createdAt: new Date(),
+    })
+    sessionState.current = {
+      user: { id: otherId, name: 'Bo', email: 'bo@example.com' },
+      session: { scope: 'dashboard' },
+    }
+    await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme', goals: ['product_feedback'] } })
+    await ensureOnboardingHomeReadyFn()
+    row = await testDb.query.settings.findFirst()
+    expect(getSetupState(row!.setupState)!.ownerPrincipalId).toBe(owner!.id)
+  })
+
+  it('records the first admin to land as the owner of a workspace an operator provisioned', async () => {
+    await testDb.insert(settings).values(operatorRow(new Date()))
+    const owner = await testDb.query.principal.findFirst({
+      where: eq(principal.userId, (sessionState.current as { user: { id: UserId } }).user.id),
+    })
+    await ensureOnboardingHomeReadyFn()
+    const row = await testDb.query.settings.findFirst()
+    expect(getSetupState(row!.setupState)!.ownerPrincipalId).toBe(owner!.id)
   })
 
   it('turns Copilot on Home on for a new workspace an operator provisioned', async () => {

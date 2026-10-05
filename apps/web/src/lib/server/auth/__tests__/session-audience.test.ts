@@ -8,7 +8,15 @@
  * widget so its Bearer never satisfies a site surface. Absent a marker the mint
  * is the widget's, so an old or unmarked client lands on the restrictive side.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+
+// The client-supplied forwarding header must not decide the recorded address;
+// the socket peer does (no trusted proxy hops here).
+vi.mock('@tanstack/react-start/server', () => ({
+  getRequestHeaders: () => new Headers({ 'x-forwarded-for': '1.2.3.4' }),
+  getRequestIP: () => '203.0.113.5',
+}))
+
 import { assignSessionScope } from '../session-audience'
 import { SESSION_AUDIENCE_HEADER } from '@/lib/shared/roles'
 
@@ -29,7 +37,7 @@ describe('assignSessionScope', () => {
       base,
       ctx('/sign-in/anonymous', { [SESSION_AUDIENCE_HEADER]: 'portal' })
     )
-    expect(result).toEqual({ data: { ...base, scope: 'portal' } })
+    expect(result).toEqual({ data: { ...base, scope: 'portal', ipAddress: '203.0.113.5' } })
   })
 
   it('reads the marker from the request when the context carries no header bag', async () => {
@@ -42,7 +50,15 @@ describe('assignSessionScope', () => {
 
   it('tags the widget anonymous mint (no marker) as widget', async () => {
     const result = await assignSessionScope(base, ctx('/sign-in/anonymous'))
-    expect(result).toEqual({ data: { ...base, scope: 'widget' } })
+    expect(result).toEqual({ data: { ...base, scope: 'widget', ipAddress: '203.0.113.5' } })
+  })
+
+  it('records the resolved peer address on the anonymous mint, for the anonymous vote limit', async () => {
+    const result = await assignSessionScope(
+      { ...base, ipAddress: '1.2.3.4' },
+      ctx('/sign-in/anonymous', { 'x-forwarded-for': '1.2.3.4' })
+    )
+    expect(result?.data.ipAddress).toBe('203.0.113.5')
   })
 
   it('treats a mint with no context headers at all as widget', async () => {

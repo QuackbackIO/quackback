@@ -421,6 +421,7 @@ export function AgentConversationThread({
   composerRef,
   detailPanelShown = false,
   replyFirst = false,
+  markRead = true,
 }: {
   /** The open item, discriminated by kind — drives both the data adapter and
    *  the derived `ThreadCapabilities`. */
@@ -461,6 +462,10 @@ export function AgentConversationThread({
   /** A first reply is the point (the Try Messenger sheet): the send button
    *  carries a label and the primary fill, and Close steps back to outline. */
   replyFirst?: boolean
+  /** Whether the thread is in view, so arriving messages are read. A host
+   *  that keeps it mounted but hidden (a tab on a narrow screen) passes false
+   *  until it shows it, and the thread is read then. */
+  markRead?: boolean
 }) {
   const queryClient = useQueryClient()
   const isTicket = item.kind === 'ticket'
@@ -910,7 +915,7 @@ export function AgentConversationThread({
     conversationId: isTicket ? null : conversationId,
     messages,
     whenLastFrom: 'visitor',
-    enabled: !isLoading,
+    enabled: !isLoading && markRead,
     readThrough: conversation?.agentLastReadAt ?? null,
     onMarked: onConversationRead,
   })

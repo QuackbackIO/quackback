@@ -155,13 +155,18 @@ export async function internalWinScope(state: SetupState | null): Promise<Intern
       columns: { id: true },
     }))
   if (!internalBoard) return null
-  // The owner is the first human admin; their own ideas do not count.
-  const [owner] = await db
-    .select({ id: principal.id })
-    .from(principal)
-    .where(and(eq(principal.role, 'admin'), eq(principal.type, 'user')))
-    .orderBy(asc(principal.createdAt))
-    .limit(1)
+  // The owner's own ideas do not count. The owner is who set the workspace
+  // up, recorded once in setup state, so a later change of role does not move
+  // it. Workspaces set up before that was recorded fall back to the earliest
+  // human teammate, whatever role they hold now.
+  const [owner] = state?.ownerPrincipalId
+    ? [{ id: state.ownerPrincipalId as PrincipalId }]
+    : await db
+        .select({ id: principal.id })
+        .from(principal)
+        .where(and(inArray(principal.role, ['admin', 'member']), eq(principal.type, 'user')))
+        .orderBy(asc(principal.createdAt))
+        .limit(1)
   return { boardId: internalBoard.id as BoardId, ownerId: owner?.id ?? null }
 }
 

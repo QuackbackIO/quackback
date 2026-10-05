@@ -51,6 +51,29 @@ function changedFlags(before: FeatureFlags, after: FeatureFlags): Partial<Featur
   return changed
 }
 
+/** A JSON value with its object keys sorted, so two encodings of it compare equal. */
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical)
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.keys(value as Record<string, unknown>)
+        .sort()
+        .map((key) => [key, canonical((value as Record<string, unknown>)[key])])
+    )
+  }
+  return value
+}
+
+/** Whether writing `next` over a stored JSON column changes what it holds. */
+function changesStoredJson(stored: string | null, next: string): boolean {
+  try {
+    const before = stored == null ? null : JSON.parse(stored)
+    return JSON.stringify(canonical(before)) !== JSON.stringify(canonical(JSON.parse(next)))
+  } catch {
+    return stored !== next
+  }
+}
+
 type GoalRow = Pick<
   typeof settings.$inferSelect,
   'id' | 'name' | 'featureFlags' | 'createdAt' | 'metadata' | 'widgetConfig' | 'portalConfig'
@@ -64,6 +87,10 @@ type GoalRow = Pick<
  * A new workspace whose row was created without flags (an operator
  * provisioned it) also gets the flags new workspaces start with; an
  * established workspace never does.
+ *
+ * `modulesChanged` reports whether any of the settings the admin keeps in
+ * its root context changed (flags, status publish, Messenger, portal), so
+ * the caller knows to reload them.
  */
 export async function applyOnboardingGoals(
   tx: Transaction,
@@ -75,7 +102,7 @@ export async function applyOnboardingGoals(
   const isNew = isNewWorkspace(row.createdAt)
   const base = isNew ? withNewWorkspaceFlags(row.featureFlags, before, goals) : before
   const { flags } = flagsForGoals(base, goals)
-  const modulesChanged = JSON.stringify(flags) !== JSON.stringify(before)
+  let modulesChanged = JSON.stringify(flags) !== JSON.stringify(before)
   // A new workspace may have been provisioned with its goal modules already
   // on but without what turning them on does (Messenger, the portal support
   // surface, the help tab), so for it those modules count as turning on now.
@@ -114,6 +141,14 @@ export async function applyOnboardingGoals(
       if (portal) patch.portalConfig = portal
     }
     await tx.update(settings).set(patch).where(eq(settings.id, row.id))
+    // The flags may already have been on while what turning them on does was
+    // not (a status page never published, Messenger never opened). Writing
+    // that is a change too: the admin holds these settings in its root
+    // context and must reload them to show the page it now has.
+    const stored = row as Record<string, unknown>
+    modulesChanged ||= Object.entries(patch).some(([key, next]) =>
+      changesStoredJson((stored[key] as string | null | undefined) ?? null, next)
+    )
   }
   await prepareOnboardingBoard(tx, { ...state, goals })
   await seedGoalPages(tx, row.name, goals)

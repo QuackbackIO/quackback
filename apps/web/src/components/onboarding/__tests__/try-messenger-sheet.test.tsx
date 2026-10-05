@@ -25,8 +25,12 @@ vi.mock('../test-customer-frame', () => ({
   },
 }))
 vi.mock('@/components/conversation/agent-conversation-thread', () => ({
-  AgentConversationThread: (props: { replyFirst?: boolean }) => (
-    <div data-testid="thread" data-reply-first={String(!!props.replyFirst)} />
+  AgentConversationThread: (props: { replyFirst?: boolean; markRead?: boolean }) => (
+    <div
+      data-testid="thread"
+      data-reply-first={String(!!props.replyFirst)}
+      data-mark-read={String(props.markRead ?? true)}
+    />
   ),
 }))
 vi.mock('@/lib/client/hooks/use-conversation-stream', () => ({ useConversationStream: vi.fn() }))
@@ -160,6 +164,41 @@ describe('TryMessengerSheet', () => {
     ;(
       window as unknown as { happyDOM: { setViewport(v: { width: number }): void } }
     ).happyDOM.setViewport({ width: 1024 })
+  })
+
+  it('on a narrow screen reads a side only while it is the one shown', async () => {
+    fns.overview.mockResolvedValue({ conversationId: 'conversation_t', testEmailAddress: null })
+    // A phone: the sheet's wide layout query does not match.
+    const matchMedia = vi.spyOn(window, 'matchMedia').mockImplementation(
+      (query: string) =>
+        ({
+          matches: false,
+          media: query,
+          addEventListener: () => {},
+          removeEventListener: () => {},
+        }) as unknown as MediaQueryList
+    )
+    renderSheet()
+    const thread = await screen.findByTestId('thread')
+    const iframe = screen.getByTitle('Messenger as a test customer') as HTMLIFrameElement
+    // A bare test frame is not on this origin; record what the sheet sends it.
+    const post = vi.spyOn(iframe.contentWindow!, 'postMessage').mockImplementation(() => {})
+    const shown = () =>
+      post.mock.calls
+        .map(([m]) => m as { type?: string; shown?: boolean })
+        .filter((m) => m.type === 'quackback:shown')
+        .map((m) => m.shown)
+
+    // The inbox is hidden behind its tab, so it leaves the customer's message unread.
+    expect(thread.getAttribute('data-mark-read')).toBe('false')
+    fireEvent.click(screen.getByRole('tab', { name: /Inbox/ }))
+    expect(screen.getByTestId('thread').getAttribute('data-mark-read')).toBe('true')
+    // The customer's frame, now hidden but still signed in, is told so.
+    await waitFor(() => expect(shown().at(-1)).toBe(false))
+    fireEvent.click(screen.getByRole('tab', { name: /Customer/ }))
+    await waitFor(() => expect(shown().at(-1)).toBe(true))
+    expect(screen.getByTestId('thread').getAttribute('data-mark-read')).toBe('false')
+    matchMedia.mockRestore()
   })
 
   it('moves between the tabs with the arrow keys', async () => {
