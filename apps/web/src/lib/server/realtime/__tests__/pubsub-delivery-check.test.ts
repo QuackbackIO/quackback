@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const hoisted = vi.hoisted(() => ({
   errors: [] as Array<{ obj: unknown; msg: string }>,
+  warns: [] as Array<{ obj: unknown; msg: string }>,
   /** Whether the double's NOTIFY round trip reaches `onPayload`. */
   delivers: true,
   verifyCalls: 0,
@@ -19,7 +20,7 @@ const hoisted = vi.hoisted(() => ({
 vi.mock('@/lib/server/logger', () => {
   const log = {
     error: (obj: unknown, msg: string) => hoisted.errors.push({ obj, msg }),
-    warn: () => {},
+    warn: (obj: unknown, msg: string) => hoisted.warns.push({ obj, msg }),
     info: () => {},
     debug: () => {},
     child: () => log,
@@ -62,6 +63,7 @@ const flush = () => new Promise((r) => setTimeout(r, 30))
 
 beforeEach(() => {
   hoisted.errors = []
+  hoisted.warns = []
   hoisted.delivers = true
   hoisted.verifyCalls = 0
   hoisted.throws = false
@@ -106,13 +108,15 @@ describe('realtime delivery check', () => {
     await b()
   })
 
-  it('does not fail the subscribe when the check itself throws', async () => {
+  it('warns, without the pooler diagnosis, when the probe could not run', async () => {
     hoisted.throws = true
     const unsubscribe = await subscribe(['conversation:inbox'], () => {})
     await flush()
     expect(unsubscribe).toBeTypeOf('function')
-    expect(hoisted.errors).toHaveLength(1)
-    expect(hoisted.errors[0].msg).toMatch(/DATABASE_URL/)
+    expect(hoisted.errors).toHaveLength(0)
+    expect(hoisted.warns).toHaveLength(1)
+    expect(hoisted.warns[0].msg).toBe('realtime delivery check could not run')
+    expect((hoisted.warns[0].obj as { err: Error }).err.message).toMatch(/refused/)
     await unsubscribe()
   })
 

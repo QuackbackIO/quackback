@@ -200,10 +200,15 @@ async function directConnection(): Promise<{ url: string; password?: () => Promi
  * failed check must not take down the subscribe that triggered it.
  */
 async function checkDelivery(namespace: string, listener: RealtimeListener): Promise<void> {
-  const ok = await listener.verify().catch((err) => {
+  let ok: boolean
+  try {
+    ok = await listener.verify()
+  } catch (err) {
+    // The probe itself failed (outage, connection limit), so nothing is known
+    // about delivery and the pooler diagnosis would be a guess.
     log.warn({ err, workspace: namespace }, 'realtime delivery check could not run')
-    return false
-  })
+    return
+  }
   if (ok) return
   // The remedy differs by tenancy: a single-workspace install is told which
   // variable to change, a pooled one which registry field, by workspace id and
