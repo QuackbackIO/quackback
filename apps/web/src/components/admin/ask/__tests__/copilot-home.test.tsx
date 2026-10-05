@@ -217,8 +217,9 @@ describe('Home idle', () => {
     mount({ canAsk: false, locked: true })
     const composer = screen.getByRole('textbox', { name: 'Ask Copilot', hidden: true })
     expect(composer.closest('[inert]')).not.toBeNull()
-    expect(screen.queryByRole('link', { name: 'Upgrade' })).toBeNull()
+    expect(screen.getByRole('link', { name: 'Upgrade' })).not.toBeVisible()
     fireEvent.mouseEnter(screen.getByRole('group', { name: 'Ask Copilot' }))
+    expect(screen.getByRole('link', { name: 'Upgrade' })).toBeVisible()
     expect(screen.getByRole('link', { name: 'Upgrade' })).toHaveAttribute(
       'href',
       '/admin/settings/billing'

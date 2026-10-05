@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import '@testing-library/jest-dom/vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -20,6 +21,7 @@ function mount() {
         }
       >
         <textarea aria-label="Ask Copilot" />
+        <p>Enter to send</p>
       </LockedComposer>
       <button type="button">After</button>
     </IntlProvider>
@@ -27,45 +29,42 @@ function mount() {
   return screen.getByRole('group', { name: 'Ask Copilot' })
 }
 
-const offer = () => screen.queryByRole('link', { name: 'Upgrade' })
+const offer = () => screen.getByRole('link', { name: 'Upgrade' })
 
 describe('the composer without AI credits', () => {
-  it('stays greyed and inert, with the offer hidden at rest but describing the area', () => {
+  it('stays greyed and inert, with the offer out of sight at rest but describing the area', () => {
     const area = mount()
     expect(screen.getByRole('textbox', { hidden: true }).closest('[inert]')).not.toBeNull()
-    expect(offer()).toBeNull()
+    expect(offer()).not.toBeVisible()
     expect(area).toHaveAccessibleDescription(/Copilot needs AI credits/)
+  })
+
+  it('is no tab stop of its own: the offer link is the one stop, and focusing it shows it', () => {
+    const area = mount()
+    expect(area).not.toHaveAttribute('tabindex')
+    const focusable = Array.from(
+      document.querySelectorAll<HTMLElement>('a[href], button, [tabindex]')
+    ).filter((element) => !element.closest('[inert]'))
+    expect(focusable.map((element) => element.textContent)).toEqual(['Before', 'Upgrade', 'After'])
+    act(() => offer().focus())
+    expect(offer()).toBeVisible()
+    fireEvent.blur(offer(), { relatedTarget: screen.getByRole('button', { name: 'After' }) })
+    expect(offer()).not.toBeVisible()
   })
 
   it('shows the offer on hover and hides it when the pointer leaves', () => {
     const area = mount()
     fireEvent.mouseEnter(area)
-    expect(offer()).toHaveAttribute('href', '/admin/settings/billing')
+    expect(offer()).toBeVisible()
     fireEvent.mouseLeave(area)
-    expect(offer()).toBeNull()
+    expect(offer()).not.toBeVisible()
   })
 
-  it('shows the offer on keyboard focus, and Escape or blur hides it', () => {
+  it('shows the offer on tap, and Escape hides it again', () => {
     const area = mount()
-    act(() => area.focus())
-    expect(offer()).toBeTruthy()
-    fireEvent.keyDown(area, { key: 'Escape' })
-    expect(offer()).toBeNull()
-    expect(area).toHaveFocus()
-    fireEvent.focus(area)
-    expect(offer()).toBeTruthy()
-    fireEvent.blur(area, { relatedTarget: screen.getByRole('button', { name: 'After' }) })
-    expect(offer()).toBeNull()
-  })
-
-  it('keeps the offer while focus moves onto its link, and shows it on tap', () => {
-    const area = mount()
-    act(() => area.focus())
-    const link = offer()!
-    fireEvent.blur(area, { relatedTarget: link })
-    expect(offer()).toBeTruthy()
-    fireEvent.keyDown(area, { key: 'Escape' })
     fireEvent.click(area)
-    expect(offer()).toBeTruthy()
+    expect(offer()).toBeVisible()
+    fireEvent.keyDown(area, { key: 'Escape' })
+    expect(offer()).not.toBeVisible()
   })
 })
