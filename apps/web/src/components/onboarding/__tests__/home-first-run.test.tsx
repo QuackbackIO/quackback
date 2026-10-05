@@ -216,6 +216,15 @@ describe('Home first-run cards', () => {
     expect(hoisted.card).not.toHaveBeenCalled()
   })
 
+  it('stops offering the tour once the first win arrives', async () => {
+    hoisted.status = status({ hasFirstWin: true })
+    hoisted.card.mockResolvedValue({ summary: null })
+    const { client } = mount()
+    await screen.findByRole('region', { name: 'First win' })
+    await waitFor(() => expect(client.getQueryData(['onboarding', 'progress'])).toBeDefined())
+    expect(screen.queryByText('New here? Take the 60-second tour')).toBeNull()
+  })
+
   it('offers no tour on a phone, where the sidebar it points at is hidden', async () => {
     hoisted.status = status()
     tourView.narrow = true

@@ -73,9 +73,11 @@ export function HomeGettingStarted({
   useEffect(() => {
     setNarrow(window.matchMedia?.('(max-width: 639px)').matches ?? false)
   }, [])
+  // The owner's first win ends the first run, and the tour offer with it.
   const showTourOffer =
     !narrow &&
     inWindow &&
+    (member || statusQuery.data.hasFirstWin !== true) &&
     Boolean(progress.data) &&
     !progress.data?.tourSeenAt &&
     !progress.data?.tourDismissedAt
