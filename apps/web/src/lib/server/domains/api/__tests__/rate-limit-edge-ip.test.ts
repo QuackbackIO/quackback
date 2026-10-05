@@ -199,7 +199,6 @@ describe('warning about a rejected edge address', () => {
     ['clock skew', { sig: sigFor(SECRET, CUSTOMER, VISITOR, NOW_S - 301) }, 'stale-timestamp'],
     ['a malformed signature', { sig: 'garbage' }, 'malformed-signature'],
     ['an invalid address', { ip: 'not-an-ip' }, 'invalid-address'],
-    ['an untrusted origin', { host: 'south.workspace.example' }, 'untrusted-origin'],
     ['an unverified customer host', { customerSig: null }, 'unverified-customer-host'],
   ])('names %s as the reason', async (_name, overrides, reason) => {
     const fresh = await freshGetClientIp()
@@ -226,6 +225,29 @@ describe('warning about a rejected edge address', () => {
     vi.advanceTimersByTime(1_000)
     fresh(rejected())
     expect(mockWarn).toHaveBeenCalledTimes(2)
+  })
+
+  it('logs nothing for a forged header on a first-party host', async () => {
+    const fresh = await freshGetClientIp()
+    for (const overrides of [
+      {},
+      { sig: 'garbage' },
+      { sig: sigFor(SECRET, CUSTOMER, VISITOR, NOW_S - 301) },
+      { ip: 'not-an-ip' },
+      { sig: sigFor('forged', CUSTOMER, VISITOR, NOW_S) },
+    ] satisfies EdgeOverrides[]) {
+      const headers = edgeHeaders({ ...overrides, host: 'south.workspace.example' })
+      expect(fresh(request(headers))).toBe(XFF_HOP)
+    }
+    expect(mockWarn).not.toHaveBeenCalled()
+  })
+
+  it('logs once for a bad signature on the trusted origin', async () => {
+    const fresh = await freshGetClientIp()
+    fresh(request(edgeHeaders({ sig: 'garbage' })))
+    fresh(request(edgeHeaders({ sig: sigFor('forged', CUSTOMER, VISITOR, NOW_S) })))
+    expect(mockWarn).toHaveBeenCalledTimes(1)
+    expect(mockWarn.mock.calls[0][0]).toEqual({ reason: 'malformed-signature' })
   })
 
   it('logs nothing for a valid header', async () => {

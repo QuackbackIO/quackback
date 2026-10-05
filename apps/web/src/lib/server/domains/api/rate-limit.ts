@@ -46,9 +46,10 @@ const EDGE_REJECTION_WARN_INTERVAL_MS = 60_000
 let lastEdgeRejectionWarnAt = 0
 
 function warnEdgeClientIpRejected(reason: EdgeClientIpRejection): void {
-  // An install without the edge secret never trusts the header, so a copy of
-  // it there is plain client input and says nothing about configuration.
-  if (reason === 'secret-unset') return
+  // Without the edge secret, or off a trusted origin, the header did not come
+  // through the edge proxy: it is plain client input and says nothing about
+  // configuration, and logging it would let any client fill the log.
+  if (reason === 'secret-unset' || reason === 'untrusted-origin') return
   const now = Date.now()
   if (now - lastEdgeRejectionWarnAt < EDGE_REJECTION_WARN_INTERVAL_MS) return
   lastEdgeRejectionWarnAt = now

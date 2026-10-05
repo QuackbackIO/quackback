@@ -138,6 +138,10 @@ export type EdgeClientIpResult = { ip: string } | { rejected: EdgeClientIpReject
  * Verifies the signed visitor address on a request, naming the first check
  * that fails. Null when the request carries no address. Callers fall back to
  * their usual resolution on any rejection.
+ *
+ * `secret-unset` and `untrusted-origin` come first: they mark a header that
+ * did not come through the edge proxy at all, so every later reason describes
+ * a request that plausibly did.
  */
 export function checkEdgeClientIp(
   headers: Headers,
@@ -149,6 +153,9 @@ export function checkEdgeClientIp(
   if (!ip) return null
   const secret = env.QUACKBACK_SAAS_EDGE_SECRET?.trim() ?? ''
   if (!secret) return { rejected: 'secret-unset' }
+  if (!requestHost || !trustedOriginHosts(env).has(requestHost)) {
+    return { rejected: 'untrusted-origin' }
+  }
   const match = EDGE_CLIENT_IP_SIG_PATTERN.exec(headers.get(EDGE_CLIENT_IP_SIG_HEADER) ?? '')
   if (!match) return { rejected: 'malformed-signature' }
   const unixSeconds = Number(match[1])
@@ -156,9 +163,6 @@ export function checkEdgeClientIp(
     return { rejected: 'stale-timestamp' }
   }
   if (!isIP(ip)) return { rejected: 'invalid-address' }
-  if (!requestHost || !trustedOriginHosts(env).has(requestHost)) {
-    return { rejected: 'untrusted-origin' }
-  }
   const customer = verifiedCustomerHost(requestHost, headers, env)
   if (!customer) return { rejected: 'unverified-customer-host' }
   const expected = Buffer.from(signEdgeClientIp(secret, customer, ip, unixSeconds), 'utf8')
