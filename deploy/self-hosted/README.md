@@ -11,10 +11,10 @@ Deploy Quackback on your own infrastructure with full control over your data.
 - [Building from Source](#building-from-source)
 - [Reverse Proxy](#reverse-proxy)
 - [Scaling Out](#scaling-out)
-- [Enterprise Edition](#enterprise-edition)
 - [Upgrading](#upgrading)
   - [Upgrading from 0.13](#upgrading-from-013)
 - [Troubleshooting](#troubleshooting)
+- [One-Click Deployments](#one-click-deployments)
 
 ---
 
@@ -44,6 +44,8 @@ Open http://localhost:3000 to access Quackback.
 
 ### Using Docker Run
 
+Bring your own PostgreSQL (see [Database Setup](#database-setup) for the requirements):
+
 ```bash
 docker run -d \
   --name quackback \
@@ -58,27 +60,23 @@ docker run -d \
 
 ## Docker Images
 
-Images are published to GitHub Container Registry:
+Images are published to GitHub Container Registry as `ghcr.io/quackbackio/quackback`, for `linux/amd64` and `linux/arm64`:
 
-| Tag                 | Description                               |
-| ------------------- | ----------------------------------------- |
-| `latest`            | Latest stable release (Community Edition) |
-| `latest-community`  | Community Edition (same as `latest`)      |
-| `latest-enterprise` | Enterprise Edition (includes EE features) |
-| `vX.Y.Z`            | Specific version                          |
-| `vX.Y.Z-community`  | Specific version, Community Edition       |
-| `vX.Y.Z-enterprise` | Specific version, Enterprise Edition      |
+| Tag      | Description                                                       |
+| -------- | ----------------------------------------------------------------- |
+| `latest` | Latest stable release                                             |
+| `X.Y.Z`  | A specific release, for example `0.14.0` (no `v` prefix)          |
+| `main`   | Latest build of the `main` branch; unreleased, not for production |
 
 ```bash
-# Pull latest community edition
+# Pull the latest release
 docker pull ghcr.io/quackbackio/quackback:latest
 
-# Pull specific version
-docker pull ghcr.io/quackbackio/quackback:v1.0.0
-
-# Pull enterprise edition
-docker pull ghcr.io/quackbackio/quackback:latest-enterprise
+# Pull a specific release (recommended for production)
+docker pull ghcr.io/quackbackio/quackback:0.14.0
 ```
+
+With `docker-compose.prod.yml`, pin the release with `QUACKBACK_TAG` in `.env`.
 
 ---
 
@@ -106,30 +104,25 @@ docker pull ghcr.io/quackbackio/quackback:latest-enterprise
 | `EMAIL_SES_IDENTITY_ACCESS_KEY_ID` | Separate SES key id used only to verify a customer-owned sending domain; needs `EMAIL_SES_IDENTITY_SECRET_ACCESS_KEY`. Grant `ses:CreateEmailIdentity`, `ses:GetEmailIdentity`, `ses:PutEmailIdentityMailFromAttributes` and NOT `ses:DeleteEmailIdentity`               | -            |
 | `EMAIL_FROM`                       | From address for emails. Configure exactly one sending provider (SMTP, Amazon SES or Resend): with more than one set, the app refuses to start and names the variables. A Resend key kept only for inbound mail beside SMTP or SES needs `EMAIL_INBOUND_PROVIDER=resend` | -            |
 
-### Integrations (Optional)
+### Sign-in Providers and Integrations
 
-| Variable               | Description                |
-| ---------------------- | -------------------------- |
-| `SLACK_CLIENT_ID`      | Slack OAuth client ID      |
-| `SLACK_CLIENT_SECRET`  | Slack OAuth client secret  |
-| `LINEAR_CLIENT_ID`     | Linear OAuth client ID     |
-| `LINEAR_CLIENT_SECRET` | Linear OAuth client secret |
-| `DISCORD_WEBHOOK_URL`  | Discord webhook URL        |
+Sign-in providers (GitHub, Google, Microsoft, custom OIDC) and integrations (Slack, Linear, Jira and others) are configured in the admin UI under Settings, and their credentials are stored encrypted in the database. No environment variables are needed.
 
-### OAuth Providers (Optional)
-
-| Variable               | Description                 |
-| ---------------------- | --------------------------- |
-| `GITHUB_CLIENT_ID`     | GitHub OAuth for user login |
-| `GITHUB_CLIENT_SECRET` | GitHub OAuth secret         |
-| `GOOGLE_CLIENT_ID`     | Google OAuth for user login |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth secret         |
+To supply integration OAuth app credentials from the environment instead, set `PLATFORM_CREDENTIALS_SOURCE=env` and the `INTEGRATION_<TYPE>_<FIELD>` variables, for example `INTEGRATION_SLACK_CLIENT_ID` and `INTEGRATION_SLACK_CLIENT_SECRET`. Sign-in provider credentials are always configured in the admin UI.
 
 ---
 
 ## Database Setup
 
-Quackback requires PostgreSQL 13+.
+Quackback requires:
+
+- **PostgreSQL 14** or newer
+- **pgvector 0.5.0** or newer (the `vector` extension)
+- The **`pg_trgm`** extension (part of the PostgreSQL contrib package)
+
+`docker-compose.prod.yml` builds a PostgreSQL image that meets all three. For your own server, the `pgvector/pgvector` Docker image works, or install pgvector and contrib from your distribution. The app creates both extensions on startup if its database user is allowed to; otherwise, have a superuser run `CREATE EXTENSION vector; CREATE EXTENSION pg_trgm;` in the Quackback database first. Startup checks these requirements before running migrations and exits with a message naming anything missing.
+
+`DATABASE_URL` must be a direct or session-mode connection. Transaction-mode poolers are not supported, because realtime features use `LISTEN`/`NOTIFY`.
 
 ### Create Database
 
@@ -150,7 +143,7 @@ Migrations run automatically on startup. To run manually:
 bun run db:migrate
 
 # Using Docker
-docker exec quackback bun run db:migrate
+docker exec quackback bun /app/migrate.mjs
 ```
 
 ### Database Backups
@@ -170,8 +163,8 @@ pg_restore -d quackback quackback_backup.dump
 ### Prerequisites
 
 - **Bun** 1.4.0+
-- **PostgreSQL** 17+
-- **Node.js** 20+ (for some dev tools)
+- **PostgreSQL** 14+ with pgvector 0.5.0+ and `pg_trgm` (see [Database Setup](#database-setup))
+- **Docker**, for the development database and object storage started by `bun run setup`
 
 ### Build Steps
 
@@ -194,7 +187,7 @@ bun run db:migrate
 bun run build
 
 # Start the server
-bun run start
+bun run --filter @quackback/web start
 ```
 
 ### Development Mode
@@ -303,7 +296,7 @@ The datastores (Postgres, Silo) are the same as in `docker-compose.prod.yml`. Th
 
 ```yaml
 services:
-  # postgres, minio: same as docker-compose.prod.yml
+  # postgres, minio, minio-init: same as docker-compose.prod.yml (minio runs Silo)
 
   web:
     image: ghcr.io/quackbackio/quackback:latest
@@ -337,7 +330,7 @@ services:
     deploy:
       replicas: 1
 
-volumes:
+# volumes: same as docker-compose.prod.yml
 ```
 
 ### Database Migrations at Scale
@@ -355,32 +348,6 @@ docker run --rm \
 
 # Then roll out the new image to web and worker replicas
 ```
-
----
-
-## Enterprise Edition
-
-Enterprise features require a license key:
-
-- **SSO/SAML** - Single sign-on with identity providers
-- **SCIM** - Automated user provisioning
-- **Audit Logs** - Detailed activity logging
-
-### Running Enterprise Edition
-
-```bash
-docker run -d \
-  --name quackback \
-  -p 3000:3000 \
-  -e DATABASE_URL="postgresql://..." \
-  -e SECRET_KEY="..." \
-  -e QUACKBACK_LICENSE_KEY="your-license-key" \
-  ghcr.io/quackbackio/quackback:latest-enterprise
-```
-
-### Obtaining a License
-
-Contact sales@quackback.io for enterprise licensing information.
 
 ---
 
@@ -526,7 +493,7 @@ bun run db:migrate
 bun run build
 
 # Restart
-bun run start
+bun run --filter @quackback/web start
 ```
 
 ---
@@ -545,6 +512,8 @@ Common issues:
 
 - Missing required environment variables
 - Database connection failed
+- Database preflight failed: the log names the unmet requirement (PostgreSQL version, pgvector, `pg_trgm`, or a missing privilege). See [Database Setup](#database-setup)
+- More than one email sending provider configured (see [Email Not Sending](#email-not-sending))
 - Port 3000 already in use
 
 ### Database Connection Failed
@@ -566,9 +535,11 @@ For Docker, ensure the database is accessible:
 Check database permissions:
 
 ```sql
--- User needs CREATE, ALTER, DROP permissions
+-- User needs CREATE, ALTER, DROP permissions (including TEMPORARY)
 GRANT ALL PRIVILEGES ON DATABASE quackback TO your_user;
 ```
+
+If the user cannot create extensions, have a superuser create `vector` and `pg_trgm` in the database (see [Database Setup](#database-setup)).
 
 ### Email Not Sending
 
@@ -586,7 +557,7 @@ curl -X POST 'https://api.resend.com/emails' \
 
 ### Performance Issues
 
-- Enable PostgreSQL connection pooling (PgBouncer)
+- Use a session-mode connection pooler if you need one (transaction-mode pooling breaks realtime features)
 - Increase container memory limits
 - Check for slow database queries
 
@@ -596,7 +567,7 @@ curl -X POST 'https://api.resend.com/emails' \
 
 ### Railway
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/bcnu9a)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/quackback)
 
 Deploys Quackback + PostgreSQL (with pgvector) + S3-compatible storage bucket to Railway. After deploying:
 
@@ -606,18 +577,12 @@ Deploys Quackback + PostgreSQL (with pgvector) + S3-compatible storage bucket to
 
 File uploads (logos, avatars, changelog images) work out of the box via the included Railway storage bucket.
 
-> Railway offers a free trial with $5 credit. See [Railway pricing](https://railway.com/pricing) for details.
-
-Coming soon:
-
-- Render
-- DigitalOcean App Platform
-- Fly.io
+See [Railway pricing](https://railway.com/pricing) for costs.
 
 ---
 
 ## Support
 
-- **Documentation**: https://docs.quackback.io
+- **Documentation**: https://quackback.io/docs
+- **GitHub Discussions**: https://github.com/quackbackio/quackback/discussions
 - **GitHub Issues**: https://github.com/quackbackio/quackback/issues
-- **Discord**: https://discord.gg/quackback
