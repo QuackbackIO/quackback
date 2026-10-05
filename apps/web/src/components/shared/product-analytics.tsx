@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { useRouterState } from '@tanstack/react-router'
+import type { PostHog } from 'posthog-js'
 import { isSyntheticAnonEmail } from '@/lib/shared/anonymous-email'
 import { analyticsDistinctId } from '@/lib/shared/analytics-identity'
 import { setAnalyticsClient } from '@/lib/client/analytics'
@@ -19,6 +20,16 @@ import {
  * sign-in page they use.
  */
 const TRACKED_ROUTE_PREFIXES = ['/admin', '/onboarding', '/auth/open-handoff', '/complete-signup']
+
+/** The same paths as URLs, matched on a segment boundary. */
+function isTrackedPath(pathname: string): boolean {
+  return TRACKED_ROUTE_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  )
+}
+
+/** The SDK once loaded in this tab, so leaving a tracked route can pause it. */
+let loaded: PostHog | null = null
 
 /**
  * Product analytics for the team, loaded only when the operator set
@@ -59,7 +70,15 @@ export function ProductAnalytics() {
   const enabled = Boolean(config && onTrackedRoute)
 
   useEffect(() => {
-    if (!enabled || !config) return
+    if (!config) return
+    if (!enabled) {
+      // Left the tracked routes within this tab: the SDK stays loaded, so
+      // pause replay and explicit events. `before_send` already drops
+      // anything captured from these URLs.
+      setAnalyticsClient(null)
+      loaded?.stopSessionRecording()
+      return
+    }
     let cancelled = false
     void import('posthog-js').then(({ default: posthog }) => {
       if (cancelled) return
@@ -76,16 +95,25 @@ export function ProductAnalytics() {
           mask_all_element_attributes: true,
           disable_session_recording: !config.sessionRecording,
           session_recording: { maskAllInputs: true, maskTextSelector: '*' },
+          // The SDK records a client-side navigation before React re-renders,
+          // so the URL itself decides, not this component's state.
+          before_send: (event) => (isTrackedPath(window.location.pathname) ? event : null),
         })
+      } else if (config.sessionRecording) {
+        posthog.startSessionRecording()
       }
+      loaded = posthog
       setAnalyticsClient(posthog)
-      if (!distinctId) return
+      const identified = posthog.get_property('$user_state') === 'identified'
+      if (!distinctId) {
+        // Signed out on a tracked page: whoever this browser last identified
+        // is not who is here now.
+        if (identified) posthog.reset()
+        return
+      }
       // One browser, a different person: their events must not join the
       // previous person's profile.
-      if (
-        posthog.get_property('$user_state') === 'identified' &&
-        posthog.get_distinct_id() !== distinctId
-      ) {
+      if (identified && posthog.get_distinct_id() !== distinctId) {
         posthog.reset()
       }
       posthog.identify(distinctId, { email: distinctId, name, role })

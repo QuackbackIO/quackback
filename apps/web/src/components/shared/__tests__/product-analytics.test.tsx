@@ -3,11 +3,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, waitFor } from '@testing-library/react'
 
 const posthog = vi.hoisted(() => ({
-  init: vi.fn(),
+  __loaded: false,
+  init: vi.fn(function (this: { __loaded: boolean }) {
+    // Like the real SDK: init marks the shared instance loaded.
+    this.__loaded = true
+  }),
   identify: vi.fn(),
   group: vi.fn(),
   reset: vi.fn(),
   capture: vi.fn(),
+  startSessionRecording: vi.fn(),
+  stopSessionRecording: vi.fn(),
   get_distinct_id: vi.fn(() => 'anon-device'),
   get_property: vi.fn((): unknown => undefined),
 }))
@@ -41,6 +47,10 @@ vi.mock('@/lib/client/hooks/use-root-context', () => ({
 import { ProductAnalytics } from '../product-analytics'
 import { setAnalyticsClient, track } from '@/lib/client/analytics'
 
+/** The options the component passed to `posthog.init`. */
+const initOptions = () =>
+  (posthog.init.mock.calls[0] as unknown as [string, Record<string, unknown>])[1]
+
 const teamSession = (id = 'user_1', email = 'ana@example.com') => ({
   session: { scope: 'dashboard' },
   user: { id, email, name: 'Ana', principalType: 'user' },
@@ -48,6 +58,7 @@ const teamSession = (id = 'user_1', email = 'ana@example.com') => ({
 
 beforeEach(() => {
   vi.clearAllMocks()
+  posthog.__loaded = false
   setAnalyticsClient(null)
   posthog.get_property.mockReturnValue(undefined)
   posthog.get_distinct_id.mockReturnValue('anon-device')
@@ -75,7 +86,10 @@ describe('ProductAnalytics', () => {
   it('starts with the configured host and masks everything a replay could show', async () => {
     render(<ProductAnalytics />)
     await waitFor(() => expect(posthog.init).toHaveBeenCalledTimes(1))
-    const [key, options] = posthog.init.mock.calls[0] as [string, Record<string, unknown>]
+    const [key, options] = posthog.init.mock.calls[0] as unknown as [
+      string,
+      Record<string, unknown>,
+    ]
     expect(key).toBe('phc_test')
     expect(options).toMatchObject({
       api_host: '/api/relay',
@@ -94,7 +108,7 @@ describe('ProductAnalytics', () => {
     ctx.analytics = { ...ctx.analytics!, sessionRecording: false }
     render(<ProductAnalytics />)
     await waitFor(() => expect(posthog.init).toHaveBeenCalled())
-    expect(posthog.init.mock.calls[0]![1]).toMatchObject({ disable_session_recording: true })
+    expect(initOptions()).toMatchObject({ disable_session_recording: true })
   })
 
   it('identifies the team member and groups them under the workspace', async () => {
@@ -166,5 +180,48 @@ describe('ProductAnalytics', () => {
     expect(posthog.capture).toHaveBeenCalledWith('onboarding_workspace_saved', {
       useCase: 'feedback',
     })
+  })
+
+  it('forgets a previous person when a tracked page is reached signed out', async () => {
+    ctx.session = null
+    route.ids = ['__root__', '/onboarding', '/onboarding/_layout/account']
+    posthog.get_property.mockReturnValue('identified')
+    posthog.get_distinct_id.mockReturnValue('previous@example.com')
+    render(<ProductAnalytics />)
+    await waitFor(() => expect(posthog.reset).toHaveBeenCalled())
+    expect(posthog.identify).not.toHaveBeenCalled()
+  })
+
+  it('drops every event sent from a page outside the tracked paths', async () => {
+    render(<ProductAnalytics />)
+    await waitFor(() => expect(posthog.init).toHaveBeenCalled())
+    const beforeSend = initOptions().before_send as (e: unknown) => unknown
+    const event = { event: '$pageview' }
+
+    window.history.pushState({}, '', '/admin/feedback')
+    expect(beforeSend(event)).toBe(event)
+    window.history.pushState({}, '', '/onboarding/account')
+    expect(beforeSend(event)).toBe(event)
+    // The SDK records a client-side navigation before React re-renders, so the
+    // URL itself is the gate, not component state.
+    for (const path of ['/', '/b/ideas', '/hc/guide', '/auth/login', '/administrator']) {
+      window.history.pushState({}, '', path)
+      expect(beforeSend(event)).toBeNull()
+    }
+  })
+
+  it('pauses replay and explicit events when the page leaves the tracked routes', async () => {
+    const view = render(<ProductAnalytics />)
+    await waitFor(() => expect(posthog.identify).toHaveBeenCalled())
+
+    route.ids = ['__root__', '/_portal', '/_portal/']
+    view.rerender(<ProductAnalytics />)
+    await waitFor(() => expect(posthog.stopSessionRecording).toHaveBeenCalled())
+    await track('portal_thing')
+    expect(posthog.capture).not.toHaveBeenCalled()
+
+    route.ids = ['__root__', '/admin', '/admin/feedback']
+    view.rerender(<ProductAnalytics />)
+    await waitFor(() => expect(posthog.startSessionRecording).toHaveBeenCalled())
   })
 })
