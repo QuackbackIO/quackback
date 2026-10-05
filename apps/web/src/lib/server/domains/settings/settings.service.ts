@@ -346,9 +346,27 @@ export async function updateAuthConfig(input: UpdateAuthConfigInput): Promise<Au
     const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
     const { resetAuth } = await import('@/lib/server/auth')
     await db.transaction(async (tx) => {
+      // Everything above decided on a read taken outside any lock, and holds
+      // no lock across its DNS checks. `oidcRedirectStyles` is not this
+      // writer's to change, so take it from the row as it stands now, under
+      // the lock the identity-provider service also writes it under, rather
+      // than writing back the copy read earlier.
+      const [locked] = await tx
+        .select({ authConfig: settings.authConfig })
+        .from(settings)
+        .limit(1)
+        .for('update')
+      const current = parseJsonConfig(locked?.authConfig ?? null, DEFAULT_AUTH_CONFIG)
+      const { oidcRedirectStyles: _stale, ...ours } = updated
       await tx
         .update(settings)
-        .set({ authConfig: JSON.stringify(updated) })
+        .set({
+          authConfig: JSON.stringify(
+            current.oidcRedirectStyles
+              ? { ...ours, oidcRedirectStyles: current.oidcRedirectStyles }
+              : ours
+          ),
+        })
         .where(eq(settings.id, org.id))
       await bumpAuthConfigVersionInTx(tx)
     })
@@ -376,18 +394,29 @@ export async function updateAuthConfig(input: UpdateAuthConfigInput): Promise<Au
  * a cross-pod Better-Auth rebuild on every test sign-in.
  */
 async function patchSsoOidc(patch: Partial<NonNullable<AuthConfig['ssoOidc']>>): Promise<void> {
-  const org = await requireSettings()
-  const existing = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
-  if (!existing.ssoOidc) return
-  const updated: AuthConfig = {
-    ...existing,
-    ssoOidc: { ...existing.ssoOidc, ...patch },
-  }
-  await db
-    .update(settings)
-    .set({ authConfig: JSON.stringify(updated) })
-    .where(eq(settings.id, org.id))
-  await invalidateSettingsCache()
+  // Read-modify-write under the row lock, so a concurrent writer of another
+  // key (the identity-provider service's `oidcRedirectStyles`) is not undone
+  // by a copy read before it committed.
+  const wrote = await db.transaction(async (tx) => {
+    const [org] = await tx
+      .select({ id: settings.id, authConfig: settings.authConfig })
+      .from(settings)
+      .limit(1)
+      .for('update')
+    if (!org) return false
+    const existing = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
+    if (!existing.ssoOidc) return false
+    const updated: AuthConfig = {
+      ...existing,
+      ssoOidc: { ...existing.ssoOidc, ...patch },
+    }
+    await tx
+      .update(settings)
+      .set({ authConfig: JSON.stringify(updated) })
+      .where(eq(settings.id, org.id))
+    return true
+  })
+  if (wrote) await invalidateSettingsCache()
 }
 
 /**

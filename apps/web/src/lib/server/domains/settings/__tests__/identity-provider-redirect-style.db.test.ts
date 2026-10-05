@@ -17,6 +17,9 @@ import postgres from 'postgres'
 const suite = vi.hoisted(() => ({
   schema: `idp_redirect_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
   db: null as unknown,
+  /** When set, the next `requireSettings` answers with this copy: a writer
+   *  that read the row before a concurrent change committed. */
+  staleRow: null as unknown,
 }))
 
 // Domain code imports the global `db`; point it at this suite's schema.
@@ -37,10 +40,18 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 // The auth instance, the settings cache and the credential store live outside
 // this suite's schema.
 vi.mock('@/lib/server/auth', () => ({ resetAuth: vi.fn() }))
-vi.mock('../settings.helpers', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../settings.helpers')>()),
-  invalidateSettingsCache: vi.fn(async () => {}),
-}))
+vi.mock('../settings.helpers', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../settings.helpers')>()
+  return {
+    ...actual,
+    invalidateSettingsCache: vi.fn(async () => {}),
+    requireSettings: vi.fn(async () => {
+      const stale = suite.staleRow
+      suite.staleRow = null
+      return stale ?? actual.requireSettings()
+    }),
+  }
+})
 vi.mock('@/lib/server/domains/platform-credentials/platform-credential.service', () => ({
   getPlatformCredentials: vi.fn(async () => null),
   deletePlatformCredentials: vi.fn(async () => {}),
@@ -60,6 +71,7 @@ import {
   setIdentityProviderRedirectStyle,
   upsertIdentityProvider,
 } from '../identity-providers.service'
+import { markSsoTestSucceeded, updateAuthConfig } from '../settings.service'
 
 let admin: postgres.Sql | null = null
 let pool: postgres.Sql | null = null
@@ -217,5 +229,60 @@ describe.skipIf(!available)('identity provider redirect style', () => {
     await deleteIdentityProvider(id)
 
     expect((await storedAuthConfig()).oidcRedirectStyles).toEqual({})
+  })
+
+  // The switch must take the provider row before settings, the order a save or
+  // delete of the same provider takes them in. Staged with a second connection:
+  // while it holds the provider row, the switch must be waiting there, not
+  // already holding settings.
+  it('locks the provider row before settings when switching', async () => {
+    const id = await seedProvider('sso', 'legacy')
+    let switched: Promise<unknown> | null = null
+    await admin!.begin(async (other) => {
+      await other.unsafe(
+        `select 1 from ${suite.schema}.identity_provider where registration_id = 'sso' for update`
+      )
+      switched = setIdentityProviderRedirectStyle(id, 'current')
+      // Give the switch time to reach its first lock.
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      // Settings is still free: NOWAIT would throw if the switch held it.
+      await other.unsafe(`select 1 from ${suite.schema}.settings for update nowait`)
+    })
+    await switched
+    expect(await sentRedirectUri('sso')).toBe(`${BASE_URL}/api/auth/callback/sso`)
+  })
+
+  // A settings writer that read the row before a switch committed must not
+  // write the old style back with the rest of its copy.
+  it('keeps a switched style when a stale updateAuthConfig writes', async () => {
+    const id = await seedProvider('sso', 'legacy')
+    const [before] = await db.select().from(settings)
+    await setIdentityProviderRedirectStyle(id, 'current')
+
+    suite.staleRow = before
+    await updateAuthConfig({ openSignup: true })
+
+    const stored = await storedAuthConfig()
+    expect(stored.openSignup).toBe(true)
+    expect(stored.oidcRedirectStyles).toEqual({ sso: 'current' })
+  })
+
+  it('keeps a switched style when a stale SSO test stamp writes', async () => {
+    await db.update(settings).set({
+      authConfig: JSON.stringify({
+        ...STORED_AUTH_CONFIG,
+        ssoOidc: { enabled: false, discoveryUrl: 'https://idp.example', clientId: 'c' },
+      }),
+    })
+    const id = await seedProvider('sso', 'legacy')
+    const [before] = await db.select().from(settings)
+    await setIdentityProviderRedirectStyle(id, 'current')
+
+    suite.staleRow = before
+    await markSsoTestSucceeded()
+
+    const stored = await storedAuthConfig()
+    expect((stored.ssoOidc as { lastSuccessfulTestAt?: string }).lastSuccessfulTestAt).toBeTruthy()
+    expect(stored.oidcRedirectStyles).toEqual({ sso: 'current' })
   })
 })

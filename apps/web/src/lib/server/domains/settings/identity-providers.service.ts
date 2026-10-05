@@ -304,10 +304,14 @@ function parseRedirectStyles(
 
 /**
  * Record (or with `null`, forget) a provider's redirect style, inside the
- * caller's transaction when it passes one. Rewrites only the `oidcRedirectStyles` key of the
- * stored JSON and leaves every other key exactly as stored, under a row lock
- * so a concurrent write to the same blob cannot be lost. A workspace with no
- * settings row has nothing to record against and is left alone.
+ * caller's transaction when it passes one. Rewrites only the
+ * `oidcRedirectStyles` key of the stored JSON and leaves every other key
+ * exactly as stored, reading under `FOR UPDATE`. The other `auth_config`
+ * writers (`updateAuthConfig`, `patchSsoOidc`) take the same row lock and keep
+ * `oidcRedirectStyles` as the locked row has it, so neither side can write a
+ * stale copy of the other's keys back. A caller holding a provider row must
+ * have locked it before calling this. A workspace with no settings row has
+ * nothing to record against and is left alone.
  */
 export async function writeRedirectStyle(
   tx: Database | Transaction,
@@ -732,10 +736,16 @@ export async function setIdentityProviderRedirectStyle(
     const { resetAuth } = await import('@/lib/server/auth')
 
     const saved = await db.transaction(async (tx) => {
+      // Lock the provider row FIRST, then settings (inside writeRedirectStyle):
+      // the order upsert and delete take them in, which write the provider row
+      // and then bump the version on settings. The opposite order would let a
+      // switch and a save of the same provider each hold the lock the other
+      // waits for.
       const [existing] = await tx
         .select({ registrationId: identityProvider.registrationId })
         .from(identityProvider)
         .where(eq(identityProvider.id, id))
+        .for('update')
       if (!existing) return null
       const current = oidcRedirectStyleFrom((await readRedirectStyles(tx))[existing.registrationId])
       if (current === style) {
