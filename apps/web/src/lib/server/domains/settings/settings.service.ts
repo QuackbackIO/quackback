@@ -72,7 +72,7 @@ import {
 } from './settings.helpers'
 import { withCurrentStorageReadTokens } from '@/lib/server/content/storage-read-urls'
 
-import { logSettingsError } from './settings-log'
+import { logSettingsReadError } from './settings-log'
 
 const log = logger.child({ component: 'settings' })
 
@@ -179,7 +179,7 @@ export async function getAuthConfig(freshness: SettingsFreshness = 'cached'): Pr
     const org = await readSettingsRow(freshness)
     return parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
   } catch (error) {
-    logSettingsError(log, error, 'get auth config failed')
+    logSettingsReadError(log, error, 'get auth config failed')
     wrapDbError('fetch auth config', error)
   }
 }
@@ -355,7 +355,7 @@ export async function updateAuthConfig(input: UpdateAuthConfigInput): Promise<Au
     await invalidateSettingsCache()
     return updated
   } catch (error) {
-    logSettingsError(log, error, 'update auth config failed')
+    log.error({ err: error }, 'update auth config failed')
     wrapDbError('update auth config', error)
   }
 }
@@ -397,7 +397,7 @@ export async function markSsoTestSucceeded(): Promise<void> {
   try {
     await patchSsoOidc({ lastSuccessfulTestAt: new Date().toISOString() })
   } catch (error) {
-    logSettingsError(log, error, 'mark sso test succeeded failed')
+    log.error({ err: error }, 'mark sso test succeeded failed')
     wrapDbError('mark sso test succeeded', error)
   }
 }
@@ -507,7 +507,7 @@ export async function insertVerifiedDomain(
     }
     return rowToVerifiedDomain(inserted.row)
   } catch (error) {
-    logSettingsError(log, error, 'insert verified domain failed')
+    log.error({ err: error }, 'insert verified domain failed')
     wrapDbError('insert verified domain', error)
   }
 }
@@ -533,7 +533,7 @@ export async function removeVerifiedDomain(id: `domain_${string}`): Promise<void
       await invalidateSettingsCache()
     }
   } catch (error) {
-    logSettingsError(log, error, 'remove verified domain failed')
+    log.error({ err: error }, 'remove verified domain failed')
     wrapDbError('remove verified domain', error)
   }
 }
@@ -577,7 +577,7 @@ export async function stampVerifiedDomain(input: {
     await invalidateSettingsCache()
     return rowToVerifiedDomain(updated)
   } catch (error) {
-    logSettingsError(log, error, 'stamp verified domain failed')
+    log.error({ err: error }, 'stamp verified domain failed')
     wrapDbError('stamp verified domain', error)
   }
 }
@@ -610,7 +610,7 @@ export async function setVerifiedDomainEnforced(
     await invalidateSettingsCache()
     return rowToVerifiedDomain(updated)
   } catch (error) {
-    logSettingsError(log, error, 'set verified domain enforced failed')
+    log.error({ err: error }, 'set verified domain enforced failed')
     wrapDbError('set verified domain enforced', error)
   }
 }
@@ -620,7 +620,7 @@ export async function listVerifiedDomains(): Promise<VerifiedDomain[]> {
     const rows = await db.select().from(ssoVerifiedDomain).orderBy(ssoVerifiedDomain.createdAt)
     return rows.map(rowToVerifiedDomain)
   } catch (error) {
-    logSettingsError(log, error, 'list verified domains failed')
+    log.error({ err: error }, 'list verified domains failed')
     wrapDbError('list verified domains', error)
   }
 }
@@ -632,7 +632,7 @@ export async function getPortalConfig(
     const org = await readSettingsRow(freshness)
     return parsePortalConfig(org.portalConfig)
   } catch (error) {
-    logSettingsError(log, error, 'get portal config failed')
+    logSettingsReadError(log, error, 'get portal config failed')
     wrapDbError('fetch portal config', error)
   }
 }
@@ -658,7 +658,7 @@ export async function updatePortalConfig(input: UpdatePortalConfigInput): Promis
     await invalidateSettingsCache()
     return updated
   } catch (error) {
-    logSettingsError(log, error, 'update portal config failed')
+    log.error({ err: error }, 'update portal config failed')
     wrapDbError('update portal config', error)
   }
 }
@@ -668,7 +668,7 @@ export async function getDeveloperConfig(): Promise<DeveloperConfig> {
     const org = await requireSettingsCached()
     return parseJsonConfig(org.developerConfig, DEFAULT_DEVELOPER_CONFIG)
   } catch (error) {
-    logSettingsError(log, error, 'get developer config failed')
+    log.error({ err: error }, 'get developer config failed')
     wrapDbError('fetch developer config', error)
   }
 }
@@ -719,7 +719,7 @@ export async function updateDeveloperConfig(
     await invalidateSettingsCache()
     return updated
   } catch (error) {
-    logSettingsError(log, error, 'update developer config failed')
+    log.error({ err: error }, 'update developer config failed')
     wrapDbError('update developer config', error)
   }
 }
@@ -731,7 +731,7 @@ export async function getHelpCenterConfig(
     const org = await readSettingsRow(freshness)
     return parseJsonConfig(org.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
   } catch (error) {
-    logSettingsError(log, error, 'get help center config failed')
+    log.error({ err: error }, 'get help center config failed')
     wrapDbError('fetch help center config', error)
   }
 }
@@ -760,7 +760,7 @@ export async function updateHelpCenterConfig(
     await invalidateSettingsCache()
     return updated
   } catch (error) {
-    logSettingsError(log, error, 'update help center config failed')
+    log.error({ err: error }, 'update help center config failed')
     wrapDbError('update help center config', error)
   }
 }
@@ -855,7 +855,7 @@ export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
       twoFactor: { required: authConfig.twoFactor?.required ?? false },
     }
   } catch (error) {
-    logSettingsError(log, error, 'get public auth config failed')
+    logSettingsReadError(log, error, 'get public auth config failed')
     wrapDbError('fetch public auth config', error)
   }
 }
@@ -884,7 +884,7 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
       },
     }
   } catch (error) {
-    logSettingsError(log, error, 'get public portal config failed')
+    logSettingsReadError(log, error, 'get public portal config failed')
     wrapDbError('fetch public portal config', error)
   }
 }
@@ -1033,7 +1033,7 @@ async function readWorkspaceSettings(): Promise<WorkspaceSettings | null> {
     await cacheSet(CACHE_KEYS.WORKSPACE_SETTINGS, result, 3600)
     return result
   } catch (error) {
-    logSettingsError(log, error, 'get workspace settings failed')
+    logSettingsReadError(log, error, 'get workspace settings failed')
     wrapDbError('fetch settings with all configs', error)
   }
 }

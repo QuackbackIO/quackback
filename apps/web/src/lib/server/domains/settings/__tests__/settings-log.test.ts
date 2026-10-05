@@ -3,9 +3,11 @@
  * SETTINGS_NOT_FOUND during sign-up. That is an expected state and logs at
  * debug; any other failure stays an error.
  */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { InternalError, NotFoundError } from '@/lib/shared/errors'
-import { isSettingsNotYetCreated, logSettingsError } from '../settings-log'
+import { isSettingsNotYetCreated, logSettingsReadError } from '../settings-log'
 
 function logDouble() {
   return { error: vi.fn(), debug: vi.fn() }
@@ -25,11 +27,11 @@ describe('isSettingsNotYetCreated', () => {
   })
 })
 
-describe('logSettingsError', () => {
+describe('logSettingsReadError', () => {
   it('logs the not-yet-onboarded case at debug', () => {
     const log = logDouble()
     const err = new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
-    logSettingsError(log, err, 'get auth config failed')
+    logSettingsReadError(log, err, 'get auth config failed')
     expect(log.error).not.toHaveBeenCalled()
     expect(log.debug).toHaveBeenCalledWith({ err }, 'get auth config failed')
   })
@@ -37,8 +39,46 @@ describe('logSettingsError', () => {
   it('keeps real failures at error', () => {
     const log = logDouble()
     const err = new InternalError('DATABASE_ERROR', 'connection refused')
-    logSettingsError(log, err, 'get auth config failed')
+    logSettingsReadError(log, err, 'get auth config failed')
     expect(log.debug).not.toHaveBeenCalled()
     expect(log.error).toHaveBeenCalledWith({ err }, 'get auth config failed')
+  })
+})
+
+describe('which call sites downgrade', () => {
+  const dir = join(__dirname, '..')
+  const sources = ['settings.service.ts', 'settings.widget.ts'].map((f) =>
+    readFileSync(join(dir, f), 'utf8')
+  )
+  const downgraded = sources.flatMap((s) =>
+    [...s.matchAll(/logSettingsReadError\(log, error, '([^']+)'\)/g)].map((m) => m[1])
+  )
+
+  it('downgrades exactly the pre-onboarding reads', () => {
+    expect([...downgraded].sort()).toEqual([
+      'get auth config failed',
+      'get portal config failed',
+      'get public auth config failed',
+      'get public portal config failed',
+      'get public widget config failed',
+      'get widget config failed',
+      'get workspace settings failed',
+    ])
+  })
+
+  it('keeps write paths at error', () => {
+    const all = sources.join('\n')
+    for (const msg of [
+      'update auth config failed',
+      'update widget config failed',
+      'update portal config failed',
+      'update developer config failed',
+      'update help center config failed',
+      'save widget hero image key failed',
+      'regenerate widget secret failed',
+    ]) {
+      expect(all).toContain(`log.error({ err: error }, '${msg}')`)
+      expect(downgraded).not.toContain(msg)
+    }
   })
 })

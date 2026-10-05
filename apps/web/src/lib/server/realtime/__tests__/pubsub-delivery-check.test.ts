@@ -12,6 +12,7 @@ const hoisted = vi.hoisted(() => ({
   delivers: true,
   verifyCalls: 0,
   throws: false,
+  pooled: false,
   opens: 0,
 }))
 
@@ -52,7 +53,7 @@ vi.mock('../pg-listener', () => ({
 }))
 
 vi.mock('@/lib/server/db', () => ({ db: { execute: async () => [] } }))
-vi.mock('../../workspaces/mode', () => ({ isPooledTenancy: () => false }))
+vi.mock('../../workspaces/mode', () => ({ isPooledTenancy: () => hoisted.pooled }))
 vi.mock('../../config', () => ({ config: { databaseUrl: 'postgresql://x/y' } }))
 
 const { subscribe, closeSubscriber } = await import('../pubsub')
@@ -64,6 +65,7 @@ beforeEach(() => {
   hoisted.delivers = true
   hoisted.verifyCalls = 0
   hoisted.throws = false
+  hoisted.pooled = false
   hoisted.opens = 0
 })
 afterEach(async () => {
@@ -111,6 +113,24 @@ describe('realtime delivery check', () => {
     expect(unsubscribe).toBeTypeOf('function')
     expect(hoisted.errors).toHaveLength(1)
     expect(hoisted.errors[0].msg).toMatch(/DATABASE_URL/)
+    await unsubscribe()
+  })
+
+  it('names the workspace direct URL, never DATABASE_URL or the URL itself, under pooled tenancy', async () => {
+    hoisted.delivers = false
+    hoisted.pooled = true
+    const { withWorkspace } = await import('@/lib/server/__tests__/workspace-scope')
+    const unsubscribe = await withWorkspace('workspace-alpha', () =>
+      subscribe(['conversation:inbox'], () => {})
+    )
+    await flush()
+
+    expect(hoisted.errors).toHaveLength(1)
+    const msg = hoisted.errors[0].msg
+    expect(msg).toContain('workspace-alpha')
+    expect(msg).toMatch(/direct database URL/)
+    expect(msg).not.toMatch(/DATABASE_URL/)
+    expect(msg).not.toContain('db.example.com')
     await unsubscribe()
   })
 })
