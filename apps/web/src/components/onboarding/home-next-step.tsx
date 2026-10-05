@@ -6,6 +6,7 @@ import type { SettingsBrandingData } from '@/lib/server/domains/settings/setting
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import {
   LAUNCH_LIVE_STEP,
+  buildLaunchTasks,
   launchPath,
   type LaunchPathGoal,
   type LaunchStatus,
@@ -143,9 +144,13 @@ export function HomeNextStep({
   const test = stepTest(next)
   const firstWin = next.classification === 'first_win'
   const why = launchTaskWhy(next)
+  // A status page grows by services: offered beside sharing it even after
+  // setup seeded the first one, to anyone who may add one.
+  // A status page grows by services: offered beside sharing it even after
+  // setup seeded the first one, to anyone who may add one.
   const service =
-    path.goal === 'status'
-      ? path.later.find((task) => task.id === 'add-status-service' && !task.isCompleted)
+    path.goal === 'status' && status.permissions?.settingsManage !== false
+      ? buildLaunchTasks(status).find((task) => task.id === 'add-status-service' && !task.isSkipped)
       : undefined
   // Other goals' steps are Home's chips; the Later line is the polish.
   const later = path.later

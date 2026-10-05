@@ -164,6 +164,21 @@ describe("Home's next step", () => {
     )
   })
 
+  it('still offers adding a service when setup already seeded one', () => {
+    mount({
+      ...status,
+      goals: ['status_page'],
+      hasStatusComponent: true,
+      features: { ...status.features!, statusPage: true },
+    })
+    const card = screen.getByRole('region', { name: 'Share your status page' })
+    expect(within(card).getByRole('button', { name: 'Copy status link' })).toBeVisible()
+    expect(within(card).getByRole('link', { name: 'Add a service' })).toHaveAttribute(
+      'href',
+      '/admin/status'
+    )
+  })
+
   it('offers no test the person cannot run', () => {
     hoisted.canConverse = false
     mount()
