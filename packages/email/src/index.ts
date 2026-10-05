@@ -1,18 +1,14 @@
 /**
  * Email sending module for Quackback
  *
- * Uses the Amazon SES v2 API or Nodemailer for SMTP, with React Email
- * components. No build step required - React components are rendered at
- * runtime.
+ * Sends through the Amazon SES v2 API, Nodemailer for SMTP, or the Resend API,
+ * with React Email components. No build step required - React components are
+ * rendered at runtime.
  *
- * Priority: SES (if EMAIL_SES_ACCESS_KEY_ID + EMAIL_SES_SECRET_ACCESS_KEY set)
- * → SMTP (if EMAIL_SMTP_HOST set) → Console logging (dev mode).
- *
- * The order is deliberate rather than incidental. An install that has set
- * `EMAIL_SMTP_HOST` has named the mail server it wants used and keeps it,
- * because a self-hoster with a mail server of their own has no SES credentials
- * to be overtaken by; only an install that has been given both halves of an SES
- * credential gets that path, which is a pair nobody sets by accident.
+ * Exactly one provider: SES (EMAIL_SES_ACCESS_KEY_ID + EMAIL_SES_SECRET_ACCESS_KEY),
+ * SMTP (EMAIL_SMTP_HOST) or Resend (EMAIL_RESEND_API_KEY / RESEND_API_KEY), and
+ * console logging (dev mode) when none is set. More than one is refused rather
+ * than ranked; see ./provider for the rule and its one inbound exception.
  */
 
 import { render } from '@react-email/components'
@@ -21,7 +17,17 @@ import type { Transporter } from 'nodemailer'
 import { Resend } from 'resend'
 import { createLogger } from '@quackback/logger'
 import { isSyntheticAnonEmail } from './anon'
-import { applyDisplayName, isSesEmailConfigured, sendViaSes } from './ses'
+import { applyDisplayName, sendViaSes } from './ses'
+import { sendViaResend } from './resend'
+import { EmailConfigError, resendApiKey, resolveEmailProvider } from './provider'
+import type { EmailProvider } from './provider'
+export {
+  EmailConfigError,
+  EmailProviderConflictError,
+  assertEmailProviderConfigured,
+} from './provider'
+export type { EmailProvider } from './provider'
+export { ResendEmailError } from './resend'
 import type { EmailAttachment } from './attachment'
 export type { EmailAttachment } from './attachment'
 export { MAX_EMAIL_ATTACHMENT_BYTES } from './attachment'
@@ -74,25 +80,6 @@ function getEnv(key: string): string | undefined {
   return process.env[key]
 }
 
-/**
- * A send refused because the install is not configured for it.
- *
- * Declares itself permanent for the same reason the transport's own errors do.
- * The conversation send path retries anything that does not say otherwise —
- * deliberately, so a new provider error name cannot quietly stop being retried
- * — and a missing environment variable is not something a second attempt
- * supplies. Without the marker a misconfiguration spends the whole backoff
- * before failing exactly as it did on the first try.
- */
-export class EmailConfigError extends Error {
-  readonly retryable = false
-
-  constructor(message: string) {
-    super(message)
-    this.name = 'EmailConfigError'
-  }
-}
-
 export function getEmailFrom(): string {
   const from = resolvedDefaultFrom() ?? getEnv('EMAIL_FROM')
   if (!from) {
@@ -102,18 +89,17 @@ export function getEmailFrom(): string {
 }
 
 /**
- * Credential for the inbound body fetch below. Nothing outbound reads it: the
- * provider that owns this key does not carry any of our mail out, only the
- * metadata-only inbound webhook's missing body back in.
+ * The Resend key. It sends when Resend is the outbound provider, and it always
+ * fetches inbound bodies for the metadata-only Resend webhook below.
  */
 function getResendApiKey(): string | undefined {
   // Support both EMAIL_RESEND_API_KEY and RESEND_API_KEY
-  return getEnv('EMAIL_RESEND_API_KEY') || getEnv('RESEND_API_KEY')
+  return resendApiKey(process.env)
 }
 
 // Lazy-initialized transports
 let smtpTransporter: Transporter | null = null
-let inboundFetchClient: Resend | null = null
+let resendClient: { key: string | undefined; client: Resend } | null = null
 
 /**
  * Why a send did not happen. Present only when `sent` is false. Both cases are
@@ -151,8 +137,6 @@ export type EmailResult = {
   messageId?: string | null
 }
 
-type EmailProvider = 'ses' | 'smtp' | 'console'
-
 export function isEmailConfigured(): boolean {
   return getProvider() !== 'console'
 }
@@ -163,17 +147,17 @@ export function getEmailProvider(): EmailProvider {
 }
 
 /**
- * The ladder, per process.
+ * The provider, per process.
  *
  * Whole-process and nothing else: SES verifies a sending identity from a DNS
  * record its owner publishes rather than from a zone we host, so a workspace
- * sending as its own branded domain is on the same rung as everything else and
- * there is no identity this ladder has to route around.
+ * sending as its own branded domain uses the same provider as everything else
+ * and there is no identity this has to route around. Throws
+ * `EmailProviderConflictError` when more than one provider is configured; boot
+ * refuses that environment, so a send only meets it when nothing booted.
  */
 function getProvider(): EmailProvider {
-  if (isSesEmailConfigured()) return 'ses'
-  if (getEnv('EMAIL_SMTP_HOST')) return 'smtp'
-  return 'console'
+  return resolveEmailProvider(process.env)
 }
 
 // Recipient addresses (PII) are never logged here — log provider + ids only.
@@ -206,13 +190,14 @@ function getSmtpTransporter(): Transporter {
   return smtpTransporter
 }
 
-/** Client for the inbound body fetch below, never for sending. */
-function getInboundFetchClient(): Resend {
-  if (!inboundFetchClient) {
-    log.info('initializing inbound email fetch client')
-    inboundFetchClient = new Resend(getResendApiKey())
+/** The Resend client, for sending and for the inbound body fetch below. */
+function getResendClient(): Resend {
+  const key = getResendApiKey()
+  if (!resendClient || resendClient.key !== key) {
+    log.info('initializing resend client')
+    resendClient = { key, client: new Resend(key) }
   }
-  return inboundFetchClient
+  return resendClient.client
 }
 
 /** Wrap a bare Message-ID in angle brackets for a header value (idempotent). */
@@ -292,14 +277,14 @@ function buildThreadingHeaders(options: ThreadingOptions): Record<string, string
  * no inbound API key is configured or the email cannot be found; throws on
  * other errors so the webhook route can 500 and let the provider redeliver.
  *
- * The only consumer of the inbound credential. Outbound mail leaves by the
- * ladder above and never touches this client.
+ * Reads the Resend key whichever provider sends, so an install that sends
+ * through SES or SMTP can still receive through Resend.
  */
 export async function getReceivedEmail(
   emailId: string
 ): Promise<{ text: string | null; html: string | null } | null> {
   if (!getResendApiKey()) return null
-  const { data, error } = await getInboundFetchClient().emails.receiving.get(emailId)
+  const { data, error } = await getResendClient().emails.receiving.get(emailId)
   if (error) {
     log.warn({ emailId, error: error.name }, 'received-email fetch failed')
     if (error.name === 'not_found') return null
@@ -309,7 +294,7 @@ export async function getReceivedEmail(
 }
 
 /**
- * The single low-level send: provider selection (SES → SMTP → console), the
+ * The single low-level send: provider selection (SES, SMTP, Resend or console), the
  * anon-address guard, and RFC 5322 threading. Takes EITHER a
  * prerendered `html` body or a `react` element (the branded senders pass
  * `react`; the raw sender passes `html`). Falls back to console when
@@ -370,7 +355,7 @@ async function dispatch(
   const billable = isEmailBillable(emailType)
 
   if (provider === 'console') {
-    // Said out loud, once per dropped message. The other two rungs announce
+    // Said out loud, once per dropped message. The other rungs announce
     // themselves when they initialize; this one delivers nothing and its
     // preview sits at `debug`, so a production deploy that dropped every
     // notification used to emit no line at all while callers read `sent: false`
@@ -452,7 +437,58 @@ async function dispatch(
     return { sent: true, messageId: result.messageId }
   }
 
-  // SMTP is the last rung: console and SES both returned above.
+  if (provider === 'resend') {
+    // Our Message-ID goes out as a header, as on SMTP, so the minted id is the
+    // one a reply quotes. The plus-addressed Reply-To carries the reply home
+    // regardless, and In-Reply-To and References keep the client threading.
+    try {
+      const result = await sendViaResend(
+        {
+          from,
+          to: options.to,
+          subject: options.subject,
+          ...(html !== undefined ? { html } : {}),
+          ...(text !== undefined ? { text } : {}),
+          ...(options.replyTo !== undefined ? { replyTo: options.replyTo } : {}),
+          ...(Object.keys(threadingHeaders).length > 0 ? { headers: threadingHeaders } : {}),
+          ...(options.attachments && options.attachments.length > 0
+            ? { attachments: options.attachments }
+            : {}),
+        },
+        getResendClient()
+      )
+      log.info({ provider: 'resend', provider_message_id: result.id }, 'email sent')
+      recordOutboundLog({
+        direction: 'outbound',
+        emailType,
+        provider: 'resend',
+        to: options.to,
+        subject: options.subject,
+        status: 'sent',
+        messageId: options.messageId ?? null,
+        providerMessageId: result.id,
+        billable,
+        ...entityIds(options),
+      })
+    } catch (error) {
+      log.error({ err: error, provider: 'resend' }, 'email send failed')
+      recordOutboundLog({
+        direction: 'outbound',
+        emailType,
+        provider: 'resend',
+        to: options.to,
+        subject: options.subject,
+        status: 'failed',
+        error: error instanceof Error ? error.message : 'send failed',
+        billable,
+        ...entityIds(options),
+      })
+      throw error
+    }
+    return { sent: true }
+  }
+
+  // SMTP is the last rung: console, SES and Resend all returned above.
   try {
     const result = await getSmtpTransporter().sendMail({
       from,

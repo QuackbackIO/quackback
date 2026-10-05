@@ -169,7 +169,7 @@ const configSchema = z
     emailSmtpUser: z.string().optional(),
     emailSmtpPass: z.string().optional(),
     emailSmtpSecure: envBoolean,
-    /** Credential for the inbound body fetch, not for sending. */
+    /** Resend: sends when it is the one outbound provider, and fetches inbound bodies. */
     emailResendApiKey: z.string().optional(),
     /**
      * SES sending credentials. Deliberately not named `AWS_*` or `S3_*`: the

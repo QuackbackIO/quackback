@@ -94,15 +94,17 @@ docker pull ghcr.io/quackbackio/quackback:latest-enterprise
 
 ### Optional
 
-| Variable                           | Description                                                                                                                                                                                                                                                | Default      |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
-| `PORT`                             | Server port                                                                                                                                                                                                                                                | `3000`       |
-| `NODE_ENV`                         | Environment                                                                                                                                                                                                                                                | `production` |
-| `QUACKBACK_ROLE`                   | Process role: `all`, `web`, or `worker` (see [Scaling Out](#scaling-out))                                                                                                                                                                                  | `all`        |
-| `SKIP_MIGRATIONS`                  | Skip the startup migration step (run migrations out-of-band instead)                                                                                                                                                                                       | `false`      |
-| `EMAIL_SES_ACCESS_KEY_ID`          | Amazon SES sending key id; needs `EMAIL_SES_SECRET_ACCESS_KEY` and `EMAIL_SES_REGION` too                                                                                                                                                                  | -            |
-| `EMAIL_SES_IDENTITY_ACCESS_KEY_ID` | Separate SES key id used only to verify a customer-owned sending domain; needs `EMAIL_SES_IDENTITY_SECRET_ACCESS_KEY`. Grant `ses:CreateEmailIdentity`, `ses:GetEmailIdentity`, `ses:PutEmailIdentityMailFromAttributes` and NOT `ses:DeleteEmailIdentity` | -            |
-| `EMAIL_FROM`                       | From address for emails                                                                                                                                                                                                                                    | -            |
+| Variable                           | Description                                                                                                                                                                                                                                                              | Default      |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------ |
+| `PORT`                             | Server port                                                                                                                                                                                                                                                              | `3000`       |
+| `NODE_ENV`                         | Environment                                                                                                                                                                                                                                                              | `production` |
+| `QUACKBACK_ROLE`                   | Process role: `all`, `web`, or `worker` (see [Scaling Out](#scaling-out))                                                                                                                                                                                                | `all`        |
+| `SKIP_MIGRATIONS`                  | Skip the startup migration step (run migrations out-of-band instead)                                                                                                                                                                                                     | `false`      |
+| `EMAIL_SMTP_HOST`                  | SMTP server for outbound email; with `EMAIL_SMTP_PORT`, `EMAIL_SMTP_USER`, `EMAIL_SMTP_PASS`                                                                                                                                                                             | -            |
+| `EMAIL_RESEND_API_KEY`             | Resend API key for outbound email (`RESEND_API_KEY` also works). Also fetches inbound mail bodies when receiving through Resend                                                                                                                                          | -            |
+| `EMAIL_SES_ACCESS_KEY_ID`          | Amazon SES sending key id; needs `EMAIL_SES_SECRET_ACCESS_KEY` and `EMAIL_SES_REGION` too                                                                                                                                                                                | -            |
+| `EMAIL_SES_IDENTITY_ACCESS_KEY_ID` | Separate SES key id used only to verify a customer-owned sending domain; needs `EMAIL_SES_IDENTITY_SECRET_ACCESS_KEY`. Grant `ses:CreateEmailIdentity`, `ses:GetEmailIdentity`, `ses:PutEmailIdentityMailFromAttributes` and NOT `ses:DeleteEmailIdentity`               | -            |
+| `EMAIL_FROM`                       | From address for emails. Configure exactly one sending provider (SMTP, Amazon SES or Resend): with more than one set, the app refuses to start and names the variables. A Resend key kept only for inbound mail beside SMTP or SES needs `EMAIL_INBOUND_PROVIDER=resend` | -            |
 
 ### Integrations (Optional)
 
@@ -540,7 +542,9 @@ GRANT ALL PRIVILEGES ON DATABASE quackback TO your_user;
 
 ### Email Not Sending
 
-Verify Resend configuration:
+Check the startup log. With no provider configured, emails are logged instead of sent. With more than one configured (SMTP, Amazon SES and Resend), the app exits at startup with an error naming the variables in conflict: remove all but one.
+
+For Resend, test the API key directly:
 
 ```bash
 # Test API key
@@ -567,7 +571,7 @@ curl -X POST 'https://api.resend.com/emails' \
 Deploys Quackback + PostgreSQL (with pgvector) + S3-compatible storage bucket to Railway. After deploying:
 
 1. **Find your OTP code**: If email is not configured, login codes appear in Railway's deployment logs
-2. **Configure email** (recommended): Add SMTP or Amazon SES credentials in the service's environment variables
+2. **Configure email** (recommended): Add SMTP, Amazon SES or Resend credentials (one of them) in the service's environment variables
 3. **Custom domain**: Add a custom domain in Railway, then update the `BASE_URL` environment variable to match
 
 File uploads (logos, avatars, changelog images) work out of the box via the included Railway storage bucket.

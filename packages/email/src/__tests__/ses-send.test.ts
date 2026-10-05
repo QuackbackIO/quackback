@@ -25,8 +25,8 @@ import { sendingAs } from './brands'
  * The SES rung, offline. Every send here goes through an injected client or a
  * mocked SDK client class; nothing in this file may touch the network.
  *
- * Two properties carry most of the weight. The ladder order is a compatibility
- * promise (an install that named an SMTP host keeps it), and the ladder is
+ * Two properties carry most of the weight. Exactly one provider is selected
+ * (two configured is refused rather than ranked), and the selection is
  * whole-process with no per-send exception: SES verifies an identity from a DNS
  * record its owner publishes, so a workspace sending as its own branded domain
  * uses this rung like everything else.
@@ -70,6 +70,7 @@ const ENV_KEYS = [
   'EMAIL_SMTP_HOST',
   'EMAIL_RESEND_API_KEY',
   'RESEND_API_KEY',
+  'EMAIL_INBOUND_PROVIDER',
   'EMAIL_FROM',
 ] as const
 
@@ -230,11 +231,11 @@ describe('provider ladder', () => {
     expect(getEmailProvider()).toBe('smtp')
   })
 
-  it('selects ses over smtp when both halves of the credential are set', () => {
+  it('refuses ses and smtp together rather than ranking them', () => {
     process.env.EMAIL_SMTP_HOST = 'smtp.acme.test'
     process.env.EMAIL_SES_ACCESS_KEY_ID = 'AKIAEXAMPLE'
     process.env.EMAIL_SES_SECRET_ACCESS_KEY = 'secret'
-    expect(getEmailProvider()).toBe('ses')
+    expect(() => getEmailProvider()).toThrow(/EMAIL_SMTP_HOST/)
   })
 
   it('keeps SMTP when only half the SES credential is set', () => {
@@ -250,12 +251,17 @@ describe('provider ladder', () => {
     expect(isSesEmailConfigured()).toBe(false)
   })
 
-  it('does not select a sending provider from an inbound-only key', () => {
-    // The inbound body fetch keeps its own credential. It carries no mail out,
-    // so holding it must not make an install look like it can send.
-    process.env.EMAIL_RESEND_API_KEY = 're_test'
+  it('sends through Resend from a lone Resend key', () => {
     process.env.RESEND_API_KEY = 're_test'
-    expect(getEmailProvider()).toBe('console')
+    expect(getEmailProvider()).toBe('resend')
+  })
+
+  it('keeps SES sending when the Resend key is declared inbound-only', () => {
+    process.env.EMAIL_SES_ACCESS_KEY_ID = 'AKIAEXAMPLE'
+    process.env.EMAIL_SES_SECRET_ACCESS_KEY = 'secret'
+    process.env.EMAIL_RESEND_API_KEY = 're_test'
+    process.env.EMAIL_INBOUND_PROVIDER = 'resend'
+    expect(getEmailProvider()).toBe('ses')
   })
 })
 
@@ -1025,9 +1031,6 @@ describe('a workspace sending as its own domain', () => {
     process.env.EMAIL_SES_ACCESS_KEY_ID = 'AKIAEXAMPLE'
     process.env.EMAIL_SES_SECRET_ACCESS_KEY = 'secret'
     process.env.EMAIL_SES_REGION = 'us-east-1'
-    // Configured so a fall-through would be visible as a rung that was taken
-    // instead. Nothing may reach it.
-    process.env.EMAIL_SMTP_HOST = 'smtp.invalid.test'
   })
 
   it('sends a customer-owned From through SES rather than dropping a rung', async () => {

@@ -37,10 +37,10 @@ function activity(n: number) {
   }))
 }
 
-function renderPage(rows = 12) {
+function renderPage(rows = 12, provider = 'smtp') {
   client.setQueryData(settingsQueries.spamFilterConfig().queryKey, { trustedSenders: [] } as never)
   client.setQueryData(channelSettingsQueries.emailStatus().queryKey, {
-    provider: 'smtp',
+    provider,
     fromAddress: 'Acme <noreply@acme.io>',
     inboundConfigured: true,
     inboundDomain: 'mail.acme.io',
@@ -102,6 +102,18 @@ describe('EmailChannelPage', () => {
     expect(screen.getByText('mail.acme.io')).toBeTruthy()
     expect(container.querySelector('.bg-emerald-500')).toBeNull()
     expect(container.querySelector('span.size-2.rounded-full')).toBeNull()
+  })
+
+  it('names each outbound provider', () => {
+    for (const [provider, label] of [
+      ['ses', 'Amazon SES'],
+      ['resend', 'Resend'],
+      ['console', 'Not configured'],
+    ]) {
+      renderPage(3, provider)
+      expect(screen.getByText(label), provider).toBeTruthy()
+      cleanup()
+    }
   })
 
   it('drops the default note from Auto-acknowledgement', () => {

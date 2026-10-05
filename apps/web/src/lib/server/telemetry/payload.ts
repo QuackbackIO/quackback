@@ -1,4 +1,5 @@
 import { existsSync } from 'fs'
+import type { EmailProvider } from '@quackback/email/provider'
 import { getOrCreateInstanceId } from './instance-id'
 import { activeSecretKey } from '@/lib/server/secret-key'
 import {
@@ -73,7 +74,8 @@ export interface TelemetryPayload {
     /** Some settings are pinned by a declarative config file. */
     configFile: boolean
   }
-  emailProvider: string
+  /** `ses`, `smtp`, `resend` or `console`. */
+  emailProvider: EmailProvider
   aiProvider: AiProvider
   auth: {
     /** Enabled sign-in methods; custom identity providers report as `oidc`. */
@@ -256,7 +258,7 @@ async function getPlatform(
   const { config } = await import('@/lib/server/config')
   const { getProcessRole } = await import('@/lib/server/process-role')
   let postgresMajor: number | null = null
-  let emailProvider = 'console'
+  let emailProvider: EmailProvider = 'console'
   try {
     const { db } = await import('@/lib/server/db')
     const { sql } = await import('drizzle-orm')
@@ -273,7 +275,8 @@ async function getPlatform(
     const { getEmailProvider } = await import('@quackback/email')
     emailProvider = getEmailProvider()
   } catch {
-    // Leave as console
+    // Leave as console: a conflicting configuration never boots, so this is
+    // a process with no provider to report.
   }
   return {
     platform: {
