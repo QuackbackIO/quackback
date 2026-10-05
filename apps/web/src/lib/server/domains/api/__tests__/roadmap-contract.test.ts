@@ -16,7 +16,24 @@ describe('roadmap OpenAPI contract', () => {
     expect(roadmapPosts).toHaveProperty('get')
     expect(roadmapPosts).not.toHaveProperty('post')
     expect(spec.paths).not.toHaveProperty('/roadmaps/{roadmapId}/posts/{postId}')
-    expect(roadmapPaths).not.toContain('isPublic')
     expect(JSON.stringify(roadmapPosts)).not.toContain('position')
+  })
+
+  it('accepts isPublic only as a deprecated request alias for visibility', () => {
+    const spec = generateOpenAPISpec()
+    type Body = { properties?: Record<string, { deprecated?: boolean }> }
+    const bodyOf = (op: unknown) =>
+      (op as { requestBody: { content: { 'application/json': { schema: Body } } } }).requestBody
+        .content['application/json'].schema
+    const create = bodyOf(spec.paths?.['/roadmaps']?.post)
+    const update = bodyOf(spec.paths?.['/roadmaps/{roadmapId}']?.patch)
+
+    expect(create.properties?.isPublic?.deprecated).toBe(true)
+    expect(update.properties?.isPublic?.deprecated).toBe(true)
+    const responses = JSON.stringify({
+      list: spec.paths?.['/roadmaps']?.get?.responses,
+      detail: spec.paths?.['/roadmaps/{roadmapId}']?.get?.responses,
+    })
+    expect(responses).not.toContain('isPublic')
   })
 })
