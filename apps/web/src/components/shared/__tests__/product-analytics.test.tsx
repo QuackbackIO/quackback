@@ -56,8 +56,14 @@ const teamSession = (id = 'user_1', email = 'ana@example.com') => ({
   user: { id, email, name: 'Ana', principalType: 'user' },
 })
 
+const optOut = (dnt: string | null, gpc: boolean | undefined) => {
+  Object.defineProperty(navigator, 'doNotTrack', { value: dnt, configurable: true })
+  Object.defineProperty(navigator, 'globalPrivacyControl', { value: gpc, configurable: true })
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
+  optOut(null, undefined)
   posthog.__loaded = false
   setAnalyticsClient(null)
   posthog.get_property.mockReturnValue(undefined)
@@ -273,5 +279,21 @@ describe('ProductAnalytics', () => {
     // A track() made during the reset had no client yet, so it was dropped
     // rather than filed under the previous person.
     expect(posthog.capture).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['Do Not Track', '1', undefined],
+    ['Global Privacy Control', null, true],
+  ])('never loads when the browser sends %s', async (_name, dnt, gpc) => {
+    optOut(dnt, gpc)
+    render(<ProductAnalytics />)
+    await new Promise((r) => setTimeout(r, 0))
+    expect(posthog.init).not.toHaveBeenCalled()
+  })
+
+  it('loads when Do Not Track is explicitly off', async () => {
+    optOut('0', false)
+    render(<ProductAnalytics />)
+    await waitFor(() => expect(posthog.init).toHaveBeenCalled())
   })
 })

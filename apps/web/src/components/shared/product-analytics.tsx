@@ -5,7 +5,11 @@ import { useRouterState } from '@tanstack/react-router'
 import type { PostHog } from 'posthog-js'
 import { isSyntheticAnonEmail } from '@/lib/shared/anonymous-email'
 import { analyticsDistinctId } from '@/lib/shared/analytics-identity'
-import { scrubEventUrls, setAnalyticsClient } from '@/lib/client/analytics'
+import {
+  browserOptedOutOfTracking,
+  scrubEventUrls,
+  setAnalyticsClient,
+} from '@/lib/client/analytics'
 import {
   useProductAnalyticsConfig,
   useSessionContext,
@@ -72,7 +76,8 @@ export function ProductAnalytics() {
   const enabled = Boolean(config && onTrackedRoute)
 
   useEffect(() => {
-    if (!config) return
+    // A browser that asks not to be tracked never loads the SDK at all.
+    if (!config || browserOptedOutOfTracking()) return
     if (!enabled) {
       // Left the tracked routes within this tab: the SDK stays loaded, so
       // pause replay and explicit events. `before_send` already drops
@@ -96,7 +101,6 @@ export function ProductAnalytics() {
           capture_pageview: 'history_change',
           capture_pageleave: true,
           person_profiles: 'identified_only',
-          respect_dnt: true,
           mask_all_text: true,
           mask_all_element_attributes: true,
           disable_session_recording: !config.sessionRecording,
