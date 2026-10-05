@@ -11,6 +11,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { betterAuth } from 'better-auth'
 import { memoryAdapter } from 'better-auth/adapters/memory'
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import { createRequire } from 'node:module'
+import { readdirSync } from 'node:fs'
+import { join } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const { proxyConfig, mockGetRequestIP } = vi.hoisted(() => ({
   proxyConfig: { hops: 0 },
@@ -91,7 +97,70 @@ describe('withTrustedClientIpRequest', () => {
     expect(request.headers.get(CLIENT_IP_HEADER)).toBe('203.0.113.7')
     expect(await request.json()).toEqual({ email: 'a@acme.example' })
   })
+
+  it('accepts the request object the Node dev server hands to route handlers', async () => {
+    const { NodeRequest } = await loadSrvxNode()
+    mockGetRequestIP.mockReturnValue('203.0.113.8')
+
+    // A real HTTP round trip, so the input is exactly what the Node adapter
+    // builds from an incoming message: a Request subclass the platform
+    // constructor cannot copy from.
+    const seen = await new Promise<{ ip: string | null; method: string; body: string }>(
+      (resolve, reject) => {
+        const server = createServer((req, res) => {
+          const nodeRequest = new NodeRequest({ req, res }) as unknown as Request
+          Promise.resolve()
+            .then(async () => {
+              const rebuilt = withTrustedClientIpRequest(nodeRequest)
+              return {
+                ip: rebuilt.headers.get(CLIENT_IP_HEADER),
+                method: rebuilt.method,
+                body: await rebuilt.text(),
+              }
+            })
+            .then(resolve, reject)
+            .finally(() => {
+              res.end()
+              server.close()
+            })
+        })
+        server.listen(0, '127.0.0.1', () => {
+          const { port } = server.address() as AddressInfo
+          fetch(`http://127.0.0.1:${port}/api/auth/sign-in/email`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', [CLIENT_IP_HEADER]: '9.9.9.9' },
+            body: '{"email":"a@acme.example"}',
+          }).catch(reject)
+        })
+      }
+    )
+
+    expect(seen).toEqual({
+      ip: '203.0.113.8',
+      method: 'POST',
+      body: '{"email":"a@acme.example"}',
+    })
+  })
 })
+
+/**
+ * The Node adapter TanStack Start's dev server wraps requests in. Not a direct
+ * dependency, so it is resolved from the plugin that uses it.
+ */
+async function loadSrvxNode(): Promise<{
+  NodeRequest: new (ctx: { req: IncomingMessage; res: ServerResponse }) => unknown
+}> {
+  const store = join(
+    fileURLToPath(new URL('../../../../../../../', import.meta.url)),
+    'node_modules/.bun'
+  )
+  const plugin = readdirSync(store).find((name) => name.startsWith('@tanstack+start-plugin-core@'))
+  if (!plugin) throw new Error('@tanstack/start-plugin-core is not installed')
+  const require = createRequire(
+    join(store, plugin, 'node_modules/@tanstack/start-plugin-core/package.json')
+  )
+  return import(pathToFileURL(require.resolve('srvx/node')).href)
+}
 
 describe('withTrustedClientIpArgs', () => {
   it('rewrites the headers of a server-side api call', () => {

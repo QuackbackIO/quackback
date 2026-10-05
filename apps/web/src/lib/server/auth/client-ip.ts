@@ -12,9 +12,11 @@
  * Instead the app resolves the address once, with `getClientIp` (socket peer
  * when TRUSTED_PROXY_HOPS is 0, the trusted hop otherwise), and hands it to
  * Better Auth in a private header that Better Auth is configured to read and
- * nothing else. Every route into Better Auth passes through
- * `withTrustedClientIp`, which drops whatever copy of that header the client
- * sent before writing the resolved one.
+ * nothing else. `withTrustedClientIp` drops whatever copy of that header the
+ * client sent before writing the resolved one. `auth.handler` and the `auth.api`
+ * proxy apply it to everything they pass on; code that calls `getAuth()`
+ * directly and forwards request headers must wrap them itself, or the client
+ * picks the address.
  */
 import { isIP } from 'node:net'
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
@@ -40,9 +42,24 @@ export function withTrustedClientIp(source: HeadersInit): Headers {
   return headers
 }
 
-/** `withTrustedClientIp` for a whole request, body and all. */
+/**
+ * `withTrustedClientIp` for a whole request, body and all.
+ *
+ * Rebuilt from its parts rather than with `new Request(request, init)`: on
+ * Node the incoming request is the server adapter's own Request subclass, and
+ * the platform constructor cannot read its internals when handed one as input.
+ */
 export function withTrustedClientIpRequest(request: Request): Request {
-  return new Request(request, { headers: withTrustedClientIp(request.headers) })
+  const hasBody = request.method !== 'GET' && request.method !== 'HEAD'
+  return new Request(request.url, {
+    method: request.method,
+    headers: withTrustedClientIp(request.headers),
+    body: hasBody ? request.body : null,
+    signal: request.signal,
+    redirect: request.redirect,
+    // Required by the platform whenever the body is a stream.
+    duplex: 'half',
+  } as RequestInit)
 }
 
 /**
