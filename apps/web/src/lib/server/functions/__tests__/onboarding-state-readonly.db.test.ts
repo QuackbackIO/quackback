@@ -14,6 +14,7 @@ import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vites
 import { createId, type PrincipalId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import { principal, user, eq, sql } from '@/lib/server/db'
+import { isSetupBlocked, pickOnboardingStep } from '@/routes/onboarding/-onboarding-step'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -171,6 +172,55 @@ describe.skipIf(!fixture.available)('checkOnboardingState reports without mutati
     const state = await checkOnboardingState()
 
     expect(state.setupClaimedByOther).toBe(false)
+  })
+
+  // A finished self-hosted install whose only admin is an API principal. A
+  // portal user who signs in from the account screen is routed by this state;
+  // routing them to the workspace step would end in its refusal.
+  it('reports a finished install with no human admin as closed to the claim', async () => {
+    await testDb.execute(sql`
+      INSERT INTO settings (id, name, slug, created_at, setup_state)
+      VALUES (
+        gen_random_uuid(), 'Acme', ${'acme-' + Math.random().toString(36).slice(2, 8)}, now(),
+        ${JSON.stringify({
+          version: 2,
+          steps: {
+            core: true,
+            workspace: true,
+            startingPoint: {
+              outcome: 'product_feedback',
+              resourceType: 'none',
+              source: 'wizard',
+              resolution: 'deferred',
+              completedAt: '2026-08-01T00:00:00.000Z',
+            },
+          },
+          useCase: 'product_feedback',
+          completionSource: 'wizard',
+        })}
+      )
+    `)
+    await testDb.insert(principal).values({
+      id: createId('principal') as PrincipalId,
+      userId: null,
+      role: 'admin',
+      type: 'service',
+      createdAt: new Date(),
+    })
+    const visitorId = await seedUser('visitor@elsewhere.example')
+    await seedPrincipal({ userId: visitorId, role: 'user' })
+    hoisted.getSession.mockResolvedValue({ user: { id: visitorId } })
+
+    const state = await checkOnboardingState()
+
+    expect(state.setupClaimedByOther).toBe(false)
+    // Not provisioned: the workspace step's control-plane branch stays off.
+    expect(state.setupOpenToClaim).toBe(true)
+    expect(state.setupClosedReason).toBe('setupComplete')
+    expect(isSetupBlocked(state)).toBe(true)
+    expect(pickOnboardingStep({ session: { userId: visitorId }, state })).toBe(
+      '/onboarding/no-access'
+    )
   })
 
   it('answers an unauthenticated caller with the empty state and no writes', async () => {

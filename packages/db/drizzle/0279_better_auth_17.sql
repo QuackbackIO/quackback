@@ -15,6 +15,65 @@
 -- no-op. A bare UPDATE or unannotated DO at the tip would collapse the
 -- gap-heal window.
 
+-- OIDC identity providers that exist when this file first applies were
+-- registered at their IdP with the 1.6 callback, /api/auth/oauth2/callback/<id>.
+-- 1.7 sends /api/auth/callback/<id> unless a provider says otherwise, and an
+-- IdP that matches redirect_uri exactly refuses the new one. Record each of
+-- them as `legacy` in settings.auth_config.oidcRedirectStyles so sign-in keeps
+-- sending the URL the IdP has. A provider with no entry is `current`.
+--
+-- This runs FIRST in the file on purpose: the guard is that
+-- oauth_client_resource, which this file creates, does not exist yet. That is
+-- true only on the first apply over a pre-1.7 schema, so a replay (or a
+-- database already on 1.7 code) never stamps a provider created since.
+-- Existing entries always win, and invalid auth_config JSON is left alone.
+CREATE OR REPLACE FUNCTION pg_temp._m0279_auth_config(settings_id uuid, raw text)
+RETURNS jsonb
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  parsed jsonb;
+BEGIN
+  IF raw IS NULL OR btrim(raw) IN ('', 'null') THEN
+    RETURN '{}'::jsonb;
+  END IF;
+  parsed := raw::jsonb;
+  IF jsonb_typeof(parsed) <> 'object' THEN
+    RAISE WARNING 'settings row % has non-object auth_config JSON; skipping OIDC redirect stamp', settings_id;
+    RETURN NULL;
+  END IF;
+  RETURN parsed;
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING 'settings row % has invalid auth_config JSON; skipping OIDC redirect stamp', settings_id;
+  RETURN NULL;
+END;
+$$;
+--> statement-breakpoint
+-- @replay: guarded-by oauth_client_resource not existing yet (this file creates it), so only the first apply over a pre-1.7 schema stamps; existing entries are never overwritten
+DO $$
+BEGIN
+  IF to_regclass('oauth_client_resource') IS NULL
+    AND EXISTS (SELECT 1 FROM "identity_provider") THEN
+    UPDATE "settings" AS s
+    SET "auth_config" = jsonb_set(
+      p.cfg,
+      '{oidcRedirectStyles}',
+      (SELECT jsonb_object_agg(ip."registration_id", 'legacy') FROM "identity_provider" ip)
+        || CASE
+             WHEN jsonb_typeof(p.cfg->'oidcRedirectStyles') = 'object'
+               THEN p.cfg->'oidcRedirectStyles'
+             ELSE '{}'::jsonb
+           END
+    )::text
+    FROM (
+      SELECT "id", pg_temp._m0279_auth_config("id", "auth_config") AS cfg
+      FROM "settings"
+    ) AS p
+    WHERE s."id" = p."id"
+      AND p.cfg IS NOT NULL;
+  END IF;
+END $$;
+--> statement-breakpoint
 ALTER TABLE "jwks" ADD COLUMN IF NOT EXISTS "alg" text;
 --> statement-breakpoint
 ALTER TABLE "jwks" ADD COLUMN IF NOT EXISTS "crv" text;

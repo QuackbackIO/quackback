@@ -5,16 +5,12 @@
  * Uses the configured chat model via the configured provider or gateway endpoint.
  */
 
-import { chat } from '@tanstack/ai'
-import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
 import { z } from 'zod'
 import { db, postSentiment, posts, eq, and, gte, lte, sql, count, isNull } from '@/lib/server/db'
 import { createId, type PostId } from '@quackback/ids'
 import { config } from '@/lib/server/config'
-import {
-  isAiClientConfigured,
-  structuredOutputProviderOptions,
-} from '@/lib/server/domains/ai/config'
+import { isAiClientConfigured } from '@/lib/server/domains/ai/config'
+import { structuredChat } from '@/lib/server/domains/ai/structured-chat'
 import { createUsageLoggingMiddleware } from '@/lib/server/domains/ai/usage-middleware'
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
@@ -93,16 +89,12 @@ export async function analyzeSentiment(
   const text = `Title: ${title}\n\nContent: ${truncatedContent}`
 
   try {
-    const object = await chat({
-      adapter: openaiCompatibleText(model, {
-        baseURL: config.openaiBaseUrl!,
-        apiKey: config.openaiApiKey!,
-      }),
+    const object = await structuredChat({
+      model,
       systemPrompts: [SENTIMENT_PROMPT],
       messages: [{ role: 'user', content: text }],
-      outputSchema: SentimentSchema,
-      stream: false,
-      modelOptions: { max_tokens: 1000, ...structuredOutputProviderOptions() },
+      schema: SentimentSchema,
+      maxTokens: 1000,
       middleware: [
         createUsageLoggingMiddleware({
           pipelineStep: 'sentiment',

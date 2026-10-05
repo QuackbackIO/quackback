@@ -3,14 +3,14 @@ import { readFileSync } from 'node:fs'
 import { sql } from 'drizzle-orm'
 import { createDb } from '../client'
 const migration = readFileSync(
-  new URL('../../drizzle/0292_workspace_copilot.sql', import.meta.url),
+  new URL('../../drizzle/0293_workspace_copilot.sql', import.meta.url),
   'utf8'
 )
   .split('--> statement-breakpoint')
   .map((s) => s.trim())
   .filter(Boolean)
 const validation = readFileSync(
-  new URL('../../drizzle/0294_validate_workspace_copilot_checks.sql', import.meta.url),
+  new URL('../../drizzle/0295_validate_workspace_copilot_checks.sql', import.meta.url),
   'utf8'
 )
   .split('--> statement-breakpoint')
@@ -94,7 +94,7 @@ it('replays without changing data or constraints and enforces private run dedupe
           )
         })
       ).rejects.toMatchObject({ cause: { code: '23514' } })
-      // 0292 adds the checks NOT VALID and leaves the scan to 0294.
+      // 0293 adds the checks NOT VALID and leaves the scan to 0295.
       expect(migration.join('\n')).not.toContain('VALIDATE CONSTRAINT')
       expect(migration.filter((statement) => statement.includes('NOT VALID'))).toHaveLength(2)
       for (const statement of validation) await tx.execute(sql.raw(statement))

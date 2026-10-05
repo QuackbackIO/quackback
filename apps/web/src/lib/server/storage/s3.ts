@@ -33,7 +33,7 @@
  *
  * ## Relocating objects that predate the namespace
  *
- * An install that has been serving before this change holds its objects at bare
+ * An install that served files before the namespace holds its objects at bare
  * keys, and composing a namespace makes them unreachable. There is deliberately
  * **no read-time fallback to the bare key.** Under one fleet bucket a bare key
  * is nobody's namespace, so reading it is the §3 failure exactly; and any
@@ -42,31 +42,47 @@
  * eventually gets wrong. The fallback is not merely unsafe by default, it is
  * unsafe in a way nothing in this process can detect.
  *
- * The relocation is instead a one-time move inside the bucket, run by the
- * operator with the credentials they already hold, before the new build serves
- * traffic:
+ * The relocation is instead a one-time copy inside the bucket, and on a
+ * single-workspace install it runs by itself: `legacy-relocation.ts`, armed by
+ * `startup.ts` on the process that runs background work, copies every key
+ * outside any workspace namespace (a stored key may itself start with `w/`;
+ * only `w/<valid workspace TypeID>/` is a namespace) to
+ * `w/<workspace TypeID>/<key>` with server-side CopyObject, keeps the originals (so a restored older database backup still finds its
+ * files), skips destinations already present, and records completion in
+ * `kv_store`. Until its first pass finishes, pre-existing assets 404; it runs
+ * in the background so readiness never waits on it, and keeps reconciling
+ * hourly for a day afterwards so bare keys an older replica writes during a
+ * rolling upgrade are picked up too.
+ *
+ * Links to those objects were minted before read tokens and carry none. On a
+ * single-workspace install the storage route still serves such a link while
+ * the bare original remains, reading the relocated copy; see
+ * {@link isPreNamespaceObject}.
+ *
+ * It reaches the bucket root through {@link openLegacyRelocationBucket}, which
+ * refuses under pooled tenancy and inside any workspace scope. Listing and
+ * copying at the root is correct against a bucket that holds one workspace and
+ * catastrophic against one that holds the fleet, so that capability exists for
+ * this one job, only where the bucket provably holds one workspace, and it has
+ * no delete.
+ *
+ * For anything the automatic copy does not cover (pooled tenancy, a bulk move
+ * between buckets, or an object over CopyObject's 5 GB single-request limit,
+ * which the application never writes), the operator fallback is:
  *
  * ```
- * aws s3 mv s3://<bucket>/ s3://<bucket>/w/<workspace TypeID>/ --recursive --exclude 'w/*'
+ * aws s3 cp s3://<bucket>/ s3://<bucket>/w/<workspace TypeID>/ --recursive --exclude 'w/workspace_*'
  * ```
  *
- * The prefix is `fromUuid('workspace', settings.id)` (for example
+ * (`mv` instead of `cp` to drop the originals.) The prefix is
+ * `fromUuid('workspace', settings.id)` (for example
  * `workspace_01kxddf1jaf6cr22gerxt7z9gg`). `SELECT id FROM settings` returns
  * the UUID spelling; copying under that UUID leaves every restored object
  * unreadable. Convert the UUID before composing `w/<prefix>/`.
  *
- * It is a server-side copy: no bytes leave the bucket, the stored keys do not
- * change, and no content is rewritten, because the namespace appears in neither
- * the database nor any URL. Every affected install holds exactly one workspace
- * per bucket, so that TypeID is unambiguous.
- *
- * **Note what this repository must NOT grow to make that convenient.** Listing
- * and deleting at the bucket root is correct against a bucket that holds one
- * workspace and catastrophic against one that holds the fleet, so the app has no
- * such capability and gains none here, not even for its own migration. The cost
- * is that an operator who deploys without moving the objects serves 404s for
- * pre-existing assets until they do — visible, reversible, and self-announcing,
- * which is the opposite of what the fallback would have been.
+ * Either way it is a server-side copy: no bytes leave the bucket, the stored
+ * keys do not change, and no content is rewritten, because the namespace
+ * appears in neither the database nor any URL.
  */
 
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
@@ -92,6 +108,7 @@ import { absolutizeOffHostAssetUrl, storedAssetKeyFromSrc } from './asset-url'
 import { composeNamespacedKey, workspaceNamespace } from './namespace'
 import { attachmentDisposition } from './serve-policy'
 import { currentWorkspaceId } from './workspace-scope'
+import { isPooledTenancy } from '@/lib/server/workspaces/mode'
 
 // ============================================================================
 // Configuration
@@ -345,6 +362,26 @@ interface S3Module {
   PutObjectCommand: new (input: BucketKeyInput) => S3Command
   GetObjectCommand: new (input: BucketKeyInput) => S3Command
   DeleteObjectCommand: new (input: BucketKeyInput) => S3Command
+  ListObjectsV2Command: new (input: ListObjectsInput) => S3Command
+  CopyObjectCommand: new (input: CopyObjectInput) => S3Command
+  HeadObjectCommand: new (input: BucketKeyInput) => S3Command
+}
+
+/** ListObjectsV2 input; used only by {@link openLegacyRelocationBucket}. */
+interface ListObjectsInput {
+  Bucket: string
+  Prefix?: string
+  ContinuationToken?: string
+  MaxKeys?: number
+}
+
+/** CopyObject input; used only by {@link openLegacyRelocationBucket}. */
+interface CopyObjectInput {
+  Bucket: string
+  Key: string
+  CopySource: string
+  MetadataDirective: 'COPY'
+  IfNoneMatch?: '*'
 }
 
 /** Typed subset of @aws-sdk/s3-request-presigner exports used by this module. */
@@ -625,19 +662,308 @@ export async function currentWorkspaceStorage(): Promise<WorkspaceStorage> {
 }
 
 // ============================================================================
+// Relocating objects that predate the namespace (single-workspace only)
+// ============================================================================
+
+/** One object as a bucket listing reports it. */
+export interface ListedObject {
+  key: string
+  size: number
+  etag?: string
+}
+
+/**
+ * The bucket-root capability the one-time relocation needs, and nothing else.
+ *
+ * Listing the bucket root and copying an arbitrary key are exactly what the
+ * workspace-scoped client withholds. They are safe here, and only here, because
+ * {@link openLegacyRelocationBucket} refuses to build this under pooled tenancy
+ * or inside a workspace scope: on a single-workspace install the bucket holds
+ * one workspace, so its root is that workspace's and nobody else's. There is no
+ * delete.
+ */
+export interface LegacyRelocationBucket {
+  /** `w/<workspace TypeID>/`, the namespace every relocated object lands in. */
+  readonly namespace: string
+  /** Where a bare key relocates to. Throws `StorageNamespaceViolation` for a key that cannot be composed. */
+  destinationFor(bareKey: string): string
+  /** One page of a listing under `prefix` (the whole bucket when omitted). */
+  listPage(
+    prefix: string | undefined,
+    continuationToken: string | undefined
+  ): Promise<{ objects: ListedObject[]; nextToken?: string }>
+  /** The object at `key` as a listing would report it, or null when absent. */
+  head(key: string): Promise<ListedObject | null>
+  /**
+   * Server-side copy within the bucket, keeping Content-Type and metadata,
+   * sent with `If-None-Match: *` so a provider that honours conditional copies
+   * never replaces an existing destination. Resolves `'exists'` when the
+   * provider refused for that reason. A provider that ignores the condition
+   * copies unconditionally, so callers re-check with {@link head} first.
+   */
+  copyIfAbsent(fromKey: string, toKey: string): Promise<'copied' | 'exists'>
+}
+
+/** A workspace-scoped or pooled process asked for the bucket root. */
+export class LegacyRelocationRefused extends Error {
+  constructor(reason: string) {
+    super(`Refusing to open the bucket root for relocation: ${reason}`)
+    this.name = 'LegacyRelocationRefused'
+  }
+}
+
+/**
+ * Open the bucket root for the single-workspace relocation, or null when this
+ * install has no object storage configured.
+ *
+ * Refuses (throws) under pooled tenancy and inside any workspace scope, because
+ * under one fleet bucket a bare key is nobody's namespace and the root is every
+ * workspace's.
+ */
+export async function openLegacyRelocationBucket(): Promise<LegacyRelocationBucket | null> {
+  if (isPooledTenancy()) throw new LegacyRelocationRefused('pooled tenancy')
+  if (getCurrentWorkspace()) throw new LegacyRelocationRefused('a workspace scope is active')
+  if (!isS3Configured()) return null
+
+  const connection = getS3Config()
+  const workspaceId = await currentWorkspaceId()
+  /** Set once the provider answers a conditional copy with 501. */
+  let conditionalCopyRejected = false
+
+  return {
+    namespace: workspaceNamespace(workspaceId),
+    destinationFor: (bareKey) => composeNamespacedKey(workspaceId, bareKey),
+
+    async listPage(prefix, continuationToken) {
+      const client = await getS3Client(connection)
+      const { ListObjectsV2Command } = await getS3Module()
+      const response = (await client.send(
+        new ListObjectsV2Command({
+          Bucket: connection.bucket,
+          ...(prefix ? { Prefix: prefix } : {}),
+          ...(continuationToken ? { ContinuationToken: continuationToken } : {}),
+        })
+      )) as {
+        Contents?: Array<{ Key?: string; Size?: number; ETag?: string }>
+        IsTruncated?: boolean
+        NextContinuationToken?: string
+      }
+      const objects: ListedObject[] = []
+      for (const entry of response.Contents ?? []) {
+        if (!entry.Key) continue
+        objects.push({ key: entry.Key, size: entry.Size ?? 0, etag: entry.ETag })
+      }
+      return {
+        objects,
+        nextToken: response.IsTruncated ? response.NextContinuationToken : undefined,
+      }
+    },
+
+    async head(key) {
+      const client = await getS3Client(connection)
+      const { HeadObjectCommand } = await getS3Module()
+      try {
+        const response = (await client.send(
+          new HeadObjectCommand({ Bucket: connection.bucket, Key: key })
+        )) as { ContentLength?: number; ETag?: string }
+        return { key, size: response.ContentLength ?? 0, etag: response.ETag }
+      } catch (err) {
+        if (s3StatusCode(err) === 404) return null
+        throw err
+      }
+    },
+
+    async copyIfAbsent(fromKey, toKey) {
+      const client = await getS3Client(connection)
+      const { CopyObjectCommand } = await getS3Module()
+      // CopySource is `<bucket>/<key>`, URL-encoded per segment so the
+      // separators survive and every other reserved character is escaped.
+      const source = [connection.bucket, ...fromKey.split('/')]
+        .map((segment) => encodeURIComponent(segment))
+        .join('/')
+      const send = (conditional: boolean) =>
+        client.send(
+          new CopyObjectCommand({
+            Bucket: connection.bucket,
+            Key: toKey,
+            CopySource: source,
+            MetadataDirective: 'COPY',
+            ...(conditional ? { IfNoneMatch: '*' as const } : {}),
+          })
+        )
+      if (conditionalCopyRejected) {
+        await send(false)
+        return 'copied'
+      }
+      try {
+        await send(true)
+        return 'copied'
+      } catch (err) {
+        const status = s3StatusCode(err)
+        if (status === 412) return 'exists'
+        // A provider that rejects the condition outright rather than ignoring
+        // it. Stop sending it for the rest of this run.
+        if (status === 501) {
+          conditionalCopyRejected = true
+          await send(false)
+          return 'copied'
+        }
+        throw err
+      }
+    },
+  }
+}
+
+// ============================================================================
+// Token-less links to objects that predate read tokens (single-workspace only)
+// ============================================================================
+
+/**
+ * Private prefixes that were written, and linked, with no read token before
+ * read tokens and the namespace existed. Every other prefix written then is
+ * public today; every other private prefix has always carried a token, so its
+ * bare originals were never reachable without one and stay that way.
+ */
+const PRE_TOKEN_PRIVATE_PREFIXES = new Set(['chat-images', 'uploads', 'widget-images'])
+
+/** How long a bucket answer is reused. A miss is kept briefly in case the key appears. */
+const PRE_NAMESPACE_HIT_TTL_MS = 60 * 60 * 1000
+const PRE_NAMESPACE_MISS_TTL_MS = 5 * 60 * 1000
+/** Entries per answer cache. Exported for tests. */
+export const PRE_NAMESPACE_CACHE_MAX = 10_000
+
+/**
+ * Bare key → when an answer was recorded, bounded and LRU-evicted, entries
+ * fresh for `ttlMs`. Timestamps only, never bytes.
+ */
+function createAnswerCache(ttlMs: number) {
+  const entries = new Map<string, number>()
+  return {
+    /** Whether a fresh answer is held, refreshing its recency; a stale one is dropped. */
+    has(key: string, now: number): boolean {
+      const at = entries.get(key)
+      if (at === undefined) return false
+      entries.delete(key)
+      if (now - at >= ttlMs) return false
+      entries.set(key, at)
+      return true
+    },
+    remember(key: string, now: number): void {
+      entries.delete(key)
+      entries.set(key, now)
+      while (entries.size > PRE_NAMESPACE_CACHE_MAX) {
+        const oldest = entries.keys().next()
+        if (oldest.done) break
+        entries.delete(oldest.value)
+      }
+    },
+  }
+}
+
+/**
+ * Where a pre-namespace original was last seen present (hits) or absent
+ * (misses). Two caches, so a flood of made-up keys fills only the miss cache
+ * and never pushes out a real link's answer. Only ever used by
+ * {@link isPreNamespaceObject}, which refuses under pooled tenancy and inside
+ * any workspace scope, so the one bucket they describe is the one this
+ * process's only workspace owns.
+ */
+const preNamespaceHits = createAnswerCache(PRE_NAMESPACE_HIT_TTL_MS)
+const preNamespaceMisses = createAnswerCache(PRE_NAMESPACE_MISS_TTL_MS)
+
+/**
+ * Whether `key` names an object that existed before the namespace, so a link
+ * to it carries no read token and may be served without one.
+ *
+ * Links minted before read tokens point at `/api/storage/<key>` with nothing
+ * else, and many cannot be re-signed: they are in emails already delivered, on
+ * pages outside the app, and in API clients that stored the URL. The
+ * relocation (`legacy-relocation.ts`) copies such an object to its namespaced
+ * name and keeps the bare original, and nothing written since creates a bare
+ * key, so "the bare original exists" is exactly "this object predates the
+ * namespace". A new upload never has one and keeps needing its token.
+ *
+ * The bare original is only ever asked about, never served: the route still
+ * reads the namespaced copy. That keeps the header's rule that reads never
+ * fall back to a bare key, and it is why this is safe to answer from a HEAD.
+ *
+ * Narrowed on purpose:
+ * - **Single-workspace only.** Under pooled tenancy, or inside any workspace
+ *   scope, a bucket-root key is nobody's namespace, so the answer is no without
+ *   asking.
+ * - **Pre-token private prefixes only** ({@link PRE_TOKEN_PRIVATE_PREFIXES}).
+ *   A key under `w/<workspace>/` is therefore never asked about, so no other
+ *   namespace's object, nor this workspace's own new upload, can stand in for
+ *   a bare original.
+ * - **Canonical keys only.** The key must compose into this workspace's
+ *   namespace, which refuses traversal, encoded traversal, empty and relative
+ *   segments and backslashes, so no spelling of a key borrows another
+ *   object's existence.
+ *
+ * Answers are cached, and only a key with no fresh answer costs a HEAD.
+ * `mayAskBucket` gates that request: the route passes a per-client budget, so
+ * token-less requests for made-up keys cannot turn into unbounded calls to the
+ * object store. Refused, the answer is no, which is the ordinary 403.
+ *
+ * An operator who moved rather than copied the originals has no bare key left,
+ * and those links then need their token like any other private link.
+ */
+export async function isPreNamespaceObject(
+  key: string,
+  mayAskBucket: () => Promise<boolean> = async () => true
+): Promise<boolean> {
+  if (isPooledTenancy() || config.isPooledTenancy) return false
+  if (getCurrentWorkspace()) return false
+  if (!PRE_TOKEN_PRIVATE_PREFIXES.has(key.split('/', 1)[0] ?? '')) return false
+  if (!isS3Usable()) return false
+
+  let connection: S3Config
+  try {
+    composeNamespacedKey(await currentWorkspaceId(), key)
+    connection = getS3Config()
+  } catch {
+    return false
+  }
+
+  const now = Date.now()
+  if (preNamespaceHits.has(key, now)) return true
+  if (preNamespaceMisses.has(key, now)) return false
+  if (!(await mayAskBucket())) return false
+
+  try {
+    const client = await getS3Client(connection)
+    const { HeadObjectCommand } = await getS3Module()
+    await client.send(new HeadObjectCommand({ Bucket: connection.bucket, Key: key }))
+  } catch (err) {
+    // A HEAD of a missing key answers 403 rather than 404 when the credential
+    // may not list the bucket, so both are "absent". Any other failure is not
+    // an answer worth remembering.
+    const status = s3StatusCode(err)
+    if (status === 403 || status === 404) preNamespaceMisses.remember(key, now)
+    return false
+  }
+  preNamespaceHits.remember(key, now)
+  return true
+}
+
+/** The HTTP status an SDK error carries, if any. */
+function s3StatusCode(err: unknown): number | undefined {
+  const meta = (err as { $metadata?: { httpStatusCode?: number } } | null)?.$metadata
+  return meta?.httpStatusCode
+}
+
+// ============================================================================
 // Internal Helpers
 // ============================================================================
 
 /**
- * Build a public URL for a storage key based on the resolved placement.
- *
- * Priority:
- * 1. the placement's public URL — explicit CDN, custom domain, or proxy URL
- * 2. <origin>/api/storage — presigned URL redirect (works with any bucket)
- *
- * The /api/storage route generates presigned GET URLs and returns a 302 redirect,
- * so it works with both public and private buckets. Deployments that want direct
- * endpoint URLs set S3_PUBLIC_URL to their endpoint.
+ * Storage URLs are always the host-independent ref `/api/storage/<key>`
+ * ({@link buildPublicUrl}), whatever `S3_PUBLIC_URL` says. The route proxies
+ * or 302-redirects to a presigned GET, so it works with public and private
+ * buckets alike. `S3_PUBLIC_URL` does not shape any URL minted here: it only
+ * marks absolute URLs under that base that are already stored in content as
+ * this install's own (`trusted-url.ts` accepts them as attachment and inline media sources,
+ * and `content/rehost-images.ts` does not re-host them).
  *
  * Which prefixes are public is fleet-wide policy, not workspace data: the set below
  * names the key spaces this application serves without a capability token, and
@@ -1147,7 +1473,7 @@ export function getPublicUrl(key: string): string {
   const url = getPublicUrlOrNull(key)
   if (!url) {
     throw new Error(
-      'Failed to generate public URL. Ensure S3 is configured and S3_PUBLIC_URL or S3_ENDPOINT is set.'
+      'Failed to generate public URL. Ensure S3 is configured (S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY).'
     )
   }
   return url

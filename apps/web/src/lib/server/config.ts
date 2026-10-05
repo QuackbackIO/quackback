@@ -44,6 +44,24 @@ function parseUserContentOrigin(value: string): string | null {
   }
 }
 
+/** An RFC 9110 field name (`token`), already lowercased. */
+const HEADER_TOKEN_RE = /^[!#$%&'*+\-.^_`|~0-9a-z]+$/
+
+/**
+ * Why a `TRUSTED_CLIENT_IP_HEADER` value cannot be used, or null when it can.
+ * X-Forwarded-For is a list whose trust is positional, which is what
+ * TRUSTED_PROXY_HOPS handles; the app's own `x-quackback-*` headers carry
+ * addresses it resolved or verified itself and must never be taken from a proxy.
+ */
+function trustedClientIpHeaderProblem(name: string): string | null {
+  if (!HEADER_TOKEN_RE.test(name)) return 'not a valid HTTP header name'
+  if (name === 'x-forwarded-for') {
+    return 'X-Forwarded-For is a list; use TRUSTED_PROXY_HOPS to pick the trusted entry instead'
+  }
+  if (name.startsWith('x-quackback-')) return 'x-quackback-* headers are reserved for the app'
+  return null
+}
+
 // =============================================================================
 // Schema Helpers
 // =============================================================================
@@ -161,6 +179,15 @@ const configSchema = z
     oauthRefreshGraceSeconds: envInt.default(7 * 24 * 60 * 60),
 
     trustedProxyHops: envInt.pipe(z.number().int().min(0).max(10)).default(0),
+    /**
+     * A single-value header the operator's reverse proxy sets (or overwrites)
+     * to the client address, e.g. `x-real-ip` or `cf-connecting-ip`. Consulted
+     * before TRUSTED_PROXY_HOPS; see getClientIp() in domains/api/rate-limit.
+     */
+    trustedClientIpHeader: z.preprocess(
+      (val) => (typeof val === 'string' ? val.trim().toLowerCase() || undefined : val),
+      z.string().optional()
+    ),
 
     // Email (all optional)
     emailFrom: z.string().optional(),
@@ -169,7 +196,7 @@ const configSchema = z
     emailSmtpUser: z.string().optional(),
     emailSmtpPass: z.string().optional(),
     emailSmtpSecure: envBoolean,
-    /** Credential for the inbound body fetch, not for sending. */
+    /** Resend: sends when it is the one outbound provider, and fetches inbound bodies. */
     emailResendApiKey: z.string().optional(),
     /**
      * SES sending credentials. Deliberately not named `AWS_*` or `S3_*`: the
@@ -239,6 +266,12 @@ const configSchema = z
 
     // Automatic website branding for new workspaces (optional)
     disableAutomaticBranding: envBoolean,
+
+    // Product analytics for the admin app (optional, off unless a key is set)
+    posthogKey: z.preprocess(emptyToUndefined, z.string().optional()),
+    posthogHost: z.preprocess(emptyToUndefined, z.string().url().optional()),
+    posthogUiHost: z.preprocess(emptyToUndefined, z.string().url().optional()),
+    posthogSessionRecording: envBoolean,
   })
   .superRefine((cfg, ctx) => {
     // A wildcard is a routing pattern, never an origin. Refused in every mode:
@@ -255,6 +288,17 @@ const configSchema = z
           '`*.example.com`; under QUACKBACK_TENANCY=pooled the per-request origin comes ' +
           'from the workspace record, so set BASE_URL to a real fleet hostname.',
       })
+    }
+
+    if (cfg.trustedClientIpHeader !== undefined) {
+      const reason = trustedClientIpHeaderProblem(cfg.trustedClientIpHeader)
+      if (reason) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['trustedClientIpHeader'],
+          message: `TRUSTED_CLIENT_IP_HEADER is ${cfg.trustedClientIpHeader}: ${reason}`,
+        })
+      }
     }
 
     if (cfg.userContentUrl !== undefined && !parseUserContentOrigin(cfg.userContentUrl)) {
@@ -328,6 +372,7 @@ function buildConfigFromEnv(): unknown {
     oauthRefreshGraceSeconds: env('OAUTH_REFRESH_GRACE_SECONDS'),
 
     trustedProxyHops: env('TRUSTED_PROXY_HOPS'),
+    trustedClientIpHeader: env('TRUSTED_CLIENT_IP_HEADER'),
 
     // Email
     emailFrom: env('EMAIL_FROM'),
@@ -382,6 +427,12 @@ function buildConfigFromEnv(): unknown {
 
     // Automatic website branding
     disableAutomaticBranding: env('DISABLE_AUTOMATIC_BRANDING'),
+
+    // Product analytics
+    posthogKey: env('POSTHOG_KEY'),
+    posthogHost: env('POSTHOG_HOST'),
+    posthogUiHost: env('POSTHOG_UI_HOST'),
+    posthogSessionRecording: env('POSTHOG_SESSION_RECORDING'),
   }
 }
 
@@ -527,6 +578,9 @@ export const config = {
 
   get trustedProxyHops() {
     return loadConfig().trustedProxyHops
+  },
+  get trustedClientIpHeader(): string | undefined {
+    return loadConfig().trustedClientIpHeader
   },
 
   // Email
@@ -678,6 +732,35 @@ export const config = {
   // administrator's company website.
   get disableAutomaticBranding() {
     return loadConfig().disableAutomaticBranding
+  },
+
+  /**
+   * Browser product analytics for signed-in team members in the admin app,
+   * or null when `POSTHOG_KEY` is unset. The key is a project API key, which
+   * can only write events, so it is safe to hand to the browser.
+   *
+   * `host` is where the browser sends: PostHog itself, or a reverse proxy on
+   * a domain content blockers do not list. `uiHost` is the PostHog app the
+   * toolbar links to; it follows from a PostHog host and must be given as
+   * `POSTHOG_UI_HOST` behind a proxy.
+   */
+  get productAnalytics(): {
+    key: string
+    host: string
+    uiHost: string | null
+    sessionRecording: boolean
+  } | null {
+    const cfg = loadConfig()
+    if (!cfg.posthogKey) return null
+    const host = (cfg.posthogHost ?? 'https://us.i.posthog.com').replace(/\/+$/, '')
+    const region = new URL(host).hostname.match(/^([a-z]+)\.i\.posthog\.com$/)?.[1]
+    return {
+      key: cfg.posthogKey,
+      host,
+      uiHost:
+        cfg.posthogUiHost?.replace(/\/+$/, '') ?? (region ? `https://${region}.posthog.com` : null),
+      sessionRecording: cfg.posthogSessionRecording ?? true,
+    }
   },
 
   // Help center

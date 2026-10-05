@@ -16,11 +16,16 @@ import {
   structuredOutputProviderOptions,
 } from '@/lib/server/domains/ai/config'
 import { createUsageLoggingMiddleware } from '@/lib/server/domains/ai/usage-middleware'
+import { getAiBudgetStatus } from '@/lib/server/domains/ai/ai-budget'
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import { getHelpCenterConfig } from '@/lib/server/domains/settings/settings.service'
 import { getArticleById } from './help-center.article.service'
-import { upsertArticleTranslation } from './help-center-translations.service'
+import {
+  getArticleTranslation,
+  upsertArticleTranslation,
+  writeGuardedArticleTranslation,
+} from './help-center-translations.service'
 import { logger } from '@/lib/server/logger'
 import type { KbArticleId } from '@quackback/ids'
 import type { HelpCenterArticleWithCategory } from './help-center.types'
@@ -78,14 +83,60 @@ Example output:
   return { system, user }
 }
 
-/** The job handler: translate one article into one locale, write a draft. */
+/** A parked job's snapshot of the translation it may replace. */
+export interface ParkedTranslationGuard {
+  /** The translation's updated_at when parked, or null when there was none. */
+  translationUpdatedAt: string | null
+}
+
+/** True when the translation still is what the parked job saw. */
+async function translationUnchanged(
+  articleId: KbArticleId,
+  locale: string,
+  guard: ParkedTranslationGuard
+): Promise<boolean> {
+  const row = await getArticleTranslation(articleId, locale)
+  const current = row ? row.updatedAt.toISOString() : null
+  return current === guard.translationUpdatedAt
+}
+
+/** Returned instead of translating when the AI allowance is used up. */
+export interface AutoTranslatePause {
+  /** When the allowance window ends; the caller retries no later than this. */
+  pausedUntil: Date
+}
+
+/**
+ * The job handler: translate one article into one locale, write a draft.
+ *
+ * Checks the AI allowance before the model call, so a used-up allowance costs
+ * nothing and writes nothing; the caller parks the item and retries it.
+ */
 export async function translateArticleForLocale(
   articleId: KbArticleId,
-  locale: string
-): Promise<void> {
+  locale: string,
+  opts: { guard?: ParkedTranslationGuard } = {}
+): Promise<AutoTranslatePause | undefined> {
   const model = getChatModel('helpCenterTranslate')
   if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) {
     log.debug({ article_id: articleId, locale }, 'auto-translate skipped: AI not configured')
+    return
+  }
+
+  const budget = await getAiBudgetStatus()
+  if (budget.exhausted) {
+    log.info(
+      { article_id: articleId, locale, resume_at: budget.window.end.toISOString() },
+      'auto-translate paused: AI allowance used up'
+    )
+    return { pausedUntil: budget.window.end }
+  }
+
+  // A job that was parked must not replace a translation a person changed
+  // while it waited. Checked here to save the model call; the write itself
+  // is conditional as well.
+  if (opts.guard && !(await translationUnchanged(articleId, locale, opts.guard))) {
+    log.info({ article_id: articleId, locale }, 'auto-translate skipped: translation changed')
     return
   }
 
@@ -130,14 +181,25 @@ export async function translateArticleForLocale(
     return
   }
 
-  await upsertArticleTranslation({
+  const result = {
     articleId,
     locale,
     title: parsed.title,
     description: parsed.description || undefined,
     content: parsed.content,
     contentJson: markdownToTiptapJson(parsed.content),
-  })
+  }
+  if (opts.guard) {
+    // Conditional in the same statement, so a change saved after the check
+    // above but before this write still wins.
+    const written = await writeGuardedArticleTranslation(result, opts.guard.translationUpdatedAt)
+    if (!written) {
+      log.info({ article_id: articleId, locale }, 'auto-translate skipped: translation changed')
+      return
+    }
+  } else {
+    await upsertArticleTranslation(result, { source: 'auto' })
+  }
   log.info({ article_id: articleId, locale }, 'auto-translate: draft translation written')
 }
 

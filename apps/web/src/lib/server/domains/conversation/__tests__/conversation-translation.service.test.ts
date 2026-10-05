@@ -22,9 +22,52 @@ const mockConfig = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/server/config', () => ({ config: mockConfig }))
 
+const budget = vi.hoisted(() => ({
+  exhausted: false,
+  windowStart: new Date('2026-11-01T00:00:00.000Z'),
+}))
+vi.mock('@/lib/server/domains/ai/ai-budget', () => ({
+  getAiBudgetStatus: async () => ({
+    cap: 1000,
+    used: budget.exhausted ? 1200 : 10,
+    exhausted: budget.exhausted,
+    window: {
+      kind: 'month',
+      start: budget.windowStart,
+      end: new Date(budget.windowStart.getTime() + 30 * 24 * 60 * 60 * 1000),
+    },
+  }),
+}))
+
+const logged = vi.hoisted(() => ({ warn: [] as Array<{ ctx: unknown; msg: unknown }> }))
+vi.mock('@/lib/server/logger', () => {
+  const noop = () => {}
+  const make = (): Record<string, unknown> => ({
+    trace: noop,
+    debug: noop,
+    info: noop,
+    error: noop,
+    fatal: noop,
+    warn: (ctx: unknown, msg: unknown) => logged.warn.push({ ctx, msg }),
+    child: () => make(),
+  })
+  return { logger: make() }
+})
+
 const mockChat = vi.fn()
 vi.mock('@tanstack/ai', () => ({
-  chat: (...args: unknown[]) => mockChat(...args),
+  chat: (...args: unknown[]) => {
+    const onWrite = usageWrite.onWrite
+    usageWrite.pending = onWrite
+      ? new Promise<void>((resolve) =>
+          setTimeout(() => {
+            onWrite()
+            resolve()
+          }, 5)
+        )
+      : Promise.resolve()
+    return mockChat(...args)
+  },
 }))
 vi.mock('@tanstack/ai-openai/compatible', () => ({
   openaiCompatibleText: (...args: unknown[]) => ({ kind: 'text', args }),
@@ -34,8 +77,16 @@ vi.mock('@/lib/server/domains/ai/config', () => ({
   isAiClientConfigured: (apiKey?: string, baseUrl?: string) => Boolean(apiKey) && Boolean(baseUrl),
   structuredOutputProviderOptions: () => ({}),
 }))
+// Stands in for the usage row write: chat() starts it, settled() awaits it.
+const usageWrite = vi.hoisted(() => ({
+  pending: Promise.resolve() as Promise<void>,
+  onWrite: null as null | (() => void),
+}))
 vi.mock('@/lib/server/domains/ai/usage-middleware', () => ({
-  createUsageLoggingMiddleware: () => ({ name: 'ai-usage-logging' }),
+  createUsageLoggingMiddleware: () => ({
+    name: 'ai-usage-logging',
+    settled: () => usageWrite.pending,
+  }),
 }))
 vi.mock('@/lib/server/domains/ai/models', () => ({
   getChatModel: (...args: unknown[]) => mockGetChatModel(...args),
@@ -143,6 +194,7 @@ const {
   dismissInboxTranslationSuggestion,
   TranslationUnavailableError,
   TranslationRichContentError,
+  inboxTranslationOverAllowance,
 } = await import('../conversation-translation.service')
 const { UNDETERMINED_LANGUAGE } = await import('@/lib/shared/conversation/translation')
 
@@ -174,6 +226,9 @@ function makeConversation(over: Partial<Conversation> = {}): Conversation {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  budget.exhausted = false
+  usageWrite.onWrite = null
+  logged.warn.length = 0
   mockConfig.openaiApiKey = 'test-key'
   mockConfig.openaiBaseUrl = 'http://localhost:9999/v1'
   conversationRow = undefined
@@ -630,5 +685,58 @@ describe('dismissInboxTranslationSuggestion (activation dismiss persistence)', (
 
   it('refuses a non-agent actor', async () => {
     await expect(dismissInboxTranslationSuggestion(conversationId, visitor)).rejects.toThrow()
+  })
+})
+
+describe('inbox translation over the AI allowance', () => {
+  const overAllowanceWarnings = () =>
+    logged.warn.filter((w) => String(w.msg).includes('AI allowance'))
+
+  it('keeps translating, and says so, once the allowance is used up', async () => {
+    budget.exhausted = true
+    budget.windowStart = new Date('2026-07-01T00:00:00.000Z')
+    mockGetChatModel.mockReturnValue('gpt-test')
+    mockChat.mockResolvedValue({ content: 'Bonjour' })
+
+    await expect(translateOutgoingContent('Hello', 'fr')).resolves.toBe('Bonjour')
+    expect(mockChat).toHaveBeenCalledOnce()
+    expect(await inboxTranslationOverAllowance()).toBe(true)
+  })
+
+  it('warns once per allowance window, not once per call', async () => {
+    budget.exhausted = true
+    budget.windowStart = new Date('2026-08-01T00:00:00.000Z')
+    mockGetChatModel.mockReturnValue('gpt-test')
+    mockChat.mockResolvedValue({ content: 'Bonjour' })
+
+    await translateOutgoingContent('Hello', 'fr')
+    await translateOutgoingContent('Hello again', 'fr')
+    await inboxTranslationOverAllowance()
+    expect(overAllowanceWarnings()).toHaveLength(1)
+
+    budget.windowStart = new Date('2026-09-01T00:00:00.000Z')
+    await inboxTranslationOverAllowance()
+    expect(overAllowanceWarnings()).toHaveLength(2)
+  })
+
+  it('is quiet while allowance remains', async () => {
+    mockGetChatModel.mockReturnValue('gpt-test')
+    mockChat.mockResolvedValue({ content: 'Bonjour' })
+    await translateOutgoingContent('Hello', 'fr')
+    expect(await inboxTranslationOverAllowance()).toBe(false)
+    expect(overAllowanceWarnings()).toHaveLength(0)
+  })
+
+  it('a call that crosses the allowance is reflected straight after it returns', async () => {
+    budget.windowStart = new Date('2026-10-01T00:00:00.000Z')
+    mockGetChatModel.mockReturnValue('gpt-test')
+    mockChat.mockResolvedValue({ content: 'Bonjour' })
+    // This call's own usage row is what takes the workspace over the cap.
+    usageWrite.onWrite = () => {
+      budget.exhausted = true
+    }
+
+    await translateOutgoingContent('Hello', 'fr')
+    expect(await inboxTranslationOverAllowance()).toBe(true)
   })
 })

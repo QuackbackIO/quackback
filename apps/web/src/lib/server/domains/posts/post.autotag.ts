@@ -20,8 +20,6 @@
  * AI-prompted tags (the ai-classification precedent), usage-logged under
  * the 'post_autotag' pipeline step.
  */
-import { chat } from '@tanstack/ai'
-import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
 import { z } from 'zod'
 import {
   db,
@@ -38,10 +36,8 @@ import {
 } from '@/lib/server/db'
 import type { BoardId, PostId, PostTagId } from '@quackback/ids'
 import { config } from '@/lib/server/config'
-import {
-  isAiClientConfigured,
-  structuredOutputProviderOptions,
-} from '@/lib/server/domains/ai/config'
+import { isAiClientConfigured } from '@/lib/server/domains/ai/config'
+import { structuredChat } from '@/lib/server/domains/ai/structured-chat'
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { createUsageLoggingMiddleware } from '@/lib/server/domains/ai/usage-middleware'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
@@ -111,11 +107,8 @@ async function evaluatePostAgainstTags(
 
   let output: { matches: string[] }
   try {
-    output = await chat({
-      adapter: openaiCompatibleText(model, {
-        baseURL: config.openaiBaseUrl!,
-        apiKey: config.openaiApiKey!,
-      }),
+    output = await structuredChat({
+      model,
       systemPrompts: [SYSTEM_PROMPT],
       messages: [
         {
@@ -132,9 +125,8 @@ async function evaluatePostAgainstTags(
           ].join('\n'),
         },
       ],
-      outputSchema: MatchResponseSchema,
-      stream: false,
-      modelOptions: { max_tokens: 500, ...structuredOutputProviderOptions() },
+      schema: MatchResponseSchema,
+      maxTokens: 500,
       middleware: [
         createUsageLoggingMiddleware({
           pipelineStep: 'post_autotag',

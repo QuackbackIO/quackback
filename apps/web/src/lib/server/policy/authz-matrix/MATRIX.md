@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 737 surfaces
+### Server functions (`requireAuth`) — 738 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -642,6 +642,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/sso.ts`::upsertIdentityProviderFn | auth.manage |
 | `lib/server/functions/sso.ts`::saveIdentityProviderClaimMappingFn | auth.manage |
 | `lib/server/functions/sso.ts`::deleteIdentityProviderFn | auth.manage |
+| `lib/server/functions/sso.ts`::setIdentityProviderRedirectStyleFn | auth.manage |
 | `lib/server/functions/sso.ts`::saveIdentityProviderLogoFn | auth.manage |
 | `lib/server/functions/sso.ts`::deleteIdentityProviderLogoFn | auth.manage |
 | `lib/server/functions/sso.ts`::setProviderCredentialsFn | auth.manage |
@@ -842,21 +843,22 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/workspace-copilot.ts`::undoWorkspaceSettingsProposalFn | DYNAMIC (copilot.use | settings.manage | settings.branding | office_hours.manage | changelog.manage) |
 | `lib/server/functions/workspace-wipe.ts`::wipeCloudWorkspaceFn | END_USER (any authenticated) |
 
-### Public REST API (`withApiKeyAuth`) — 126 surfaces
+### Public REST API (`withApiKeyAuth`) — 127 surfaces
 
 | Surface | Enforces |
 | --- | --- |
 | `routes/api/billing/session.ts`::POST | billing.manage |
 | `routes/api/billing/trial.ts`::POST | billing.manage |
 | `routes/api/export.companies.ts`::GET | company.view |
+| `routes/api/export.ts`::GET | post.export |
 | `routes/api/export.users.ts`::handleExportUsers | people.view |
 | `routes/api/v1/apps/boards.ts`::GET | PUBLIC (any valid key) |
-| `routes/api/v1/apps/link.ts`::POST | integration.manage |
+| `routes/api/v1/apps/link.ts`::POST | post.vote_on_behalf |
 | `routes/api/v1/apps/linked.ts`::GET | integration.view |
 | `routes/api/v1/apps/posts.ts`::POST | post.create |
 | `routes/api/v1/apps/search.ts`::GET | post.view_private |
 | `routes/api/v1/apps/suggest.ts`::GET | post.view_private |
-| `routes/api/v1/apps/unlink.ts`::POST | integration.manage |
+| `routes/api/v1/apps/unlink.ts`::POST | post.vote_on_behalf |
 | `routes/api/v1/boards/$boardId.ts`::GET | PUBLIC (any valid key) |
 | `routes/api/v1/boards/$boardId.ts`::PATCH | board.manage |
 | `routes/api/v1/boards/$boardId.ts`::DELETE | board.manage |
@@ -1054,7 +1056,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-227 of 1075 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+226 of 1076 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1202,7 +1204,6 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/api/devices.ts`::DELETE | route |
 | `routes/api/devices.ts`::POST | route |
 | `routes/api/export.conversations.ts`::GET | route |
-| `routes/api/export.ts`::GET | route |
 | `routes/api/export/runs.$runId.download.ts`::GET | route |
 | `routes/api/export/runs.$runId.ts`::GET | route |
 | `routes/api/export/runs.ts`::GET | route |
