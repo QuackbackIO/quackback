@@ -35,10 +35,11 @@ describe('isTrustedSender', () => {
 })
 
 describe('parseSpamFilterConfig', () => {
-  it('defaults to an empty trusted-sender list', () => {
-    expect(parseSpamFilterConfig(null)).toEqual({ trustedSenders: [] })
-    expect(parseSpamFilterConfig('not json')).toEqual({ trustedSenders: [] })
-    expect(parseSpamFilterConfig('{}')).toEqual({ trustedSenders: [] })
+  it('defaults to an empty trusted-sender list with the AI classifier on', () => {
+    const defaults = { trustedSenders: [], aiClassifier: true }
+    expect(parseSpamFilterConfig(null)).toEqual(defaults)
+    expect(parseSpamFilterConfig('not json')).toEqual(defaults)
+    expect(parseSpamFilterConfig('{}')).toEqual(defaults)
   })
 
   it('keeps only plausible string entries, normalized', () => {
@@ -46,6 +47,17 @@ describe('parseSpamFilterConfig', () => {
       parseSpamFilterConfig(
         JSON.stringify({ trustedSenders: [' Jane@ACME.com ', '', 42, 'acme.com', null] })
       )
-    ).toEqual({ trustedSenders: ['jane@acme.com', 'acme.com'] })
+    ).toEqual({ trustedSenders: ['jane@acme.com', 'acme.com'], aiClassifier: true })
+  })
+
+  it('honours a stored aiClassifier switch independently of the list', () => {
+    expect(parseSpamFilterConfig('{"aiClassifier":false}')).toEqual({
+      trustedSenders: [],
+      aiClassifier: false,
+    })
+    expect(
+      parseSpamFilterConfig('{"trustedSenders":"broken","aiClassifier":false}').aiClassifier
+    ).toBe(false)
+    expect(parseSpamFilterConfig('{"aiClassifier":"no"}').aiClassifier).toBe(true)
   })
 })

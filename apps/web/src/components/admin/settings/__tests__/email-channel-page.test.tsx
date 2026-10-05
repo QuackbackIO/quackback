@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 
 const updateAck = vi.fn()
+const updateSpam = vi.fn()
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
@@ -14,6 +15,7 @@ vi.mock('@tanstack/react-router', () => ({
 vi.mock('@/lib/server/functions/settings', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/functions/settings')>()),
   updateEmailAutoAckFn: (...a: unknown[]) => updateAck(...a),
+  updateSpamFilterConfigFn: (...a: unknown[]) => updateSpam(...a),
 }))
 vi.mock('@/lib/server/functions/channel-accounts', () => ({
   listRecentEmailLogFn: vi.fn(),
@@ -37,8 +39,11 @@ function activity(n: number) {
   }))
 }
 
-function renderPage(rows = 12, provider = 'smtp') {
-  client.setQueryData(settingsQueries.spamFilterConfig().queryKey, { trustedSenders: [] } as never)
+function renderPage(rows = 12, provider = 'smtp', aiClassifier = false) {
+  client.setQueryData(settingsQueries.spamFilterConfig().queryKey, {
+    trustedSenders: [],
+    aiClassifier,
+  } as never)
   client.setQueryData(channelSettingsQueries.emailStatus().queryKey, {
     provider,
     fromAddress: 'Acme <noreply@acme.io>',
@@ -65,6 +70,8 @@ function renderPage(rows = 12, provider = 'smtp') {
 beforeEach(() => {
   updateAck.mockReset()
   updateAck.mockResolvedValue({})
+  updateSpam.mockReset()
+  updateSpam.mockResolvedValue({})
   client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
 })
 afterEach(cleanup)
@@ -126,5 +133,20 @@ describe('EmailChannelPage', () => {
     fireEvent.click(screen.getByRole('switch', { name: 'Acknowledge new inbound mail' }))
     await waitFor(() => expect(updateAck).toHaveBeenCalledWith({ data: { enabled: true } }))
     expect(client.getMutationCache().getAll()[0].meta).toEqual({ autosave: true })
+  })
+
+  it('shows the stored AI spam filter state and autosaves only that switch', async () => {
+    renderPage(3, 'smtp', false)
+    const toggle = screen.getByRole('switch', { name: 'AI spam filter' })
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(toggle)
+    await waitFor(() => expect(updateSpam).toHaveBeenCalledWith({ data: { aiClassifier: true } }))
+  })
+
+  it('shows the AI spam filter on when the workspace has it on', () => {
+    renderPage(3, 'smtp', true)
+    expect(
+      screen.getByRole('switch', { name: 'AI spam filter' }).getAttribute('aria-checked')
+    ).toBe('true')
   })
 })
