@@ -128,11 +128,18 @@ export interface WorkspaceClaim {
    * Whether arriving here is still a way to become this workspace's admin.
    *
    * False on a workspace a control plane provisioned, whose owner is recorded
-   * where it was created. A screen that offered account creation on such a
-   * workspace would be offering a path the promoter refuses, which is the
-   * disagreement this whole answer exists to prevent.
+   * where it was created, and on a workspace whose setup is already finished.
+   * A screen that offered account creation on such a workspace would be
+   * offering a path the promoter refuses, which is the disagreement this whole
+   * answer exists to prevent.
    */
   openToClaim: boolean
+  /**
+   * Why {@link openToClaim} is false, so the screen can say the true thing:
+   * `provisioned` (created for a named account) or `setupComplete` (already
+   * set up; an admin signs in). Null while it is open.
+   */
+  closedReason: 'provisioned' | 'setupComplete' | null
 }
 
 /**
@@ -166,12 +173,18 @@ export const getWorkspaceClaimFn = createServerFn({ method: 'GET' }).handler(
     // Existence only, on the same predicates the promoter guards with, so the
     // screen and the promoter can never disagree about who owns setup or about
     // whether it is still there to be taken.
-    const [owner, openToClaim] = await Promise.all([findHumanAdmin(db), isOpenToBootstrapClaim(db)])
+    const [owner, unprovisioned, setupOpen] = await Promise.all([
+      findHumanAdmin(db),
+      isOpenToBootstrapClaim(db),
+      isSetupOpenToClaim(db),
+    ])
 
     const current = await getSettings()
     const setupComplete = isOnboardingComplete(getSetupState(current?.setupState ?? null))
 
-    return { claimed: !!owner, setupComplete, openToClaim }
+    // Same order the promoter refuses in: provenance first, then setup state.
+    const closedReason = !unprovisioned ? 'provisioned' : !setupOpen ? 'setupComplete' : null
+    return { claimed: !!owner, setupComplete, openToClaim: closedReason === null, closedReason }
   }
 )
 

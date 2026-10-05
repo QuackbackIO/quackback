@@ -101,7 +101,13 @@ export function AccountStep({ ssoEnabled, claim, authConfig, workspaceName }: Ac
   if (claim.claimed || !claim.openToClaim) {
     return (
       <SignInOnlyStep
-        reason={claim.claimed ? 'claimed' : 'notOpen'}
+        reason={
+          claim.claimed
+            ? 'claimed'
+            : claim.closedReason === 'setupComplete'
+              ? 'setupComplete'
+              : 'notOpen'
+        }
         claim={claim}
         authConfig={authConfig}
         workspaceName={workspaceName}
@@ -123,7 +129,11 @@ export function AccountStep({ ssoEnabled, claim, authConfig, workspaceName }: Ac
  * setup mail. Someone who is not the owner does not need the address; they
  * need to know the form is not theirs, which the copy says outright.
  *
- * The two reasons get different copy because they are different situations to
+ * A finished workspace with no admin left is a third situation: nobody is
+ * waiting to set it up, so it asks for an admin account and offers nothing to
+ * create.
+ *
+ * The reasons get different copy because they are different situations to
  * be in, and telling a customer waiting on a workspace they just paid for that
  * it "already has an owner" would send them to support for no reason.
  */
@@ -133,7 +143,7 @@ function SignInOnlyStep({
   authConfig,
   workspaceName,
 }: {
-  reason: 'claimed' | 'notOpen'
+  reason: 'claimed' | 'notOpen' | 'setupComplete'
   claim: WorkspaceClaim
   authConfig: AccountAuthConfig
   workspaceName?: string
@@ -147,6 +157,11 @@ function SignInOnlyStep({
               id="onboarding.account.claimed.title"
               defaultMessage="This workspace already has an owner"
             />
+          ) : reason === 'setupComplete' ? (
+            <FormattedMessage
+              id="onboarding.account.setupComplete.title"
+              defaultMessage="This workspace is already set up"
+            />
           ) : (
             <FormattedMessage
               id="onboarding.account.notOpen.title"
@@ -159,6 +174,11 @@ function SignInOnlyStep({
             <FormattedMessage
               id="onboarding.account.claimed.signIn"
               defaultMessage="Setup belongs to an existing admin. Sign in as that admin to pick up where setup left off."
+            />
+          ) : reason === 'setupComplete' ? (
+            <FormattedMessage
+              id="onboarding.account.setupComplete.signIn"
+              defaultMessage="Sign in with an admin account."
             />
           ) : (
             <FormattedMessage
