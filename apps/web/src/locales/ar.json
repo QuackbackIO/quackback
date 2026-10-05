@@ -610,6 +610,7 @@
   "widget.messenger.offline.noEmail": "نحن غير متواجدين حاليًا. اترك رسالة وسنرد عليك هنا عند عودتنا.",
   "widget.messenger.online": "نحن متصلون الآن",
   "widget.messenger.placeholder": "رسالة...",
+  "widget.messenger.defaultGreeting": "مرحبًا! 👋 كيف يمكننا مساعدتك اليوم؟",
   "widget.messenger.replyTime.away": "نحن غير متواجدين حاليًا. سنعاود التواصل معك بمجرد عودتنا.",
   "widget.messenger.replyTime.online": "نحن متواجدون الآن، عادةً ما نرد خلال أقل من ساعة.",
   "widget.messenger.seen": "تمت المشاهدة",

@@ -610,6 +610,7 @@
   "widget.messenger.offline.noEmail": "Nous sommes absents pour le moment. Laissez un message et nous vous répondrons ici à notre retour.",
   "widget.messenger.online": "Nous sommes en ligne",
   "widget.messenger.placeholder": "Message...",
+  "widget.messenger.defaultGreeting": "Bonjour ! 👋 Comment pouvons-nous vous aider aujourd'hui ?",
   "widget.messenger.replyTime.away": "Nous sommes absents pour le moment. Nous vous répondrons dès que nous serons de retour en ligne.",
   "widget.messenger.replyTime.online": "Nous sommes en ligne, nous répondons généralement en moins d'une heure.",
   "widget.messenger.seen": "Vu",

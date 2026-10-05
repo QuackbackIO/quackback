@@ -610,6 +610,7 @@
   "widget.messenger.offline.noEmail": "我們目前不在線上。請留言，我們回來後會在這裡回覆你。",
   "widget.messenger.online": "我們在線上",
   "widget.messenger.placeholder": "輸入訊息…",
+  "widget.messenger.defaultGreeting": "你好！👋 今天我們能幫你什麼？",
   "widget.messenger.replyTime.away": "我們目前不在線上。我們回來後會盡快與你聯繫。",
   "widget.messenger.replyTime.online": "我們在線，通常會在一小時內回覆。",
   "widget.messenger.seen": "已讀",

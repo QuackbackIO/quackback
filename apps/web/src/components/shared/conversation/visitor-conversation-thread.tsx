@@ -30,6 +30,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { TypingDots } from '@/components/shared/typing-dots'
 import { personalizeMessage, firstNameOf } from '@/lib/shared/conversation/personalize'
+import { shownGreeting } from '@/lib/shared/conversation/default-greeting'
 import { useConversationStream } from '@/lib/client/hooks/use-conversation-stream'
 import { useConversationTyping } from '@/lib/client/hooks/use-conversation-typing'
 import { useAssistantTurn } from '@/lib/client/hooks/use-assistant-turn'
@@ -954,7 +955,7 @@ export function VisitorConversationThread({
             side="peer"
             authorName={assistant?.name ?? teamName ?? undefined}
             isAssistant={!!assistant}
-            content={personalizeMessage(welcomeMessage ?? '', firstName)}
+            content={personalizeMessage(shownGreeting(welcomeMessage, intl) ?? '', firstName)}
             embedOpenMode={embedOpenMode}
           />
         )

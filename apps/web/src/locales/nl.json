@@ -610,6 +610,7 @@
   "widget.messenger.offline.noEmail": "We zijn nu afwezig. Laat een bericht achter, dan antwoorden we hier zodra we terug zijn.",
   "widget.messenger.online": "We zijn online",
   "widget.messenger.placeholder": "Bericht...",
+  "widget.messenger.defaultGreeting": "Hoi! 👋 Hoe kunnen we je vandaag helpen?",
   "widget.messenger.replyTime.away": "We zijn nu afwezig. We antwoorden zodra we weer online zijn.",
   "widget.messenger.replyTime.online": "We zijn online, meestal antwoorden we binnen een uur.",
   "widget.messenger.seen": "Gezien",

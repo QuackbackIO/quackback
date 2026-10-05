@@ -610,6 +610,7 @@
   "widget.messenger.offline.noEmail": "Нас сейчас нет на месте. Оставьте сообщение, и мы ответим здесь, когда вернёмся.",
   "widget.messenger.online": "Мы в сети",
   "widget.messenger.placeholder": "Сообщение...",
+  "widget.messenger.defaultGreeting": "Здравствуйте! 👋 Чем мы можем помочь сегодня?",
   "widget.messenger.replyTime.away": "Нас сейчас нет на месте. Мы ответим вам, как только снова будем на связи.",
   "widget.messenger.replyTime.online": "Мы на связи, обычно отвечаем менее чем за час.",
   "widget.messenger.seen": "Просмотрено",

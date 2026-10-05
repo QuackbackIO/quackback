@@ -15,6 +15,7 @@ import type { OidcSignInButton } from '@/lib/shared/oidc-sign-in-button'
 // logger.client-stub.ts), so it is safe for this otherwise client-bundled
 // module to import it for the one server-side parse-failure log below.
 import { logger } from '@/lib/server/logger'
+import { DEFAULT_WELCOME_MESSAGE } from '@/lib/shared/conversation/default-greeting'
 
 const log = logger.child({ component: 'settings-types' })
 
@@ -744,7 +745,7 @@ export type PublicWidgetConfig = Pick<
 
 export const DEFAULT_MESSENGER_CONFIG: MessengerConfig = {
   enabled: false,
-  welcomeMessage: 'Hi! 👋 How can we help you today?',
+  welcomeMessage: DEFAULT_WELCOME_MESSAGE,
   offlineMessage: "We're away right now. Leave a message and we'll get back to you by email.",
   // AI-first: identity on, and Quinn answers when a model is configured.
   // Admins pause replies under Automation → Agent. The widget master stays

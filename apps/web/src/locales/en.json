@@ -610,6 +610,7 @@
   "widget.messenger.offline.noEmail": "We're away right now. Leave a message and we'll reply here when we're back.",
   "widget.messenger.online": "We're online",
   "widget.messenger.placeholder": "Message...",
+  "widget.messenger.defaultGreeting": "Hi! 👋 How can we help you today?",
   "widget.messenger.replyTime.away": "We're away right now. We'll get back to you as soon as we're back online.",
   "widget.messenger.replyTime.online": "We're online, typically replies in under an hour.",
   "widget.messenger.seen": "Seen",
