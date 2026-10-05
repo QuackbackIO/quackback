@@ -16,6 +16,9 @@ import {
   adminSeedMessages,
   isTourMessage,
   loadTourMessages,
+  loadUnsubscribeMessages,
+  isSheetMessage,
+  loadSheetMessages,
 } from '../i18n'
 
 describe('normalizeLocale', () => {
@@ -224,5 +227,46 @@ describe('admin seed', () => {
     expect(tour['onboarding.tour.next']).toBe(all['onboarding.tour.next'])
     expect(Object.keys(tour).every(isTourMessage)).toBe(true)
     expect(Object.keys(tour).length).toBeGreaterThan(20)
+  })
+})
+
+describe('unsubscribe page strings', () => {
+  it('are seeded by that page alone', async () => {
+    const [all, portal, page] = await Promise.all([
+      loadMessages('de'),
+      loadPortalMessages('de'),
+      loadUnsubscribeMessages('de'),
+    ])
+    const isUnsubscribe = (key: string) => key.startsWith('unsubscribe.')
+    expect(Object.keys(page).length).toBeGreaterThan(30)
+    expect(Object.keys(page).every(isUnsubscribe)).toBe(true)
+    expect(page['unsubscribe.button']).toBe(all['unsubscribe.button'])
+    expect(Object.keys(portal).filter(isUnsubscribe)).toEqual([])
+    expect(Object.keys(adminSeedMessages(all)).filter(isUnsubscribe)).toEqual([])
+    // The post page's resubscribe banner is portal copy.
+    expect(portal['portal.unsubscribeBanner.dismiss']).toBe(all['portal.unsubscribeBanner.dismiss'])
+  })
+})
+
+describe('setup sheet strings', () => {
+  it('load with the sheets, while the entry points pages render stay seeded', async () => {
+    const [all, sheets] = await Promise.all([loadMessages('de'), loadSheetMessages('de')])
+    const seeded = adminSeedMessages(all)
+    expect(Object.keys(seeded).filter(isSheetMessage)).toEqual([])
+    expect(seeded['onboarding.live.install.title']).toBeUndefined()
+    expect(seeded['onboarding.test.badge']).toBeUndefined()
+    // Pages render these outside any sheet.
+    for (const key of [
+      'onboarding.test.title',
+      'onboarding.test.sendTest',
+      'onboarding.test.postTest',
+      'onboarding.test.postTestIdea',
+      'onboarding.test.sendTestMessage',
+    ]) {
+      expect(seeded[key]).toBe(all[key])
+    }
+    expect(sheets['onboarding.test.badge']).toBe(all['onboarding.test.badge'])
+    expect(Object.keys(sheets).length).toBeGreaterThan(40)
+    expect(Object.keys(sheets).every(isSheetMessage)).toBe(true)
   })
 })

@@ -2,8 +2,7 @@ import { Suspense } from 'react'
 import { createFileRoute, notFound, redirect, useRouteContext } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
-import { PortalNoBoards } from '@/components/public/portal-no-boards'
-import { usePortalNavItems } from '@/components/public/use-portal-nav-items'
+import { ViewerPortalNoBoards } from '@/components/public/portal-no-boards'
 import { FeedbackContainer } from '@/components/public/feedback/feedback-container'
 import { PortalWelcomeCard } from '@/components/public/feedback/portal-welcome-card'
 import { usePreviewWelcomeCard } from '@/components/public/preview-draft-context'
@@ -167,7 +166,6 @@ function PortalFeed() {
   const session = useSessionContext()
   const settings = useWorkspaceSettings()
   const { showPoweredBy } = Route.useLoaderData()
-  const navItems = usePortalNavItems()
   const search = Route.useSearch()
 
   const currentBoard = search.board
@@ -192,7 +190,7 @@ function PortalFeed() {
 
   // Empty state if no boards exist (derived from the query, not the loader).
   if (portalData.boards.length === 0) {
-    return <PortalNoBoards orgName={workspaceName} items={navItems} />
+    return <ViewerPortalNoBoards orgName={workspaceName} />
   }
 
   return (

@@ -245,15 +245,65 @@ const WIZARD_ONLY_MESSAGE_PREFIXES = [
 ] as const
 
 /**
+ * Strings only the setup sheets render (Try Messenger, install Messenger,
+ * invite the team). Each sheet is a lazy chunk opened on a click, so admin
+ * pages leave these out of the catalog they seed and the sheet loads them as
+ * it opens (see `SheetMessages`). The few that pages render outside a sheet,
+ * the buttons that open one, stay seeded.
+ */
+const SHEET_MESSAGE_PREFIXES = ['onboarding.live.', 'onboarding.test.'] as const
+const SEEDED_SHEET_MESSAGES: ReadonlySet<string> = new Set([
+  'onboarding.test.title',
+  'onboarding.test.sendTest',
+  'onboarding.test.postTest',
+  'onboarding.test.postTestIdea',
+  'onboarding.test.sendTestMessage',
+])
+
+export function isSheetMessage(key: string): boolean {
+  return (
+    SHEET_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix)) &&
+    !SEEDED_SHEET_MESSAGES.has(key)
+  )
+}
+
+/** The setup sheets' strings in a locale. */
+export async function loadSheetMessages(locale: SupportedLocale): Promise<Record<string, string>> {
+  const all = await loadMessages(locale)
+  const subset: Record<string, string> = {}
+  for (const [key, value] of Object.entries(all)) {
+    if (isSheetMessage(key)) subset[key] = value
+  }
+  return subset
+}
+
+/** The prefix of the unsubscribe page's strings, which no other page renders. */
+const UNSUBSCRIBE_MESSAGE_PREFIX = 'unsubscribe.'
+
+/** The unsubscribe page's strings in a locale: the one page that seeds them. */
+export async function loadUnsubscribeMessages(
+  locale: SupportedLocale
+): Promise<Record<string, string>> {
+  const all = await loadMessages(locale)
+  const subset: Record<string, string> = {}
+  for (const [key, value] of Object.entries(all)) {
+    if (key.startsWith(UNSUBSCRIBE_MESSAGE_PREFIX)) subset[key] = value
+  }
+  return subset
+}
+
+/**
  * The catalog an admin page seeds: everything but the strings that load with
- * a lazy surface (the file viewer, the product tour, Copilot and search), the
- * wizard's own, and email copy (formatted on the server, never rendered).
+ * a lazy surface (the file viewer, the product tour, Copilot and search, the
+ * setup sheets), the wizard's and the unsubscribe page's own, and email copy (formatted on the
+ * server, never rendered).
  */
 export function adminSeedMessages(all: Record<string, string>): Record<string, string> {
   const subset: Record<string, string> = {}
   for (const [key, value] of Object.entries(all)) {
     if (isViewerMessage(key) || isTourMessage(key) || isAskMessage(key)) continue
-    if (key.startsWith('email.')) continue
+    if (isSheetMessage(key)) continue
+    if (key.startsWith('email.') || key.startsWith(UNSUBSCRIBE_MESSAGE_PREFIX)) continue
     if (WIZARD_ONLY_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))) continue
     subset[key] = value
   }

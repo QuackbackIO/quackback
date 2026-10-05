@@ -1,7 +1,9 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { OPEN_GOING_LIVE_EVENT, type GoingLiveSheet } from './going-live-events'
+import { SheetMessages } from './sheet-messages'
 
-// Each sheet loads on its first open, so no admin page pays for them up front.
+// Each sheet loads on its first open, with its strings, so no admin page pays
+// for them up front.
 const InstallMessengerSheet = lazy(() =>
   import('./install-messenger-sheet').then((m) => ({ default: m.InstallMessengerSheet }))
 )
@@ -61,11 +63,13 @@ export function GoingLiveSheets() {
   const onOpenChange = (open: boolean) => setState((prev) => prev && { ...prev, open })
   return (
     <Suspense fallback={null}>
-      {state.sheet === 'install-messenger' ? (
-        <InstallMessengerSheet open={state.open} onOpenChange={onOpenChange} />
-      ) : (
-        <InviteTeamSheet open={state.open} onOpenChange={onOpenChange} />
-      )}
+      <SheetMessages>
+        {state.sheet === 'install-messenger' ? (
+          <InstallMessengerSheet open={state.open} onOpenChange={onOpenChange} />
+        ) : (
+          <InviteTeamSheet open={state.open} onOpenChange={onOpenChange} />
+        )}
+      </SheetMessages>
     </Suspense>
   )
 }

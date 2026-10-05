@@ -5,7 +5,7 @@ import { FormattedMessage, useIntl, type MessageDescriptor } from 'react-intl'
 import { CheckCircleIcon, XCircleIcon, EnvelopeIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
-import { loadPortalIntl } from '@/lib/server/functions/locale'
+import { loadUnsubscribeIntl } from '@/lib/server/functions/locale'
 import {
   peekUnsubscribeTokenFn,
   processUnsubscribeTokenFn,
@@ -33,12 +33,12 @@ export const Route = createFileRoute('/unsubscribe')({
   loader: async ({
     deps,
   }): Promise<
-    Awaited<ReturnType<typeof loadPortalIntl>> & {
+    Awaited<ReturnType<typeof loadUnsubscribeIntl>> & {
       token: string | null
       preview: UnsubscribePreview | { valid: false; error: PageError }
     }
   > => {
-    const intl = await loadPortalIntl()
+    const intl = await loadUnsubscribeIntl()
     if (!deps.token) return { ...intl, token: null, preview: { valid: false, error: 'missing' } }
     if (!UUID.test(deps.token)) {
       return { ...intl, token: null, preview: { valid: false, error: 'malformed' } }
@@ -96,7 +96,7 @@ function ConfirmFlow({ token, preview }: { token: string; preview: UnsubscribePr
         {preview.postTitle ? (
           <p className="text-sm text-muted-foreground">
             <FormattedMessage
-              id="portal.unsubscribe.postLabel"
+              id="unsubscribe.postLabel"
               defaultMessage="Post: {title}"
               values={{ title: <span className="font-medium">{preview.postTitle}</span> }}
             />
@@ -125,7 +125,7 @@ function DoneView({ result }: { result: UnsubscribeResult }) {
       <StatusIcon tone="success" />
       <div className="space-y-2">
         <h1 className="text-xl font-semibold text-foreground">
-          <FormattedMessage id="portal.unsubscribe.doneTitle" defaultMessage="Done" />
+          <FormattedMessage id="unsubscribe.doneTitle" defaultMessage="Done" />
         </h1>
         <p role="status" className="text-sm text-muted-foreground">
           {intl.formatMessage(copy.doneBody)}
@@ -133,7 +133,7 @@ function DoneView({ result }: { result: UnsubscribeResult }) {
         {result.action === 'unsubscribe_onboarding' ? (
           <p className="text-sm text-muted-foreground">
             <FormattedMessage
-              id="portal.unsubscribe.onboarding.turnBackOn"
+              id="unsubscribe.onboarding.turnBackOn"
               defaultMessage="Changed your mind? <link>Turn them back on</link> in your preferences."
               values={{
                 link: (chunks) => (
@@ -156,7 +156,7 @@ function DoneView({ result }: { result: UnsubscribeResult }) {
               to="/b/$slug/posts/$postId"
               params={{ slug: result.boardSlug, postId: result.postId }}
             >
-              <FormattedMessage id="portal.unsubscribe.viewPost" defaultMessage="View post" />
+              <FormattedMessage id="unsubscribe.viewPost" defaultMessage="View post" />
             </Link>
           </Button>
         ) : (
@@ -188,7 +188,7 @@ function HomeButton() {
   return (
     <Button asChild variant="outline">
       <Link to="/">
-        <FormattedMessage id="portal.unsubscribe.goHome" defaultMessage="Go to home" />
+        <FormattedMessage id="unsubscribe.goHome" defaultMessage="Go to home" />
       </Link>
     </Button>
   )
@@ -219,95 +219,95 @@ interface ActionCopy {
 }
 
 const UNSUBSCRIBE_BUTTON: MessageDescriptor = {
-  id: 'portal.unsubscribe.button',
+  id: 'unsubscribe.button',
   defaultMessage: 'Unsubscribe',
 }
 
 const ACTION_COPY: Record<string, ActionCopy> = {
   unsubscribe_post: {
     confirmTitle: {
-      id: 'portal.unsubscribe.post.confirmTitle',
+      id: 'unsubscribe.post.confirmTitle',
       defaultMessage: 'Unsubscribe from this post?',
     },
     confirmBody: {
-      id: 'portal.unsubscribe.post.confirmBody',
+      id: 'unsubscribe.post.confirmBody',
       defaultMessage: 'You will stop getting email updates about it.',
     },
     button: UNSUBSCRIBE_BUTTON,
     doneBody: {
-      id: 'portal.unsubscribe.post.doneBody',
+      id: 'unsubscribe.post.doneBody',
       defaultMessage: 'You will not get more email updates about this post.',
     },
   },
   mute_post: {
-    confirmTitle: { id: 'portal.unsubscribe.mute.confirmTitle', defaultMessage: 'Mute this post?' },
+    confirmTitle: { id: 'unsubscribe.mute.confirmTitle', defaultMessage: 'Mute this post?' },
     confirmBody: {
-      id: 'portal.unsubscribe.mute.confirmBody',
+      id: 'unsubscribe.mute.confirmBody',
       defaultMessage: 'You will stop getting notifications about it.',
     },
-    button: { id: 'portal.unsubscribe.mute.button', defaultMessage: 'Mute' },
+    button: { id: 'unsubscribe.mute.button', defaultMessage: 'Mute' },
     doneBody: {
-      id: 'portal.unsubscribe.mute.doneBody',
+      id: 'unsubscribe.mute.doneBody',
       defaultMessage: 'This post is muted. You can unmute it from the post.',
     },
   },
   unsubscribe_all: {
     confirmTitle: {
-      id: 'portal.unsubscribe.all.confirmTitle',
+      id: 'unsubscribe.all.confirmTitle',
       defaultMessage: 'Turn off all email?',
     },
     confirmBody: {
-      id: 'portal.unsubscribe.all.confirmBody',
+      id: 'unsubscribe.all.confirmBody',
       defaultMessage: 'You will stop getting every email notification.',
     },
-    button: { id: 'portal.unsubscribe.all.button', defaultMessage: 'Turn off all email' },
+    button: { id: 'unsubscribe.all.button', defaultMessage: 'Turn off all email' },
     doneBody: {
-      id: 'portal.unsubscribe.all.doneBody',
+      id: 'unsubscribe.all.doneBody',
       defaultMessage: 'All email is off. You can turn it back on in your preferences.',
     },
   },
   unsubscribe_changelog: {
     confirmTitle: {
-      id: 'portal.unsubscribe.changelog.confirmTitle',
+      id: 'unsubscribe.changelog.confirmTitle',
       defaultMessage: 'Unsubscribe from changelog emails?',
     },
     confirmBody: {
-      id: 'portal.unsubscribe.changelog.confirmBody',
+      id: 'unsubscribe.changelog.confirmBody',
       defaultMessage: 'You will stop getting an email when an update is published.',
     },
     button: UNSUBSCRIBE_BUTTON,
     doneBody: {
-      id: 'portal.unsubscribe.changelog.doneBody',
+      id: 'unsubscribe.changelog.doneBody',
       defaultMessage: 'You will not get more changelog emails. You can subscribe again any time.',
     },
   },
   unsubscribe_onboarding: {
     confirmTitle: {
-      id: 'portal.unsubscribe.onboarding.confirmTitle',
+      id: 'unsubscribe.onboarding.confirmTitle',
       defaultMessage: 'Stop setup tips?',
     },
     confirmBody: {
-      id: 'portal.unsubscribe.onboarding.confirmBody',
+      id: 'unsubscribe.onboarding.confirmBody',
       defaultMessage: 'You will stop getting setup tips by email. Nothing else changes.',
     },
-    button: { id: 'portal.unsubscribe.onboarding.button', defaultMessage: 'Stop setup tips' },
+    button: { id: 'unsubscribe.onboarding.button', defaultMessage: 'Stop setup tips' },
     doneBody: {
-      id: 'portal.unsubscribe.onboarding.doneBody',
+      id: 'unsubscribe.onboarding.doneBody',
       defaultMessage: 'Setup tips are off.',
     },
   },
   unsubscribe_status: {
     confirmTitle: {
-      id: 'portal.unsubscribe.status.confirmTitle',
+      id: 'unsubscribe.status.confirmTitle',
       defaultMessage: 'Unsubscribe from status updates?',
     },
     confirmBody: {
-      id: 'portal.unsubscribe.status.confirmBody',
+      id: 'unsubscribe.status.confirmBody',
       defaultMessage: 'You will stop getting status page emails.',
     },
     button: UNSUBSCRIBE_BUTTON,
     doneBody: {
-      id: 'portal.unsubscribe.status.doneBody',
+      id: 'unsubscribe.status.doneBody',
       defaultMessage: 'You will not get more status page emails. You can subscribe again any time.',
     },
   },
@@ -315,16 +315,16 @@ const ACTION_COPY: Record<string, ActionCopy> = {
 
 const GENERIC_COPY: ActionCopy = {
   confirmTitle: {
-    id: 'portal.unsubscribe.generic.confirmTitle',
+    id: 'unsubscribe.generic.confirmTitle',
     defaultMessage: 'Stop these emails?',
   },
   confirmBody: {
-    id: 'portal.unsubscribe.generic.confirmBody',
+    id: 'unsubscribe.generic.confirmBody',
     defaultMessage: 'You will stop getting emails like this one.',
   },
   button: UNSUBSCRIBE_BUTTON,
   doneBody: {
-    id: 'portal.unsubscribe.generic.doneBody',
+    id: 'unsubscribe.generic.doneBody',
     defaultMessage: 'Your preferences are updated.',
   },
 }
@@ -336,41 +336,41 @@ function actionCopy(action: string | undefined): ActionCopy {
 const ERROR_COPY: Record<PageError, { title: MessageDescriptor; body: MessageDescriptor }> = {
   missing: {
     title: {
-      id: 'portal.unsubscribe.error.missing.title',
+      id: 'unsubscribe.error.missing.title',
       defaultMessage: 'This link is incomplete',
     },
     body: {
-      id: 'portal.unsubscribe.error.missing.body',
+      id: 'unsubscribe.error.missing.body',
       defaultMessage: 'Use the link from your email.',
     },
   },
   malformed: {
     title: {
-      id: 'portal.unsubscribe.error.malformed.title',
+      id: 'unsubscribe.error.malformed.title',
       defaultMessage: 'This link is not valid',
     },
     body: {
-      id: 'portal.unsubscribe.error.missing.body',
+      id: 'unsubscribe.error.missing.body',
       defaultMessage: 'Use the link from your email.',
     },
   },
   invalid: {
     title: {
-      id: 'portal.unsubscribe.error.invalid.title',
+      id: 'unsubscribe.error.invalid.title',
       defaultMessage: 'This link has expired',
     },
     body: {
-      id: 'portal.unsubscribe.error.invalid.body',
+      id: 'unsubscribe.error.invalid.body',
       defaultMessage: 'It was already used or is too old. Use the link in a newer email.',
     },
   },
   failed: {
     title: {
-      id: 'portal.unsubscribe.error.failed.title',
+      id: 'unsubscribe.error.failed.title',
       defaultMessage: 'Something went wrong',
     },
     body: {
-      id: 'portal.unsubscribe.error.failed.body',
+      id: 'unsubscribe.error.failed.body',
       defaultMessage: 'We could not update your preferences. Try again in a moment.',
     },
   },
