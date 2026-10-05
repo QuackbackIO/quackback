@@ -48,7 +48,7 @@ describe('product analytics config', () => {
     expect(await load()).toBeNull()
   })
 
-  it('defaults to the US cloud host with session replay on', async () => {
+  it('defaults to the US host with session replay on', async () => {
     process.env.POSTHOG_KEY = 'phc_abc'
     expect(await load()).toEqual({
       key: 'phc_abc',
