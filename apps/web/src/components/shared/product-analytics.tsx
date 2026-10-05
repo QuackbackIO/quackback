@@ -34,8 +34,8 @@ let loaded: PostHog | null = null
 /**
  * Product analytics for the team, loaded only when the operator set
  * `POSTHOG_KEY`. The SDK is its own chunk, fetched only on a tracked route,
- * so customer-facing pages never ship it, and it talks to this origin's
- * relay rather than a third-party host content blockers drop.
+ * so customer-facing pages never ship it. Pointing `POSTHOG_HOST` at a
+ * reverse proxy on a neutral domain keeps content blockers from dropping it.
  *
  * Admin screens show the workspace's own customers, so a replay masks every
  * input and every text node, and autocapture records no element text or
@@ -84,8 +84,12 @@ export function ProductAnalytics() {
       if (cancelled) return
       if (!posthog.__loaded) {
         posthog.init(config.key, {
+          // Pinned so an SDK upgrade cannot change what is captured. A later
+          // snapshot records network request bodies, which on these screens
+          // carry the workspace's customer data.
+          defaults: '2026-05-30',
           api_host: config.apiHost,
-          ui_host: config.uiHost,
+          ...(config.uiHost ? { ui_host: config.uiHost } : {}),
           cross_subdomain_cookie: true,
           capture_pageview: 'history_change',
           capture_pageleave: true,

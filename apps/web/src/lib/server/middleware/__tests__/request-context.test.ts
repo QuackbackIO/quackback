@@ -223,16 +223,6 @@ describe('handleRequestWithContext', () => {
     }
   )
 
-  it('does NOT log completion for a relayed analytics request that succeeded', async () => {
-    const cap = capture()
-    await handleRequestWithContext({
-      request: new Request('http://localhost/api/relay/e/', { method: 'POST' }),
-      log: cap.log,
-      next: async () => ({ response: new Response('ok', { status: 200 }) }),
-    })
-    expect(cap.records().find((r) => r.msg === 'request completed')).toBeUndefined()
-  })
-
   it('still logs /api/health when the probe is unhealthy (status >= 400)', async () => {
     const cap = capture()
     const request = new Request('http://localhost/api/health')

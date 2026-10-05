@@ -23,7 +23,7 @@ const ctx = vi.hoisted(() => ({
   analytics: null as null | {
     key: string
     apiHost: string
-    uiHost: string
+    uiHost: string | null
     sessionRecording: boolean
     workspaceId: string | null
   },
@@ -64,7 +64,7 @@ beforeEach(() => {
   posthog.get_distinct_id.mockReturnValue('anon-device')
   ctx.analytics = {
     key: 'phc_test',
-    apiHost: '/api/relay',
+    apiHost: 'https://t.example.com',
     uiHost: 'https://eu.posthog.com',
     sessionRecording: true,
     workspaceId: 'ws_1',
@@ -92,7 +92,8 @@ describe('ProductAnalytics', () => {
     ]
     expect(key).toBe('phc_test')
     expect(options).toMatchObject({
-      api_host: '/api/relay',
+      defaults: '2026-05-30',
+      api_host: 'https://t.example.com',
       ui_host: 'https://eu.posthog.com',
       cross_subdomain_cookie: true,
       capture_pageview: 'history_change',

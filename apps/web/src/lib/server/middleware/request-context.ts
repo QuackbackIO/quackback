@@ -32,11 +32,6 @@ function isHealthPath(pathname: string): boolean {
   return pathname === '/api/health' || pathname.startsWith('/api/health/')
 }
 
-/** The analytics relay: a steady stream of SDK traffic, noise when it succeeds. */
-function isAnalyticsRelayPath(pathname: string): boolean {
-  return pathname.startsWith('/api/relay/')
-}
-
 function deriveRequestId(request: Request): string {
   const header = request.headers.get('x-request-id') ?? request.headers.get('x-correlation-id')
   // Cap to keep a malicious/huge header out of every log line.
@@ -101,10 +96,7 @@ export async function handleRequestWithContext<T extends NextResult>({
       const status = response?.status
       // Suppress the completion line for successful health probes. Everything
       // else — and unhealthy probes — still logs.
-      const quiet =
-        (isHealthPath(pathname) || isAnalyticsRelayPath(pathname)) &&
-        status !== undefined &&
-        status < 400
+      const quiet = isHealthPath(pathname) && status !== undefined && status < 400
       if (!quiet) {
         log.info(
           { status, duration_ms: durationMs, db_queries: metrics.dbQueries },

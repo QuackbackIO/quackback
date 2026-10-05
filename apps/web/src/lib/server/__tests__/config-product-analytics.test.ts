@@ -19,6 +19,7 @@ beforeEach(() => {
     'QUACKBACK_TENANCY',
     'POSTHOG_KEY',
     'POSTHOG_HOST',
+    'POSTHOG_UI_HOST',
     'POSTHOG_SESSION_RECORDING',
     'DISABLE_TELEMETRY',
   ]) {
@@ -53,6 +54,7 @@ describe('product analytics config', () => {
     expect(await load()).toEqual({
       key: 'phc_abc',
       host: 'https://us.i.posthog.com',
+      uiHost: 'https://us.posthog.com',
       sessionRecording: true,
     })
   })
@@ -66,8 +68,26 @@ describe('product analytics config', () => {
     expect(await load()).toEqual({
       key: 'phc_abc',
       host: 'https://eu.i.posthog.com',
+      uiHost: 'https://eu.posthog.com',
       sessionRecording: false,
     })
+  })
+
+  it('takes the app host from POSTHOG_UI_HOST when the host is a proxy domain', async () => {
+    Object.assign(process.env, {
+      POSTHOG_KEY: 'phc_abc',
+      POSTHOG_HOST: 'https://t.example.com',
+      POSTHOG_UI_HOST: 'https://eu.posthog.com/',
+    })
+    expect(await load()).toMatchObject({
+      host: 'https://t.example.com',
+      uiHost: 'https://eu.posthog.com',
+    })
+  })
+
+  it('leaves the app host unset for a proxy domain without POSTHOG_UI_HOST', async () => {
+    Object.assign(process.env, { POSTHOG_KEY: 'phc_abc', POSTHOG_HOST: 'https://t.example.com' })
+    expect(await load()).toMatchObject({ host: 'https://t.example.com', uiHost: null })
   })
 
   it('is independent of DISABLE_TELEMETRY', async () => {
