@@ -205,6 +205,7 @@
   "admin.inbox.filesSectionTitle": "Files",
   "admin.inbox.translationOverAllowance": "Your AI allowance is used up. Translation keeps working.",
   "admin.helpCenter.autoTranslatePaused": "Paused: AI allowance used up",
+  "admin.billing.aiResets": "Resets {date}",
   "portal.header.nav.feedback": "Feedback",
   "portal.header.nav.roadmap": "Roadmap",
   "portal.header.nav.changelog": "Changelog",

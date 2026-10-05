@@ -205,6 +205,7 @@
   "admin.inbox.filesSectionTitle": "Fichiers",
   "admin.inbox.translationOverAllowance": "Le budget IA est épuisé. La traduction continue de fonctionner.",
   "admin.helpCenter.autoTranslatePaused": "En pause : budget IA épuisé",
+  "admin.billing.aiResets": "Réinitialisation le {date}",
   "portal.header.nav.feedback": "Feedback",
   "portal.header.nav.roadmap": "Roadmap",
   "portal.header.nav.changelog": "Nouveautés",

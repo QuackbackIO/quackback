@@ -205,6 +205,7 @@
   "admin.inbox.filesSectionTitle": "الملفات",
   "admin.inbox.translationOverAllowance": "نفدت ميزانية الذكاء الاصطناعي. تستمر الترجمة في العمل.",
   "admin.helpCenter.autoTranslatePaused": "متوقف مؤقتًا: نفدت ميزانية الذكاء الاصطناعي",
+  "admin.billing.aiResets": "يُعاد التعيين في {date}",
   "portal.header.nav.feedback": "الملاحظات",
   "portal.header.nav.roadmap": "خارطة الطريق",
   "portal.header.nav.changelog": "آخر المستجدات",

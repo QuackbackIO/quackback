@@ -205,6 +205,7 @@
   "admin.inbox.filesSectionTitle": "Файлы",
   "admin.inbox.translationOverAllowance": "Бюджет ИИ исчерпан. Перевод продолжает работать.",
   "admin.helpCenter.autoTranslatePaused": "Приостановлено: бюджет ИИ исчерпан",
+  "admin.billing.aiResets": "Сброс {date}",
   "portal.header.nav.feedback": "Обратная связь",
   "portal.header.nav.roadmap": "Дорожная карта",
   "portal.header.nav.changelog": "Журнал изменений",

@@ -205,6 +205,7 @@
   "admin.inbox.filesSectionTitle": "Pliki",
   "admin.inbox.translationOverAllowance": "Budżet AI został wyczerpany. Tłumaczenie nadal działa.",
   "admin.helpCenter.autoTranslatePaused": "Wstrzymano: budżet AI wyczerpany",
+  "admin.billing.aiResets": "Odnowienie {date}",
   "portal.header.nav.feedback": "Pomysły",
   "portal.header.nav.roadmap": "Plan rozwoju",
   "portal.header.nav.changelog": "Lista zmian",

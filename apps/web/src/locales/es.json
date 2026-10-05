@@ -205,6 +205,7 @@
   "admin.inbox.filesSectionTitle": "Archivos",
   "admin.inbox.translationOverAllowance": "Se agotó el presupuesto de IA. La traducción sigue funcionando.",
   "admin.helpCenter.autoTranslatePaused": "En pausa: presupuesto de IA agotado",
+  "admin.billing.aiResets": "Se restablece el {date}",
   "portal.header.nav.feedback": "Feedback",
   "portal.header.nav.roadmap": "Roadmap",
   "portal.header.nav.changelog": "Novedades",

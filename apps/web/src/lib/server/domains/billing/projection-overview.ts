@@ -1,3 +1,4 @@
+import type { AiBudgetWindow } from '@/lib/server/domains/ai/ai-budget'
 import { getCloudConfig } from '@/lib/server/domains/settings/cloud/cloud.service'
 import {
   PLAN_CATALOGUE,
@@ -21,6 +22,12 @@ export type BillingAiOverview = {
   includedCents: number
   usedCents: number
   extraCents: number
+  /**
+   * When the AI allowance resets, if that is not the start of the next
+   * calendar month (a trial's allowance runs to the trial end). Null means
+   * the monthly reset shown for the other meters applies.
+   */
+  resetsAt: string | null
 }
 
 export interface BillingProjectionOverview {
@@ -47,13 +54,15 @@ export function composeAiUsage(input: {
   tokenCap: number | null
   includedCents: number
   blendedCentsPerMTok: number
+  window?: AiBudgetWindow
 }): BillingAiOverview {
   const rate = input.blendedCentsPerMTok
   const usedCents = rate > 0 ? Math.round((input.usedTokens * rate) / 1_000_000) : 0
   const includedTokens = rate > 0 ? (input.includedCents * 1_000_000) / rate : 0
   const extraTokens = input.tokenCap != null ? Math.max(0, input.tokenCap - includedTokens) : 0
   const extraCents = rate > 0 ? Math.round((extraTokens * rate) / 1_000_000) : 0
-  return { includedCents: input.includedCents, usedCents, extraCents }
+  const resetsAt = input.window?.kind === 'trial' ? input.window.end.toISOString() : null
+  return { includedCents: input.includedCents, usedCents, extraCents, resetsAt }
 }
 
 export function catalogueAiIncludedCents(
@@ -111,12 +120,14 @@ export async function getBillingProjectionOverview(): Promise<BillingProjectionO
 
   const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
   const { countSeatUsage } = await import('@/lib/server/domains/principals/seat-usage')
-  const { aiTokensThisWindow } = await import('@/lib/server/domains/ai/ai-budget')
+  const { aiBudgetWindow } = await import('@/lib/server/domains/ai/ai-budget')
+  const { aiTokensInWindow } = await import('@/lib/server/domains/ai/usage-counter')
+  const aiWindow = aiBudgetWindow(cloud)
 
   const [limits, seats, usedTokens, catalogue, planLimitsMaxTeamSeats] = await Promise.all([
     getTierLimits(),
     countSeatUsage(),
-    aiTokensThisWindow(),
+    aiTokensInWindow(aiWindow.start, aiWindow.end),
     loadCatalogue(),
     projectedPlanLimitsMaxTeamSeats(),
   ])
@@ -139,6 +150,7 @@ export async function getBillingProjectionOverview(): Promise<BillingProjectionO
           tokenCap: limits.aiTokensPerMonth,
           includedCents,
           blendedCentsPerMTok: blended,
+          window: aiWindow,
         })
       : null
 

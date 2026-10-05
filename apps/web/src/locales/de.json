@@ -205,6 +205,7 @@
   "admin.inbox.filesSectionTitle": "Dateien",
   "admin.inbox.translationOverAllowance": "Das KI-Budget ist aufgebraucht. Die Übersetzung läuft weiter.",
   "admin.helpCenter.autoTranslatePaused": "Pausiert: KI-Budget aufgebraucht",
+  "admin.billing.aiResets": "Wird am {date} zurückgesetzt",
   "portal.header.nav.feedback": "Feedback",
   "portal.header.nav.roadmap": "Roadmap",
   "portal.header.nav.changelog": "Neuigkeiten",

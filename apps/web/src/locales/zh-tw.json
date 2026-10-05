@@ -205,6 +205,7 @@
   "admin.inbox.filesSectionTitle": "檔案",
   "admin.inbox.translationOverAllowance": "AI 預算已用盡，翻譯仍可繼續使用。",
   "admin.helpCenter.autoTranslatePaused": "已暫停：AI 預算已用盡",
+  "admin.billing.aiResets": "{date} 重設",
   "portal.header.nav.feedback": "意見回饋",
   "portal.header.nav.roadmap": "產品藍圖",
   "portal.header.nav.changelog": "更新日誌",

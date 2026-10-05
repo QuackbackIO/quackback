@@ -205,6 +205,7 @@
   "admin.inbox.filesSectionTitle": "Bestanden",
   "admin.inbox.translationOverAllowance": "Het AI-budget is op. Vertalen blijft werken.",
   "admin.helpCenter.autoTranslatePaused": "Gepauzeerd: AI-budget is op",
+  "admin.billing.aiResets": "Wordt gereset op {date}",
   "portal.header.nav.feedback": "Feedback",
   "portal.header.nav.roadmap": "Roadmap",
   "portal.header.nav.changelog": "Changelog",
