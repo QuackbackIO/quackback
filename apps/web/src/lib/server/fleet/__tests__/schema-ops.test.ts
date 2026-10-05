@@ -36,6 +36,7 @@ import {
   MigrationPreflightError,
   REQUIRED_EXTENSIONS,
   type ConcurrentIndexSpec,
+  type IndexBuildEvent,
   type PreflightFacts,
 } from '@quackback/db/schema-ops'
 
@@ -207,6 +208,29 @@ describe('ensureConcurrentIndexes', () => {
   it('builds a spec index that does not exist yet', async () => {
     expect(await ensureConcurrentIndexes(sql, [spec])).toEqual([])
     expect(await isValid('widgets_name_idx')).toBe(true)
+  })
+
+  it('reports each build it does, and nothing for an index that is already valid', async () => {
+    const events: IndexBuildEvent[] = []
+    const record = (e: IndexBuildEvent) => events.push(e)
+
+    await ensureConcurrentIndexes(sql, [spec], record)
+    expect(events.map((e) => [e.phase, e.name, e.reason])).toEqual([
+      ['start', 'widgets_name_idx', 'missing'],
+      ['done', 'widgets_name_idx', 'missing'],
+    ])
+    expect(events[1]!.durationMs).toBeGreaterThanOrEqual(0)
+
+    events.length = 0
+    await ensureConcurrentIndexes(sql, [spec], record)
+    expect(events).toEqual([])
+
+    await invalidate('widgets_name_idx')
+    await ensureConcurrentIndexes(sql, [spec], record)
+    expect(events.map((e) => [e.phase, e.reason])).toEqual([
+      ['start', 'invalid'],
+      ['done', 'invalid'],
+    ])
   })
 })
 

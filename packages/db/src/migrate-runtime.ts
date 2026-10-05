@@ -76,6 +76,8 @@ import {
   ensureConcurrentIndexes,
   ensureExtensions,
   verifySchemaPostconditions,
+  CONCURRENT_INDEX_SPECS,
+  type IndexBuildEvent,
   type InvalidIndex,
   type PostconditionReport,
 } from './schema-ops'
@@ -160,6 +162,11 @@ export interface RunMigrationsOptions {
    * transaction commits.
    */
   onMigration?: (event: MigrationProgress) => void
+  /**
+   * Called as each concurrent index that is missing or INVALID is built. An
+   * index that already exists and is valid produces no event.
+   */
+  onIndexBuild?: (event: IndexBuildEvent) => void
 }
 
 export interface PendingMigrations {
@@ -250,6 +257,7 @@ export async function runMigrations(
     onStep = () => {},
     onPending = () => {},
     onMigration = () => {},
+    onIndexBuild = () => {},
   } = options
 
   if (lockTimeoutMs !== undefined && !Number.isSafeInteger(lockTimeoutMs)) {
@@ -304,7 +312,7 @@ export async function runMigrations(
 
     if (concurrentIndexes) {
       onStep('concurrent-indexes')
-      await ensureConcurrentIndexes(sql)
+      await ensureConcurrentIndexes(sql, CONCURRENT_INDEX_SPECS, onIndexBuild)
     }
 
     if (seed) {

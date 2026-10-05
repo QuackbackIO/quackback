@@ -66,7 +66,6 @@ async function main() {
         console.log(
           `   Migrations committed in ${formatDuration(performance.now() - migrateStartedAt)}`
         )
-        console.log('🔄 Building search indexes (can take a while on a large database)...')
       }
     },
     onPending: ({ tags }) => {
@@ -83,6 +82,16 @@ async function main() {
         )
       }
       migrateStartedAt = performance.now()
+    },
+    onIndexBuild: (event) => {
+      if (event.phase === 'start') {
+        console.log(
+          `🔄 ${event.reason === 'invalid' ? 'Rebuilding invalid' : 'Building'} index ` +
+            `${event.name} (can take a while on a large database)...`
+        )
+      } else {
+        console.log(`   Built ${event.name} in ${formatDuration(event.durationMs ?? 0)}`)
+      }
     },
     onMigration: (event) => {
       if (event.phase === 'start') {

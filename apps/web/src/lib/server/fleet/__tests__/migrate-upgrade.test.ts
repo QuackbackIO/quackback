@@ -25,7 +25,11 @@ import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import postgres from 'postgres'
 import { runMigrations, type MigrationProgress } from '@quackback/db/migrate'
-import { CONCURRENT_INDEX_SPECS, MigrationPreflightError } from '@quackback/db/schema-ops'
+import {
+  CONCURRENT_INDEX_SPECS,
+  MigrationPreflightError,
+  type IndexBuildEvent,
+} from '@quackback/db/schema-ops'
 import { BUNDLED_MIGRATIONS, MIGRATIONS_DIR } from '@quackback/db/schema-version'
 
 const ADMIN_URL =
@@ -168,6 +172,28 @@ describe('upgrading a database at the last released schema', () => {
       onPending: ({ tags }) => pending.push(tags),
     })
     expect(pending).toEqual([[]])
+  })
+
+  it('reports an index rebuild on a start with nothing pending, and is quiet otherwise', async () => {
+    const builds: IndexBuildEvent[] = []
+    const opts = {
+      requireSessionMode: false,
+      seed: false,
+      verify: false,
+      onIndexBuild: (e: IndexBuildEvent) => builds.push(e),
+    }
+    await runMigrations(dsnFor(SCRATCH), opts)
+    expect(builds).toEqual([])
+
+    // What a build killed mid-flight leaves behind, on a current install.
+    await sql.unsafe(
+      `UPDATE pg_index SET indisvalid = false WHERE indexrelid = 'user_name_trgm_idx'::regclass`
+    )
+    await runMigrations(dsnFor(SCRATCH), opts)
+    expect(builds.map((e) => [e.phase, e.name])).toEqual([
+      ['start', 'user_name_trgm_idx'],
+      ['done', 'user_name_trgm_idx'],
+    ])
   })
 })
 

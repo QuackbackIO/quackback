@@ -437,9 +437,19 @@ export async function dropInvalidIndexes(sql: postgres.Sql): Promise<DropInvalid
  * spec's index is checked first and dropped when invalid, then built. Returns
  * the names it had to drop and rebuild.
  */
+export interface IndexBuildEvent {
+  phase: 'start' | 'done'
+  name: string
+  /** `missing`: never built. `invalid`: a killed build left it unusable. */
+  reason: 'missing' | 'invalid'
+  /** Set on `done`. */
+  durationMs?: number
+}
+
 export async function ensureConcurrentIndexes(
   sql: postgres.Sql,
-  specs: readonly ConcurrentIndexSpec[] = CONCURRENT_INDEX_SPECS
+  specs: readonly ConcurrentIndexSpec[] = CONCURRENT_INDEX_SPECS,
+  onBuild: (event: IndexBuildEvent) => void = () => {}
 ): Promise<string[]> {
   const rebuilt: string[] = []
   for (const spec of specs) {
@@ -450,7 +460,16 @@ export async function ensureConcurrentIndexes(
       `SELECT indisvalid FROM pg_index WHERE indexrelid = to_regclass($1)`,
       [spec.name]
     )
-    if (existing && !existing.indisvalid) {
+    // A valid index is left alone and reported as nothing: the build below is
+    // an IF NOT EXISTS no-op for it, and a quiet start is the normal case.
+    if (existing?.indisvalid) {
+      await sql.unsafe(spec.ddl)
+      continue
+    }
+    const reason = existing ? 'invalid' : 'missing'
+    onBuild({ phase: 'start', name: spec.name, reason })
+    const started = performance.now()
+    if (existing) {
       // DROP INDEX CONCURRENTLY is refused on a partitioned parent, exactly
       // like the build, so it follows the spec's own `concurrent` flag.
       await sql.unsafe(
@@ -459,6 +478,12 @@ export async function ensureConcurrentIndexes(
       rebuilt.push(spec.name)
     }
     await sql.unsafe(spec.ddl)
+    onBuild({
+      phase: 'done',
+      name: spec.name,
+      reason,
+      durationMs: performance.now() - started,
+    })
   }
   return rebuilt
 }
