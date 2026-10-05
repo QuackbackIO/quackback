@@ -22,6 +22,37 @@ describe('upstreamFor', () => {
     )
   })
 
+  it('relays only the endpoints the SDK calls', () => {
+    const host = 'https://ph.internal.example'
+    for (const path of [
+      '/e/',
+      '/s/',
+      '/i/v0/e/',
+      '/i/v1/logs',
+      '/flags/',
+      '/decide/',
+      '/batch/',
+      '/static/array.js',
+      '/array/phc_x/config.js',
+      '/api/surveys/',
+      '/api/early_access_features/',
+    ]) {
+      expect(upstreamFor(host, path)).toBe(`${host}${path}`)
+    }
+    for (const path of [
+      '/',
+      '/api/projects/1/',
+      '/admin/',
+      '/login',
+      '/api/personal_api_keys/',
+      '/e/../api/projects/1/',
+      '/e/%2e%2e/api/projects/1/',
+      '/static/../../admin',
+    ]) {
+      expect(upstreamFor(host, path)).toBeNull()
+    }
+  })
+
   it('refuses a path that could leave the PostHog host', () => {
     expect(upstreamFor('https://us.i.posthog.com', '//evil.test/x')).toBeNull()
     expect(upstreamFor('https://us.i.posthog.com', 'e/')).toBeNull()
