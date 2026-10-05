@@ -34,7 +34,35 @@ const state = vi.hoisted(() => ({
   modelCalls: 0,
   /** Runs once, right after the allowance check returns. */
   afterBudgetCheck: null as null | (() => Promise<void>),
+  /** Runs once, immediately before auto-translate writes its result. */
+  beforeAutoWrite: null as null | (() => Promise<void>),
 }))
+
+// The seam just before the auto-translate write, whichever function performs
+// it. The manual write the hook makes goes through the real module.
+vi.mock('../help-center-translations.service', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../help-center-translations.service')>()
+  const runHook = async () => {
+    const hook = state.beforeAutoWrite
+    state.beforeAutoWrite = null
+    if (hook) await hook()
+  }
+  const wrapped: Record<string, unknown> = {
+    ...real,
+    upsertArticleTranslation: async (...args: Parameters<typeof real.upsertArticleTranslation>) => {
+      if (args[1]?.source === 'auto') await runHook()
+      return real.upsertArticleTranslation(...args)
+    },
+  }
+  const guarded = (real as Record<string, unknown>).writeGuardedArticleTranslation
+  if (typeof guarded === 'function') {
+    wrapped.writeGuardedArticleTranslation = async (...args: unknown[]) => {
+      await runHook()
+      return (guarded as (...a: unknown[]) => unknown)(...args)
+    }
+  }
+  return wrapped
+})
 
 vi.mock('@/lib/server/domains/ai/ai-budget', () => ({
   getAiBudgetStatus: async () => {
@@ -159,6 +187,7 @@ describe.skipIf(!fixture.available)('parked auto-translate never replaces manual
     state.exhausted = true
     state.modelCalls = 0
     state.afterBudgetCheck = null
+    state.beforeAutoWrite = null
   })
   afterEach(fixture.rollback)
   afterAll(fixture.close)
@@ -272,5 +301,46 @@ describe.skipIf(!fixture.available)('parked auto-translate never replaces manual
 
     expect(state.modelCalls).toBe(0)
     expect((await translation(articleId, 'de'))?.content).toBe('Von Hand geschrieben.')
+  })
+
+  async function releaseAndRun(articleId: KbArticleId) {
+    state.exhausted = false
+    await runHelpCenterTranslateResume(job({}))
+    for (const { payload } of await pendingFor(articleId)) {
+      await runHelpCenterTranslate(job(payload))
+    }
+  }
+
+  it('an edit landing just before the write survives (existing translation)', async () => {
+    const articleId = await seedArticle()
+    await upsertArticleTranslation({ ...manual(articleId), content: 'Erste Fassung.' })
+    await park(articleId)
+    state.beforeAutoWrite = async () => {
+      await upsertArticleTranslation(manual(articleId))
+      await setArticleTranslationStatus(articleId, 'de', 'published')
+    }
+    await releaseAndRun(articleId)
+
+    const row = await translation(articleId, 'de')
+    expect(row?.content).toBe('Von Hand geschrieben.')
+    expect(row?.status).toBe('published')
+  })
+
+  it('an edit landing just before the write survives (no translation when parked)', async () => {
+    const articleId = await seedArticle()
+    await park(articleId)
+    state.beforeAutoWrite = async () => {
+      await upsertArticleTranslation(manual(articleId))
+    }
+    await releaseAndRun(articleId)
+    expect((await translation(articleId, 'de'))?.content).toBe('Von Hand geschrieben.')
+  })
+
+  it('a released job over an unchanged existing translation still writes', async () => {
+    const articleId = await seedArticle()
+    await upsertArticleTranslation({ ...manual(articleId), content: 'Erste Fassung.' })
+    await park(articleId)
+    await releaseAndRun(articleId)
+    expect((await translation(articleId, 'de'))?.content).toBe('AUTO body')
   })
 })

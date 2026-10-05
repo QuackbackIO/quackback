@@ -21,7 +21,11 @@ import { getChatModel } from '@/lib/server/domains/ai/models'
 import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import { getHelpCenterConfig } from '@/lib/server/domains/settings/settings.service'
 import { getArticleById } from './help-center.article.service'
-import { getArticleTranslation, upsertArticleTranslation } from './help-center-translations.service'
+import {
+  getArticleTranslation,
+  upsertArticleTranslation,
+  writeGuardedArticleTranslation,
+} from './help-center-translations.service'
 import { logger } from '@/lib/server/logger'
 import type { KbArticleId } from '@quackback/ids'
 import type { HelpCenterArticleWithCategory } from './help-center.types'
@@ -129,7 +133,8 @@ export async function translateArticleForLocale(
   }
 
   // A job that was parked must not replace a translation a person changed
-  // while it waited. Checked before the model call and again before writing.
+  // while it waited. Checked here to save the model call; the write itself
+  // is conditional as well.
   if (opts.guard && !(await translationUnchanged(articleId, locale, opts.guard))) {
     log.info({ article_id: articleId, locale }, 'auto-translate skipped: translation changed')
     return
@@ -176,22 +181,25 @@ export async function translateArticleForLocale(
     return
   }
 
-  if (opts.guard && !(await translationUnchanged(articleId, locale, opts.guard))) {
-    log.info({ article_id: articleId, locale }, 'auto-translate skipped: translation changed')
-    return
+  const result = {
+    articleId,
+    locale,
+    title: parsed.title,
+    description: parsed.description || undefined,
+    content: parsed.content,
+    contentJson: markdownToTiptapJson(parsed.content),
   }
-
-  await upsertArticleTranslation(
-    {
-      articleId,
-      locale,
-      title: parsed.title,
-      description: parsed.description || undefined,
-      content: parsed.content,
-      contentJson: markdownToTiptapJson(parsed.content),
-    },
-    { source: 'auto' }
-  )
+  if (opts.guard) {
+    // Conditional in the same statement, so a change saved after the check
+    // above but before this write still wins.
+    const written = await writeGuardedArticleTranslation(result, opts.guard.translationUpdatedAt)
+    if (!written) {
+      log.info({ article_id: articleId, locale }, 'auto-translate skipped: translation changed')
+      return
+    }
+  } else {
+    await upsertArticleTranslation(result, { source: 'auto' })
+  }
   log.info({ article_id: articleId, locale }, 'auto-translate: draft translation written')
 }
 

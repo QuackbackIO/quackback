@@ -7,6 +7,7 @@ import {
   db,
   eq,
   and,
+  sql,
   helpCenterArticleTranslations,
   helpCenterCategoryTranslations,
   type TiptapContent,
@@ -97,6 +98,49 @@ export async function upsertArticleTranslation(
     })
     .returning()
   return row
+}
+
+/**
+ * Auto-translate's write for a job parked at the AI allowance: one statement
+ * that writes only if the translation is still what the job saw when parked
+ * (`baselineUpdatedAt`, or no row at all when null). A person's change that
+ * lands at any point before this statement wins, including a published
+ * translation, which stays exactly as they left it. Returns whether a row
+ * was written.
+ *
+ * Compared at millisecond precision because the baseline went through a JS
+ * Date, which keeps only milliseconds.
+ */
+export async function writeGuardedArticleTranslation(
+  input: UpsertArticleTranslationInput,
+  baselineUpdatedAt: string | null
+): Promise<boolean> {
+  const values = {
+    articleId: input.articleId,
+    locale: input.locale,
+    title: input.title,
+    description: input.description ?? null,
+    content: input.content,
+    contentJson: input.contentJson ?? null,
+  }
+  const insert = db.insert(helpCenterArticleTranslations).values(values)
+  const rows =
+    baselineUpdatedAt === null
+      ? await insert.onConflictDoNothing().returning({ id: helpCenterArticleTranslations.id })
+      : await insert
+          .onConflictDoUpdate({
+            target: [helpCenterArticleTranslations.articleId, helpCenterArticleTranslations.locale],
+            set: {
+              title: values.title,
+              description: values.description,
+              content: values.content,
+              contentJson: values.contentJson,
+              updatedAt: new Date(),
+            },
+            setWhere: sql`date_trunc('milliseconds', ${helpCenterArticleTranslations.updatedAt}) = ${baselineUpdatedAt}::timestamptz`,
+          })
+          .returning({ id: helpCenterArticleTranslations.id })
+  return rows.length > 0
 }
 
 export async function setArticleTranslationStatus(
