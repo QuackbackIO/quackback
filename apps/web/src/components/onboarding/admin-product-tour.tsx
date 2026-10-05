@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from
 import { useCopilotOnHome } from '@/components/admin/ask/copilot-on-home'
 import { ProductTourProvider, type TourEndAction } from './product-tour'
 import type { TryMessengerStart } from './try-messenger-sheet'
+import { SheetMessages } from './sheet-messages'
 
 // The admin layout owns the one Try Messenger sheet and is the only module
 // that loads it. The sheet embeds the inbox thread; loaded from the pages'
@@ -60,7 +61,9 @@ export function AdminProductTourProvider({ children }: { children: ReactNode }) 
       {children}
       {sheet && (
         <Suspense fallback={null}>
-          <TryMessengerSheet open={sheet.open} onOpenChange={onOpenChange} start={sheet.start} />
+          <SheetMessages>
+            <TryMessengerSheet open={sheet.open} onOpenChange={onOpenChange} start={sheet.start} />
+          </SheetMessages>
         </Suspense>
       )}
     </ProductTourProvider>

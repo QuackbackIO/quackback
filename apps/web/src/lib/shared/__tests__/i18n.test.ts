@@ -17,6 +17,8 @@ import {
   isTourMessage,
   loadTourMessages,
   loadUnsubscribeMessages,
+  isSheetMessage,
+  loadSheetMessages,
 } from '../i18n'
 
 describe('normalizeLocale', () => {
@@ -243,5 +245,28 @@ describe('unsubscribe page strings', () => {
     expect(Object.keys(adminSeedMessages(all)).filter(isUnsubscribe)).toEqual([])
     // The post page's resubscribe banner is portal copy.
     expect(portal['portal.unsubscribeBanner.dismiss']).toBe(all['portal.unsubscribeBanner.dismiss'])
+  })
+})
+
+describe('setup sheet strings', () => {
+  it('load with the sheets, while the entry points pages render stay seeded', async () => {
+    const [all, sheets] = await Promise.all([loadMessages('de'), loadSheetMessages('de')])
+    const seeded = adminSeedMessages(all)
+    expect(Object.keys(seeded).filter(isSheetMessage)).toEqual([])
+    expect(seeded['onboarding.live.install.title']).toBeUndefined()
+    expect(seeded['onboarding.test.badge']).toBeUndefined()
+    // Pages render these outside any sheet.
+    for (const key of [
+      'onboarding.test.title',
+      'onboarding.test.sendTest',
+      'onboarding.test.postTest',
+      'onboarding.test.postTestIdea',
+      'onboarding.test.sendTestMessage',
+    ]) {
+      expect(seeded[key]).toBe(all[key])
+    }
+    expect(sheets['onboarding.test.badge']).toBe(all['onboarding.test.badge'])
+    expect(Object.keys(sheets).length).toBeGreaterThan(40)
+    expect(Object.keys(sheets).every(isSheetMessage)).toBe(true)
   })
 })
