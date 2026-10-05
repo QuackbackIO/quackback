@@ -13,6 +13,7 @@ import {
 import { friendlyPlatformLabel, platformUrlSuffix } from '@/lib/shared/platform-label'
 import { toastEnabledModules } from '@/lib/client/enabled-modules-toast'
 import { isPathManagedFromBootstrap, MANAGED_PATHS } from '@/lib/client/config-file'
+import { track } from '@/lib/client/analytics'
 
 const DRAFT_KEY = 'quackback:onboarding:workspace-name'
 
@@ -65,6 +66,7 @@ export function CloudWorkspaceDetailsStep(props: { identity: CloudIdentity }) {
     canonicalOrigin: string
   }): Promise<void> {
     await markCloudWorkspaceDetailsSeenFn()
+    void track('onboarding_workspace_details_completed', { domainChanged: Boolean(transfer) })
     if (transfer) {
       const target = new URL('/auth/origin-transfer', transfer.canonicalOrigin)
       target.searchParams.set('ott', transfer.token)
@@ -243,6 +245,7 @@ function WorkspaceNameStep({
         data: { workspaceName: workspaceName.trim() },
       })
       toastEnabledModules(result.enabledModules)
+      void track('onboarding_workspace_saved', { enabledModules: result.enabledModules })
       localStorage.removeItem(DRAFT_KEY)
       await navigate({ to: '/admin' })
     } catch (err) {

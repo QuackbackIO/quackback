@@ -7,6 +7,7 @@ import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { startOidcSignIn } from '@/lib/client/start-oidc-sign-in'
 import type { WorkspaceClaim } from '@/lib/server/functions/onboarding'
 import type { OidcSignInButton } from '@/lib/shared/oidc-sign-in-button'
+import { track } from '@/lib/client/analytics'
 
 /** Sign-in methods the workspace actually allows, in the shape
  *  `PortalAuthFormInline` already consumes on the portal. */
@@ -49,6 +50,7 @@ function useAdvanceOnAuthSuccess(): void {
 
   useAuthBroadcast({
     onSuccess: () => {
+      void track('onboarding_account_created')
       void (async () => {
         await router.invalidate()
         await navigate({ to: ONBOARDING_CALLBACK })
