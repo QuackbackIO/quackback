@@ -5,8 +5,6 @@
  * Summaries include a prose overview, urgency level, key quotes, and next steps.
  */
 
-import { chat } from '@tanstack/ai'
-import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
 import { z } from 'zod'
 import {
   db,
@@ -22,10 +20,8 @@ import {
   notInArray,
 } from '@/lib/server/db'
 import { config } from '@/lib/server/config'
-import {
-  isAiClientConfigured,
-  structuredOutputProviderOptions,
-} from '@/lib/server/domains/ai/config'
+import { isAiClientConfigured } from '@/lib/server/domains/ai/config'
+import { structuredChat } from '@/lib/server/domains/ai/structured-chat'
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { commentPlainText } from '@/lib/server/markdown-tiptap'
@@ -179,16 +175,12 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
 
   let summaryJson: PostSummaryJson
   try {
-    summaryJson = await chat({
-      adapter: openaiCompatibleText(model, {
-        baseURL: config.openaiBaseUrl!,
-        apiKey: config.openaiApiKey!,
-      }),
+    summaryJson = await structuredChat({
+      model,
       systemPrompts: [systemPrompt],
       messages: [{ role: 'user', content: input }],
-      outputSchema: PostSummarySchema,
-      stream: false,
-      modelOptions: { max_tokens: 1000, ...structuredOutputProviderOptions() },
+      schema: PostSummarySchema,
+      maxTokens: 1000,
     })
   } catch (err) {
     if (!isStructuredOutputError(err)) throw err
