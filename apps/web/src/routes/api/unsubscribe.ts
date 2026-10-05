@@ -9,12 +9,19 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
  * One-click unsubscribe (RFC 8058). Every email carrying an unsubscribe token
  * names this URL in `List-Unsubscribe` with `List-Unsubscribe-Post:
  * List-Unsubscribe=One-Click`, so the mail client's own unsubscribe button
- * works without opening the page. POST only: link scanners issue GETs, and
- * the /unsubscribe page a GET reaches only asks the person to confirm.
+ * works without opening the page. Only POST spends the token: link scanners
+ * issue GETs, so a GET (from a mail client that knows the header but not
+ * one-click) is sent on to the /unsubscribe page, which asks the person to
+ * confirm.
  */
 export const Route = createFileRoute('/api/unsubscribe')({
   server: {
     handlers: {
+      GET: ({ request }) => {
+        const token = new URL(request.url).searchParams.get('token')
+        const query = token ? `?${new URLSearchParams({ token })}` : ''
+        return new Response(null, { status: 303, headers: { Location: `/unsubscribe${query}` } })
+      },
       POST: async ({ request }) => {
         const token = new URL(request.url).searchParams.get('token')
         if (!token || !UUID.test(token)) {
