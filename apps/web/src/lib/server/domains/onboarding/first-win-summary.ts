@@ -24,6 +24,7 @@ import {
 } from '@/lib/server/db'
 import { notTestPrincipal } from '@/lib/server/test-data'
 import { winOutcome, winRules } from '@/lib/server/activation-wins'
+import { principalShownName } from '@/lib/shared/greeting-name'
 
 export interface FirstWinSummary {
   kind: 'idea' | 'teamIdea' | 'conversation' | 'helpful' | 'subscriber'
@@ -48,9 +49,22 @@ function domainOf(email: string | null | undefined): string | null {
   return at > 0 ? email.slice(at + 1).toLowerCase() : null
 }
 
-function nameOf(displayName: string | null, userName: string | null): string | null {
-  const name = (userName || displayName || '').trim()
-  return name.length > 0 ? name : null
+interface Who {
+  principalType: string | null
+  displayName: string | null
+  userName: string | null
+  email: string | null
+}
+
+/** Who acted, by the shown-name rule; an anonymous visitor without a name is just a visitor. */
+function nameOf(row: Who): { name: string | null; visitor?: true } {
+  const name = principalShownName({
+    type: row.principalType,
+    displayName: row.displayName,
+    name: row.userName,
+    email: row.email,
+  })
+  return name === null && row.principalType === 'anonymous' ? { name, visitor: true } : { name }
 }
 
 function snippet(text: string | null): string | null {
@@ -63,6 +77,7 @@ function snippet(text: string | null): string | null {
 export async function firstWinSummary(state: SetupState | null): Promise<FirstWinSummary | null> {
   const outcome = winOutcome(state)
   const who = {
+    principalType: principal.type,
     displayName: principal.displayName,
     userName: user.name,
     email: user.email,
@@ -86,7 +101,7 @@ export async function firstWinSummary(state: SetupState | null): Promise<FirstWi
       .limit(1)
     return {
       kind: 'conversation',
-      name: nameOf(row.displayName, row.userName),
+      ...nameOf(row),
       domain: domainOf(row.email),
       subject: snippet(first?.content ?? null),
       at: row.at.toISOString(),
@@ -106,7 +121,7 @@ export async function firstWinSummary(state: SetupState | null): Promise<FirstWi
     if (!row) return null
     return {
       kind: 'subscriber',
-      name: nameOf(row.displayName, row.userName),
+      ...nameOf(row),
       domain: domainOf(row.email),
       subject: null,
       at: row.at.toISOString(),
@@ -134,9 +149,9 @@ export async function firstWinSummary(state: SetupState | null): Promise<FirstWi
     if (!row) return null
     return {
       kind: 'helpful',
-      name: nameOf(row.displayName, row.userName),
+      ...nameOf(row),
       domain: domainOf(row.email),
-      ...(row.principalId === null ? { visitor: true } : {}),
+      ...(row.principalId === null ? { visitor: true as const } : {}),
       subject: row.title,
       at: row.at.toISOString(),
       href: `/admin/help-center?article=${row.articleId}`,
@@ -171,7 +186,7 @@ export async function firstWinSummary(state: SetupState | null): Promise<FirstWi
   if (!row) return null
   return {
     kind: outcome === 'internal' ? 'teamIdea' : 'idea',
-    name: nameOf(row.displayName, row.userName),
+    ...nameOf(row),
     domain: outcome === 'internal' ? null : domainOf(row.email),
     subject: row.title,
     votes: row.votes,

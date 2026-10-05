@@ -15,6 +15,8 @@ export interface SessionUser {
   emailVerified: boolean
   image: string | null
   principalType: PrincipalType
+  /** An anonymous visitor's generated name, which their ideas and comments carry. */
+  displayName?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -65,6 +67,9 @@ export async function getSession(): Promise<Session | null> {
         emailVerified: session.user.emailVerified,
         image: session.user.image ?? null,
         principalType: (principalRecord?.type as PrincipalType) ?? 'user',
+        ...(principalRecord?.type === 'anonymous'
+          ? { displayName: principalRecord.displayName ?? null }
+          : {}),
         createdAt: session.user.createdAt.toISOString(),
         updatedAt: session.user.updatedAt.toISOString(),
       },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { accountDisplayName, greetingName, shownName } from '../greeting-name'
+import { accountDisplayName, greetingName, principalShownName, shownName } from '../greeting-name'
 
 describe('greetingName', () => {
   it('uses the first name', () => {
@@ -48,5 +48,37 @@ describe('shownName', () => {
     expect(shownName('Ana Silva', 'ana@northwind.test')).toBe('Ana Silva')
     expect(shownName('', 'x1@northwind.test')).toBe('x1@northwind.test')
     expect(shownName(null, null)).toBe('')
+  })
+})
+
+describe('principalShownName', () => {
+  it('names an anonymous visitor by their generated name, never the account placeholder', () => {
+    expect(
+      principalShownName({
+        type: 'anonymous',
+        displayName: 'Snowy Cardinal',
+        name: 'Anonymous',
+        email: 'temp-abc@anon.example',
+      })
+    ).toBe('Snowy Cardinal')
+  })
+
+  it('gives no name for an anonymous visitor without a generated one', () => {
+    expect(
+      principalShownName({ type: 'anonymous', displayName: ' ', name: 'Anonymous', email: null })
+    ).toBeNull()
+  })
+
+  it('names a person by the name they gave, else their email, else their principal name', () => {
+    expect(
+      principalShownName({ type: 'user', displayName: 'Old', name: 'Ana Silva', email: null })
+    ).toBe('Ana Silva')
+    expect(
+      principalShownName({ type: 'user', displayName: null, name: '', email: 'ana@x.example' })
+    ).toBe('Ana')
+    expect(
+      principalShownName({ type: 'user', displayName: 'Ana S', name: null, email: null })
+    ).toBe('Ana S')
+    expect(principalShownName({ type: null, displayName: null, name: null, email: null })).toBeNull()
   })
 })

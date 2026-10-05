@@ -46,3 +46,21 @@ export function shownName(
 ): string {
   return accountDisplayName(name, email) ?? (name?.trim() || email || '')
 }
+
+/**
+ * The name a principal goes by wherever someone else sees it. An anonymous
+ * visitor goes by their generated name (their account's own name is only a
+ * placeholder); anyone else by the name they gave, else one from their email,
+ * else their principal's name. Null when none is left, so the caller can
+ * say "a visitor" or "a customer".
+ */
+export function principalShownName(who: {
+  type: string | null | undefined
+  displayName: string | null | undefined
+  name: string | null | undefined
+  email: string | null | undefined
+}): string | null {
+  const display = who.displayName?.trim() || null
+  if (who.type === 'anonymous') return display
+  return accountDisplayName(who.name, who.email) ?? display
+}

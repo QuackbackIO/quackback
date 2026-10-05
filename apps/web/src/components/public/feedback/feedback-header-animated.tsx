@@ -82,6 +82,7 @@ export function FeedbackHeaderAnimated({
 
   // Identified users post as themselves; anonymous posting is handled separately.
   const isAnonymousSession = session?.user?.principalType === 'anonymous'
+  const anonymousName = isAnonymousSession ? session?.user?.displayName?.trim() || null : null
   const effectiveUser =
     session?.user && !isAnonymousSession
       ? { name: shownName(session.user.name, session.user.email), email: session.user.email }
@@ -421,6 +422,25 @@ export function FeedbackHeaderAnimated({
                     id="portal.feedback.header.noAccess"
                     defaultMessage="You don't have access to post on this board"
                   />
+                </p>
+              ) : isAnonymousSession && canPostAnonymously ? (
+                // A visitor who never signed in posts under their generated
+                // name, and has nothing to sign out of.
+                <p className="text-xs text-muted-foreground">
+                  {anonymousName ? (
+                    <>
+                      <FormattedMessage
+                        id="portal.feedback.header.postingAs"
+                        defaultMessage="Posting as"
+                      />{' '}
+                      <span className="font-medium text-foreground">{anonymousName}</span>
+                    </>
+                  ) : (
+                    <FormattedMessage
+                      id="portal.feedback.header.postingAnonymously"
+                      defaultMessage="Posting anonymously"
+                    />
+                  )}
                 </p>
               ) : effectiveUser ? (
                 <p className="text-xs text-muted-foreground">

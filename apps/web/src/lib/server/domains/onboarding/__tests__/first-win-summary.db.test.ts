@@ -8,6 +8,7 @@ import {
   boards,
   conversationMessages,
   conversations,
+  eq,
   helpCenterArticleFeedback,
   helpCenterArticles,
   helpCenterCategories,
@@ -173,6 +174,52 @@ it('names the article a signed-out visitor found helpful', async () => {
     subject: 'How do I reset my password?',
     at: '2026-10-01T10:00:00.000Z',
     href: `/admin/help-center?article=${article!.id}`,
+  })
+})
+
+async function anonymousVisitor(displayName: string | null) {
+  const userId = createId('user') as UserId
+  const id = createId('principal') as PrincipalId
+  await testDb
+    .insert(user)
+    .values({ id: userId, name: 'Anonymous', email: `temp-${userId}@anon.example` })
+  await testDb
+    .insert(principal)
+    .values({ id, userId, role: 'user', type: 'anonymous', displayName, createdAt: new Date() })
+  return id
+}
+
+it('names an anonymous idea by the visitor generated name, else as a visitor', async () => {
+  const [board] = await testDb
+    .insert(boards)
+    .values({ name: 'Ideas', slug: createId('board') })
+    .returning()
+  const snowy = await anonymousVisitor('Snowy Cardinal')
+  await testDb.insert(posts).values({
+    boardId: board!.id,
+    principalId: snowy,
+    title: 'Dark mode',
+    content: '',
+    createdAt: new Date('2026-10-01T10:00:00Z'),
+  })
+  const named = await firstWinSummary(state(['product_feedback']))
+  expect(named).toMatchObject({ kind: 'idea', name: 'Snowy Cardinal', domain: null })
+  expect(named?.visitor).toBeUndefined()
+
+  await testDb.delete(posts).where(eq(posts.principalId, snowy))
+  const nameless = await anonymousVisitor(null)
+  await testDb.insert(posts).values({
+    boardId: board!.id,
+    principalId: nameless,
+    title: 'Dark mode',
+    content: '',
+    createdAt: new Date('2026-10-01T10:00:00Z'),
+  })
+  expect(await firstWinSummary(state(['product_feedback']))).toMatchObject({
+    kind: 'idea',
+    name: null,
+    domain: null,
+    visitor: true,
   })
 })
 

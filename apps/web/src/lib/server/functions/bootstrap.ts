@@ -131,6 +131,9 @@ async function getSessionAndRole(): Promise<{
           emailVerified: session.user.emailVerified,
           image: session.user.image ?? null,
           principalType: (principalRecord?.type as PrincipalType) ?? 'user',
+          ...(principalRecord?.type === 'anonymous'
+            ? { displayName: principalRecord.displayName ?? null }
+            : {}),
           createdAt: session.user.createdAt.toISOString(),
           updatedAt: session.user.updatedAt.toISOString(),
         },
