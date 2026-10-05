@@ -111,12 +111,12 @@ export async function getBillingProjectionOverview(): Promise<BillingProjectionO
 
   const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
   const { countSeatUsage } = await import('@/lib/server/domains/principals/seat-usage')
-  const { aiTokensThisMonth } = await import('@/lib/server/domains/ai/usage-counter')
+  const { aiTokensThisWindow } = await import('@/lib/server/domains/ai/ai-budget')
 
   const [limits, seats, usedTokens, catalogue, planLimitsMaxTeamSeats] = await Promise.all([
     getTierLimits(),
     countSeatUsage(),
-    aiTokensThisMonth(),
+    aiTokensThisWindow(),
     loadCatalogue(),
     projectedPlanLimitsMaxTeamSeats(),
   ])

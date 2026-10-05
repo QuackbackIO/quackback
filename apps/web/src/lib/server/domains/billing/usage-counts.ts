@@ -22,7 +22,7 @@ import {
   statusComponents,
   emailSendingDomains,
 } from '@/lib/server/db'
-import { aiTokensThisMonth } from '@/lib/server/domains/ai/usage-counter'
+import { aiTokensThisWindow } from '@/lib/server/domains/ai/ai-budget'
 import { countSeatUsage } from '@/lib/server/domains/principals/seat-usage'
 import { emailsSentThisMonth } from '@/lib/server/email/email-budget'
 import { apiRequestsThisMonth } from '@/lib/server/domains/api/monthly-usage'
@@ -63,7 +63,7 @@ export async function loadUsageCounts(): Promise<Record<string, number>> {
       .from(roles)
       .where(eq(roles.isSystem, false)),
     db.select({ count: sql<number>`count(*)::int` }).from(emailSendingDomains),
-    aiTokensThisMonth(),
+    aiTokensThisWindow(),
     emailsSentThisMonth(),
     apiRequestsThisMonth(),
   ])

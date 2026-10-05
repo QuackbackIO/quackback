@@ -15,8 +15,14 @@ export async function aiTokensThisMonth(): Promise<number> {
 
 /** Sum successful chat-completion tokens in the UTC month containing `at`. */
 export async function aiTokensInUtcMonth(at: Date): Promise<number> {
-  const start = utcMonthStart(at)
-  const end = utcNextMonthStart(at)
+  return aiTokensInWindow(utcMonthStart(at), utcNextMonthStart(at))
+}
+
+/**
+ * Sum successful tokens in [start, end). The allowance gate passes the window
+ * from `ai-budget.ts`, which is a trial's whole span while one is running.
+ */
+export async function aiTokensInWindow(start: Date, end: Date): Promise<number> {
   const result = await db.execute(sql`
     SELECT coalesce(sum(total_tokens), 0)::bigint AS total
     FROM ai_usage_log
@@ -29,10 +35,10 @@ export async function aiTokensInUtcMonth(at: Date): Promise<number> {
   return Number(rows[0]?.total ?? 0)
 }
 
-function utcMonthStart(at: Date): Date {
+export function utcMonthStart(at: Date): Date {
   return new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), 1))
 }
 
-function utcNextMonthStart(at: Date): Date {
+export function utcNextMonthStart(at: Date): Date {
   return new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() + 1, 1))
 }
