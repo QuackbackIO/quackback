@@ -19,13 +19,7 @@ function makeChain() {
 
 vi.mock('@/lib/server/db', () => ({
   db: { select: vi.fn(() => makeChain()) },
-  helpCenterCategories: {
-    id: 'id',
-    slug: 'slug',
-    name: 'name',
-    isPublic: 'is_public',
-    deletedAt: 'cat_deleted',
-  },
+  helpCenterCategories: { id: 'id', slug: 'slug', name: 'name', isPublic: 'is_public', deletedAt: 'cat_deleted' },
   helpCenterArticles: {
     id: 'id',
     slug: 'slug',
@@ -62,8 +56,9 @@ vi.mock('@/lib/server/db', () => ({
   ),
 }))
 
-const { orTermsTsQueryForLocale, hybridSearchForLocale } =
-  await import('../help-center-search.service')
+const { orTermsTsQueryForLocale, hybridSearchForLocale } = await import(
+  '../help-center-search.service'
+)
 
 beforeEach(() => {
   mockGenerateKbQueryEmbedding.mockReset()
