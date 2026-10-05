@@ -44,6 +44,24 @@ function parseUserContentOrigin(value: string): string | null {
   }
 }
 
+/** An RFC 9110 field name (`token`), already lowercased. */
+const HEADER_TOKEN_RE = /^[!#$%&'*+\-.^_`|~0-9a-z]+$/
+
+/**
+ * Why a `TRUSTED_CLIENT_IP_HEADER` value cannot be used, or null when it can.
+ * X-Forwarded-For is a list whose trust is positional, which is what
+ * TRUSTED_PROXY_HOPS handles; the app's own `x-quackback-*` headers carry
+ * addresses it resolved or verified itself and must never be taken from a proxy.
+ */
+function trustedClientIpHeaderProblem(name: string): string | null {
+  if (!HEADER_TOKEN_RE.test(name)) return 'not a valid HTTP header name'
+  if (name === 'x-forwarded-for') {
+    return 'X-Forwarded-For is a list; use TRUSTED_PROXY_HOPS to pick the trusted entry instead'
+  }
+  if (name.startsWith('x-quackback-')) return 'x-quackback-* headers are reserved for the app'
+  return null
+}
+
 // =============================================================================
 // Schema Helpers
 // =============================================================================
@@ -161,6 +179,15 @@ const configSchema = z
     oauthRefreshGraceSeconds: envInt.default(7 * 24 * 60 * 60),
 
     trustedProxyHops: envInt.pipe(z.number().int().min(0).max(10)).default(0),
+    /**
+     * A single-value header the operator's reverse proxy sets (or overwrites)
+     * to the client address, e.g. `x-real-ip` or `cf-connecting-ip`. Consulted
+     * before TRUSTED_PROXY_HOPS; see getClientIp() in domains/api/rate-limit.
+     */
+    trustedClientIpHeader: z.preprocess(
+      (val) => (typeof val === 'string' ? val.trim().toLowerCase() || undefined : val),
+      z.string().optional()
+    ),
 
     // Email (all optional)
     emailFrom: z.string().optional(),
@@ -260,6 +287,17 @@ const configSchema = z
       })
     }
 
+    if (cfg.trustedClientIpHeader !== undefined) {
+      const reason = trustedClientIpHeaderProblem(cfg.trustedClientIpHeader)
+      if (reason) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['trustedClientIpHeader'],
+          message: `TRUSTED_CLIENT_IP_HEADER is ${cfg.trustedClientIpHeader}: ${reason}`,
+        })
+      }
+    }
+
     if (cfg.userContentUrl !== undefined && !parseUserContentOrigin(cfg.userContentUrl)) {
       ctx.addIssue({
         code: 'custom',
@@ -331,6 +369,7 @@ function buildConfigFromEnv(): unknown {
     oauthRefreshGraceSeconds: env('OAUTH_REFRESH_GRACE_SECONDS'),
 
     trustedProxyHops: env('TRUSTED_PROXY_HOPS'),
+    trustedClientIpHeader: env('TRUSTED_CLIENT_IP_HEADER'),
 
     // Email
     emailFrom: env('EMAIL_FROM'),
@@ -533,6 +572,9 @@ export const config = {
 
   get trustedProxyHops() {
     return loadConfig().trustedProxyHops
+  },
+  get trustedClientIpHeader(): string | undefined {
+    return loadConfig().trustedClientIpHeader
   },
 
   // Email

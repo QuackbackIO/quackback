@@ -19,7 +19,7 @@ import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const { proxyConfig, mockGetRequestIP } = vi.hoisted(() => ({
-  proxyConfig: { hops: 0 },
+  proxyConfig: { hops: 0, header: undefined as string | undefined },
   mockGetRequestIP: vi.fn(),
 }))
 
@@ -27,6 +27,9 @@ vi.mock('@/lib/server/config', () => ({
   config: {
     get trustedProxyHops() {
       return proxyConfig.hops
+    },
+    get trustedClientIpHeader() {
+      return proxyConfig.header
     },
   },
 }))
@@ -46,6 +49,7 @@ import { signCustomerHost, signEdgeClientIp } from '@/lib/server/workspaces/saas
 
 beforeEach(() => {
   proxyConfig.hops = 0
+  proxyConfig.header = undefined
   mockGetRequestIP.mockReset()
 })
 
@@ -73,6 +77,24 @@ describe('withTrustedClientIp', () => {
     mockGetRequestIP.mockReturnValue(undefined)
     const headers = withTrustedClientIp({ [CLIENT_IP_HEADER]: '9.9.9.9' })
     expect(headers.has(CLIENT_IP_HEADER)).toBe(false)
+  })
+
+  it('uses the operator-trusted client address header when configured', () => {
+    proxyConfig.header = 'x-real-ip'
+    proxyConfig.hops = 1
+    mockGetRequestIP.mockReturnValue('10.0.0.1')
+    const request = withTrustedClientIpRequest(
+      new Request('https://acme.example/api/auth/sign-in/email', {
+        method: 'POST',
+        headers: {
+          'x-forwarded-for': '9.9.9.9, 10.0.0.3',
+          'x-real-ip': '198.51.100.4',
+          [CLIENT_IP_HEADER]: '9.9.9.9',
+        },
+        body: '{}',
+      })
+    )
+    expect(request.headers.get(CLIENT_IP_HEADER)).toBe('198.51.100.4')
   })
 
   it('leaves the caller headers untouched', () => {

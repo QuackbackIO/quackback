@@ -4,8 +4,8 @@
  * primitive so this limiter shares plumbing with the sign-in limiters rather
  * than re-implementing bucket bookkeeping.
  *
- * Forwarding headers are ignored unless TRUSTED_PROXY_HOPS is configured;
- * see getClientIp() below for the two resolution modes.
+ * Forwarding headers are ignored unless TRUSTED_CLIENT_IP_HEADER or
+ * TRUSTED_PROXY_HOPS is configured; see getClientIp() below for the rules.
  */
 import { bucketRetryAfter, incrementBuckets } from '@/lib/server/utils/rate-bucket'
 import { API_MONTH_BUCKET_KEY, secondsUntilNextUtcMonth } from './monthly-usage'
@@ -57,6 +57,39 @@ function warnEdgeClientIpRejected(reason: EdgeClientIpRejection): void {
     { reason },
     'Ignoring a signed edge client address. Until the edge proxy and this process agree on QUACKBACK_SAAS_EDGE_SECRET, clock and trusted origin, custom-host visitors share one rate-limit bucket.'
   )
+}
+
+// A configured client-address header that is missing or unusable sends the
+// request down the TRUSTED_PROXY_HOPS path, which behind a proxy usually means
+// the proxy's own address and one shared bucket. Warn at most once a minute:
+// a proxy that does not set the header misses it on every request. The value
+// is never logged, since it may be client-written.
+const TRUSTED_HEADER_WARN_INTERVAL_MS = 60_000
+let lastTrustedHeaderWarnAt = 0
+
+function warnTrustedClientIpHeaderUnusable(header: string, present: boolean): void {
+  const now = Date.now()
+  if (now - lastTrustedHeaderWarnAt < TRUSTED_HEADER_WARN_INTERVAL_MS) return
+  lastTrustedHeaderWarnAt = now
+  log.warn(
+    { header, present },
+    'TRUSTED_CLIENT_IP_HEADER is set but the request does not carry a single valid IP address in that header, so the client address falls back to TRUSTED_PROXY_HOPS. Check that the reverse proxy sets this header on every request.'
+  )
+}
+
+/** The address in the configured header, or null when it is not exactly one IP. */
+function trustedHeaderIp(headers: Headers, header: string): string | null {
+  const value = headers.get(header)
+  if (value === null) {
+    warnTrustedClientIpHeaderUnusable(header, false)
+    return null
+  }
+  const candidate = value.trim()
+  // A comma means the header was appended to rather than overwritten, so the
+  // proxy did not establish which entry is the client: accept none of them.
+  if (!candidate.includes(',') && isIP(candidate)) return candidate
+  warnTrustedClientIpHeaderUnusable(header, true)
+  return null
 }
 
 // Configuration
@@ -131,7 +164,15 @@ function requestHostname(source: Request | Headers, headers: Headers): string | 
  * parameter is unused when trustedHops === 0 (see below) but is kept so
  * every call site has one signature regardless of mode.
  *
- * Two resolution modes, chosen by TRUSTED_PROXY_HOPS:
+ * With TRUSTED_CLIENT_IP_HEADER set, the address in that header is used when
+ * it holds exactly one valid IP. It is for proxies that set or overwrite one
+ * authoritative header (nginx `proxy_set_header X-Real-IP $remote_addr`,
+ * CF-Connecting-IP), which is the only reliable source when requests cross
+ * several internal proxies of unknown count. The operator vouches that the
+ * proxy never passes a client's copy through. A missing or unusable value
+ * falls back to the rules below and logs a throttled warning.
+ *
+ * Otherwise, two resolution modes, chosen by TRUSTED_PROXY_HOPS:
  *
  * - hops === 0 (default, direct exposure): headers are entirely untrusted,
  *   since any client can set X-Forwarded-For/CF-Connecting-IP/X-Real-IP on
@@ -148,12 +189,13 @@ function requestHostname(source: Request | Headers, headers: Headers): string | 
  *   observed, so counting from the right lands on what the outermost
  *   trusted proxy actually saw regardless of how many untrusted entries a
  *   client prepends further left. Single-value headers like
- *   CF-Connecting-IP/X-Real-IP are intentionally not consulted: unlike
- *   X-Forwarded-For's position-based trust, there is no way to tell
+ *   CF-Connecting-IP/X-Real-IP are not consulted here: unlike
+ *   X-Forwarded-For's position-based trust, nothing in the request tells
  *   whether such a header was set by a trusted hop or relayed unmodified
- *   from the client, so honoring them would reopen the same spoofing gap.
+ *   from the client. Only the operator knows, which is why reading one
+ *   takes an explicit TRUSTED_CLIENT_IP_HEADER.
  *
- * Both modes yield to a visitor address signed by the trusted edge proxy that
+ * All of these yield to a visitor address signed by the trusted edge proxy that
  * serves custom hostnames (see `edgeClientIp` in workspaces/saas-edge-host):
  * that proxy is the TCP peer and the last X-Forwarded-For hop of every such
  * request, so either rule alone would put all of its visitors in one bucket.
@@ -178,6 +220,18 @@ export function getClientIp(source: Request | Headers): string {
   // Startup validates config before serving traffic. Unit-level consumers may
   // intentionally load this helper without a complete runtime environment;
   // fail closed to direct-peer semantics in that case.
+  const trustedHeader = (() => {
+    try {
+      return config.trustedClientIpHeader
+    } catch {
+      return undefined
+    }
+  })()
+  if (trustedHeader) {
+    const ip = trustedHeaderIp(headers, trustedHeader)
+    if (ip) return ip
+  }
+
   const trustedHops = (() => {
     try {
       return config.trustedProxyHops
@@ -187,7 +241,9 @@ export function getClientIp(source: Request | Headers): string {
   })()
 
   if (trustedHops === 0) {
-    warnIfForwardedHeaders(headers)
+    // With a trusted header configured the operator has described their proxy;
+    // its own warning above covers a request that lacks it.
+    if (!trustedHeader) warnIfForwardedHeaders(headers)
     try {
       const peer = getRequestIP()
       if (peer && isIP(peer)) return peer

@@ -659,6 +659,17 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   },
   {
     file: 'apps/web/src/lib/server/domains/api/rate-limit.ts',
+    name: 'lastTrustedHeaderWarnAt',
+    category: 'process-lifetime',
+    reason:
+      'Timestamp throttling the unusable TRUSTED_CLIENT_IP_HEADER warning to one line a minute. It ' +
+      'holds a single number about the PROCESS and no workspace data, never the header value: the ' +
+      'header name is process configuration and the proxy that fails to set it fronts every ' +
+      'workspace alike, so sharing the throttle across workspaces costs at most a minute of ' +
+      'suppressed duplicate log lines.',
+  },
+  {
+    file: 'apps/web/src/lib/server/domains/api/rate-limit.ts',
     name: 'warnedForwardedHeaders',
     category: 'process-lifetime',
     reason:

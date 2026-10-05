@@ -246,6 +246,14 @@ server {
 }
 ```
 
+This config sets `X-Real-IP` to the address nginx saw and overwrites any copy the client sent, so you can tell Quackback to read the client IP from it instead of counting hops:
+
+```bash
+TRUSTED_CLIENT_IP_HEADER=x-real-ip
+```
+
+Use `TRUSTED_CLIENT_IP_HEADER` when your proxy sets one authoritative client-IP header (`X-Real-IP` as above, `CF-Connecting-IP` behind Cloudflare), especially when requests pass through more proxies than you can count. Use `TRUSTED_PROXY_HOPS` when you know the exact number of proxies that append to `X-Forwarded-For`. Only name a header your proxy always sets or overwrites, and keep the app port unreachable except through the proxy; a header passed through from clients lets them spoof their IP.
+
 Quackback accepts MP4 and WebM feedback videos up to 100 MB. If another proxy,
 load balancer, or hosting platform sits in front of Quackback, set its request
 body limit above 100 MB as well. Image uploads remain limited to 5 MB.
@@ -411,7 +419,7 @@ There is no rolling upgrade and no downgrade: new migrations are not reversible,
    - If your `.env` has a `REDIS_URL` line, delete it. Redis and Dragonfly are no longer used. The 0.13 compose file set it for you, so most installs have none.
    - If you set `MINIO_IMAGE_TAG` or `MC_IMAGE_TAG`, remove them.
    - Set `SECRET_KEY` to the value your 0.13 instance used. The compose file refuses to start without it.
-   - Set `TRUSTED_PROXY_HOPS`. Behind nginx, Caddy, Traefik or a Cloudflare tunnel, set it to `1` (`2` for a CDN plus a proxy). Left at `0` behind a proxy, every client shares the proxy's IP and one rate-limit bucket, and the app logs a warning. Keep `0` if clients connect directly. See [Reverse Proxy](#reverse-proxy).
+   - Set `TRUSTED_PROXY_HOPS`. Behind nginx, Caddy, Traefik or a Cloudflare tunnel, set it to `1` (`2` for a CDN plus a proxy). Left at `0` behind a proxy, every client shares the proxy's IP and one rate-limit bucket, and the app logs a warning. Keep `0` if clients connect directly. If your proxy sets a single client-IP header such as `X-Real-IP`, you can set `TRUSTED_CLIENT_IP_HEADER` instead. See [Reverse Proxy](#reverse-proxy).
    - Keep exactly one email sending provider: `EMAIL_SMTP_HOST`, the `EMAIL_SES_*` keys or `EMAIL_RESEND_API_KEY`. With more than one set, the app will not start; it stops after the migrations have run, so check this now. If a Resend key is there only to receive inbound mail while SMTP or SES sends, add `EMAIL_INBOUND_PROVIDER=resend`.
 
 3. **Check your database.** `DATABASE_URL` must be a direct or session-mode connection, not a transaction pooler (for example a pooler on port 6543), because realtime uses `LISTEN`/`NOTIFY`. Use PostgreSQL 14 or newer with pgvector 0.5 or newer and the `pg_trgm` extension.
