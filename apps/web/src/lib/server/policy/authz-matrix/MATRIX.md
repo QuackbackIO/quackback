@@ -1054,7 +1054,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-224 of 1072 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+226 of 1074 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1153,6 +1153,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/status.ts`::getStatusPageFn | server-fn |
 | `lib/server/functions/status.ts`::getStatusUptimeFn | server-fn |
 | `lib/server/functions/status.ts`::listStatusHistoryFn | server-fn |
+| `lib/server/functions/subscriptions.ts`::peekUnsubscribeTokenFn | server-fn |
 | `lib/server/functions/subscriptions.ts`::processUnsubscribeTokenFn | server-fn |
 | `lib/server/functions/uploads.ts`::checkS3ConfiguredFn | server-fn |
 | `lib/server/functions/uploads.ts`::getWidgetImageUploadUrlFn | server-fn |
@@ -1229,6 +1230,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/api/storage/$.ts`::PUT | route |
 | `routes/api/track.ts`::OPTIONS | route |
 | `routes/api/track.ts`::POST | route |
+| `routes/api/unsubscribe.ts`::POST | route |
 | `routes/api/upload/file.ts`::POST | route |
 | `routes/api/upload/image.ts`::POST | route |
 | `routes/api/user/avatar.$userId.ts`::GET | route |
