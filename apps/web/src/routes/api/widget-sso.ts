@@ -14,9 +14,9 @@ export async function handleWidgetSso(): Promise<Response> {
     email: user.email,
     name: user.name,
   })
-  if (!ssoToken) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  // No signing secret here, or no real address to sign for: nothing to
+  // identify, which is not an error the browser console should show.
+  if (!ssoToken) return new Response(null, { status: 204 })
   return Response.json({ ssoToken })
 }
 

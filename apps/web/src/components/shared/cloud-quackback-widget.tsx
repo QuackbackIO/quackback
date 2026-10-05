@@ -72,7 +72,7 @@ export function CloudQuackbackWidget({ launcherHidden = false }: { launcherHidde
     let cancelled = false
     void (async () => {
       const res = await fetch('/api/widget-sso')
-      if (!res.ok || cancelled) return
+      if (!res.ok || res.status === 204 || cancelled) return
       const body: unknown = await res.json().catch(() => null)
       const ssoToken =
         body && typeof body === 'object' && 'ssoToken' in body && typeof body.ssoToken === 'string'
