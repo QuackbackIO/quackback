@@ -6,7 +6,11 @@ import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { createArticleSchema } from '@/lib/shared/schemas/help-center'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
-import { useCreateArticle, usePublishArticle } from '@/lib/client/mutations/help-center'
+import {
+  useCreateArticle,
+  usePublishArticle,
+  useUpdateArticle,
+} from '@/lib/client/mutations/help-center'
 import { useHasPermission } from '@/lib/client/use-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { KbArticleId } from '@quackback/ids'
@@ -41,12 +45,16 @@ export function CreateArticleDialog({
   const [categoryId, setCategoryId] = useState('')
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false)
   const createArticleMutation = useCreateArticle()
+  const updateArticleMutation = useUpdateArticle()
   const publishArticleMutation = usePublishArticle()
   // Publishing takes the same permission as writing; checked so the button
   // never offers what the server would refuse.
   const canPublish = useHasPermission(PERMISSIONS.HELP_CENTER_MANAGE)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const isPending = createArticleMutation.isPending || publishArticleMutation.isPending
+  const isPending =
+    createArticleMutation.isPending ||
+    updateArticleMutation.isPending ||
+    publishArticleMutation.isPending
   const navigate = useNavigate()
 
   const form = useForm({
@@ -74,29 +82,37 @@ export function CreateArticleDialog({
     [form]
   )
 
-  // A draft that saved but did not publish: a retry publishes it, never a second copy.
+  // A draft that saved but did not publish: a retry saves the current edits
+  // into it and publishes it, never a second copy.
   const [savedDraftId, setSavedDraftId] = useState<string | null>(null)
 
   const save = (publish: boolean) =>
     form.handleSubmit(async (data) => {
       setSaveError(null)
+      const content = {
+        categoryId: data.categoryId,
+        title: data.title,
+        content: data.content,
+        contentJson: contentJson as TiptapContent | null,
+      }
       let articleId = savedDraftId
       try {
-        if (!articleId) {
-          const newArticle = await createArticleMutation.mutateAsync({
-            categoryId: data.categoryId,
-            title: data.title,
-            content: data.content,
-            contentJson: contentJson as TiptapContent | null,
-          })
-          articleId = newArticle.id
+        if (articleId) {
+          await updateArticleMutation.mutateAsync({ id: articleId, ...content })
+        } else {
+          articleId = (await createArticleMutation.mutateAsync(content)).id
         }
+      } catch (error) {
+        setSaveError(error instanceof Error ? error.message : String(error))
+        return
+      }
+      try {
         if (publish) await publishArticleMutation.mutateAsync(articleId as KbArticleId)
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
-        if (articleId) setSavedDraftId(articleId)
+        setSavedDraftId(articleId)
         // Stay open, so whoever clicked Publish sees it is not live yet.
-        setSaveError(articleId ? `Saved as a draft, but not published: ${message}` : message)
+        setSaveError(`Saved as a draft, but not published: ${message}`)
         return
       }
       handleOpenChange(false)
@@ -116,6 +132,7 @@ export function CreateArticleDialog({
       setContentJson(null)
       setCategoryId('')
       createArticleMutation.reset()
+      updateArticleMutation.reset()
       publishArticleMutation.reset()
       setSaveError(null)
       setSavedDraftId(null)

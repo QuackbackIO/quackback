@@ -8,6 +8,8 @@ import { afterEach, expect, it, vi } from 'vitest'
 const calls = vi.hoisted(() => ({
   created: [] as unknown[],
   published: [] as unknown[],
+  updated: [] as unknown[],
+  updateFailures: 0,
   canManage: true,
   publishFailures: 0,
   navigate: vi.fn(),
@@ -31,6 +33,13 @@ vi.mock('@/lib/client/mutations/help-center', () => {
   })
   return {
     useCreateArticle: mutation(calls.created, () => ({ id: 'kb_article_1' })),
+    useUpdateArticle: mutation(calls.updated, (input) => {
+      if (calls.updateFailures > 0) {
+        calls.updateFailures -= 1
+        throw new Error('Saving is unavailable')
+      }
+      return input
+    }),
     usePublishArticle: mutation(calls.published, (id) => {
       if (calls.publishFailures > 0) {
         calls.publishFailures -= 1
@@ -54,7 +63,20 @@ vi.mock('../help-center-form-fields', () => ({
       form.setValue('title', 'Getting started')
       onContentChange({ json: () => ({ type: 'doc' }), markdown: () => 'Hello' })
     }, [form, onContentChange])
-    return error ? <p role="alert">{error}</p> : null
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => {
+            form.setValue('title', 'Getting started, revised')
+            onContentChange({ json: () => ({ type: 'doc', v: 2 }), markdown: () => 'Hello again' })
+          }}
+        >
+          Edit
+        </button>
+        {error ? <p role="alert">{error}</p> : null}
+      </>
+    )
   },
 }))
 vi.mock('../help-center-metadata-sidebar', () => ({
@@ -70,6 +92,8 @@ afterEach(() => {
   calls.published.length = 0
   calls.canManage = true
   calls.publishFailures = 0
+  calls.updated.length = 0
+  calls.updateFailures = 0
   calls.navigate.mockReset()
 })
 
@@ -110,6 +134,35 @@ it('keeps a failed publish in view, and publishes the saved draft on retry', asy
   await waitFor(() => expect(calls.navigate).toHaveBeenCalledTimes(1))
   // The draft saved the first time: the retry publishes it, never a second copy.
   expect(calls.created).toHaveLength(1)
+  expect(calls.published).toEqual(['kb_article_1', 'kb_article_1'])
+  expect(onOpenChange).toHaveBeenCalledWith(false)
+})
+
+it('saves edits made after a failed publish into the same draft before publishing', async () => {
+  calls.publishFailures = 1
+  calls.updateFailures = 1
+  const onOpenChange = vi.fn()
+  render(<CreateArticleDialog open onOpenChange={onOpenChange} />)
+  const user = userEvent.setup()
+  await user.click(await screen.findByRole('button', { name: 'Publish' }))
+  await screen.findByRole('alert')
+
+  await user.click(screen.getByRole('button', { name: 'Edit' }))
+  // The save of the edits fails: the dialog stays open with the error, nothing published.
+  await user.click(screen.getByRole('button', { name: 'Publish' }))
+  expect(await screen.findByText(/Saving is unavailable/)).toBeInTheDocument()
+  expect(calls.published).toEqual(['kb_article_1'])
+  expect(calls.navigate).not.toHaveBeenCalled()
+
+  await user.click(screen.getByRole('button', { name: 'Publish' }))
+  await waitFor(() => expect(calls.navigate).toHaveBeenCalledTimes(1))
+  expect(calls.created).toHaveLength(1)
+  expect(calls.updated.at(-1)).toMatchObject({
+    id: 'kb_article_1',
+    title: 'Getting started, revised',
+    content: 'Hello again',
+    contentJson: { type: 'doc', v: 2 },
+  })
   expect(calls.published).toEqual(['kb_article_1', 'kb_article_1'])
   expect(onOpenChange).toHaveBeenCalledWith(false)
 })
