@@ -6,7 +6,10 @@ import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { createArticleSchema } from '@/lib/shared/schemas/help-center'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
-import { useCreateArticle } from '@/lib/client/mutations/help-center'
+import { useCreateArticle, usePublishArticle } from '@/lib/client/mutations/help-center'
+import { useHasPermission } from '@/lib/client/use-permissions'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import type { KbArticleId } from '@quackback/ids'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
@@ -38,6 +41,12 @@ export function CreateArticleDialog({
   const [categoryId, setCategoryId] = useState('')
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false)
   const createArticleMutation = useCreateArticle()
+  const publishArticleMutation = usePublishArticle()
+  // Publishing takes the same permission as writing; checked so the button
+  // never offers what the server would refuse.
+  const canPublish = useHasPermission(PERMISSIONS.HELP_CENTER_MANAGE)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const isPending = createArticleMutation.isPending || publishArticleMutation.isPending
   const navigate = useNavigate()
 
   const form = useForm({
@@ -65,28 +74,29 @@ export function CreateArticleDialog({
     [form]
   )
 
-  const handleSubmit = form.handleSubmit((data) => {
-    createArticleMutation.mutate(
-      {
-        categoryId: data.categoryId,
-        title: data.title,
-        content: data.content,
-        contentJson: contentJson as TiptapContent | null,
-      },
-      {
-        onSuccess: (newArticle) => {
-          handleOpenChange(false)
-          form.reset()
-          setContentJson(null)
-          setCategoryId('')
-          void navigate({
-            to: '/admin/help-center',
-            search: { article: newArticle.id },
-          })
-        },
+  const save = (publish: boolean) =>
+    form.handleSubmit(async (data) => {
+      setSaveError(null)
+      let articleId: string | null = null
+      try {
+        const newArticle = await createArticleMutation.mutateAsync({
+          categoryId: data.categoryId,
+          title: data.title,
+          content: data.content,
+          contentJson: contentJson as TiptapContent | null,
+        })
+        articleId = newArticle.id
+        if (publish) await publishArticleMutation.mutateAsync(newArticle.id as KbArticleId)
+      } catch (error) {
+        setSaveError(error instanceof Error ? error.message : String(error))
+        // A draft that saved but did not publish is still worth opening.
+        if (!articleId) return
       }
-    )
-  })
+      handleOpenChange(false)
+      void navigate({ to: '/admin/help-center', search: { article: articleId } })
+    })
+  const handleSubmit = save(false)
+  const handlePublish = save(true)
 
   function handleOpenChange(isOpen: boolean) {
     if (isControlled) {
@@ -99,6 +109,8 @@ export function CreateArticleDialog({
       setContentJson(null)
       setCategoryId('')
       createArticleMutation.reset()
+      publishArticleMutation.reset()
+      setSaveError(null)
     }
   }
 
@@ -126,9 +138,7 @@ export function CreateArticleDialog({
                   form={form}
                   contentJson={contentJson}
                   onContentChange={handleContentChange}
-                  error={
-                    createArticleMutation.isError ? createArticleMutation.error.message : undefined
-                  }
+                  error={saveError ?? undefined}
                 />
               </div>
 
@@ -142,9 +152,15 @@ export function CreateArticleDialog({
 
             <ModalFooter
               onCancel={() => handleOpenChange(false)}
-              submitLabel={createArticleMutation.isPending ? 'Saving...' : 'Save draft'}
-              isPending={createArticleMutation.isPending}
+              submitLabel={isPending ? 'Saving...' : canPublish ? 'Publish' : 'Save draft'}
+              isPending={isPending}
+              {...(canPublish ? { submitType: 'button' as const, onSubmit: handlePublish } : {})}
             >
+              {canPublish && (
+                <Button type="submit" variant="outline" size="sm" disabled={isPending}>
+                  Save draft
+                </Button>
+              )}
               <Sheet open={mobileSettingsOpen} onOpenChange={setMobileSettingsOpen}>
                 <SheetTrigger asChild>
                   <Button type="button" variant="outline" size="sm" className="lg:hidden">
