@@ -323,8 +323,11 @@ function startBackgroundProcessing(): void {
       setTimeout(() => void jobs.runStatusMaintenanceSweep(), 31_000)
       setInterval(() => void jobs.runStatusMaintenanceSweep(), 5 * 60 * 1000)
 
-      setTimeout(() => void jobs.runFleetMigratorPass(), 90_000)
-      setInterval(() => void jobs.runFleetMigratorPass(), 60 * 60 * 1000)
+      // Walks the workspace registry, which only exists under pooled tenancy.
+      if (config.isPooledTenancy) {
+        setTimeout(() => void jobs.runFleetMigratorPass(), 90_000)
+        setInterval(() => void jobs.runFleetMigratorPass(), 60 * 60 * 1000)
+      }
 
       log.info({ event: 'sweeps.armed' }, 'scheduled sweeps armed')
     })
