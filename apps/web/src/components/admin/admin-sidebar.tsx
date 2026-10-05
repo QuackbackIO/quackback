@@ -447,7 +447,10 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
               >
                 <GlobeAltIcon className="size-5 shrink-0" />
                 <span className="min-w-0 flex-1 truncate">
-                  <FormattedMessage id="admin.nav.viewPortal" defaultMessage="View portal" />
+                  {intl.formatMessage({
+                    id: 'admin.nav.viewPortal',
+                    defaultMessage: 'View portal',
+                  })}
                 </span>
               </Link>
 
