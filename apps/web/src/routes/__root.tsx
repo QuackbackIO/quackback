@@ -302,7 +302,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
         >
           {children}
           <Suspense fallback={null}>
-            <Toaster />
+            <Toaster locale={locale} />
           </Suspense>
         </ThemeProvider>
         <DocumentScripts />

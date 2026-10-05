@@ -26,6 +26,7 @@ import { createRouteContextMemo } from '@/lib/client/route-context-memo'
 import { isAdminPathAllowedDuringDowngradeLock } from '@/lib/shared/billing/plan-downgrade-lock'
 import type { requireWorkspaceRole } from '@/lib/server/functions/workspace-utils'
 import { useFeatureFlag, useProductEnabled } from '@/lib/client/hooks/use-root-context'
+import { useToasterLocale } from '@/components/ui/sonner'
 
 /** What the admin pages read from the role guard's answer. */
 type AdminGuard = Pick<
@@ -255,6 +256,7 @@ function AdminLayout() {
     messages,
   } = Route.useLoaderData()
   useSeedAdminGuard()
+  useToasterLocale(locale)
 
   // Mark team members online for conversation routing across the whole admin (not just
   // the inbox), but only when the support inbox feature is on.
