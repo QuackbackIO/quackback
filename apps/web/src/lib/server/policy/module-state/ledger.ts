@@ -648,6 +648,17 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   },
   {
     file: 'apps/web/src/lib/server/domains/api/rate-limit.ts',
+    name: 'lastEdgeRejectionWarnAt',
+    category: 'process-lifetime',
+    reason:
+      'Timestamp throttling the rejected-edge-address warning to one line a minute. It holds a ' +
+      'single number about the PROCESS and no workspace data: the edge secret and trusted origins ' +
+      'are process configuration, so a rejection seen in one workspace is the same misconfiguration ' +
+      'in every other, and sharing the throttle across workspaces costs at most a minute of ' +
+      'suppressed duplicate log lines.',
+  },
+  {
+    file: 'apps/web/src/lib/server/domains/api/rate-limit.ts',
     name: 'warnedForwardedHeaders',
     category: 'process-lifetime',
     reason:

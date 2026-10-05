@@ -186,3 +186,58 @@ describe('getClientIp ignores an edge address that does not fully verify', () =>
     expect(getClientIp(request(edgeHeaders()))).toBe(PROXY_PEER)
   })
 })
+
+describe('warning about a rejected edge address', () => {
+  // A fresh module per test, since the throttle timestamp is module state.
+  async function freshGetClientIp() {
+    vi.resetModules()
+    return (await import('../rate-limit')).getClientIp
+  }
+
+  it.each<[string, EdgeOverrides, string]>([
+    ['a bad signature', { sig: sigFor('drifted', CUSTOMER, VISITOR, NOW_S) }, 'signature-mismatch'],
+    ['clock skew', { sig: sigFor(SECRET, CUSTOMER, VISITOR, NOW_S - 301) }, 'stale-timestamp'],
+    ['a malformed signature', { sig: 'garbage' }, 'malformed-signature'],
+    ['an invalid address', { ip: 'not-an-ip' }, 'invalid-address'],
+    ['an untrusted origin', { host: 'south.workspace.example' }, 'untrusted-origin'],
+    ['an unverified customer host', { customerSig: null }, 'unverified-customer-host'],
+  ])('names %s as the reason', async (_name, overrides, reason) => {
+    const fresh = await freshGetClientIp()
+    expect(fresh(request(edgeHeaders(overrides)))).toBe(XFF_HOP)
+    expect(mockWarn).toHaveBeenCalledTimes(1)
+    expect(mockWarn.mock.calls[0][0]).toEqual({ reason })
+    const logged = JSON.stringify(mockWarn.mock.calls[0])
+    expect(logged).not.toContain(VISITOR)
+    expect(logged).not.toContain(SECRET)
+    expect(logged).not.toContain(CUSTOMER)
+  })
+
+  it('logs at most once a minute', async () => {
+    const fresh = await freshGetClientIp()
+    const rejected = () =>
+      request(
+        edgeHeaders({ sig: sigFor('drifted', CUSTOMER, VISITOR, Math.floor(Date.now() / 1000)) })
+      )
+    fresh(rejected())
+    fresh(rejected())
+    vi.advanceTimersByTime(59_000)
+    fresh(rejected())
+    expect(mockWarn).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(1_000)
+    fresh(rejected())
+    expect(mockWarn).toHaveBeenCalledTimes(2)
+  })
+
+  it('logs nothing for a valid header', async () => {
+    const fresh = await freshGetClientIp()
+    expect(fresh(request(edgeHeaders()))).toBe(VISITOR)
+    expect(mockWarn).not.toHaveBeenCalled()
+  })
+
+  it('logs nothing when the edge secret is unset', async () => {
+    vi.stubEnv('QUACKBACK_SAAS_EDGE_SECRET', '')
+    const fresh = await freshGetClientIp()
+    expect(fresh(request(edgeHeaders()))).toBe(XFF_HOP)
+    expect(mockWarn).not.toHaveBeenCalled()
+  })
+})

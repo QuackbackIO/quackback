@@ -122,30 +122,59 @@ export function signEdgeClientIp(
     .digest('hex')
 }
 
+/** Why a request's edge visitor address was not trusted. */
+export type EdgeClientIpRejection =
+  | 'secret-unset'
+  | 'malformed-signature'
+  | 'stale-timestamp'
+  | 'invalid-address'
+  | 'untrusted-origin'
+  | 'unverified-customer-host'
+  | 'signature-mismatch'
+
+export type EdgeClientIpResult = { ip: string } | { rejected: EdgeClientIpRejection }
+
 /**
- * The signed visitor address on this request, or null when any part of it
- * fails: no secret, no address header, an unverified customer host, a bad or
- * stale signature, or an address that does not parse. Callers fall back to
- * their usual resolution on null.
+ * Verifies the signed visitor address on a request, naming the first check
+ * that fails. Null when the request carries no address. Callers fall back to
+ * their usual resolution on any rejection.
  */
+export function checkEdgeClientIp(
+  headers: Headers,
+  requestHost: string | null,
+  env: NodeJS.ProcessEnv = process.env,
+  nowMs: number = Date.now()
+): EdgeClientIpResult | null {
+  const ip = headers.get(EDGE_CLIENT_IP_HEADER)
+  if (!ip) return null
+  const secret = env.QUACKBACK_SAAS_EDGE_SECRET?.trim() ?? ''
+  if (!secret) return { rejected: 'secret-unset' }
+  const match = EDGE_CLIENT_IP_SIG_PATTERN.exec(headers.get(EDGE_CLIENT_IP_SIG_HEADER) ?? '')
+  if (!match) return { rejected: 'malformed-signature' }
+  const unixSeconds = Number(match[1])
+  if (Math.abs(nowMs / 1000 - unixSeconds) > EDGE_CLIENT_IP_MAX_SKEW_SECONDS) {
+    return { rejected: 'stale-timestamp' }
+  }
+  if (!isIP(ip)) return { rejected: 'invalid-address' }
+  if (!requestHost || !trustedOriginHosts(env).has(requestHost)) {
+    return { rejected: 'untrusted-origin' }
+  }
+  const customer = verifiedCustomerHost(requestHost, headers, env)
+  if (!customer) return { rejected: 'unverified-customer-host' }
+  const expected = Buffer.from(signEdgeClientIp(secret, customer, ip, unixSeconds), 'utf8')
+  const given = Buffer.from(match[2]!, 'utf8')
+  return expected.length === given.length && timingSafeEqual(expected, given)
+    ? { ip }
+    : { rejected: 'signature-mismatch' }
+}
+
+/** The verified visitor address on this request, or null. */
 export function edgeClientIp(
   headers: Headers,
   requestHost: string | null,
   env: NodeJS.ProcessEnv = process.env,
   nowMs: number = Date.now()
 ): string | null {
-  const ip = headers.get(EDGE_CLIENT_IP_HEADER)
-  if (!ip) return null
-  const secret = env.QUACKBACK_SAAS_EDGE_SECRET?.trim() ?? ''
-  if (!secret) return null
-  const match = EDGE_CLIENT_IP_SIG_PATTERN.exec(headers.get(EDGE_CLIENT_IP_SIG_HEADER) ?? '')
-  if (!match) return null
-  const unixSeconds = Number(match[1])
-  if (Math.abs(nowMs / 1000 - unixSeconds) > EDGE_CLIENT_IP_MAX_SKEW_SECONDS) return null
-  if (!isIP(ip)) return null
-  const customer = verifiedCustomerHost(requestHost, headers, env)
-  if (!customer) return null
-  const expected = Buffer.from(signEdgeClientIp(secret, customer, ip, unixSeconds), 'utf8')
-  const given = Buffer.from(match[2]!, 'utf8')
-  return expected.length === given.length && timingSafeEqual(expected, given) ? ip : null
+  const result = checkEdgeClientIp(headers, requestHost, env, nowMs)
+  return result && 'ip' in result ? result.ip : null
 }

@@ -15,8 +15,9 @@ import { getRequestIP } from '@tanstack/react-start/server'
 import { logger } from '@/lib/server/logger'
 import {
   EDGE_CLIENT_IP_HEADER,
-  edgeClientIp,
+  checkEdgeClientIp,
   hostnameOnly,
+  type EdgeClientIpRejection,
 } from '@/lib/server/workspaces/saas-edge-host'
 
 const log = logger.child({ component: 'rate-limit' })
@@ -34,6 +35,26 @@ function warnIfForwardedHeaders(headers: Headers): void {
   log.warn(
     {},
     'Request carries forwarding headers while TRUSTED_PROXY_HOPS is 0. If Quackback runs behind a reverse proxy, set TRUSTED_PROXY_HOPS to the number of proxies in front of it, otherwise every client shares one rate-limit bucket. If clients connect directly, ignore this and keep 0.'
+  )
+}
+
+// A rejected edge visitor address sends every custom-host visitor to the edge
+// proxy's own address and so into one bucket. Warn about it at most once a
+// minute: the cause (secret drift, clock skew, origin config) persists, and
+// every request it affects carries the header.
+const EDGE_REJECTION_WARN_INTERVAL_MS = 60_000
+let lastEdgeRejectionWarnAt = 0
+
+function warnEdgeClientIpRejected(reason: EdgeClientIpRejection): void {
+  // An install without the edge secret never trusts the header, so a copy of
+  // it there is plain client input and says nothing about configuration.
+  if (reason === 'secret-unset') return
+  const now = Date.now()
+  if (now - lastEdgeRejectionWarnAt < EDGE_REJECTION_WARN_INTERVAL_MS) return
+  lastEdgeRejectionWarnAt = now
+  log.warn(
+    { reason },
+    'Ignoring a signed edge client address. Until the edge proxy and this process agree on QUACKBACK_SAAS_EDGE_SECRET, clock and trusted origin, custom-host visitors share one rate-limit bucket.'
   )
 }
 
@@ -149,8 +170,9 @@ function requestHostname(source: Request | Headers, headers: Headers): string | 
 export function getClientIp(source: Request | Headers): string {
   const headers = source instanceof Headers ? source : source.headers
   if (headers.has(EDGE_CLIENT_IP_HEADER)) {
-    const edge = edgeClientIp(headers, requestHostname(source, headers))
-    if (edge) return edge
+    const edge = checkEdgeClientIp(headers, requestHostname(source, headers))
+    if (edge && 'ip' in edge) return edge.ip
+    if (edge) warnEdgeClientIpRejected(edge.rejected)
   }
   // Startup validates config before serving traffic. Unit-level consumers may
   // intentionally load this helper without a complete runtime environment;
