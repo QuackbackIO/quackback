@@ -525,11 +525,15 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   },
   {
     file: 'packages/email/src/index.ts',
-    name: 'inboundFetchClient',
+    name: 'resendClient',
     category: 'fleet-wide',
     reason:
-      'Built from the inbound API key, which §8 confirms the control plane writes fleet-wide into ' +
-      'every workspace. Fetches an inbound body by provider id; carries no outbound mail.',
+      'Built from EMAIL_RESEND_API_KEY/RESEND_API_KEY, a process environment value (§8: written ' +
+      'fleet-wide into every workspace), and stored beside the key it was built from so a key ' +
+      'change rebuilds it. A cross-workspace hit returns the client the requesting workspace ' +
+      'would have built from the same key. It fetches inbound bodies by provider id and, when ' +
+      'Resend is the outbound provider, sends; every per-message field (From, To, headers) is ' +
+      'passed per call, so it holds nothing of any workspace.',
   },
   {
     file: 'packages/email/src/ses.ts',
