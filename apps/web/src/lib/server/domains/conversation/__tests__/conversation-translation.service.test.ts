@@ -22,6 +22,38 @@ const mockConfig = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/server/config', () => ({ config: mockConfig }))
 
+const budget = vi.hoisted(() => ({
+  exhausted: false,
+  windowStart: new Date('2026-11-01T00:00:00.000Z'),
+}))
+vi.mock('@/lib/server/domains/ai/ai-budget', () => ({
+  getAiBudgetStatus: async () => ({
+    cap: 1000,
+    used: budget.exhausted ? 1200 : 10,
+    exhausted: budget.exhausted,
+    window: {
+      kind: 'month',
+      start: budget.windowStart,
+      end: new Date(budget.windowStart.getTime() + 30 * 24 * 60 * 60 * 1000),
+    },
+  }),
+}))
+
+const logged = vi.hoisted(() => ({ warn: [] as Array<{ ctx: unknown; msg: unknown }> }))
+vi.mock('@/lib/server/logger', () => {
+  const noop = () => {}
+  const make = (): Record<string, unknown> => ({
+    trace: noop,
+    debug: noop,
+    info: noop,
+    error: noop,
+    fatal: noop,
+    warn: (ctx: unknown, msg: unknown) => logged.warn.push({ ctx, msg }),
+    child: () => make(),
+  })
+  return { logger: make() }
+})
+
 const mockChat = vi.fn()
 vi.mock('@tanstack/ai', () => ({
   chat: (...args: unknown[]) => mockChat(...args),
@@ -143,6 +175,7 @@ const {
   dismissInboxTranslationSuggestion,
   TranslationUnavailableError,
   TranslationRichContentError,
+  inboxTranslationOverAllowance,
 } = await import('../conversation-translation.service')
 const { UNDETERMINED_LANGUAGE } = await import('@/lib/shared/conversation/translation')
 
@@ -174,6 +207,8 @@ function makeConversation(over: Partial<Conversation> = {}): Conversation {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  budget.exhausted = false
+  logged.warn.length = 0
   mockConfig.openaiApiKey = 'test-key'
   mockConfig.openaiBaseUrl = 'http://localhost:9999/v1'
   conversationRow = undefined
@@ -630,5 +665,45 @@ describe('dismissInboxTranslationSuggestion (activation dismiss persistence)', (
 
   it('refuses a non-agent actor', async () => {
     await expect(dismissInboxTranslationSuggestion(conversationId, visitor)).rejects.toThrow()
+  })
+})
+
+describe('inbox translation over the AI allowance', () => {
+  const overAllowanceWarnings = () =>
+    logged.warn.filter((w) => String(w.msg).includes('AI allowance'))
+
+  it('keeps translating, and says so, once the allowance is used up', async () => {
+    budget.exhausted = true
+    budget.windowStart = new Date('2026-07-01T00:00:00.000Z')
+    mockGetChatModel.mockReturnValue('gpt-test')
+    mockChat.mockResolvedValue({ content: 'Bonjour' })
+
+    await expect(translateOutgoingContent('Hello', 'fr')).resolves.toBe('Bonjour')
+    expect(mockChat).toHaveBeenCalledOnce()
+    expect(await inboxTranslationOverAllowance()).toBe(true)
+  })
+
+  it('warns once per allowance window, not once per call', async () => {
+    budget.exhausted = true
+    budget.windowStart = new Date('2026-08-01T00:00:00.000Z')
+    mockGetChatModel.mockReturnValue('gpt-test')
+    mockChat.mockResolvedValue({ content: 'Bonjour' })
+
+    await translateOutgoingContent('Hello', 'fr')
+    await translateOutgoingContent('Hello again', 'fr')
+    await inboxTranslationOverAllowance()
+    expect(overAllowanceWarnings()).toHaveLength(1)
+
+    budget.windowStart = new Date('2026-09-01T00:00:00.000Z')
+    await inboxTranslationOverAllowance()
+    expect(overAllowanceWarnings()).toHaveLength(2)
+  })
+
+  it('is quiet while allowance remains', async () => {
+    mockGetChatModel.mockReturnValue('gpt-test')
+    mockChat.mockResolvedValue({ content: 'Bonjour' })
+    await translateOutgoingContent('Hello', 'fr')
+    expect(await inboxTranslationOverAllowance()).toBe(false)
+    expect(overAllowanceWarnings()).toHaveLength(0)
   })
 })

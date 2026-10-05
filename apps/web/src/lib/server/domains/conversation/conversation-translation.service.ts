@@ -65,6 +65,8 @@ import {
   structuredOutputProviderOptions,
 } from '@/lib/server/domains/ai/config'
 import { createUsageLoggingMiddleware } from '@/lib/server/domains/ai/usage-middleware'
+import { getAiBudgetStatus } from '@/lib/server/domains/ai/ai-budget'
+import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { ValidationError, ForbiddenError, NotFoundError } from '@/lib/shared/errors'
 import { canActAsAgent } from '@/lib/server/policy/conversation'
@@ -165,6 +167,41 @@ Example output:
   return { system, user }
 }
 
+/** Allowance windows this process has already warned about, per workspace. */
+const overAllowanceWarned = new WorkspaceKeyedCache<true>(1_000)
+
+/**
+ * Whether the workspace is past its AI allowance. Inbox translation is never
+ * blocked by the allowance (a conversation must stay readable), but it is
+ * still counted, so the teammate sees a notice and the log gets one warning
+ * per workspace per allowance window. A failed read answers false: the
+ * notice is advisory and must never stand in the way of a translation.
+ */
+export async function inboxTranslationOverAllowance(): Promise<boolean> {
+  let status: Awaited<ReturnType<typeof getAiBudgetStatus>>
+  try {
+    status = await getAiBudgetStatus()
+  } catch (err) {
+    log.warn({ err }, 'inbox translation: AI allowance check failed')
+    return false
+  }
+  if (!status.exhausted) return false
+  const windowKey = status.window.start.toISOString()
+  if (!overAllowanceWarned.has(windowKey)) {
+    overAllowanceWarned.set(windowKey, true)
+    log.warn(
+      {
+        used: status.used,
+        cap: status.cap,
+        window_kind: status.window.kind,
+        window_start: windowKey,
+      },
+      'inbox translation running past the AI allowance'
+    )
+  }
+  return true
+}
+
 /** Raw chat call shared by detection + both translate directions, so all
  *  three go through the identical AI-config/usage-logging path (matching the
  *  help-center-auto-translate precedent). Returns null when AI isn't
@@ -183,6 +220,9 @@ async function callInboxTranslationModel<T>(
 ): Promise<T | null> {
   const model = getChatModel('inboxTranslation')
   if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) return null
+
+  // Counted, never blocked: see inboxTranslationOverAllowance.
+  await inboxTranslationOverAllowance()
 
   // chat() can't infer the structured-output type through the generic
   // `z.ZodType<T>` (it resolves to `unknown`), so assert the validated result
