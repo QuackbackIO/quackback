@@ -4,7 +4,7 @@
  */
 import { logger } from '@/lib/server/logger'
 import { getProcessRole, shouldRunWorkers } from './process-role'
-import { config, validateRuntimeConfig } from './config'
+import { config } from './config'
 import { logUnusedRedisUrl } from './unused-env'
 
 const log = logger.child({ component: 'startup' })
@@ -94,7 +94,6 @@ export function logStartupBanner(): void {
   if (process.env.QUACKBACK_BUILD === '1') return
 
   if (_logged) return
-  validateRuntimeConfig()
   _logged = true
 
   const runtime =
