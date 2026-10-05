@@ -13,6 +13,8 @@ interface AdminListHeaderProps {
   sortOptions?: SortOption[]
   activeSort?: string
   onSortChange?: (value: string) => void
+  /** The sort trigger's text for the active option, for translated copy. */
+  formatSortLabel?: (label: string) => React.ReactNode
   /** Filter controls placed after the sort menu */
   filters?: React.ReactNode
   /** Slot for the primary action (e.g., NewButton), on the right */
@@ -28,6 +30,7 @@ export function AdminListHeader({
   sortOptions,
   activeSort,
   onSortChange,
+  formatSortLabel,
   filters,
   action,
   children,
@@ -48,6 +51,7 @@ export function AdminListHeader({
             options={sortOptions}
             value={activeSort ?? sortOptions[0].value}
             onChange={onSortChange}
+            formatLabel={formatSortLabel}
           />
         )}
         {filters}

@@ -170,7 +170,11 @@ export function FilterChip({
  * The dashed "+ Filter" control that opens a list's filter menu. It matches the
  * height and text colour of the other toolbar controls (`SortMenu`, Search).
  */
-export function FilterAddButton({ className, ...props }: React.ComponentProps<typeof Button>) {
+export function FilterAddButton({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof Button>) {
   return (
     <Button
       type="button"
@@ -180,7 +184,7 @@ export function FilterAddButton({ className, ...props }: React.ComponentProps<ty
       {...props}
     >
       <PlusIcon className="size-3.5" aria-hidden />
-      Filter
+      {children ?? 'Filter'}
     </Button>
   )
 }
