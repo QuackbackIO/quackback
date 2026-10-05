@@ -638,11 +638,7 @@ async function createAuth() {
       session: {
         create: {
           // Only the widget's lazy anonymous mint; everything else is a dashboard sign-in.
-          before: async (sessionData, context) => {
-            if (context?.path === '/sign-in/anonymous') {
-              return { data: { ...sessionData, scope: 'widget' } }
-            }
-          },
+          before: beforeSessionCreate,
         },
       },
     },
@@ -969,6 +965,7 @@ import { ANON_EMAIL_DOMAIN } from '@/lib/shared/anonymous-email'
 import { mapProfileClaims } from '@/lib/server/auth/map-profile-claims'
 import { createAuthLogger } from '@/lib/server/auth/auth-logger-adapter'
 import { stashResolvedClaims } from '@/lib/server/auth/resolved-claims-stash'
+import { beforeSessionCreate } from '@/lib/server/auth/session-create'
 
 /** Check if role is in allowed list: canAccess('admin', ['admin']) → true */
 export function canAccess(role: Role, allowed: Role[]): boolean {

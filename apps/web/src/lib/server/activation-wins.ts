@@ -1,4 +1,4 @@
-import type { BoardId } from '@quackback/ids'
+import type { BoardId, PrincipalId } from '@quackback/ids'
 import {
   db,
   and,
@@ -136,10 +136,7 @@ export async function detectFirstWin(state: SetupState | null): Promise<FirstWin
     const [row] = await db
       .select({ reachedAt: helpCenterArticleFeedback.createdAt })
       .from(helpCenterArticleFeedback)
-      .innerJoin(
-        helpCenterArticles,
-        eq(helpCenterArticles.id, helpCenterArticleFeedback.articleId)
-      )
+      .innerJoin(helpCenterArticles, eq(helpCenterArticles.id, helpCenterArticleFeedback.articleId))
       .leftJoin(principal, eq(principal.id, helpCenterArticleFeedback.principalId))
       .where(
         and(
@@ -169,13 +166,18 @@ export async function detectFirstWin(state: SetupState | null): Promise<FirstWin
         columns: { id: true },
       }))
     if (!internalBoard) return { reached: false, reachedAt: null }
-    // The owner is the first human admin; their own ideas do not count.
-    const [owner] = await db
-      .select({ id: principal.id })
-      .from(principal)
-      .where(and(eq(principal.role, 'admin'), eq(principal.type, 'user')))
-      .orderBy(asc(principal.createdAt))
-      .limit(1)
+    // The owner's own ideas do not count. The owner is who set the workspace
+    // up, recorded once in setup state, so a later change of role does not move
+    // it. Workspaces set up before that was recorded fall back to the earliest
+    // human teammate, whatever role they hold now.
+    const [owner] = state?.ownerPrincipalId
+      ? [{ id: state.ownerPrincipalId as PrincipalId }]
+      : await db
+          .select({ id: principal.id })
+          .from(principal)
+          .where(and(inArray(principal.role, ['admin', 'member']), eq(principal.type, 'user')))
+          .orderBy(asc(principal.createdAt))
+          .limit(1)
     const [row] = await db
       .select({ reachedAt: posts.createdAt })
       .from(posts)
