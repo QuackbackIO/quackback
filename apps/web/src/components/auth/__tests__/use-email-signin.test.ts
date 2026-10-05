@@ -15,7 +15,12 @@ vi.mock('@/lib/client/auth-client', () => ({
   authClient: { signIn: { emailOtp: hoisted.emailOtp } },
 }))
 
+import { createElement, type ReactNode } from 'react'
+import { IntlProvider } from 'react-intl'
 import { useEmailSignin } from '../use-email-signin'
+
+const wrapper = ({ children }: { children: ReactNode }) =>
+  createElement(IntlProvider, { locale: 'en' }, children)
 
 beforeEach(() => vi.clearAllMocks())
 
@@ -23,7 +28,9 @@ describe('useEmailSignin.verify', () => {
   it('stops loading once the code is accepted', async () => {
     hoisted.emailOtp.mockResolvedValue({ data: {}, error: null })
     const onSuccess = vi.fn()
-    const { result } = renderHook(() => useEmailSignin({ callbackUrl: '/onboarding', onSuccess }))
+    const { result } = renderHook(() => useEmailSignin({ callbackUrl: '/onboarding', onSuccess }), {
+      wrapper,
+    })
 
     await act(async () => {
       await result.current.verify('someone@example.com', '123456')
@@ -36,17 +43,21 @@ describe('useEmailSignin.verify', () => {
   it('stops loading and reports the failure when the code is rejected', async () => {
     hoisted.emailOtp.mockResolvedValue({
       data: null,
-      error: { message: 'Invalid or expired code' },
+      error: { code: 'INVALID_OTP', message: 'Invalid OTP' },
     })
     const onSuccess = vi.fn()
-    const { result } = renderHook(() => useEmailSignin({ callbackUrl: '/onboarding', onSuccess }))
+    const { result } = renderHook(() => useEmailSignin({ callbackUrl: '/onboarding', onSuccess }), {
+      wrapper,
+    })
 
     await act(async () => {
       await result.current.verify('someone@example.com', '123456')
     })
 
     expect(onSuccess).not.toHaveBeenCalled()
-    expect(result.current.error).toMatch(/invalid or expired/i)
+    expect(result.current.error).toBe(
+      "That code isn't right. Check the email and try again, or send a new code."
+    )
     expect(result.current.loading).toBe(false)
   })
 
@@ -56,7 +67,9 @@ describe('useEmailSignin.verify', () => {
   it('can verify again after a success', async () => {
     hoisted.emailOtp.mockResolvedValue({ data: {}, error: null })
     const onSuccess = vi.fn()
-    const { result } = renderHook(() => useEmailSignin({ callbackUrl: '/onboarding', onSuccess }))
+    const { result } = renderHook(() => useEmailSignin({ callbackUrl: '/onboarding', onSuccess }), {
+      wrapper,
+    })
 
     await act(async () => {
       await result.current.verify('someone@example.com', '123456')
@@ -66,5 +79,22 @@ describe('useEmailSignin.verify', () => {
     })
 
     expect(hoisted.emailOtp).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('useEmailSignin.verify wording', () => {
+  it.each([
+    ['OTP_EXPIRED', 'That code expired. Send a new one.'],
+    ['TOO_MANY_ATTEMPTS', 'Too many tries. Send a new code.'],
+  ])('says what went wrong for %s, never the raw error', async (code, copy) => {
+    hoisted.emailOtp.mockResolvedValue({ data: null, error: { code, message: 'raw' } })
+    const { result } = renderHook(
+      () => useEmailSignin({ callbackUrl: '/onboarding', onSuccess: vi.fn() }),
+      { wrapper }
+    )
+    await act(async () => {
+      await result.current.verify('someone@example.com', '123456')
+    })
+    expect(result.current.error).toBe(copy)
   })
 })
