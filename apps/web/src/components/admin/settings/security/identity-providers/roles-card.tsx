@@ -161,25 +161,43 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
     mapping: provider.claimMapping,
     autoProvisionRole: provider.autoProvisionRole,
   }
-  // `baseline` is what the draft is compared with and Cancel returns to: the
-  // stored values, or what this card just saved until the refetch lands.
+  // `baseline` is the stored row the draft is based on: what it is compared
+  // with, what Cancel returns to, and what Save expects to replace.
   const [baseline, setBaseline] = useState<Baseline>(stored)
   const [seen, setSeen] = useState<Baseline>(stored)
   const [draft, setDraft] = useState<RolesDraft>(() => draftFrom(stored))
+  // Something this draft edits was changed elsewhere since it was based.
+  const [conflict, setConflict] = useState(false)
 
   const roleChangedFrom = (base: Baseline, d: RolesDraft) =>
     JSON.stringify(roleSection(d)) !== JSON.stringify(roleSection(draftFrom(base)))
   const defaultChangedFrom = (base: Baseline, d: RolesDraft) =>
     d.defaultRole !== effectiveDefaultRole(base.autoProvisionRole)
 
-  // The stored row changed (a save here or on another card, or a refetch). A
-  // clean draft follows it; a draft with edits is kept.
+  // The stored row changed: a save here, a save on another card, or another
+  // admin. What the draft has not edited follows it. An edited part that also
+  // changed underneath, to something else, is a conflict: the draft stays
+  // based on the old row, and Save waits until the admin reviews it.
   if (seen.mapping !== stored.mapping || seen.autoProvisionRole !== stored.autoProvisionRole) {
     setSeen(stored)
-    setBaseline(stored)
-    if (!roleChangedFrom(baseline, draft) && !defaultChangedFrom(baseline, draft)) {
-      setDraft(draftFrom(stored))
-    }
+    const base = draftFrom(baseline)
+    const fresh = draftFrom(stored)
+    const roleKey = (d: RolesDraft) => JSON.stringify(roleSection(d))
+    const roleEdited = roleChangedFrom(baseline, draft)
+    const defaultEdited = defaultChangedFrom(baseline, draft)
+    const clash =
+      (roleEdited && roleKey(fresh) !== roleKey(base) && roleKey(fresh) !== roleKey(draft)) ||
+      (defaultEdited &&
+        fresh.defaultRole !== base.defaultRole &&
+        fresh.defaultRole !== draft.defaultRole)
+    setDraft({
+      ...(roleEdited
+        ? { claimPath: draft.claimPath, rules: draft.rules, mode: draft.mode }
+        : { claimPath: fresh.claimPath, rules: fresh.rules, mode: fresh.mode }),
+      defaultRole: defaultEdited ? draft.defaultRole : fresh.defaultRole,
+    })
+    setConflict(clash)
+    if (!clash) setBaseline(stored)
   }
 
   const roleChanged = roleChangedFrom(baseline, draft)
@@ -298,7 +316,11 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
     const both = roleChanged && defaultChanged
     if (roleChanged) {
       const saved = await saveClaimMapping(
-        { operations, acknowledgeAdminRules: risks.hasAdminRules },
+        {
+          expectedClaimMapping: baseline.mapping,
+          operations,
+          acknowledgeAdminRules: risks.hasAdminRules,
+        },
         both ? null : 'Roles saved.',
         (err) => {
           if (isSyncLockout(err)) {
@@ -335,7 +357,7 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
   }
 
   const requestSave = () => {
-    if (!dirty || lockout || !valid || waiting) return
+    if (!dirty || lockout || conflict || !valid || waiting) return
     if (adminRulesChanged) {
       setConfirmOpen(true)
       return
@@ -596,6 +618,13 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
         </Alert>
       )}
 
+      {conflict && (
+        <p role="status" className="text-sm font-medium text-warning">
+          This provider&apos;s roles changed elsewhere. Review before saving, or Cancel to take the
+          saved roles.
+        </p>
+      )}
+
       {dirty && (
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border/40 pt-5">
           {waiting && valid && <p className="mr-auto text-sm text-muted-foreground">{waiting}</p>}
@@ -611,7 +640,11 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
             variant="outline"
             size="sm"
             className={NEUTRAL_BUTTON_FOCUS}
-            onClick={() => setDraft(draftFrom(baseline))}
+            onClick={() => {
+              setBaseline(stored)
+              setDraft(draftFrom(stored))
+              setConflict(false)
+            }}
             disabled={saving}
           >
             Cancel
@@ -621,7 +654,7 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
             size="sm"
             className={NEUTRAL_BUTTON_FOCUS}
             onClick={requestSave}
-            disabled={saving || lockout || !valid || waiting !== null}
+            disabled={saving || lockout || conflict || !valid || waiting !== null}
           >
             {saving ? 'Saving…' : 'Save changes'}
           </Button>

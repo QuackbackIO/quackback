@@ -355,6 +355,14 @@ describe('<ProviderDetailPage> page shell', () => {
     expect(screen.queryByRole('heading', { name: /Delete|Remove|Danger/ })).not.toBeInTheDocument()
   })
 
+  it('shows the role sign-in really gives when no default was saved', () => {
+    renderPage(makeProvider({ autoCreateUsers: true, autoProvisionRole: null }))
+    // The default role lives on the Roles card now.
+    expect(
+      section('roles').getByRole('combobox', { name: 'Role for people at a verified domain' })
+    ).toHaveTextContent('Member')
+  })
+
   it('puts the provider under Access & Security in the breadcrumb', () => {
     renderPage(makeProvider({ label: 'Acme SSO' }))
     const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' })
@@ -993,7 +1001,10 @@ describe('<ProviderDetailPage> profile', () => {
         claimMapping: { profile: { sources: ['idToken', 'userinfo', 'accessTokenJwt'] } },
       })
     )
-    expect(screen.getByTestId('compatibility-sources')).toHaveTextContent('Access-token JWT')
+    // Open by default for a non-standard list; closed, its summary names it.
+    expect(screen.getByLabelText('Access-token JWT')).toBeChecked()
+    fireEvent.click(screen.getByRole('button', { name: /Compatibility/ }))
+    expect(screen.getByTestId('compatibility-section')).toHaveTextContent('Access-token JWT')
   })
 
   it('lists the five profile fields with no Default badges', () => {

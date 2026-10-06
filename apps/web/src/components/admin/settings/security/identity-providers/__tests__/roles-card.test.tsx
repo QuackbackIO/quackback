@@ -396,6 +396,72 @@ describe('<RolesCard> editing rules', () => {
   })
 })
 
+describe('<RolesCard> changes made elsewhere', () => {
+  /** Renders the card, then lets a test swap in a newer stored row. */
+  function renderLive(provider: IdentityProvider) {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    qc.setQueryData(['settings', 'roles'], { roles: [], maxCustomRoles: null })
+    const ui = (p: IdentityProvider) => (
+      <QueryClientProvider client={qc}>
+        <RolesCard provider={p} />
+      </QueryClientProvider>
+    )
+    const view = render(ui(provider))
+    return (next: Partial<IdentityProvider>) => view.rerender(ui({ ...provider, ...next }))
+  }
+  const NOTICE = /roles changed elsewhere/
+
+  it('follows a part the admin did not edit and keeps the edit', async () => {
+    const provider = makeProvider({ domains: [acmeDomain], claimMapping: TWO_RULES })
+    const restore = renderLive(provider)
+    await userEvent.click(
+      screen.getByRole('combobox', { name: 'Role for people at a verified domain' })
+    )
+    await userEvent.click(screen.getByRole('option', { name: 'Admin' }))
+    restore({
+      claimMapping: {
+        role: { claimPath: 'groups', rules: [{ whenContains: 'ops', role: 'admin' }] },
+      },
+    })
+    expect(ruleRows()).toHaveLength(1)
+    expect(ruleRows()[0]).toHaveTextContent('ops')
+    expect(
+      screen.getByRole('combobox', { name: 'Role for people at a verified domain' })
+    ).toHaveTextContent('Admin')
+    expect(screen.queryByText(NOTICE)).not.toBeInTheDocument()
+    save()
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(mappingSpy).not.toHaveBeenCalled()
+  })
+
+  it('holds Save when an edited part changed elsewhere, and Cancel takes the saved roles', async () => {
+    const provider = makeProvider({ claimMapping: TWO_RULES })
+    const restore = renderLive(provider)
+    fireEvent.click(screen.getByRole('button', { name: 'Remove rule 2' }))
+    restore({
+      claimMapping: {
+        role: { claimPath: 'groups', rules: [{ whenContains: 'ops', role: 'member' }] },
+      },
+    })
+    expect(screen.getByText(NOTICE)).toBeInTheDocument()
+    expect(ruleRows()).toHaveLength(1)
+    expect(ruleRows()[0]).toHaveTextContent('admins')
+    expect(saveButton()).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByText(NOTICE)).not.toBeInTheDocument()
+    expect(ruleRows()[0]).toHaveTextContent('ops')
+    expect(saveButton()).not.toBeInTheDocument()
+  })
+
+  it('sends the row it was based on, so the server refuses a stale write', async () => {
+    renderCard(makeProvider({ claimMapping: TWO_RULES }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove rule 2' }))
+    save()
+    await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
+    expect(lastMapping().expectedClaimMapping).toEqual(TWO_RULES)
+  })
+})
+
 describe('<RolesCard> custom role grants', () => {
   const OPS_ROLE = {
     ...SUPPORT_ROLE,

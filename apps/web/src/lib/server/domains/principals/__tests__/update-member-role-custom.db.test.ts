@@ -173,6 +173,7 @@ describe.skipIf(!fixture.available)('updateMemberRole — custom grants (real Po
     await updateMemberRole(target.principalId, 'member', acting.principalId, null, undefined, {
       assignRoleId: customRoleId,
       granterPermissions: ALL_PERMISSIONS,
+      granterRole: 'admin',
     })
 
     const rows = await testDb
@@ -197,6 +198,7 @@ describe.skipIf(!fixture.available)('updateMemberRole — custom grants (real Po
       updateMemberRole(lastAdmin.principalId, 'member', acting.principalId, null, undefined, {
         assignRoleId: customRoleId,
         granterPermissions: ALL_PERMISSIONS,
+        granterRole: 'admin',
       })
     ).rejects.toThrow(/last admin/i)
   })

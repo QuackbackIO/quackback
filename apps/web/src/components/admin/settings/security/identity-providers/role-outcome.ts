@@ -8,6 +8,7 @@
 import type { ClaimRoleRule } from '@/lib/shared/oidc-claim-mapping'
 import { SYSTEM_ROLES } from '@/lib/shared/permissions'
 import type { Role } from '@/lib/shared/roles'
+import { DEFAULT_PROVISION_ROLE } from '@/lib/shared/sso-mapping-preview'
 
 /** One rule as the editor holds it. A custom role rides the member tier and
  *  names its role by id. */
@@ -19,9 +20,9 @@ export const ROLE_PRESET_LABELS: Record<Role, string> = {
   user: 'Portal user',
 }
 
-/** What sign-in uses when no default role was ever saved. */
+/** The default role sign-in applies: the saved one, else `DEFAULT_PROVISION_ROLE`. */
 export function effectiveDefaultRole(autoProvisionRole: Role | null | undefined): Role {
-  return autoProvisionRole ?? 'member'
+  return autoProvisionRole ?? DEFAULT_PROVISION_ROLE
 }
 
 export function verifiedDomainNames(

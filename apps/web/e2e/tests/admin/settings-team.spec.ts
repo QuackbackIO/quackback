@@ -32,9 +32,9 @@ test.describe('Admin Team Settings', () => {
     await expect(roleBadge.first()).toBeVisible({ timeout: 10000 })
   })
 
-  test('shows "Invite member" button', async ({ page }) => {
-    const inviteButton = page.getByRole('button', { name: /invite member/i })
-    await expect(inviteButton).toBeVisible({ timeout: 10000 })
+  test('shows "Add people" button', async ({ page }) => {
+    const addButton = page.getByRole('button', { name: /add people/i })
+    await expect(addButton).toBeVisible({ timeout: 10000 })
   })
 
   test('shows search input for filtering members', async ({ page }) => {
@@ -56,38 +56,29 @@ test.describe('Admin Team Settings', () => {
     await searchInput.fill('')
   })
 
-  test('can open invite member dialog', async ({ page }) => {
-    const inviteButton = page.getByRole('button', { name: /invite member/i })
-    await inviteButton.click()
+  test('can open the add people dialog', async ({ page }) => {
+    await page.getByRole('button', { name: /add people/i }).click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
-
-    await expect(dialog.getByText(/invite team member/i)).toBeVisible()
+    await expect(dialog.getByRole('heading', { name: 'Add people' })).toBeVisible()
   })
 
-  test('invite dialog has name, email, and role fields', async ({ page }) => {
-    await page.getByRole('button', { name: /invite member/i }).click()
+  test('add people dialog has the people field, role and actions', async ({ page }) => {
+    await page.getByRole('button', { name: /add people/i }).click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
 
-    // Name field
-    await expect(dialog.getByRole('textbox', { name: /^name$/i })).toBeVisible()
-
-    // Email field
-    await expect(dialog.getByRole('textbox', { name: /email address/i })).toBeVisible()
-
-    // Role selector
-    await expect(dialog.getByRole('combobox')).toBeVisible()
-
-    // Action buttons
+    await expect(dialog.getByRole('combobox', { name: 'People' })).toBeVisible()
+    await expect(dialog.getByText('Role', { exact: true })).toBeVisible()
     await expect(dialog.getByRole('button', { name: /cancel/i })).toBeVisible()
-    await expect(dialog.getByRole('button', { name: /send invitation/i })).toBeVisible()
+    // Nothing chosen yet, so there is nothing to add.
+    await expect(dialog.getByRole('button', { name: /^add people$/i })).toBeDisabled()
   })
 
-  test('invite dialog cancel closes the dialog', async ({ page }) => {
-    await page.getByRole('button', { name: /invite member/i }).click()
+  test('add people dialog cancel closes the dialog', async ({ page }) => {
+    await page.getByRole('button', { name: /add people/i }).click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
@@ -96,38 +87,18 @@ test.describe('Admin Team Settings', () => {
     await expect(dialog).toBeHidden({ timeout: 5000 })
   })
 
-  test('invite dialog shows validation error for invalid email', async ({ page }) => {
-    await page.getByRole('button', { name: /invite member/i }).click()
+  test('typing a new full email offers to invite it', async ({ page }) => {
+    await page.getByRole('button', { name: /add people/i }).click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
 
-    // Fill in an invalid email and submit
-    await dialog.getByRole('textbox', { name: /email address/i }).fill('not-an-email')
-    await dialog.getByRole('button', { name: /send invitation/i }).click()
+    const address = `e2e-${Date.now()}@example.com`
+    await dialog.getByRole('combobox', { name: 'People' }).fill(address)
+    await dialog.getByRole('option', { name: `Invite ${address}` }).click()
+    await expect(dialog.getByRole('button', { name: `Remove ${address}` })).toBeVisible()
+    await expect(dialog.getByRole('button', { name: /^invite 1 person$/i })).toBeEnabled()
 
-    // Should show a validation message near the email field
-    const validationMsg = dialog.getByText(/invalid|valid email|email/i)
-    await expect(validationMsg.first()).toBeVisible({ timeout: 5000 })
-
-    // Close dialog
-    await dialog.getByRole('button', { name: /cancel/i }).click()
-  })
-
-  test('invite dialog role selector shows admin and member options', async ({ page }) => {
-    await page.getByRole('button', { name: /invite member/i }).click()
-
-    const dialog = page.getByRole('dialog')
-    await expect(dialog).toBeVisible({ timeout: 5000 })
-
-    // Open role selector
-    await dialog.getByRole('combobox').click()
-
-    // Should list member and admin options
-    await expect(page.getByRole('option', { name: /^member/i })).toBeVisible({ timeout: 8000 })
-    await expect(page.getByRole('option', { name: /^admin/i })).toBeVisible({ timeout: 8000 })
-
-    await page.keyboard.press('Escape')
     await dialog.getByRole('button', { name: /cancel/i }).click()
   })
 

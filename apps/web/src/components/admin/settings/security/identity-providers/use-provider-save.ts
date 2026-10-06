@@ -66,6 +66,9 @@ export function useProviderSave(provider: IdentityProvider) {
 
   const saveClaimMapping = async (
     args: {
+      /** The stored mapping the edit was based on; the server refuses the
+       *  write if it has changed since. Defaults to the provider's. */
+      expectedClaimMapping?: IdentityProvider['claimMapping']
       operations: ClaimMappingOperation[]
       acknowledgeIdentifierChange?: boolean
       acknowledgeAdminRules?: boolean
@@ -79,7 +82,10 @@ export function useProviderSave(provider: IdentityProvider) {
       const saved = (await saveMappingFn({
         data: {
           id: provider.id,
-          expectedClaimMapping: provider.claimMapping,
+          expectedClaimMapping:
+            args.expectedClaimMapping !== undefined
+              ? args.expectedClaimMapping
+              : provider.claimMapping,
           operations: args.operations,
           acknowledgeIdentifierChange: args.acknowledgeIdentifierChange,
           acknowledgeAdminRules: args.acknowledgeAdminRules,

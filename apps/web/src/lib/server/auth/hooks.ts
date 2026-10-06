@@ -738,7 +738,8 @@ export async function handleAutoProvisionAfter(
   // team membership. A claim-matched role bypasses this gate.
   if (claimRole === null && findProviderForDomainEmail(email, [provider]) === null) return
 
-  const targetRole: Role = claimRole ?? provider.autoProvisionRole ?? 'member'
+  const { DEFAULT_PROVISION_ROLE } = await import('@/lib/shared/sso-mapping-preview')
+  const targetRole: Role = claimRole ?? provider.autoProvisionRole ?? DEFAULT_PROVISION_ROLE
 
   const p = await db.query.principal.findFirst({
     where: eq(principalTable.userId, userIdTyped),

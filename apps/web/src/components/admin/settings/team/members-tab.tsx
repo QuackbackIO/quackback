@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect, useMemo } from 'react'
+import { Fragment, lazy, Suspense, useState, useEffect, useMemo } from 'react'
 import {
   type ColumnDef,
   type FilterFn,
@@ -9,7 +9,7 @@ import {
   tableFeatures,
   useTable,
 } from '@tanstack/react-table'
-import { useSuspenseQuery, useQueryClient } from '@tanstack/react-query'
+import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { EnvelopeIcon, PlusIcon } from '@heroicons/react/24/solid'
 import { Avatar } from '@/components/ui/avatar'
@@ -28,7 +28,6 @@ import { FormError } from '@/components/shared/form-error'
 import { CopyButton } from '@/components/shared/copy-button'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Button } from '@/components/ui/button'
-import { InviteMemberDialog } from '@/components/auth/invite-member-dialog'
 import {
   type PendingInvitation,
   getExpiryText,
@@ -41,7 +40,15 @@ import { CloudOwnershipActions } from '@/components/admin/settings/team/cloud-ow
 import { seatInviteBlocked } from '@/components/admin/settings/team/seat-usage'
 import type { UserId, PrincipalId } from '@quackback/ids'
 import { isAdmin } from '@/lib/shared/roles'
-import { useSessionContext } from '@/lib/client/hooks/use-root-context'
+import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { useOpenedOnce } from '@/lib/client/hooks/use-opened-once'
+
+// Loads the first time it opens, not with the roster.
+const AddPeopleDialog = lazy(() =>
+  import('@/components/admin/settings/team/add-people-dialog').then((m) => ({
+    default: m.AddPeopleDialog,
+  }))
+)
 
 // Discriminated union: each row is either a member or an invitation
 type TeamRow =
@@ -143,17 +150,20 @@ function SignInLabel({
 
 interface MembersTabProps {
   currentMember: { id: PrincipalId; role: 'admin' | 'member'; userId: UserId }
+  /** Holds member.manage: may add people to the team. */
+  canManageMembers: boolean
 }
 
 /** The teammate roster + pending invitations (the Members tab of Members & Teams). */
-export function MembersTab({ currentMember }: MembersTabProps) {
+export function MembersTab({ currentMember, canManageMembers }: MembersTabProps) {
   const session = useSessionContext()
+  const workspaceName = useWorkspaceSettings()?.name
   const teamDataQuery = useSuspenseQuery(settingsQueries.teamMembersAndInvitations())
   const { members, avatarMap, formattedInvitations, seatUsage } = teamDataQuery.data
 
   const [search, setSearch] = useState('')
-  const [showInviteDialog, setShowInviteDialog] = useState(false)
-  const queryClient = useQueryClient()
+  const [showAddPeople, setShowAddPeople] = useState(false)
+  const addPeopleOpened = useOpenedOnce(showAddPeople)
   const [error, setError] = useState<string | null>(null)
   const [inviteLinkMap, setInviteLinkMap] = useState<Record<string, string>>({})
 
@@ -167,7 +177,7 @@ export function MembersTab({ currentMember }: MembersTabProps) {
   const seatLine = seatUsage?.limit != null ? `${seatUsage.used} of ${seatUsage.limit} seats` : null
   const seatDescription = seatLine
     ? inviteBlocked
-      ? `${seatLine}. Upgrade to invite more.`
+      ? `${seatLine}. Upgrade to add more people.`
       : seatLine
     : null
 
@@ -364,10 +374,12 @@ export function MembersTab({ currentMember }: MembersTabProps) {
         {seatDescription && (
           <span className="text-[13px] text-muted-foreground">{seatDescription}</span>
         )}
-        <Button size="sm" className="ml-auto" onClick={() => setShowInviteDialog(true)}>
-          <PlusIcon className="h-4 w-4" />
-          Invite member
-        </Button>
+        {canManageMembers && (
+          <Button size="sm" className="ml-auto" onClick={() => setShowAddPeople(true)}>
+            <PlusIcon className="h-4 w-4" />
+            Add people
+          </Button>
+        )}
       </div>
 
       <SettingsCard flush>
@@ -526,11 +538,16 @@ export function MembersTab({ currentMember }: MembersTabProps) {
         </div>
       </SettingsCard>
 
-      <InviteMemberDialog
-        open={showInviteDialog}
-        onClose={() => setShowInviteDialog(false)}
-        onSuccess={() => queryClient.invalidateQueries({ queryKey: ['settings', 'team'] })}
-      />
+      {canManageMembers && addPeopleOpened && (
+        <Suspense fallback={null}>
+          <AddPeopleDialog
+            open={showAddPeople}
+            onOpenChange={setShowAddPeople}
+            canGrantAdmin={isCurrentUserAdmin}
+            workspaceName={workspaceName}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }
