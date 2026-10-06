@@ -382,7 +382,7 @@ function SeatMeter({
               className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"
             >
               <span
-                className={cn('block h-full', over ? 'bg-amber-500' : 'bg-primary')}
+                className={cn('block h-full', over ? 'bg-warning' : 'bg-primary')}
                 style={{ width: `${percent}%` }}
               />
             </span>
