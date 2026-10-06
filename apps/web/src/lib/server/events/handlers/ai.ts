@@ -18,6 +18,7 @@ import {
   releaseHookDelivery,
 } from '../hook-idempotency'
 import { isRetryableError } from '../hook-utils'
+import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'ai' })
@@ -66,11 +67,22 @@ export const aiHook: HookHandler = {
       const embeddingOk = embeddingResult.status === 'fulfilled' && embeddingResult.value
 
       // Log any failures
+      // A tier-limit refusal is an expected skip, not a failure.
       if (sentimentResult.status === 'rejected') {
-        log.error({ err: sentimentResult.reason, post_id: postId }, 'sentiment failed')
+        const reason = sentimentResult.reason
+        if (reason instanceof TierLimitError) {
+          log.info({ err: reason, post_id: postId }, 'sentiment skipped: ai not available on plan')
+        } else {
+          log.error({ err: reason, post_id: postId }, 'sentiment failed')
+        }
       }
       if (embeddingResult.status === 'rejected') {
-        log.error({ err: embeddingResult.reason, post_id: postId }, 'embedding failed')
+        const reason = embeddingResult.reason
+        if (reason instanceof TierLimitError) {
+          log.info({ err: reason, post_id: postId }, 'embedding skipped: ai not available on plan')
+        } else {
+          log.error({ err: reason, post_id: postId }, 'embedding failed')
+        }
       }
 
       log.info(
