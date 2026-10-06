@@ -331,7 +331,7 @@ export const account = pgTable(
  * A table of its own rather than columns on `account`: Better-Auth's adapter
  * selects every `account` column, so a column there would fail every sign-in
  * on a database that has not applied its migration yet. Nothing in Better-Auth
- * reads this table. See 0297.
+ * reads this table. See 0292.
  */
 export const accountProfileSync = pgTable('account_profile_sync', {
   accountId: typeIdColumn('account')('account_id')
