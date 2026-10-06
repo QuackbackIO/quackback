@@ -7,7 +7,8 @@
  * rules (first-match-wins). Arrays are scanned member-wise; scalars are
  * compared via case-insensitive equality. Returns null when no rule matches
  * (or no mapping is set) so the caller can fall back to the provider's
- * default role.
+ * default role. A match carries the rule's `roleId` when it grants a
+ * workspace role on top of the member tier.
  */
 
 import { getClaimByPath, type ClaimRoleMapping } from './oidc-claim-mapping'
@@ -15,7 +16,8 @@ import type { Role } from './roles'
 
 type Claims = Record<string, unknown>
 
-function matchesRule(claim: unknown, whenContains: string): boolean {
+/** Whether one rule's value is in a resolved claim. */
+export function roleRuleMatchesClaim(claim: unknown, whenContains: string): boolean {
   const needle = whenContains.toLowerCase()
   if (Array.isArray(claim)) {
     return claim.some((entry) => typeof entry === 'string' && entry.toLowerCase() === needle)
@@ -26,16 +28,21 @@ function matchesRule(claim: unknown, whenContains: string): boolean {
   return false
 }
 
+/** The first matching rule: its tier, the workspace role it grants, if any, and where it sits. */
+export type SsoRoleMatch = { role: Role; roleId?: string; ruleIndex: number }
+
 export function resolveSsoRoleMatch(
   claims: Claims,
   mapping: ClaimRoleMapping | undefined
-): { role: Role; ruleIndex: number } | null {
+): SsoRoleMatch | null {
   if (!mapping) return null
   const claim = getClaimByPath(claims, mapping.claimPath)
   for (let i = 0; i < mapping.rules.length; i++) {
     const rule = mapping.rules[i]
-    if (rule && matchesRule(claim, rule.whenContains)) {
-      return { role: rule.role, ruleIndex: i }
+    if (rule && roleRuleMatchesClaim(claim, rule.whenContains)) {
+      return rule.roleId
+        ? { role: rule.role, roleId: rule.roleId, ruleIndex: i }
+        : { role: rule.role, ruleIndex: i }
     }
   }
   return null

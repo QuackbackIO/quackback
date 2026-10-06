@@ -32,6 +32,7 @@ export type {
   IdentitySource,
   ProfileField,
   ClaimRoleMapping,
+  ClaimRoleRule,
   IdentityProviderClaimMapping,
   SourceSnapshot,
   SourceUnavailableReason,

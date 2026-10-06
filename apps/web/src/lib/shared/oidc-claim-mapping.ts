@@ -19,11 +19,12 @@
  * alternative is throwing inside the auth callback.
  */
 
-import type { Role } from './roles'
+import { isValidTypeId } from '@quackback/ids'
 import type { IdentityMapping } from './sso-claim-binder'
 import { isPlainRecord as isRecord } from './record'
 import type {
   ClaimRoleMapping,
+  ClaimRoleRule,
   IdentityProviderClaimMapping,
   IdentitySource,
   ProfileField,
@@ -33,6 +34,7 @@ import type {
 
 export type {
   ClaimRoleMapping,
+  ClaimRoleRule,
   IdentityProviderClaimMapping,
   IdentitySource,
   ProfileField,
@@ -117,6 +119,29 @@ function readProfile(value: unknown): IdentityProviderClaimMapping['profile'] {
   return Object.keys(profile).length > 0 ? profile : undefined
 }
 
+/** Whether a value names a workspace role by id. Existence is checked at use. */
+export function isRoleRuleRoleId(value: unknown): value is string {
+  return typeof value === 'string' && isValidTypeId(value, 'role')
+}
+
+/**
+ * One stored rule, or undefined when it cannot be read. A custom role rides
+ * the member tier only. A rule whose `roleId` is malformed or sits on another
+ * tier is dropped whole, the same as a rule with an unknown tier: the admin
+ * chose a specific role, and granting the bare tier instead would hand out a
+ * bundle nobody picked (the member preset may well exceed the custom role).
+ * A well-formed id that names a deleted role is not detectable here; sign-in
+ * resolves that one.
+ */
+export function readRoleRule(value: unknown): ClaimRoleRule | undefined {
+  if (!isRecord(value) || typeof value.whenContains !== 'string') return undefined
+  if (!KNOWN_ROLES.includes(value.role as string)) return undefined
+  const role = value.role as ClaimRoleRule['role']
+  if (value.roleId == null) return { whenContains: value.whenContains, role }
+  if (role !== 'member' || !isRoleRuleRoleId(value.roleId)) return undefined
+  return { whenContains: value.whenContains, role, roleId: value.roleId }
+}
+
 function readRole(value: unknown): ClaimRoleMapping | undefined {
   if (!isRecord(value)) return undefined
   const claimPath = usablePath(value.claimPath)
@@ -125,12 +150,10 @@ function readRole(value: unknown): ClaimRoleMapping | undefined {
   // configuration and gets default-role behaviour.
   if (!claimPath) return undefined
   const rules = Array.isArray(value.rules)
-    ? value.rules.filter(
-        (r): r is { whenContains: string; role: Role } =>
-          isRecord(r) &&
-          typeof r.whenContains === 'string' &&
-          KNOWN_ROLES.includes(r.role as string)
-      )
+    ? value.rules.flatMap((r) => {
+        const rule = readRoleRule(r)
+        return rule ? [rule] : []
+      })
     : []
   const role: ClaimRoleMapping = { claimPath, rules }
   if (value.syncOnEverySignIn === true) role.syncOnEverySignIn = true

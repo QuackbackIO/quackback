@@ -36,8 +36,10 @@ import {
   effectiveProfileSignature,
   mappingSaveRisks,
   mappingWouldStripUnsupported,
+  roleRuleRoleIds,
   storedJsonEqual,
   type ClaimMappingOperation,
+  type RoleRuleGrantCheck,
 } from '@/lib/shared/sso-claim-mapping-edit'
 import { logger } from '@/lib/server/logger'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
@@ -52,7 +54,7 @@ import { AUTH_CREDENTIAL_PREFIX } from '@/lib/server/auth/auth-providers'
 import { verifiedDomainCount, shouldRenderPublicButton } from '@/lib/server/auth/provider-ids'
 import type { VerifiedDomain } from './settings.types'
 import { invalidateSettingsCache, wrapDbError } from './settings.helpers'
-import { ConflictError, ValidationError } from '@/lib/shared/errors'
+import { ConflictError, ForbiddenError, ValidationError } from '@/lib/shared/errors'
 
 const log = logger.child({ component: 'identity-providers' })
 
@@ -150,6 +152,12 @@ export interface UpsertIdentityProviderInput {
   showButton?: boolean
   acknowledgeIdentifierChange?: boolean
   acknowledgeAdminRules?: boolean
+  /**
+   * The grant check for the saving admin (`roleRuleGrantCheck` in the roles
+   * domain). Saving a rule that grants a workspace role is a grant, so such a
+   * save without one is refused.
+   */
+  checkRoleGrants?: RoleRuleGrantCheck
 }
 
 // ============================================================================
@@ -579,7 +587,12 @@ export async function upsertIdentityProvider(
             )
           }
           if (!storedJsonEqual(existing.claimMapping, input.claimMapping)) {
-            const risks = mappingSaveRisks(existing.claimMapping, input.claimMapping)
+            const grants = await runRoleGrantCheck(
+              existing.claimMapping,
+              input.claimMapping,
+              input.checkRoleGrants
+            )
+            const risks = mappingSaveRisks(existing.claimMapping, input.claimMapping, grants)
             if (risks.identifierChanged && !input.acknowledgeIdentifierChange) {
               throw new ValidationError(
                 'MAPPING_IDENTIFIER_ACK_REQUIRED',
@@ -612,6 +625,9 @@ export async function upsertIdentityProvider(
           .where(eq(identityProvider.id, existing.id))
           .returning()
       } else {
+        if (input.claimMapping) {
+          await runRoleGrantCheck(null, input.claimMapping, input.checkRoleGrants)
+        }
         // Insert: omit `id` so the typeIdWithDefault column generates it.
         ;[row] = await tx
           .insert(identityProvider)
@@ -900,6 +916,23 @@ export async function persistTestResult(
   }
 }
 
+/**
+ * Run the caller's grant check over a mapping save. Without one, a save that
+ * grants a workspace role is refused (fail closed) and no role counts as
+ * admin-tier, which only matters for rules that were already stored.
+ */
+async function runRoleGrantCheck(
+  before: unknown,
+  after: unknown,
+  check: RoleRuleGrantCheck | undefined
+): Promise<{ adminTierRoleIds: ReadonlySet<string> }> {
+  if (check) return check(before, after)
+  if (roleRuleRoleIds(after, { newSince: before }).length > 0) {
+    throw new ForbiddenError('GRANT_CEILING', 'Assigner permission set is required')
+  }
+  return { adminTierRoleIds: new Set() }
+}
+
 export async function saveIdentityProviderClaimMapping(
   id: IdentityProviderId,
   args: {
@@ -907,6 +940,8 @@ export async function saveIdentityProviderClaimMapping(
     operations: ClaimMappingOperation[]
     acknowledgeIdentifierChange?: boolean
     acknowledgeAdminRules?: boolean
+    /** The saving admin's grant check; see `UpsertIdentityProviderInput`. */
+    checkRoleGrants?: RoleRuleGrantCheck
   }
 ): Promise<IdentityProvider> {
   const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
@@ -930,7 +965,8 @@ export async function saveIdentityProviderClaimMapping(
         )
       }
       const next = applyClaimMappingEdits(existing.claimMapping, args.operations)
-      const risks = mappingSaveRisks(existing.claimMapping, next)
+      const grants = await runRoleGrantCheck(existing.claimMapping, next, args.checkRoleGrants)
+      const risks = mappingSaveRisks(existing.claimMapping, next, grants)
       if (risks.identifierChanged && !args.acknowledgeIdentifierChange) {
         throw new ValidationError(
           'MAPPING_IDENTIFIER_ACK_REQUIRED',
@@ -966,7 +1002,13 @@ export async function saveIdentityProviderClaimMapping(
     ])
     return rowToIdentityProvider(saved, domains, configured, redirectStyles)
   } catch (error) {
-    if (error instanceof ValidationError || error instanceof ConflictError) throw error
+    if (
+      error instanceof ValidationError ||
+      error instanceof ConflictError ||
+      error instanceof ForbiddenError
+    ) {
+      throw error
+    }
     log.error({ err: error }, 'save identity provider claim mapping failed')
     wrapDbError('save identity provider claim mapping', error)
     throw error

@@ -10,16 +10,20 @@ import {
   identitySourcesFor,
   profileClaimFor,
   profileSyncEnabled,
+  readRoleRule,
+  getClaimByPath,
   type IdentityProviderClaimMapping,
   type IdentitySource,
   type ProfileField,
 } from './oidc-claim-mapping'
 import { planClaimAttributeWrites, type AttributeDefinition } from './plan-claim-attribute-writes'
-import { resolveSsoRoleMatch } from './resolve-sso-role'
+import { resolveSsoRoleMatch, roleRuleMatchesClaim } from './resolve-sso-role'
+import { claimValuesAt } from './claim-suggestions'
+import { isPlainRecord as isRecord } from './record'
 import type { Role } from './roles'
 import { finishBinding, replayClaimMapping } from './sso-claim-binder'
 import { finalizeProfileOutcome, type ProfileOutcome } from './sso-profile-outcome'
-import { isReplayableCapture, type SsoTestCapture } from './sso-test-capture'
+import { isReplayableCapture, type SsoTestCapture, type SsoTestCaptureV2 } from './sso-test-capture'
 
 export const SOURCE_WORDS: Record<IdentitySource, string> = {
   idToken: 'ID token',
@@ -36,10 +40,27 @@ export type MappingPreviewPolicy = {
   registrationId: string
 }
 
+/**
+ * The rule a test person matched. `roleId` is the workspace role it grants on
+ * top of the tier, `roleName` its name when the caller passed the role list,
+ * and `roleMissing` marks a role that list no longer has: sign-in then grants
+ * nothing and leaves the person's role as it is.
+ */
+export type RolePreviewMatch = {
+  role: Role
+  ruleIndex: number
+  roleId?: string
+  roleName?: string
+  roleMissing?: true
+}
+
+/** A workspace role as the preview names it. */
+export type PreviewRole = { id: string; name: string }
+
 export type MappingPreview = {
   status: MappingPreviewStatus
   identity: ProfileOutcome | null
-  roleMatch: { role: Role; ruleIndex: number } | null
+  roleMatch: RolePreviewMatch | null
   peoplePlan: ReturnType<typeof planClaimAttributeWrites> | null
   stale: boolean
   limitations: string[]
@@ -88,6 +109,25 @@ export function captureConfigIsStale(
   return Number.isFinite(capturedMs) && currentMs > capturedMs
 }
 
+/** The profile outcome sign-in would compute from a capture under a draft. */
+function replayIdentity(draft: unknown, capture: SsoTestCaptureV2): ProfileOutcome {
+  const identityMapping = identityMappingFor(draft)
+  const bound = finishBinding(
+    replayClaimMapping(
+      {
+        mapping: identityMapping,
+        requiredClaimPaths: requiredClaimPathsFor(draft),
+        wantImage: true,
+      },
+      capture.replay.sources
+    )
+  )
+  return finalizeProfileOutcome(bound, {
+    allowMissingEmail: allowsMissingEmail(draft),
+    usernameClaim: identityMapping.usernameClaim,
+  })
+}
+
 function sourceMissingFromCapture(draft: unknown, capture: SsoTestCapture): IdentitySource | null {
   if (!isReplayableCapture(capture)) return null
   const captured = new Set(capture.replay.sources.map((s) => s.source))
@@ -97,16 +137,33 @@ function sourceMissingFromCapture(draft: unknown, capture: SsoTestCapture): Iden
   return null
 }
 
+function namedRoleMatch(
+  match: ReturnType<typeof resolveSsoRoleMatch>,
+  roles: ReadonlyArray<PreviewRole> | undefined
+): RolePreviewMatch | null {
+  if (!match) return null
+  const result: RolePreviewMatch = { ...match }
+  if (match.roleId && roles) {
+    const found = roles.find((r) => r.id === match.roleId)
+    if (found) result.roleName = found.name
+    else result.roleMissing = true
+  }
+  return result
+}
+
 export function previewClaimMapping({
   draft,
   capture,
   definitions,
   providerPolicy,
+  roles,
 }: {
   draft: IdentityProviderClaimMapping | null
   capture: SsoTestCapture | null
   definitions: AttributeDefinition[]
   providerPolicy: MappingPreviewPolicy
+  /** Workspace roles, to name a matched rule's role. */
+  roles?: ReadonlyArray<PreviewRole>
 }): MappingPreview {
   if (!capture || capture.registrationId !== providerPolicy.registrationId) {
     return {
@@ -152,23 +209,12 @@ export function previewClaimMapping({
     }
   }
 
-  const identityMapping = identityMappingFor(draft)
-  const bound = finishBinding(
-    replayClaimMapping(
-      {
-        mapping: identityMapping,
-        requiredClaimPaths: requiredClaimPathsFor(draft),
-        wantImage: true,
-      },
-      capture.replay.sources
-    )
-  )
-  const identity = finalizeProfileOutcome(bound, {
-    allowMissingEmail: allowsMissingEmail(draft),
-    usernameClaim: identityMapping.usernameClaim,
-  })
+  const identity = replayIdentity(draft, capture)
   const mapping = claimMappingFor(draft)
-  const roleMatch = resolveSsoRoleMatch(identity.acceptedClaims, mapping.role)
+  const roleMatch = namedRoleMatch(
+    resolveSsoRoleMatch(identity.acceptedClaims, mapping.role),
+    roles
+  )
   const peoplePlan = mapping.attributes
     ? planClaimAttributeWrites({
         claims: identity.acceptedClaims,
@@ -200,6 +246,54 @@ export function previewClaimMapping({
     limitations,
     missingSource: null,
     capture,
+  }
+}
+
+/** How a draft's role rules fare against one test sign-in. */
+export type RoleRuleMatches = {
+  /** The role claim path the rules read. */
+  claimPath: string
+  /** Per draft rule, in draft order: whether the test person's claim holds its value. */
+  ruleMatches: boolean[]
+  /** The rule sign-in would apply (first match wins), or null when none matches. */
+  firstMatchIndex: number | null
+  /** The distinct values the test person's claim held at the path. */
+  valuesAtPath: string[]
+}
+
+/**
+ * Every role rule checked against a test sign-in, not only the winner, so the
+ * editor can mark each row. Indexes follow the draft's own rule list. A rule
+ * sign-in would not read (for example a malformed role id) never counts as the
+ * first match, though its row still reports whether the value is present.
+ *
+ * Null when there is no role section with a claim path, or whenever the
+ * outcome preview asks for a new test, so the two never disagree.
+ */
+export function previewRoleRuleMatches(
+  draft: unknown,
+  capture: SsoTestCapture | null | undefined
+): RoleRuleMatches | null {
+  if (!capture || !isReplayableCapture(capture)) return null
+  if (sourceMissingFromCapture(draft, capture)) return null
+  const roleSection = isRecord(draft) && isRecord(draft.role) ? draft.role : null
+  const claimPath = claimMappingFor(draft).role?.claimPath
+  if (!roleSection || !claimPath) return null
+  const rules = Array.isArray(roleSection.rules) ? roleSection.rules : []
+  const claims = replayIdentity(draft, capture).acceptedClaims
+  const claim = getClaimByPath(claims, claimPath)
+  const ruleMatches = rules.map(
+    (rule) =>
+      isRecord(rule) &&
+      typeof rule.whenContains === 'string' &&
+      roleRuleMatchesClaim(claim, rule.whenContains)
+  )
+  const first = ruleMatches.findIndex((hit, i) => hit && readRoleRule(rules[i]) !== undefined)
+  return {
+    claimPath,
+    ruleMatches,
+    firstMatchIndex: first < 0 ? null : first,
+    valuesAtPath: claimValuesAt(claims, claimPath),
   }
 }
 

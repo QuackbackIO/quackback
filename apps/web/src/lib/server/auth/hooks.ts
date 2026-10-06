@@ -21,7 +21,8 @@
 
 import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { getJwtToken } from 'better-auth/plugins'
-import type { UserId } from '@quackback/ids'
+import type { PrincipalId, RoleId, UserId } from '@quackback/ids'
+import type { SsoRoleMatch } from '@/lib/shared/resolve-sso-role'
 import { toSessionScope, type Role } from '@/lib/shared/roles'
 import {
   findProviderForDomainEmail,
@@ -716,16 +717,17 @@ export async function handleAutoProvisionAfter(
   // the email is not at one of the provider's verified domains.
   const { roleMappingFor } = await import('@/lib/shared/oidc-claim-mapping')
   const roleMapping = roleMappingFor(provider.claimMapping)
-  let claimRole: Role | null = null
+  let claimMatch: SsoRoleMatch | null = null
   if (roleMapping) {
     // Role resolution is indifferent to provenance: a role claim absent from
     // the stored token yields the default role either way.
     const claims = readClaims
       ? (await readClaims()).claims
       : await readSsoClaims(userIdTyped, providerId)
-    const { resolveSsoRole } = await import('@/lib/shared/resolve-sso-role')
-    claimRole = resolveSsoRole(claims, roleMapping)
+    const { resolveSsoRoleMatch } = await import('@/lib/shared/resolve-sso-role')
+    claimMatch = resolveSsoRoleMatch(claims, roleMapping)
   }
+  const claimRole: Role | null = claimMatch?.role ?? null
 
   // The default role (no claim matched) is NOT a per-user attestation, so it
   // stays scoped to the CALLBACK provider's own verified domains: without the
@@ -734,11 +736,23 @@ export async function handleAutoProvisionAfter(
   if (claimRole === null && findProviderForDomainEmail(email, [provider]) === null) return
 
   const targetRole: Role = claimRole ?? provider.autoProvisionRole ?? 'member'
+  // A rule may grant a workspace role on top of the member tier, through the
+  // same assignment path custom-role invites and role changes use.
+  const targetCustom = claimMatch?.roleId
+    ? await grantableRuleRole(claimMatch.roleId, claimMatch.ruleIndex, provider.id)
+    : null
+  // A matched rule whose role cannot be granted grants nothing. First match
+  // wins, so later rules and the default role do not apply either, and the
+  // person keeps whatever role they hold. Granting the bare tier instead would
+  // hand out the member preset, which can exceed the role the admin chose.
+  if (claimMatch?.roleId && !targetCustom) return
 
   const p = await db.query.principal.findFirst({
     where: eq(principalTable.userId, userIdTyped),
-    columns: { role: true },
+    columns: { id: true, role: true },
   })
+  // The workspace role the person holds now; only read when a rule names one.
+  const currentCustom = targetCustom && p ? await workspaceAssignmentOf(p.id as PrincipalId) : null
 
   // A missing principal is a returning user whose row was soft-removed
   // ("Remove from portal" deletes the principal, not the auth identity, so the
@@ -757,11 +771,15 @@ export async function handleAutoProvisionAfter(
   // demote an existing team-role user to 'user' under sync mode.
   if (targetRole === 'user' && !syncOnEverySignIn) return
 
-  if (currentRole === targetRole) return // no-op, save the write
+  // Under sync, a person whose matched rule now names a different workspace
+  // role moves to it even when the tier is unchanged.
+  const customMoves = targetCustom != null && currentCustom?.id !== targetCustom.id
+  if (currentRole === targetRole && !customMoves) return // no-op, save the write
+  const assignRoleId = targetCustom?.id
 
   if (p) {
     // No tx -> the factory busts PRINCIPAL_BY_USER itself.
-    await setPrincipalRole({ userId: userIdTyped }, targetRole)
+    await setPrincipalRole({ userId: userIdTyped }, targetRole, { assignRoleId })
   } else {
     // Recreate the soft-removed principal in-band with the provisioned role.
     // Display fields come from the auth user so the rebuilt principal matches
@@ -781,26 +799,81 @@ export async function handleAutoProvisionAfter(
       lastSsoSignInAt: new Date(),
     })
     // If a concurrent lazy create won the race it seeded role 'user'; reapply the
-    // provisioned role so the SSO attestation isn't silently dropped.
-    if (!created && rebuilt.role !== targetRole) {
-      await setPrincipalRole({ userId: userIdTyped }, targetRole)
+    // provisioned role so the SSO attestation isn't silently dropped. A
+    // workspace role is written through the role writer either way, since a
+    // plain create records no assignment.
+    if (assignRoleId || (!created && rebuilt.role !== targetRole)) {
+      await setPrincipalRole({ userId: userIdTyped }, targetRole, { assignRoleId })
     }
   }
 
-  if (p?.role && p.role !== targetRole) {
+  if (p?.role && (p.role !== targetRole || customMoves)) {
     const { recordAuditEvent } = await import('@/lib/server/audit/log')
     await recordAuditEvent({
       event: 'user.role.changed',
       outcome: 'success',
       actor: { userId: userIdTyped },
       target: { type: 'user', id: userIdTyped },
-      before: { role: p.role },
-      after: { role: targetRole },
+      before: {
+        role: p.role,
+        ...(customMoves && currentCustom ? { assignedRole: currentCustom.name } : {}),
+      },
+      after: { role: targetRole, ...(targetCustom ? { assignedRole: targetCustom.name } : {}) },
       metadata: { source: roleMapping ? 'claim_mapping' : 'auto_provision' },
     })
   }
 
   log.info({ user_id: userId, role: targetRole }, 'auto-provisioned verified-domain user via sso')
+}
+
+/**
+ * The workspace role a matched rule names, when it can still be granted. A
+ * role deleted since the rule was saved (or the Owner preset, which rides the
+ * admin tier and its own promotion path) yields null and the rule grants
+ * nothing; the warning carries ids only.
+ */
+async function grantableRuleRole(
+  roleId: string,
+  ruleIndex: number,
+  providerId: string
+): Promise<{ id: RoleId; name: string } | null> {
+  const { db, roles, eq } = await import('@/lib/server/db')
+  const [row] = await db
+    .select({ id: roles.id, key: roles.key, name: roles.name })
+    .from(roles)
+    .where(eq(roles.id, roleId as RoleId))
+    .limit(1)
+  const { SYSTEM_ROLES } = await import('@/lib/shared/permissions')
+  if (row && row.key !== SYSTEM_ROLES.OWNER) return { id: row.id, name: row.name }
+  log.warn(
+    {
+      code: 'sso_role_rule_role_missing',
+      provider_id: providerId,
+      rule_index: ruleIndex,
+      role_id: roleId,
+    },
+    'sso role rule names a role that cannot be granted; leaving the role unchanged'
+  )
+  return null
+}
+
+/** The principal's workspace-wide role assignment, if any. */
+async function workspaceAssignmentOf(
+  principalId: PrincipalId
+): Promise<{ id: RoleId; name: string } | null> {
+  const { db, roles, principalRoleAssignments, and, eq, isNull } = await import('@/lib/server/db')
+  const [row] = await db
+    .select({ id: roles.id, name: roles.name })
+    .from(principalRoleAssignments)
+    .innerJoin(roles, eq(roles.id, principalRoleAssignments.roleId))
+    .where(
+      and(
+        eq(principalRoleAssignments.principalId, principalId),
+        isNull(principalRoleAssignments.teamId)
+      )
+    )
+    .limit(1)
+  return row ?? null
 }
 
 type IdpRows = Awaited<
