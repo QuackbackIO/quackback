@@ -3,7 +3,6 @@ import type { ReactNode } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render as baseRender, screen, fireEvent, waitFor } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
-import en from '@/locales/en.json'
 
 const mockEnable = vi.fn()
 const mockVerifyTotp = vi.fn()
@@ -56,11 +55,9 @@ beforeEach(() => {
   mockVerifyTotp.mockResolvedValue({ error: null })
 })
 
-// The whole catalog holds the two-factor strings, as the sign-in gate's and
-// onboarding's do, so the steps render at once instead of loading them.
 function render(ui: React.ReactElement) {
   return baseRender(
-    <IntlProvider locale="en" defaultLocale="en" messages={en}>
+    <IntlProvider locale="en" defaultLocale="en">
       {ui}
     </IntlProvider>
   )

@@ -2,9 +2,8 @@
  * Guard: each area's strings (`AREA_MESSAGE_PREFIXES`) are left out of the
  * catalog every page seeds, so they show only where the area supplies them:
  *   - only the area's own modules use them;
- *   - an area whose routes read its strings in the loader has its modules
- *     imported, however indirectly, only from those routes;
- *   - an area that loads as it opens is mounted, by name, wherever it is shown.
+ *   - those modules are imported, however indirectly, only from the routes
+ *     whose loaders read the area's strings.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
@@ -14,9 +13,9 @@ import { AREA_MESSAGE_PREFIXES, messageArea, type MessageArea } from '@/lib/shar
 const SRC = resolve(__dirname, '../../..')
 
 /**
- * Per area: the modules that may use its strings and, for an area its route
- * loaders read, the modules that may import those (null for an area that loads
- * its own strings, or the private portal's gate, which loads the whole catalog).
+ * Per area: the modules that may use its strings and the modules that may
+ * import those (null for the private portal's gate, which loads the whole
+ * catalog itself).
  */
 const AREAS: Record<MessageArea, { users: RegExp; importers: RegExp | null }> = {
   notificationPreferences: {
@@ -32,25 +31,11 @@ const AREAS: Record<MessageArea, { users: RegExp; importers: RegExp | null }> = 
     users: /^(components\/help-center\/|routes\/_portal\/hc\/)/,
     importers: /^(components\/help-center\/|routes\/_portal\/hc(\.tsx$|\/))/,
   },
-  twoFactor: {
-    users: /^components\/auth\/two-factor-(challenge-step|enroll-steps)\.tsx$/,
-    importers: null,
-  },
-  notificationText: {
-    users: /^components\/notifications\/notification-text\.ts$/,
-    importers: null,
-  },
   accessGate: {
     users: /^components\/portal\/portal-access-gate\.tsx$/,
     importers: null,
   },
 }
-
-/** Where an area that loads as it opens is shown, and so must be mounted. */
-const SHOWN_BY: { area: MessageArea; marker: RegExp }[] = [
-  { area: 'twoFactor', marker: /<(ChallengeStep|EnrollSteps)\b/ },
-  { area: 'notificationText', marker: /<NotificationItem\b/ },
-]
 
 /**
  * The areas whose strings a source names: a quoted id under an area prefix
@@ -159,10 +144,4 @@ describe('area strings stay with their area', () => {
       expect(leaks).toEqual([])
     }
   )
-
-  it.each(SHOWN_BY)('$area is mounted wherever it is shown', ({ area, marker }) => {
-    const showing = files.filter((path) => marker.test(sources.get(path)!))
-    expect(showing.length).toBeGreaterThan(0)
-    expect(showing.filter((path) => !sources.get(path)!.includes(`area="${area}"`))).toEqual([])
-  })
 })

@@ -29,7 +29,7 @@ function NotificationsPage() {
   const { preferences, messages } = Route.useLoaderData()
   return (
     <SettingsPage page="/admin/settings/notifications">
-      <AreaMessages area="notificationPreferences" messages={messages}>
+      <AreaMessages messages={messages}>
         <NotificationMatrixForm surface="admin" initialPreferences={preferences} />
       </AreaMessages>
     </SettingsPage>

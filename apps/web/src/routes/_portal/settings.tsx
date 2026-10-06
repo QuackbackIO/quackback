@@ -26,7 +26,7 @@ export const Route = createFileRoute('/_portal/settings')({
 function SettingsLayout() {
   const { messages } = Route.useLoaderData()
   return (
-    <AreaMessages area="settings" messages={messages}>
+    <AreaMessages messages={messages}>
       <div className="mx-auto max-w-6xl w-full flex flex-col md:flex-row gap-4 md:gap-8 px-4 sm:px-6 py-6 md:py-8 flex-1 animate-in fade-in duration-200">
         <SettingsNav />
         <main className="min-w-0 flex-1">

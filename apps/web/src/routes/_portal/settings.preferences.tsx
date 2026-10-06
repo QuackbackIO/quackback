@@ -87,7 +87,7 @@ function PreferencesPage() {
             defaultMessage="Choose what you're notified about and how"
           />
         </p>
-        <AreaMessages area="notificationPreferences" messages={messages}>
+        <AreaMessages messages={messages}>
           <NotificationMatrixForm surface="portal" initialPreferences={notificationPreferences} />
         </AreaMessages>
       </div>

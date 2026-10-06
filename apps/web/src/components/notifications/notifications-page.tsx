@@ -9,7 +9,6 @@ import {
 import { PageHeader } from '@/components/shared/page-header'
 import { EmptyState } from '@/components/shared/empty-state'
 import { Spinner } from '@/components/shared/spinner'
-import { AreaMessages } from '@/components/shared/area-messages'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -159,48 +158,39 @@ export function NotificationsPage() {
               className="py-24"
             />
           ) : notifications.length > 0 ? (
-            <AreaMessages
-              area="notificationText"
-              fallback={
-                <div className="flex items-center justify-center py-24">
-                  <Spinner size="xl" />
+            <div className="space-y-4">
+              {groups.map((group) => (
+                <div key={group.label}>
+                  <h2 className="mb-2 text-[13px] font-medium text-muted-foreground">
+                    {GROUP_LABELS[group.label]}
+                  </h2>
+                  <div className="divide-y divide-border/50">
+                    {group.notifications.map((notification) => (
+                      <NotificationItem
+                        key={notification.id}
+                        notification={notification}
+                        onMarkAsRead={(id) => markAsRead.mutate(id)}
+                        onArchive={(id) => archiveNotification.mutate(id)}
+                        variant="full"
+                      />
+                    ))}
+                  </div>
                 </div>
-              }
-            >
-              <div className="space-y-4">
-                {groups.map((group) => (
-                  <div key={group.label}>
-                    <h2 className="mb-2 text-[13px] font-medium text-muted-foreground">
-                      {GROUP_LABELS[group.label]}
-                    </h2>
-                    <div className="divide-y divide-border/50">
-                      {group.notifications.map((notification) => (
-                        <NotificationItem
-                          key={notification.id}
-                          notification={notification}
-                          onMarkAsRead={(id) => markAsRead.mutate(id)}
-                          onArchive={(id) => archiveNotification.mutate(id)}
-                          variant="full"
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-                {hasNextPage && (
-                  <div className="flex justify-center pt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => fetchNextPage()}
-                      disabled={isFetchingNextPage}
-                    >
-                      {isFetchingNextPage && <Spinner size="sm" />}
-                      Load more
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </AreaMessages>
+              ))}
+              {hasNextPage && (
+                <div className="flex justify-center pt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fetchNextPage()}
+                    disabled={isFetchingNextPage}
+                  >
+                    {isFetchingNextPage && <Spinner size="sm" />}
+                    Load more
+                  </Button>
+                </div>
+              )}
+            </div>
           ) : unreadOnly ? (
             <EmptyState
               icon={CheckCircleIcon}

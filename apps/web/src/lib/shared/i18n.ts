@@ -194,12 +194,11 @@ export function isSetupWizardMessage(key: string): boolean {
 
 /**
  * Strings only one area of the app shows. Like the viewer's, pages leave them
- * out of the catalog they seed. An area its routes render on the server loads
- * its strings in the route loader (portal settings and help center, the admin
- * notification preferences); one that opens on a click loads them as it opens
- * (the two-factor sign-in steps, the notification lists). The private portal's
- * gate loads the whole catalog itself, so its strings need no seed at all.
- * See `AreaMessages`.
+ * out of the catalog they seed. The routes that show an area (portal settings
+ * and help center, the admin notification preferences) read its strings in
+ * their loader, so they render on the server as before; see `AreaMessages`.
+ * The private portal's gate loads the whole catalog itself, so its strings
+ * need no seed at all.
  *
  * A key belongs to the first area whose prefix it has, so the notification
  * preferences, which admin renders too, are their own area within settings.
@@ -208,8 +207,6 @@ export const AREA_MESSAGE_PREFIXES = {
   notificationPreferences: ['portal.settings.notifications.'],
   settings: ['portal.settings.'],
   helpCenter: ['portal.hc.'],
-  twoFactor: ['portal.auth.twoFactor.'],
-  notificationText: ['portal.notifications.text.'],
   accessGate: ['portal.accessGate.'],
 } as const satisfies Record<string, readonly string[]>
 
