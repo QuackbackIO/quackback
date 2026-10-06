@@ -243,8 +243,8 @@ describe('OutcomePreviewRail', () => {
     expect(screen.getByText('photo_url')).toBeInTheDocument()
   })
 
-  it('shows Member (runtime default) when Accounts role is null', () => {
+  it('shows Member when no default role is saved', () => {
     renderRail({ draft: { role: { claimPath: 'groups', rules: [] } } })
-    expect(screen.getByText(/Member \(runtime default\)/)).toBeInTheDocument()
+    expect(screen.getByText(/^Member at verified domains/)).toBeInTheDocument()
   })
 })

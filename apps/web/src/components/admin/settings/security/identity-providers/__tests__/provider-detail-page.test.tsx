@@ -339,6 +339,11 @@ describe('<ProviderDetailPage> page shell', () => {
     expect(screen.queryByRole('heading', { name: /Delete|Remove|Danger/ })).not.toBeInTheDocument()
   })
 
+  it('shows the role sign-in really gives when no default was saved', () => {
+    renderPage(makeProvider({ autoCreateUsers: true, autoProvisionRole: null }))
+    expect(screen.getByRole('combobox', { name: 'New account role' })).toHaveTextContent('Member')
+  })
+
   it('puts the provider under Access & Security in the breadcrumb', () => {
     renderPage(makeProvider({ label: 'Acme SSO' }))
     const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' })
