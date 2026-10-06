@@ -26,6 +26,7 @@ export const Route = createFileRoute('/admin/settings/members')({
     // The Teams tab lists teams, a read gated on team.manage rather than the
     // page's member.view, so only a viewer who may read them is shown the tab.
     const canManageTeams = !!context.permissions?.includes(PERMISSIONS.TEAM_MANAGE)
+    const canManageMembers = !!context.permissions?.includes(PERMISSIONS.MEMBER_MANAGE)
     const ensure = readBatch(queryClient)
     await Promise.all([
       ensure(settingsQueries.teamMembersAndInvitations()),
@@ -39,13 +40,14 @@ export const Route = createFileRoute('/admin/settings/members')({
       settings,
       currentMember: principal as { id: PrincipalId; role: 'admin' | 'member'; userId: UserId },
       canManageTeams,
+      canManageMembers,
     }
   },
   component: MembersPage,
 })
 
 function MembersPage() {
-  const { currentMember, canManageTeams } = Route.useLoaderData()
+  const { currentMember, canManageTeams, canManageMembers } = Route.useLoaderData()
   const { tab: requested = 'members' } = Route.useSearch()
   const tab = requested === 'teams' && !canManageTeams ? 'members' : requested
   const navigate = Route.useNavigate()
@@ -69,7 +71,7 @@ function MembersPage() {
           <TabsTrigger value="roles">Roles</TabsTrigger>
         </TabsList>
         <TabsContent value="members">
-          <MembersTab currentMember={currentMember} />
+          <MembersTab currentMember={currentMember} canManageMembers={canManageMembers} />
         </TabsContent>
         {canManageTeams && (
           <TabsContent value="teams">

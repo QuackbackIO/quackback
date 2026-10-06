@@ -265,11 +265,18 @@ export function effectiveNamePath(draft: unknown): string {
   return profileClaimFor(draft, 'name') ?? 'name'
 }
 
+/**
+ * The role a provider gives a new account at a verified domain when no rule
+ * matches and no default role was saved. Sign-in, the settings form and the
+ * preview all read it, so what an admin sees is what sign-in does.
+ */
+export const DEFAULT_PROVISION_ROLE: Role = 'member'
+
 export function runtimeFallbackRole(autoProvisionRole: Role | null): {
   role: Role
   label: string
 } {
-  if (autoProvisionRole == null) return { role: 'member', label: 'Member (runtime default)' }
+  if (autoProvisionRole == null) return { role: DEFAULT_PROVISION_ROLE, label: 'Member' }
   const labels: Record<Role, string> = {
     admin: 'Admin',
     member: 'Member',

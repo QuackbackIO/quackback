@@ -13,6 +13,7 @@
  * and Account options (signing in without an email address).
  */
 import { useId, useState } from 'react'
+import { DEFAULT_PROVISION_ROLE } from '@/lib/shared/sso-mapping-preview'
 import type { Role } from '@/lib/shared/roles'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -50,7 +51,7 @@ export function SignInCard({ provider }: { provider: IdentityProvider }) {
   const [label, setLabel] = useState(provider.label)
   const [autoCreateUsers, setAutoCreateUsers] = useState(provider.autoCreateUsers)
   const [autoProvisionRole, setAutoProvisionRole] = useState<Role>(
-    provider.autoProvisionRole ?? 'user'
+    provider.autoProvisionRole ?? DEFAULT_PROVISION_ROLE
   )
   const storedAllowMissingEmail = allowsMissingEmail(provider.claimMapping)
   const [allowMissingEmail, setAllowMissingEmail] = useState(storedAllowMissingEmail)
@@ -67,7 +68,8 @@ export function SignInCard({ provider }: { provider: IdentityProvider }) {
     showButton !== provider.showButton ||
     label.trim() !== provider.label ||
     autoCreateUsers !== provider.autoCreateUsers ||
-    (autoCreateUsers && autoProvisionRole !== (provider.autoProvisionRole ?? 'user')) ||
+    (autoCreateUsers &&
+      autoProvisionRole !== (provider.autoProvisionRole ?? DEFAULT_PROVISION_ROLE)) ||
     allowMissingEmail !== storedAllowMissingEmail
 
   const handleSave = async () => {

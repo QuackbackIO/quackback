@@ -75,7 +75,7 @@ describe('updateMemberRole', () => {
       role: 'admin',
     })
 
-    await updateMemberRole(TARGET, 'member', ACTING)
+    await updateMemberRole(TARGET, 'member', ACTING, null, undefined, { granterRole: 'admin' })
 
     expect(mockCacheDel).toHaveBeenCalledWith(`principal:user:${TARGET_USER}`)
   })
@@ -89,7 +89,7 @@ describe('updateMemberRole', () => {
       role: 'admin',
     })
 
-    await updateMemberRole(TARGET, 'member', ACTING)
+    await updateMemberRole(TARGET, 'member', ACTING, null, undefined, { granterRole: 'admin' })
 
     expect(mockCacheDel).not.toHaveBeenCalled()
   })

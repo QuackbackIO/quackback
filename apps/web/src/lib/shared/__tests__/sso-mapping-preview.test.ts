@@ -496,3 +496,12 @@ describe('previewProfileValues', () => {
     ).toBe('jd')
   })
 })
+
+describe('the default new-account role', () => {
+  it('is Member when none is saved, the same value sign-in uses', async () => {
+    const { DEFAULT_PROVISION_ROLE } = await import('../sso-mapping-preview')
+    expect(DEFAULT_PROVISION_ROLE).toBe('member')
+    const { runtimeFallbackRole } = await import('../sso-mapping-preview')
+    expect(runtimeFallbackRole(null)).toEqual({ role: 'member', label: 'Member' })
+  })
+})
