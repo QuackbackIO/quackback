@@ -288,7 +288,7 @@ describe('area strings', () => {
     expect(messageArea('portal.settings.notifications.saving')).toBe('notificationPreferences')
     expect(messageArea('portal.settings.profile.title')).toBe('settings')
     expect(messageArea('portal.hc.home.title')).toBe('helpCenter')
-    expect(messageArea('portal.auth.twoFactor.verify')).toBeNull()
+    expect(messageArea('portal.auth.twoFactor.verify')).toBe('twoFactor')
     expect(messageArea('portal.auth.continue')).toBeNull()
     expect(messageArea('portal.header.nav.feedback')).toBeNull()
   })

@@ -79,7 +79,7 @@ function HelpCenterLayoutRoute() {
   ])
 
   return (
-    <AreaMessages messages={messages}>
+    <AreaMessages area="helpCenter" messages={messages}>
       <div className="flex flex-1 min-h-0 flex-col" dir={isRtlLocale(locale) ? 'rtl' : 'ltr'}>
         {additionalLocales.length > 0 && (
           <div className="flex justify-end px-4 py-2 sm:px-6">
