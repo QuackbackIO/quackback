@@ -89,7 +89,8 @@ vi.stubGlobal('fetch', mockFetch)
 // ---------------------------------------------------------------------------
 
 async function runHandoffLoader(search: string) {
-  const { setResponseHeader, getRequestHeaders } = await import('@tanstack/react-start/server')
+  const { setResponseHeader } = await import('@tanstack/react-start/server')
+  const { verifyHandoffToken } = await import('../auth.widget-handoff')
   const { config } = await import('@/lib/server/config')
   const { db, widgetOriginSession, session, eq } = await import('@/lib/server/db')
   const { recordAuditEvent } = await import('@/lib/server/audit/log')
@@ -112,16 +113,7 @@ async function runHandoffLoader(search: string) {
 
   let verifyResponse: Response
   try {
-    verifyResponse = await fetch(`${config.baseUrl}/api/auth/one-time-token/verify`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        ...(getRequestHeaders().get('cookie')
-          ? { cookie: getRequestHeaders().get('cookie')! }
-          : {}),
-      },
-      body: JSON.stringify({ token: ott }),
-    })
+    verifyResponse = await verifyHandoffToken(config.baseUrl, ott)
   } catch {
     await recordAuditEvent({
       event: 'portal.widget_handshake.invalid',
@@ -255,6 +247,7 @@ async function runHandoffLoader(search: string) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockGetRequestHeaders.mockReturnValue(new Headers())
 })
 
 describe('isHandoffPrincipalTeammate', () => {
@@ -272,6 +265,36 @@ describe('isHandoffPrincipalTeammate', () => {
     const { isHandoffPrincipalTeammate } = await import('../auth.widget-handoff')
     mockPrincipalFindFirst.mockResolvedValueOnce(null)
     expect(await isHandoffPrincipalTeammate('user_unknown')).toBe(false)
+  })
+})
+
+describe('verifyHandoffToken', () => {
+  it('sends no cookie or origin-sensitive header even when the browser has cookies', async () => {
+    // The incoming request carries portal-host cookies (a theme preference
+    // plus CDN cookies). BA rejects a cookie-bearing request without Origin
+    // with 403 MISSING_OR_NULL_ORIGIN, so none may be forwarded.
+    mockGetRequestHeaders.mockReturnValue(new Headers({ cookie: 'cf_clearance=x; theme=dark' }))
+    mockFetch.mockResolvedValue({ ok: true, status: 200 } as Response)
+
+    const { verifyHandoffToken } = await import('../auth.widget-handoff')
+    await verifyHandoffToken('http://localhost:3000', 'tok_1')
+
+    const [url, init] = mockFetch.mock.calls[0]
+    expect(url).toBe('http://localhost:3000/api/auth/one-time-token/verify')
+    const headers = new Headers(init.headers)
+    expect(headers.get('cookie')).toBeNull()
+    expect(headers.get('content-type')).toBe('application/json')
+    expect(JSON.parse(init.body)).toEqual({ token: 'tok_1' })
+  })
+
+  it('does not forward the incoming cookie from the handoff flow either', async () => {
+    mockGetRequestHeaders.mockReturnValue(new Headers({ cookie: 'cf_clearance=x; theme=dark' }))
+    mockFetch.mockResolvedValue({ ok: false, status: 400 } as Response)
+
+    await runHandoffLoader('?ott=tok_2')
+
+    const headers = new Headers(mockFetch.mock.calls[0][1].headers)
+    expect(headers.get('cookie')).toBeNull()
   })
 })
 

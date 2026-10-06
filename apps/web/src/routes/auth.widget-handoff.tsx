@@ -19,8 +19,7 @@
  *      renders.
  *
  * Why the server fn wrapper?
- *   The actual OTT consumption logic needs `setResponseHeader` and
- *   `getRequestHeaders` from `@tanstack/react-start/server`. Vite's
+ *   The actual OTT consumption logic needs `setResponseHeader` from `@tanstack/react-start/server`. Vite's
  *   import-protection plugin denies that specifier in client-bundled code,
  *   and route files end up in the client bundle via `routeTree.gen.ts`.
  *   Wrapping the logic in a `createServerFn` confines the server-only
@@ -41,7 +40,7 @@
  */
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
-import { getRequestHeaders, setResponseHeader } from '@tanstack/react-start/server'
+import { setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import { isSafeCallbackUrl } from '@/lib/shared/routing'
 import { buildSigninRedirect } from '@/lib/shared/auth-prompt'
@@ -118,6 +117,25 @@ type HandoffResult =
   | { kind: 'error'; status: 'invalid' | 'expired' | 'error' }
 
 /**
+ * Server-to-server call to BA's one-time-token verify endpoint.
+ *
+ * The browser's cookie header is deliberately NOT forwarded. The token alone
+ * identifies the session to install, and the verify handler never reads the
+ * caller's cookies. Forwarding them is actively harmful: BA's origin check
+ * rejects a cookie-bearing request that carries no Origin header with a 403,
+ * and any visitor who already holds a cookie on the portal host (a theme
+ * preference, a CDN clearance cookie) would be refused as if the link had
+ * expired.
+ */
+export function verifyHandoffToken(baseUrl: string, ott: string): Promise<Response> {
+  return fetch(`${baseUrl}/api/auth/one-time-token/verify`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token: ott }),
+  })
+}
+
+/**
  * Verify the OTT against BA, forward Set-Cookie to the browser, insert the
  * widget_origin_session marker, and record the audit event. Returns a
  * discriminated union so the route loader can decide whether to throw
@@ -155,18 +173,7 @@ const consumeWidgetHandoffFn = createServerFn({ method: 'POST' })
     // redirect fires.
     let verifyResponse: Response
     try {
-      verifyResponse = await fetch(`${config.baseUrl}/api/auth/one-time-token/verify`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          // Forward the caller's cookie header so BA can resolve any
-          // existing session context if needed.
-          ...(getRequestHeaders().get('cookie')
-            ? { cookie: getRequestHeaders().get('cookie')! }
-            : {}),
-        },
-        body: JSON.stringify({ token: data.ott }),
-      })
+      verifyResponse = await verifyHandoffToken(config.baseUrl, data.ott)
     } catch (err) {
       log.error({ err }, 'ott verify fetch failed')
       await recordAuditEvent({
