@@ -11,7 +11,6 @@ import { isProductEnabled } from '@/lib/shared/types/settings'
 import { unreadCountQuery } from '@/lib/client/hooks/use-notifications-queries'
 import { getLatestVersion, isNewerVersion } from '@/lib/server/functions/version'
 import { AdminProductTourProvider } from '@/components/onboarding/admin-product-tour'
-import { GoingLiveSheets } from '@/components/onboarding/going-live-sheets'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
 import { ArticleModal, ChangelogModal, PostModal } from '@/components/admin/entity-modals'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -281,7 +280,6 @@ function AdminLayout() {
               inLaunchWindow={inLaunchWindow}
               currentUser={currentUser}
             />
-            <GoingLiveSheets />
           </TooltipProvider>
         </AdminProductTourProvider>
       </SearchPaletteProvider>

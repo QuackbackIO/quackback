@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { OPEN_GOING_LIVE_EVENT, type GoingLiveSheet } from './going-live-events'
 import { SheetMessages } from './sheet-messages'
 
@@ -33,8 +33,13 @@ export function consumeSetupLink(href: string): {
   }
 }
 
-/** The admin layout's going-live sheets, opened by `openGoingLiveSheet`. */
-export function GoingLiveSheets() {
+/**
+ * The admin layout's going-live sheets, opened by `openGoingLiveSheet`: the
+ * open sheet, for the layout's sheet host to render. A hook rather than a
+ * component of its own, so every admin page renders nothing more for it until
+ * a sheet opens.
+ */
+export function useGoingLiveSheets(): ReactNode {
   const [state, setState] = useState<{ sheet: GoingLiveSheet; open: boolean } | null>(null)
   useEffect(() => {
     const onOpen = (event: Event) => {
@@ -47,8 +52,8 @@ export function GoingLiveSheets() {
     if (link) {
       window.history.replaceState(window.history.state, '', link.rest)
       if (link.open) setState({ sheet: link.open, open: true })
-      // After this commit: the Try Messenger host wraps the page and
-      // registers its listener in an effect that runs after this one.
+      // After this commit, so the Try Messenger host is listening whichever
+      // order its effect and this one run in.
       const test = link.test
       if (test) {
         window.setTimeout(() =>

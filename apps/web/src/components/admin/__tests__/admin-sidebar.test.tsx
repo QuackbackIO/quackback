@@ -378,6 +378,21 @@ describe('AdminSidebar rail', () => {
   })
 })
 
+it('shows a running trial quietly in the footer, and nothing there without a notice', () => {
+  renderSidebar('admin', {
+    planNotice: {
+      label: 'Pro trial',
+      expiresAt: new Date(Date.now() + 14 * 86_400_000 - 60_000).toISOString(),
+      actionUrl: '/admin/settings/billing',
+    },
+  })
+  expect(screen.getByRole('link', { name: 'Pro trial · 14 days' })).toBeTruthy()
+  cleanup()
+  renderSidebar('admin')
+  expect(screen.queryByText(/Pro trial/)).toBeNull()
+  cleanup()
+})
+
 it('opens the shared palette from the sidebar search button, the one tour stop', () => {
   const { container } = renderSidebar('admin')
   fireEvent.click(screen.getAllByRole('button', { name: 'Search' })[0]!)

@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useCopilotOnHome } from '@/components/admin/ask/copilot-on-home'
+import { useGoingLiveSheets } from './going-live-sheets'
 import { ProductTourProvider, type TourEndAction } from './product-tour'
 import type { TryMessengerStart } from './try-messenger-sheet'
 import { SheetMessages } from './sheet-messages'
@@ -22,7 +23,10 @@ const TourEndTestAction = lazy(() =>
  */
 export const OPEN_TRY_MESSENGER_EVENT = 'quackback:open-try-messenger'
 
-/** The admin's guided tour, ending on the next test action, and the one Try Messenger sheet. */
+/**
+ * The admin's guided tour, ending on the next test action, the one Try
+ * Messenger sheet and the going-live sheets.
+ */
 export function AdminProductTourProvider({ children }: { children: ReactNode }) {
   const [sheet, setSheet] = useState<{ open: boolean; start: TryMessengerStart } | null>(null)
   // Home is the Copilot chat for this teammate, so the tour opens on it.
@@ -38,6 +42,7 @@ export function AdminProductTourProvider({ children }: { children: ReactNode }) 
     window.addEventListener(OPEN_TRY_MESSENGER_EVENT, onOpen)
     return () => window.removeEventListener(OPEN_TRY_MESSENGER_EVENT, onOpen)
   }, [open])
+  const goingLiveSheet = useGoingLiveSheets()
   const onOpenChange = useCallback(
     (next: boolean) => setSheet((prev) => prev && { ...prev, open: next }),
     []
@@ -67,6 +72,7 @@ export function AdminProductTourProvider({ children }: { children: ReactNode }) 
           </SheetMessages>
         </Suspense>
       )}
+      {goingLiveSheet}
     </ProductTourProvider>
   )
 }
