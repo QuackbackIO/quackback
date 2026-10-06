@@ -12,7 +12,7 @@
  * sign-in" is refused when it would take admin access away from the admins
  * who sign in with this provider.
  */
-import { useId, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { PlusIcon, TrashIcon } from '@heroicons/react/24/solid'
 import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline'
@@ -36,19 +36,15 @@ import { INLINE_LINK } from '@/components/admin/settings/inline-link'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
-import { deriveClaimSuggestions } from '@/lib/shared/claim-suggestions'
 import {
   adminTierRoleIds,
+  canManageSso,
   diffClaimMappingOperations,
   mappingSaveRisks,
   roleRuleRoleIds,
 } from '@/lib/shared/sso-claim-mapping-edit'
-import { previewClaimMapping, previewRoleRuleMatches } from '@/lib/shared/sso-mapping-preview'
-import {
-  captureIdentityCaption,
-  captureSuggestionClaims,
-  type SsoTestCapture,
-} from '@/lib/shared/sso-test-capture'
+import { previewRoleRuleMatches } from '@/lib/shared/sso-mapping-preview'
+import { captureIdentityCaption, type SsoTestCapture } from '@/lib/shared/sso-test-capture'
 import { ClaimPathInput } from './claim-path-input'
 import { mergeClaimMapping, normalizeRoleMapping, type RoleMapping } from './provider-shared'
 import {
@@ -137,6 +133,13 @@ function adminRulesOf(role: RoleMapping | undefined | null, tierIds: ReadonlySet
     .map((r) => [r.whenContains, r.roleId ?? r.role])
 }
 
+/** Roles that hold SSO management (auth.manage); a rule giving one keeps it. */
+function ssoManagerRoleIds(
+  roles: ReadonlyArray<{ id: string; permissionKeys: readonly string[] }>
+): Set<string> {
+  return new Set(roles.filter((r) => canManageSso(r.permissionKeys)).map((r) => r.id))
+}
+
 function RolesEditor({ provider, label }: { provider: IdentityProvider; label: string }) {
   const { saving, save, saveClaimMapping } = useProviderSave(provider)
   const capture = useProviderCapture(provider)
@@ -151,6 +154,8 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
   const [confirmOpen, setConfirmOpen] = useState(false)
   // A refused save, shown on the rules it names until the next edit.
   const [ruleError, setRuleError] = useState<{ roleIds: string[]; message: string } | null>(null)
+  // The server's own lockout refusal, shown by the choice it refused.
+  const [syncRefused, setSyncRefused] = useState<string | null>(null)
 
   const stored: Baseline = {
     mapping: provider.claimMapping,
@@ -202,43 +207,57 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
     (draft.rules.length === 0 || draft.claimPath.trim() !== '')
   const valid = filled && !editedMissing
 
-  // The last test sign-in, replayed under this draft: which rules its person
-  // matches, and the role sign-in would give them.
-  const preview = previewClaimMapping({
-    draft: proposed,
-    capture,
-    definitions: [],
-    providerPolicy: {
-      autoCreateUsers: provider.autoCreateUsers,
-      autoProvisionRole: provider.autoProvisionRole,
-      detailsChangedAt: provider.detailsChangedAt,
-      registrationId: provider.registrationId,
-    },
-    roles: liveRoles,
-  })
-  const ruleMatches = previewRoleRuleMatches(proposed, capture)
+  // The last test sign-in, replayed once under this draft: which raw rules its
+  // person matches, the first one sign-in would apply, and the values sent.
+  const proposedKey = JSON.stringify(proposed)
+  const ruleMatches = useMemo(
+    () => previewRoleRuleMatches(JSON.parse(proposedKey) as typeof proposed, capture),
+    [proposedKey, capture]
+  )
   const matches = ruleMatches?.ruleMatches ?? []
   const firstMatch = ruleMatches?.firstMatchIndex ?? -1
   const testPerson = capture ? personName(capture) : null
-  const seenValues = capture
-    ? (deriveClaimSuggestions(captureSuggestionClaims(capture)).valuesByPath[
-        draft.claimPath.trim()
-      ] ?? [])
-    : []
+  const seenValues = ruleMatches?.valuesAtPath ?? []
+  const firstRule = firstMatch >= 0 ? draft.rules[firstMatch] : undefined
+  const testMatch = !ruleMatches
+    ? undefined
+    : firstRule
+      ? {
+          role: firstRule.role,
+          ...(firstRule.roleId ? { roleId: firstRule.roleId } : {}),
+          ...(roleMissing(firstRule) ? { roleMissing: true as const } : {}),
+          ruleIndex: firstMatch,
+        }
+      : null
 
+  const ssoManagerRoles = ssoManagerRoleIds(rolesData?.roles ?? [])
   const guardActive = provider.autoCreateUsers && draft.mode === 'every'
   const admins = useProviderAdmins(provider.id, guardActive)
   const guard = adminGuard({
     active: guardActive,
     loading: admins.isPending,
+    failed: admins.isError,
     admins: admins.data,
     draft,
     domains,
-    tierIds,
-    testEmail: preview.identity?.email ?? null,
-    testMatch: preview.identity ? preview.roleMatch : undefined,
+    keepsIds: ssoManagerRoles,
+    testEmail: capture?.identity?.email ?? null,
+    testMatch,
   })
-  const lockout = guard.kind === 'caller' || guard.kind === 'block'
+  const lockout = guard.kind === 'caller' || guard.kind === 'block' || guard.kind === 'error'
+  // Off the verified domains, only a rule can change someone's role. Who matches
+  // a rule without SSO management is unknown here, so they get a quiet warning.
+  // The general warning already covers them when a rule can keep access.
+  const offDomainAtRisk =
+    guard.kind === 'none' || guard.kind === 'block' || guard.kind === 'caller'
+      ? draft.rules.some(
+          (r) =>
+            r.whenContains.trim() !== '' &&
+            !(r.roleId ? ssoManagerRoles.has(r.roleId) : r.role === 'admin')
+        )
+        ? (admins.data ?? []).filter((p) => p.canManageSso && !p.atVerifiedDomain).length
+        : 0
+      : 0
   // Save waits for the role list (so an admin-level custom role is always
   // confirmed) and, under "Every sign-in", for the admin check.
   const waiting = !rolesData
@@ -249,10 +268,12 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
 
   const update = (patch: Partial<RolesDraft>) => {
     setRuleError(null)
+    setSyncRefused(null)
     setDraft((prev) => ({ ...prev, ...patch }))
   }
   const updateRule = (index: number, patch: Partial<RoleRuleDraft>) => {
     setRuleError(null)
+    setSyncRefused(null)
     setDraft((prev) => ({
       ...prev,
       rules: prev.rules.map((rule, i) => {
@@ -280,6 +301,10 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
         { operations, acknowledgeAdminRules: risks.hasAdminRules },
         both ? null : 'Roles saved.',
         (err) => {
+          if (isSyncLockout(err)) {
+            setSyncRefused(syncLockoutMessage(label))
+            return true
+          }
           const refusal = grantRefusal(err)
           // The server names no rule, but it only checks rules this save adds
           // or changes, so the refusal belongs on those.
@@ -292,7 +317,11 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
       if (!saved) return
     }
     if (defaultChanged) {
-      const ok = await save({ autoProvisionRole: draft.defaultRole }, 'Roles saved.')
+      const ok = await save({ autoProvisionRole: draft.defaultRole }, 'Roles saved.', (err) => {
+        if (!isSyncLockout(err)) return false
+        setSyncRefused(syncLockoutMessage(label))
+        return true
+      })
       if (!ok) {
         if (roleChanged) setBaseline((prev) => ({ ...prev, mapping: proposed }))
         return
@@ -500,6 +529,27 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
         onChange={(mode) => update({ mode })}
       />
 
+      {guard.kind === 'error' && (
+        <Alert variant="destructive">
+          <AlertDescription className="flex flex-wrap items-center gap-2">
+            <span>Couldn&apos;t check which admins sign in with {label}. Try again.</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className={NEUTRAL_BUTTON_FOCUS}
+              onClick={() => void admins.refetch()}
+            >
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+      {syncRefused && (
+        <Alert variant="destructive">
+          <AlertDescription>{syncRefused}</AlertDescription>
+        </Alert>
+      )}
       {guard.kind === 'caller' && (
         <Alert variant="destructive">
           <AlertTitle>This would remove admin access from you.</AlertTitle>
@@ -522,6 +572,17 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
                 <li key={p.principalId}>{personLabel(p)}</li>
               ))}
             </ul>
+          </AlertDescription>
+        </Alert>
+      )}
+      {offDomainAtRisk > 0 && (
+        <Alert role="status" className="text-warning">
+          <AlertDescription className="text-warning">
+            {offDomainAtRisk === 1
+              ? '1 admin outside your verified domains signs in'
+              : `${offDomainAtRisk} admins outside your verified domains sign in`}{' '}
+            with {label}. If one matches a rule that does not give Admin, they lose admin access at
+            their next sign-in.
           </AlertDescription>
         </Alert>
       )}
@@ -590,6 +651,16 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
   )
 }
 
+/** Whether the server refused "Every sign-in" because it would lock admins out. */
+function isSyncLockout(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null)?.code
+  return code === 'SYNC_LOCKOUT' || (err instanceof Error && /SYNC_LOCKOUT/.test(err.message))
+}
+
+function syncLockoutMessage(label: string): string {
+  return `Saving this would remove admin access from people who sign in with ${label}. Add a rule that gives Admin, or keep “First sign-in only”.`
+}
+
 /** The plain-English reason a save that grants a role was refused, or null. */
 function grantRefusal(err: unknown): string | null {
   const code =
@@ -617,45 +688,53 @@ function personName(capture: SsoTestCapture): string {
 type AdminGuard =
   | { kind: 'none' }
   | { kind: 'loading' }
-  /** The caller's own last test sign-in shows they would lose admin access. */
+  /** The admin list could not be read, so nothing vouches for the change. */
+  | { kind: 'error' }
+  /** The caller's own last test sign-in shows they would lose SSO management. */
   | { kind: 'caller' }
-  /** No rule gives an admin-level role and the default is not Admin. */
+  /** People sign-in would demote: at a verified domain, with no rule that can keep them. */
   | { kind: 'block'; people: ProviderAdmin[] }
-  /** Some rule gives an admin-level role; whether each admin matches is unknown. */
+  /** Some rule can keep them; whether each one matches it is unknown here. */
   | { kind: 'warn'; count: number }
 
 /**
- * Whether saving "Every sign-in" would take admin access from the admins who
- * sign in with this provider. Their claims are unknown here, so a draft with
- * no rule giving an admin-level role (and a default that is not Admin) blocks,
- * and one with such a rule only warns. When the last test sign-in was the
- * caller's own, their claims decide it for them exactly.
+ * Whether saving "Every sign-in" would take SSO management away from the
+ * people who sign in with this provider and hold it now, mirroring sign-in:
+ * without a matching rule, only someone at a verified domain gets the default
+ * role; anyone else is left alone. Their claims are unknown here, so a draft
+ * with no rule able to keep them (and a default that is not Admin) blocks for
+ * those at a verified domain, and one with such a rule only warns. When the
+ * last test sign-in was the caller's own, their claims decide it exactly.
  */
 function adminGuard({
   active,
   loading,
+  failed,
   admins,
   draft,
   domains,
-  tierIds,
+  keepsIds,
   testEmail,
   testMatch,
 }: {
   active: boolean
   loading: boolean
+  failed: boolean
   admins: ProviderAdmin[] | undefined
   draft: RolesDraft
   domains: string[]
-  /** Custom roles whose permissions reach admin level: they keep admin access. */
-  tierIds: ReadonlySet<string>
-  /** The test person's email, and the rule they match (undefined: not replayed). */
+  /** Custom roles that hold SSO management: a rule giving one keeps it. */
+  keepsIds: ReadonlySet<string>
+  /** The test person's email, and the raw rule they match first (undefined: no test). */
   testEmail: string | null
   testMatch:
     { role: Role; roleId?: string; roleMissing?: true; ruleIndex: number } | null | undefined
 }): AdminGuard {
   if (!active) return { kind: 'none' }
+  if (failed) return { kind: 'error' }
   if (loading) return { kind: 'loading' }
-  const people = admins ?? []
+  const people = (admins ?? []).filter((p) => p.canManageSso)
+  const keeps = (role: Role, roleId?: string) => (roleId ? keepsIds.has(roleId) : role === 'admin')
   const caller = people.find((p) => p.isCaller)
   if (
     caller?.email &&
@@ -670,19 +749,16 @@ function adminGuard({
     })
     const loses =
       outcome.source === 'rule'
-        ? outcome.roleId
-          ? !tierIds.has(outcome.roleId)
-          : outcome.role !== 'admin'
+        ? !keeps(outcome.role, outcome.roleId)
         : outcome.source === 'domain' && outcome.role !== 'admin'
     if (loses) return { kind: 'caller' }
   }
   if (people.length === 0) return { kind: 'none' }
-  const ruleGivesAdmin = draft.rules.some(
-    (r) => r.whenContains.trim() !== '' && (r.roleId ? tierIds.has(r.roleId) : r.role === 'admin')
-  )
-  if (ruleGivesAdmin) return { kind: 'warn', count: people.length }
-  if (draft.defaultRole !== 'admin') return { kind: 'block', people }
-  return { kind: 'none' }
+  const ruleKeeps = draft.rules.some((r) => r.whenContains.trim() !== '' && keeps(r.role, r.roleId))
+  if (ruleKeeps) return { kind: 'warn', count: people.length }
+  if (draft.defaultRole === 'admin') return { kind: 'none' }
+  const demoted = people.filter((p) => p.atVerifiedDomain)
+  return demoted.length > 0 ? { kind: 'block', people: demoted } : { kind: 'none' }
 }
 
 function personLabel(p: ProviderAdmin): string {

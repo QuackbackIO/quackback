@@ -84,6 +84,7 @@ function renderRail(over: {
   detailsChangedAt?: string | null
   verifiedDomains?: string[]
   roles?: Array<{ id: string; name: string }>
+  adminTierRoleIds?: ReadonlySet<string>
 }) {
   return render(
     <OutcomePreviewRail
@@ -98,6 +99,7 @@ function renderRail(over: {
       }}
       verifiedDomains={over.verifiedDomains}
       roles={over.roles}
+      adminTierRoleIds={over.adminTierRoleIds}
       dirty={over.dirty ?? false}
       registrationId={REG}
       canTest
@@ -263,6 +265,21 @@ describe('OutcomePreviewRail', () => {
     renderRail({ draft, roles: [] })
     const line = screen.getByText('No change (rule 1 names a role that no longer exists)')
     expect(line.className).toMatch(/text-warning/)
+  })
+
+  it('warns about an admin-level custom role rule like an Admin rule', () => {
+    const roleId = generateId('role')
+    const draft = {
+      role: {
+        claimPath: 'groups',
+        rules: [{ whenContains: 'ops', role: 'member' as const, roleId }],
+      },
+    }
+    const { unmount } = renderRail({ draft, adminTierRoleIds: new Set([roleId]) })
+    expect(screen.getByText(/even outside this provider's verified domains/)).toBeInTheDocument()
+    unmount()
+    renderRail({ draft, adminTierRoleIds: new Set() })
+    expect(screen.queryByText(/even outside this provider's verified domains/)).toBeNull()
   })
 
   it('names the matching rule as "Admin (rule 1)"', () => {

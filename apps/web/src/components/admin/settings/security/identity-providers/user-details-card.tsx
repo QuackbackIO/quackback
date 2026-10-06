@@ -32,7 +32,11 @@ import {
   type ProfileField,
 } from '@/lib/shared/oidc-claim-mapping'
 import type { AttributeDefinition } from '@/lib/shared/plan-claim-attribute-writes'
-import { diffClaimMappingOperations, mappingSaveRisks } from '@/lib/shared/sso-claim-mapping-edit'
+import {
+  adminTierRoleIds,
+  diffClaimMappingOperations,
+  mappingSaveRisks,
+} from '@/lib/shared/sso-claim-mapping-edit'
 import { previewProfileValues } from '@/lib/shared/sso-mapping-preview'
 import {
   ClaimRowDialog,
@@ -408,6 +412,7 @@ function ProfileEditor({
         verifiedDomains={verifiedDomainNames(provider.domains)}
         roles={rolesData ? grantableRoles(rolesData.roles) : undefined}
         roleUnsaved={rolesDraft !== null}
+        adminTierRoleIds={adminTierRoleIds(rolesData?.roles ?? [])}
         dirty={dirty}
         onSaveAndTest={() => requestSave(true)}
         registrationId={provider.registrationId}

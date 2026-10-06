@@ -62,6 +62,7 @@ export function OutcomePreviewRail({
   verifiedDomains = [],
   roles,
   roleUnsaved = false,
+  adminTierRoleIds,
   dirty,
   onSaveAndTest,
   registrationId,
@@ -77,6 +78,8 @@ export function OutcomePreviewRail({
   roles?: Array<{ id: string; name: string }>
   /** The Role line answers for the Roles card's unsaved draft. */
   roleUnsaved?: boolean
+  /** Custom roles whose permissions reach admin level. */
+  adminTierRoleIds?: ReadonlySet<string>
   dirty: boolean
   onSaveAndTest?: () => void
   registrationId: string
@@ -110,7 +113,10 @@ export function OutcomePreviewRail({
   }
 
   const roleRules = draft?.role?.rules ?? []
-  const hasAdminRule = roleRules.some((r) => r.role === 'admin')
+  // The same rules the card confirms: Admin, or a custom role at admin level.
+  const hasAdminRule = roleRules.some((r) =>
+    r.roleId ? (adminTierRoleIds?.has(r.roleId) ?? false) : r.role === 'admin'
+  )
   const identity = preview.identity
 
   return (

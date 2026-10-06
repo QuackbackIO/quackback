@@ -37,7 +37,9 @@ export function useProviderSave(provider: IdentityProvider) {
    *  A null message saves quietly, for the first of two writes behind one Save. */
   const save = async (
     patch: ProviderPatch,
-    successMessage: string | null = 'Saved.'
+    successMessage: string | null = 'Saved.',
+    /** Shows a refusal where it belongs. Returns true when it did, so no toast follows. */
+    onError?: (err: unknown) => boolean
   ): Promise<boolean> => {
     setSaving(true)
     try {
@@ -54,6 +56,7 @@ export function useProviderSave(provider: IdentityProvider) {
       if (successMessage) toast.success(successMessage)
       return true
     } catch (err) {
+      if (onError?.(err)) return false
       toast.error(err instanceof Error ? err.message : 'Could not save the identity provider.')
       return false
     } finally {

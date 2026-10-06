@@ -1,6 +1,5 @@
 /**
- * Admins, and teammates whose role reaches admin level, who sign in with one
- * provider. The Roles card's lockout guard reads it before "Every sign-in" is
+ * The teammates who sign in with one provider, and what each can manage. The Roles card's lockout guard reads it before "Every sign-in" is
  * saved, since that choice can take their access away at their next sign-in.
  */
 import { useQuery } from '@tanstack/react-query'
@@ -16,9 +15,8 @@ export function useProviderAdmins(providerId: IdentityProviderId, enabled: boole
   const list = useServerFn(listProviderAdminsFn)
   return useQuery({
     queryKey: [...IDENTITY_PROVIDERS_KEY, providerId, 'admins'],
-    // The list holds every teammate on this provider; only admin-level access can be lost.
-    queryFn: async (): Promise<ProviderAdmin[]> =>
-      (await list({ data: { providerId } })).filter((p) => p.adminTier),
+    // Every teammate on this provider; the guard picks who can lose access.
+    queryFn: async (): Promise<ProviderAdmin[]> => list({ data: { providerId } }),
     enabled,
     staleTime: 30_000,
   })

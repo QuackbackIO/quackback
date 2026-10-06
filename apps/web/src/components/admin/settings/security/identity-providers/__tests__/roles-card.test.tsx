@@ -41,9 +41,11 @@ const { mappingSpy, upsertSpy, toastSpy, adminsRef, rolesRef } = vi.hoisted(() =
   upsertSpy: vi.fn(async (_args: { data: Record<string, unknown> }) => undefined),
   toastSpy: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
   adminsRef: {
-    current: { isPending: false, data: [] } as {
+    current: { isPending: false, isError: false, data: [], refetch: vi.fn() } as {
       isPending: boolean
+      isError: boolean
       data: Array<Record<string, unknown>> | undefined
+      refetch: ReturnType<typeof vi.fn>
     },
   },
   rolesRef: { pending: false },
@@ -161,6 +163,8 @@ const SAM = {
   email: 'sam@acme.com',
   role: 'admin',
   adminTier: true,
+  canManageSso: true,
+  atVerifiedDomain: true,
   isCaller: true,
 }
 
@@ -184,6 +188,9 @@ function renderCard(provider: IdentityProvider, roles: unknown[] = []) {
   )
 }
 
+const setAdmins = (data: Array<Record<string, unknown>>) => {
+  adminsRef.current = { isPending: false, isError: false, data, refetch: vi.fn() }
+}
 const saveButton = () => screen.queryByRole('button', { name: 'Save changes' })
 const save = () => fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 const ruleRows = () =>
@@ -211,7 +218,7 @@ beforeEach(() => {
   toastSpy.mockClear()
   toastSpy.success.mockClear()
   toastSpy.error.mockClear()
-  adminsRef.current = { isPending: false, data: [] }
+  setAdmins([])
   rolesRef.pending = false
 })
 
@@ -503,7 +510,7 @@ describe('<RolesCard> rules naming a missing role', () => {
   })
 
   it('does not count a missing role against the caller: it changes nothing', async () => {
-    adminsRef.current = { isPending: false, data: [SAM] }
+    setAdmins([SAM])
     const withAdminRule = {
       role: {
         ...GONE_RULES.role,
@@ -547,6 +554,47 @@ describe('<RolesCard> last test sign-in', () => {
     const [first, second] = ruleRows()
     expect(first).not.toHaveTextContent(/Matches/)
     expect(second).toHaveTextContent('Matches Sam Lee in the last test sign-in')
+  })
+})
+
+describe('<RolesCard> last test sign-in, more', () => {
+  it('offers the value of a single-valued claim too', async () => {
+    const scalar = capture([])
+    const claims = { ...scalar.claims, groups: 'support' }
+    renderCard(
+      makeProvider({
+        claimMapping: TWO_RULES,
+        lastTestCapture: {
+          ...scalar,
+          claims,
+          replay: { sources: [{ source: 'idToken', claims }, scalar.replay!.sources[1]!] },
+        } as SsoTestCapture,
+      })
+    )
+    expect(screen.getByText(/Values seen in the last test sign-in/)).toHaveTextContent('support')
+    await userEvent.click(screen.getByRole('combobox', { name: 'Value for rule 1' }))
+    expect(screen.getByRole('option', { name: 'support' })).toBeInTheDocument()
+  })
+
+  it('highlights by the rule’s place in the list, skipping one sign-in cannot read', () => {
+    renderCard(
+      makeProvider({
+        claimMapping: {
+          role: {
+            claimPath: 'groups',
+            rules: [
+              // A role id on the admin tier is unreadable: sign-in skips this rule.
+              { whenContains: 'support', role: 'admin', roleId: generateId('role') },
+              { whenContains: 'support', role: 'member' },
+            ],
+          },
+        } as IdentityProvider['claimMapping'],
+        lastTestCapture: capture(['support']),
+      })
+    )
+    const [first, second] = ruleRows()
+    expect(first!.className).not.toMatch(/border-success/)
+    expect(second!.className).toMatch(/border-success/)
   })
 })
 
@@ -661,12 +709,14 @@ describe('<RolesCard> lockout guard', () => {
     email: 'ana@acme.com',
     role: 'admin',
     adminTier: true,
+    canManageSso: true,
+    atVerifiedDomain: true,
     isCaller: false,
   }
   const lostList = () => screen.getByRole('list', { name: 'Admins who would lose access' })
 
   it('blocks Every sign-in when no rule gives Admin, naming everyone it would demote', async () => {
-    adminsRef.current = { isPending: false, data: [SAM, ANA] }
+    setAdmins([SAM, ANA])
     renderCard(makeProvider({ domains: [acmeDomain], claimMapping: NON_ADMIN_RULES }))
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     await chooseEvery()
@@ -689,7 +739,7 @@ describe('<RolesCard> lockout guard', () => {
   })
 
   it('leaves out "including you" when the caller does not sign in with this provider', async () => {
-    adminsRef.current = { isPending: false, data: [ANA] }
+    setAdmins([ANA])
     renderCard(makeProvider({ claimMapping: NON_ADMIN_RULES }))
     await chooseEvery()
     expect(screen.getByRole('alert')).toHaveTextContent(
@@ -699,14 +749,14 @@ describe('<RolesCard> lockout guard', () => {
   })
 
   it('says "from you" when the caller is the only one', async () => {
-    adminsRef.current = { isPending: false, data: [SAM] }
+    setAdmins([SAM])
     renderCard(makeProvider({ claimMapping: NON_ADMIN_RULES }))
     await chooseEvery()
     expect(screen.getByRole('alert')).toHaveTextContent('This would remove admin access from you.')
   })
 
   it('only warns when a rule gives Admin, since who matches it is unknown', async () => {
-    adminsRef.current = { isPending: false, data: [SAM, ANA] }
+    setAdmins([SAM, ANA])
     renderCard(makeProvider({ claimMapping: TWO_RULES }))
     await chooseEvery()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -716,14 +766,14 @@ describe('<RolesCard> lockout guard', () => {
     expect(saveButton()).not.toBeDisabled()
   })
 
-  it('counts a custom role that reaches admin level as giving Admin', async () => {
+  it('counts a rule giving a custom role that manages sign-in as keeping access', async () => {
     const opsRole = {
       ...SUPPORT_ROLE,
       id: generateId('role'),
       name: 'Ops admin',
-      permissionKeys: [PERMISSIONS.SETTINGS_MANAGE],
+      permissionKeys: [PERMISSIONS.AUTH_MANAGE],
     }
-    adminsRef.current = { isPending: false, data: [ANA] }
+    setAdmins([ANA])
     renderCard(
       makeProvider({
         claimMapping: {
@@ -741,7 +791,7 @@ describe('<RolesCard> lockout guard', () => {
   })
 
   it('blocks when the caller’s own test sign-in matches only a non-admin rule', async () => {
-    adminsRef.current = { isPending: false, data: [SAM, ANA] }
+    setAdmins([SAM, ANA])
     renderCard(
       makeProvider({
         domains: [acmeDomain],
@@ -757,7 +807,7 @@ describe('<RolesCard> lockout guard', () => {
   })
 
   it('does not block when the caller’s own test sign-in matches the Admin rule', async () => {
-    adminsRef.current = { isPending: false, data: [SAM] }
+    setAdmins([SAM])
     renderCard(
       makeProvider({
         domains: [acmeDomain],
@@ -771,7 +821,7 @@ describe('<RolesCard> lockout guard', () => {
   })
 
   it('stays quiet when nobody with admin access signs in with this provider', async () => {
-    adminsRef.current = { isPending: false, data: [] }
+    setAdmins([])
     renderCard(makeProvider({ claimMapping: NON_ADMIN_RULES }))
     await chooseEvery()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -780,14 +830,133 @@ describe('<RolesCard> lockout guard', () => {
   })
 
   it('stays quiet when the default role is Admin', async () => {
-    adminsRef.current = { isPending: false, data: [SAM] }
+    setAdmins([SAM])
     renderCard(makeProvider({ domains: [acmeDomain], autoProvisionRole: 'admin' }))
     await chooseEvery()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
+  it('leaves out people off the verified domains: with no matching rule sign-in leaves them alone', async () => {
+    setAdmins([SAM, { ...ANA, atVerifiedDomain: false }])
+    renderCard(makeProvider({ domains: [acmeDomain], claimMapping: NON_ADMIN_RULES }))
+    await chooseEvery()
+    expect(screen.getByRole('alert')).toHaveTextContent('This would remove admin access from you.')
+    expect(
+      within(lostList())
+        .getAllByRole('listitem')
+        .map((li) => li.textContent)
+    ).toEqual(['Sam Lee (you)'])
+  })
+
+  it('stays quiet when everyone who manages sign-in is off the verified domains', async () => {
+    setAdmins([{ ...SAM, atVerifiedDomain: false }])
+    renderCard(makeProvider({ claimMapping: NON_ADMIN_RULES }))
+    await chooseEvery()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(saveButton()).not.toBeDisabled()
+  })
+
+  it('ignores teammates who cannot manage sign-in, even at admin level', async () => {
+    setAdmins([{ ...ANA, role: 'member', canManageSso: false }])
+    renderCard(makeProvider({ claimMapping: NON_ADMIN_RULES }))
+    await chooseEvery()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('does not count a custom role without sign-in management as keeping access', async () => {
+    const reportsRole = {
+      ...SUPPORT_ROLE,
+      id: generateId('role'),
+      name: 'Settings admin',
+      permissionKeys: [PERMISSIONS.SETTINGS_MANAGE],
+    }
+    setAdmins([ANA])
+    renderCard(
+      makeProvider({
+        claimMapping: {
+          role: {
+            claimPath: 'groups',
+            rules: [{ whenContains: 'ops', role: 'member', roleId: reportsRole.id }],
+          },
+        },
+      }),
+      [reportsRole]
+    )
+    await chooseEvery()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'This would remove admin access from 1 person.'
+    )
+  })
+
+  it('fails closed when the admin list cannot be read, with a Retry', async () => {
+    const refetch = vi.fn()
+    adminsRef.current = { isPending: false, isError: true, data: undefined, refetch }
+    renderCard(makeProvider({ claimMapping: TWO_RULES }))
+    await chooseEvery()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      "Couldn't check which admins sign in with Acme ID. Try again."
+    )
+    expect(saveButton()).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(refetch).toHaveBeenCalled()
+  })
+
+  it.each([
+    ['a typed refusal', Object.assign(new Error('Refused'), { code: 'SYNC_LOCKOUT' })],
+    ['a refusal whose code only survives in the message', new Error('SYNC_LOCKOUT: refused')],
+  ])('shows the server lockout refusal inline for %s', async (_name, error) => {
+    mappingSpy.mockRejectedValueOnce(error)
+    renderCard(makeProvider({ claimMapping: TWO_RULES }))
+    await chooseEvery()
+    save()
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Saving this would remove admin access from people who sign in with Acme ID. Add a rule that gives Admin, or keep “First sign-in only”.'
+    )
+    expect(toastSpy.error).not.toHaveBeenCalled()
+    // Any edit clears it.
+    await userEvent.click(screen.getByRole('radio', { name: /^First sign-in only/ }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('warns, without blocking, about admins off the verified domains who could match a non-admin rule', async () => {
+    setAdmins([
+      { ...SAM, atVerifiedDomain: false },
+      { ...ANA, atVerifiedDomain: false },
+    ])
+    renderCard(makeProvider({ claimMapping: NON_ADMIN_RULES }))
+    await chooseEvery()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '2 admins outside your verified domains sign in with Acme ID. If one matches a rule that does not give Admin, they lose admin access at their next sign-in.'
+    )
+    expect(screen.queryByRole('list', { name: 'Admins who would lose access' })).toBeNull()
+    expect(saveButton()).not.toBeDisabled()
+  })
+
+  it('shows the off-domain warning beside a block for those at a verified domain', async () => {
+    setAdmins([SAM, { ...ANA, atVerifiedDomain: false }])
+    renderCard(makeProvider({ domains: [acmeDomain], claimMapping: NON_ADMIN_RULES }))
+    await chooseEvery()
+    expect(screen.getByRole('alert')).toHaveTextContent('This would remove admin access from you.')
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '1 admin outside your verified domains signs in with Acme ID.'
+    )
+  })
+
+  it('keeps the off-domain warning quiet with no non-admin rule or nobody off-domain', async () => {
+    setAdmins([{ ...SAM, atVerifiedDomain: false }])
+    const { unmount } = renderCard(makeProvider({ claimMapping: null }))
+    await chooseEvery()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    unmount()
+    setAdmins([SAM])
+    renderCard(makeProvider({ domains: [acmeDomain], claimMapping: NON_ADMIN_RULES }))
+    await chooseEvery()
+    expect(screen.queryByText(/outside your verified domains/)).not.toBeInTheDocument()
+  })
+
   it('holds Save while the admin check loads', async () => {
-    adminsRef.current = { isPending: true, data: undefined }
+    adminsRef.current = { isPending: true, isError: false, data: undefined, refetch: vi.fn() }
     renderCard(makeProvider({ claimMapping: NON_ADMIN_RULES }))
     await chooseEvery()
     expect(saveButton()).toBeDisabled()

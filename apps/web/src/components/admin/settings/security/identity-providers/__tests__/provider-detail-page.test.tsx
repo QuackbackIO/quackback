@@ -208,7 +208,7 @@ vi.mock('sonner', () => ({ toast: toastSpy }))
 
 // The lockout guard's admin list; the Roles card tests drive it.
 vi.mock('../use-provider-admins', () => ({
-  useProviderAdmins: () => ({ isPending: false, data: [] }),
+  useProviderAdmins: () => ({ isPending: false, isError: false, data: [], refetch: vi.fn() }),
 }))
 
 // Stub the Test sign-in button used inside the preview rail so the page does
