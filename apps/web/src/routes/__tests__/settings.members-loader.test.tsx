@@ -139,6 +139,8 @@ describe('members settings page', () => {
     const data = await runLoader(MANAGER)
     expect(reads.sort()).toEqual(['fetchTeamMembersAndInvitations', 'listRolesFn'])
     expect(data.canManageTeams).toBe(false)
+    // A Manager sees the roster but cannot add people to it.
+    expect(data.canManageMembers).toBe(false)
   })
 
   it('warms the teams too for a role that may manage them', async () => {
@@ -149,6 +151,7 @@ describe('members settings page', () => {
       'listTeamsAdminFn',
     ])
     expect(data.canManageTeams).toBe(true)
+    expect(data.canManageMembers).toBe(true)
   })
 
   it('does not offer a Manager the Teams tab, even from a link to it', async () => {
