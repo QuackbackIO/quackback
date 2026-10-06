@@ -17,18 +17,13 @@
 import { decodeJwt } from 'jose'
 import {
   advanceBindingState,
-  asHttpUrl,
   bindingComplete,
   createBindingState,
   finishBinding,
   type BindingState,
   type IdentityMapping,
 } from '@/lib/shared/sso-claim-binder'
-import {
-  getClaimByPath,
-  type IdentitySource,
-  type SourceUnavailableReason,
-} from '@/lib/shared/oidc-claim-mapping'
+import type { IdentitySource, SourceUnavailableReason } from '@/lib/shared/oidc-claim-mapping'
 
 export type { IdentitySource, IdentityMapping }
 
@@ -36,8 +31,9 @@ export interface ResolvedIdentity {
   id: string
   email?: string
   name?: string
-  /** Avatar URL, resolved only when `wantImage` is set. Always an absolute
-   *  `http(s)` URL (see {@link pickAvatarUrl}); `undefined` otherwise. */
+  /** Avatar URL from the mapped avatar claim (`picture` when unmapped),
+   *  resolved only when `wantImage` is set. Always an absolute `http(s)` URL;
+   *  a mapped claim never falls back to `picture`. */
   image?: string
   emailVerified: boolean
   /** Which source supplied each field, for the test's provenance report. */
@@ -111,26 +107,6 @@ function decodeSource(
   if (!token) return { unavailable: 'absent' }
   const payload = decodePayload(token)
   return payload ? { claims: payload } : { unavailable: 'unreadable' }
-}
-
-/**
- * The avatar URL to adopt for an OIDC account, read from the provider's mapped
- * avatar claim, or the OIDC Core `picture` claim when none is mapped (`userinfo`
- * or the ID token; `claims` here is already the merged set). Only an http(s)
- * URL is adopted. A mapped claim never falls back to `picture`: the admin
- * chose where the avatar lives, and a guess from another claim would hide that
- * the chosen one is missing.
- *
- * Better-Auth's genericOAuth only maps `userInfo.image` to `user.image`, never
- * `picture`, so without this a fully compliant provider produces no avatar.
- * Kept standalone so it is unit-testable without the resolver, and reused by the
- * after-callback avatar backfill.
- */
-export function pickAvatarUrl(
-  claims: Record<string, unknown>,
-  imageClaim: string = 'picture'
-): string | undefined {
-  return asHttpUrl(getClaimByPath(claims, imageClaim))
 }
 
 function sourcesFrom(state: BindingState): ResolvedIdentity['sources'] {

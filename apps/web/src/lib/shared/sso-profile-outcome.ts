@@ -15,6 +15,10 @@ export type ProfileOutcome = {
   id?: string
   email?: string
   name?: string
+  /** The handle the account is named from when the provider sends no name. */
+  username?: string
+  /** The avatar URL the binder resolved, an http(s) URL. */
+  image?: string
   nameSynthesized: boolean
   emailVerified: boolean
   placeholderEmail: boolean
@@ -45,24 +49,51 @@ function readableFromSubject(subject: string): string {
   return cleaned || 'Member'
 }
 
+function nameFromSubject(subject: string): string {
+  return readableFromSubject(usableClaim(subject) ?? '')
+}
+
+/**
+ * The handle the claims carry: the mapped username claim alone when one is
+ * mapped, else `preferred_username`, then `nickname`. Trimmed; blank is none.
+ *
+ * A mapped claim replaces the two standard ones rather than joining them: the
+ * admin named the claim that holds the handle, so a same-named standard claim
+ * from the provider is not a better guess.
+ */
+export function usernameFrom(
+  claims: Record<string, unknown>,
+  usernameClaim?: string
+): string | undefined {
+  return usernameClaim
+    ? usableClaim(getClaimByPath(claims, usernameClaim))
+    : (usableClaim(claims.preferred_username) ?? usableClaim(claims.nickname))
+}
+
 /**
  * A display name from the claims, falling back to the subject. Ordered by how
  * deliberately the person chose it: a handle they set, then a nickname, then
  * whatever can be read out of the identifier.
- *
- * A mapped username claim replaces the two standard handle claims rather than
- * joining them: the admin named the claim that holds the handle, so a
- * same-named standard claim from the provider is not a better guess.
  */
 export function synthesizeName(
   claims: Record<string, unknown>,
   subject: string,
   usernameClaim?: string
 ): string {
-  const handle = usernameClaim
-    ? usableClaim(getClaimByPath(claims, usernameClaim))
-    : (usableClaim(claims.preferred_username) ?? usableClaim(claims.nickname))
-  return handle ?? readableFromSubject(usableClaim(subject) ?? '')
+  return usernameFrom(claims, usernameClaim) ?? nameFromSubject(subject)
+}
+
+/**
+ * Every name sign-up could have generated for this account: the synthesized
+ * name, and the subject-only name it falls back to. A stored name equal to one
+ * of these was never typed by a person, so profile sync may replace it.
+ */
+export function generatedNames(
+  claims: Record<string, unknown>,
+  subject: string,
+  usernameClaim?: string
+): string[] {
+  return [...new Set([synthesizeName(claims, subject, usernameClaim), nameFromSubject(subject)])]
 }
 
 /** Matches Better-Auth genericOAuth's stored-email lowercase. */
@@ -80,7 +111,10 @@ export function finalizeProfileOutcome(
   opts: { allowMissingEmail: boolean; usernameClaim?: string }
 ): ProfileOutcome {
   const { identity, acceptedClaims, warnings, provenance } = bound
+  const username = usernameFrom(acceptedClaims, opts.usernameClaim)
   const base = {
+    ...(username ? { username } : {}),
+    ...(identity.image ? { image: identity.image } : {}),
     provenance: provenance ?? {},
     acceptedClaims: acceptedClaims as Record<string, JsonValue>,
     warnings: warnings ?? [],

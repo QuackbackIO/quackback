@@ -323,6 +323,25 @@ export const account = pgTable(
   ]
 )
 
+/**
+ * The name and avatar URL an identity provider last wrote to an account's
+ * user, each kept only while the user's stored value still equals it. Profile
+ * sync on sign-in refreshes a recorded field and never one a person chose.
+ *
+ * A table of its own rather than columns on `account`: Better-Auth's adapter
+ * selects every `account` column, so a column there would fail every sign-in
+ * on a database that has not applied its migration yet. Nothing in Better-Auth
+ * reads this table. See 0297.
+ */
+export const accountProfileSync = pgTable('account_profile_sync', {
+  accountId: typeIdColumn('account')('account_id')
+    .primaryKey()
+    .references(() => account.id, { onDelete: 'cascade' }),
+  name: text('name'),
+  image: text('image'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
 export const verification = pgTable(
   'verification',
   {
@@ -611,7 +630,7 @@ export type IdentityProviderClaimMapping = {
    *  username and the avatar. */
   profile?: {
     sources?: IdentitySource[]
-    claims?: { id?: string; email?: string; name?: string; username?: string; image?: string }
+    claims?: Partial<Record<ProfileField, string>>
     /** Mint a placeholder address when the provider supplies no email. */
     allowMissingEmail?: boolean
     /** Refresh the name and avatar from the provider on every sign-in. */

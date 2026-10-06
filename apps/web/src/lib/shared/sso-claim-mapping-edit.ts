@@ -8,6 +8,7 @@ import {
   PROFILE_FIELDS,
   allowsMissingEmail,
   identitySourcesFor,
+  isProfileField,
   profileClaimFor,
   profileSyncEnabled,
   type IdentityProviderClaimMapping,
@@ -340,7 +341,7 @@ export function effectiveProfileSignature(raw: unknown): string {
     .sort()
   const claims = isRecord(profile.claims) ? profile.claims : {}
   const unknownClaimKeys = Object.keys(claims)
-    .filter((key) => !SUPPORTED_CLAIMS.has(key))
+    .filter((key) => !isProfileField(key))
     .sort()
   return JSON.stringify({
     sources: identitySourcesFor(raw),
@@ -453,7 +454,7 @@ export function diffClaimMappingOperations(
   }
 
   const beforeProfileSync = profileSyncEnabled(before)
-  const afterProfileSync = proposed?.profile?.syncOnSignIn === true
+  const afterProfileSync = profileSyncEnabled(proposed)
   if (beforeProfileSync !== afterProfileSync) {
     ops.push({ op: 'setProfileSync', syncOnSignIn: afterProfileSync })
   }
@@ -575,13 +576,15 @@ export function storedJsonEqual(a: unknown, b: unknown): boolean {
 
 const SUPPORTED_TOP = new Set(['profile', 'role', 'attributes'])
 const SUPPORTED_PROFILE = new Set(['sources', 'claims', 'allowMissingEmail', 'syncOnSignIn'])
-const SUPPORTED_CLAIMS = new Set<string>(PROFILE_FIELDS)
+const SUPPORTED_CLAIMS: SupportedKeys = { has: isProfileField }
 const SUPPORTED_ROLE = new Set(['claimPath', 'rules', 'syncOnEverySignIn'])
 const SUPPORTED_ROLE_RULE = new Set(['whenContains', 'role'])
 const SUPPORTED_ATTRIBUTES = new Set(['map', 'overrideExisting', 'syncOnSignIn'])
 const SUPPORTED_PEOPLE_ROW = new Set(['claimPath', 'attributeKey'])
 
-function hasLostKeys(stored: unknown, submitted: unknown, supported: Set<string>): boolean {
+type SupportedKeys = { has(key: string): boolean }
+
+function hasLostKeys(stored: unknown, submitted: unknown, supported: SupportedKeys): boolean {
   if (!isRecord(stored)) return false
   const dest = isRecord(submitted) ? submitted : {}
   for (const key of Object.keys(stored)) {

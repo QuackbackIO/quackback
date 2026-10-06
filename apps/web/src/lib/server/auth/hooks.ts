@@ -56,9 +56,8 @@ import { getBaseUrl } from '@/lib/server/config'
 import { isSyntheticAnonEmail } from '@/lib/shared/anonymous-email'
 import { readSsoClaims, readSsoClaimsWithProvenance, type ClaimRead } from './read-sso-claims'
 import { applyClaimAttributesAfter } from './apply-claim-attributes'
-import { decodeSsoClaims } from './sso-claims-decode'
-import { peekResolvedClaims } from './resolved-claims-stash'
-import { pickAvatarUrl } from './resolve-identity'
+import type { ResolvedProfile } from './resolved-claims-stash'
+import { profileSyncEnabled } from '@/lib/shared/oidc-claim-mapping'
 import { forgetRequestIdentity } from './request-session'
 import { logger } from '@/lib/server/logger'
 
@@ -810,117 +809,181 @@ type IdpRows = Awaited<
   >
 >
 
-/**
- * Resolve a provider's userinfo endpoint: the manual URL if set, else the
- * `userinfo_endpoint` from its discovery document. SSRF-guarded, best-effort.
- */
-async function resolveUserInfoEndpoint(
-  provider: IdpRows[number] | undefined
-): Promise<string | null> {
-  if (!provider) return null
-  if (provider.userInfoUrl) return provider.userInfoUrl
-  if (!provider.discoveryUrl) return null
-  try {
-    const { safeFetch } = await import('@/lib/server/content/ssrf-guard')
-    const res = await safeFetch(provider.discoveryUrl, { timeoutMs: 5000 })
-    if (!res.ok) return null
-    const doc: unknown = await res.json()
-    const endpoint = (doc as { userinfo_endpoint?: unknown } | null)?.userinfo_endpoint
-    return typeof endpoint === 'string' ? endpoint : null
-  } catch {
-    return null
-  }
-}
+/** What a provider last wrote to an account's user, per `account_profile_sync`. */
+type SyncedProfile = { name: string | null; image: string | null }
 
-/** Fetch a userinfo document with the bearer token. Best-effort. */
-async function fetchUserInfoDoc(
-  url: string,
-  accessToken: string
-): Promise<Record<string, unknown> | null> {
-  try {
-    const { safeFetch } = await import('@/lib/server/content/ssrf-guard')
-    const res = await safeFetch(url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      timeoutMs: 5000,
-    })
-    if (!res.ok) return null
-    const body: unknown = await res.json()
-    return body !== null && typeof body === 'object' ? (body as Record<string, unknown>) : null
-  } catch {
-    return null
-  }
+/**
+ * One field of the next record: the stored value, while it equals what the
+ * provider sends now or what it last wrote. A value still equal to the last
+ * recorded one stays recorded, so turning sync on later can refresh it.
+ * Anything else was changed by someone other than the provider.
+ */
+function nextSyncedField(
+  stored: string | null,
+  providerValue: string | undefined,
+  recorded: string | null | undefined
+): string | null {
+  return stored !== null && (stored === providerValue || stored === recorded) ? stored : null
 }
 
 /**
- * Fill `user.image` from the SSO `picture` claim — but only when the account
- * has no avatar yet.
+ * Keep `user.name` and `user.image` in step with the identity provider after an
+ * OIDC callback, without ever overwriting what a person chose in Quackback.
  *
- * Better-Auth's genericOAuth writes `image` only when it CREATES the user, and
- * we deliberately leave `overrideUserInfo` off ("set once, never clobber a
- * picture the user chose in Quackback"). Neither covers the common case: an
- * account that already existed before the workspace's IdP started returning a
- * `picture`, or before this feature shipped. This closes that gap without ever
- * overwriting a non-empty avatar.
+ * Better-Auth's genericOAuth writes `name` and `image` only when it CREATES the
+ * user, and `overrideUserInfo` stays off. So, on every callback:
  *
- * `picture` is sourced, in order:
- *   1. the request's resolved claims (peeked, not consumed, so role
- *      provisioning still takes its copy) — the free path;
- *   2. the stored ID token;
- *   3. a live userinfo call with the just-issued access token — the
- *      deterministic path for an IdP that exposes `picture` only at userinfo,
- *      where (1) can miss if role provisioning drained the stash first.
+ *  - Fill: an empty avatar takes the provider's avatar, for every provider.
+ *  - Sync, when the provider's claim mapping has `profile.syncOnSignIn`:
+ *    - the name follows the provider's name while the current name is
+ *      provider-set: the value this provider last wrote, or a name sign-up
+ *      generated for the account;
+ *    - the avatar follows the provider's avatar while the current avatar is the
+ *      value this provider last wrote and nothing was uploaded (`imageKey`).
+ *  - Record: `account_profile_sync` keeps, per field, the provider value the
+ *    user's stored value equals, whether sync is on or off. It is written only
+ *    when it changes, so an ordinary sign-in costs no extra write. A record
+ *    that cannot be read (a database that has not created the table yet)
+ *    counts as no record and is left unwritten, so the avatar fill still runs.
  *
- * Runs BEFORE `handleAutoProvisionAfter` so the peek in (1) sees the stash.
+ * The provider's name, avatar and generated names are the resolver's
+ * decisions for this sign-in, read through the shared per-callback claim
+ * reader. A stale read (the stored ID token, not this sign-in) changes
+ * nothing, the same stance as attribute sync.
+ *
+ * Name and avatar changes reach `principal.display_name` / `avatar_url` the way
+ * a profile edit does. A failure is logged and swallowed: a profile refresh
+ * must never block a sign-in.
  */
-export async function handleAvatarBackfillAfter(
+export async function handleProfileRefreshAfter(
   ctx: {
     path?: string
     params?: Record<string, unknown>
     context?: { newSession?: { user?: { id?: string } } | null }
   },
   registeredOidcIds: Set<string>,
-  providers: IdpRows
+  providers: IdpRows,
+  /** Shared per-callback claim reader. Omitted, falls back to `readSsoClaimsWithProvenance`. */
+  readClaims?: () => Promise<ClaimRead>
 ): Promise<void> {
   const providerId = oidcCallbackProviderId(ctx)
   if (!providerId || !isRegisteredOidcProvider(providerId, registeredOidcIds)) return
   const userId = ctx.context?.newSession?.user?.id
   if (typeof userId !== 'string' || userId.length === 0) return
-  type UserId = `user_${string}`
-  const userIdTyped = userId as UserId
+  try {
+    const read = await (readClaims
+      ? readClaims()
+      : readSsoClaimsWithProvenance(userId as UserId, providerId))
+    if (!read.fresh || !read.profile) return
+    const provider = providers.find((p) => p.registrationId === providerId)
+    await refreshSsoProfile(
+      userId as UserId,
+      providerId,
+      read.profile,
+      profileSyncEnabled(provider?.claimMapping)
+    )
+  } catch {
+    // No error object: a failed query's message can carry the values it wrote.
+    log.error(
+      { code: 'sso_profile_refresh_failed', user_id: userId, provider_id: providerId },
+      'sso profile refresh failed'
+    )
+  }
+}
 
-  const { db, user: userTable, account, and, eq, desc } = await import('@/lib/server/db')
+async function refreshSsoProfile(
+  userId: UserId,
+  providerId: string,
+  profile: ResolvedProfile,
+  sync: boolean
+): Promise<void> {
+  const {
+    db,
+    user: userTable,
+    account,
+    accountProfileSync,
+    and,
+    eq,
+    desc,
+  } = await import('@/lib/server/db')
 
   const owner = await db.query.user.findFirst({
-    where: eq(userTable.id, userIdTyped),
-    columns: { image: true },
+    where: eq(userTable.id, userId),
+    columns: { name: true, image: true, imageKey: true },
   })
-  // Only fill an empty avatar — never replace one the user set.
-  if (!owner || (typeof owner.image === 'string' && owner.image.trim() !== '')) return
+  if (!owner) return
 
   const row = await db.query.account.findFirst({
-    where: and(eq(account.userId, userIdTyped), eq(account.providerId, providerId)),
-    columns: { idToken: true, accountId: true, accessToken: true },
+    where: and(eq(account.userId, userId), eq(account.providerId, providerId)),
+    columns: { id: true },
     orderBy: desc(account.createdAt),
   })
+  if (!row) return
 
-  const stashed = row?.accountId ? peekResolvedClaims(providerId, row.accountId) : null
-  let image = pickAvatarUrl(stashed ?? decodeSsoClaims(row?.idToken))
-
-  // Last resort: ask userinfo directly. `picture` frequently lives only there,
-  // and the stash can be gone by now.
-  if (!image && row?.accessToken) {
-    const endpoint = await resolveUserInfoEndpoint(
-      providers.find((p) => p.registrationId === providerId)
+  let recorded: SyncedProfile | null = null
+  try {
+    const stored = await db.query.accountProfileSync.findFirst({
+      where: eq(accountProfileSync.accountId, row.id),
+      columns: { name: true, image: true },
+    })
+    recorded = stored ?? { name: null, image: null }
+  } catch {
+    log.warn(
+      { code: 'sso_profile_record_unreadable', user_id: userId, provider_id: providerId },
+      'sso profile record unreadable'
     )
-    if (endpoint) {
-      image = pickAvatarUrl((await fetchUserInfoDoc(endpoint, row.accessToken)) ?? {})
-    }
   }
 
-  if (!image) return
+  // A blank name is never written over a real one.
+  const providerName = profile.name?.trim() ? profile.name : undefined
+  const providerImage = profile.image
+  const imageEmpty = !owner.image?.trim()
 
-  await db.update(userTable).set({ image }).where(eq(userTable.id, userIdTyped))
-  log.info({ user_id: userId, provider_id: providerId }, 'backfilled sso avatar')
+  const changes: { name?: string; image?: string } = {}
+  if (
+    sync &&
+    providerName &&
+    owner.name !== providerName &&
+    (owner.name === recorded?.name || profile.generatedNames.includes(owner.name))
+  ) {
+    changes.name = providerName
+  }
+  if (
+    providerImage &&
+    owner.image !== providerImage &&
+    (imageEmpty || (sync && !owner.imageKey && owner.image === recorded?.image))
+  ) {
+    changes.image = providerImage
+  }
+
+  const fields = Object.keys(changes)
+  if (fields.length > 0) {
+    await db.update(userTable).set(changes).where(eq(userTable.id, userId))
+    const { syncPrincipalProfile } =
+      await import('@/lib/server/domains/principals/principal.factory')
+    await syncPrincipalProfile(userId, {
+      ...(changes.name !== undefined ? { displayName: changes.name } : {}),
+      ...(changes.image !== undefined ? { avatarUrl: changes.image } : {}),
+    })
+    log.info({ user_id: userId, provider_id: providerId, fields }, 'refreshed sso profile')
+  }
+
+  // Unknown state is left alone rather than overwritten.
+  if (!recorded) return
+  const next: SyncedProfile = {
+    name: nextSyncedField(changes.name ?? owner.name, providerName, recorded.name),
+    image: nextSyncedField(changes.image ?? owner.image, providerImage, recorded.image),
+  }
+  if (next.name === recorded.name && next.image === recorded.image) return
+  if (next.name === null && next.image === null) {
+    await db.delete(accountProfileSync).where(eq(accountProfileSync.accountId, row.id))
+    return
+  }
+  const values = { ...next, updatedAt: new Date() }
+  await db
+    .insert(accountProfileSync)
+    .values({ accountId: row.id, ...values })
+    .onConflictDoUpdate({ target: accountProfileSync.accountId, set: values })
 }
 
 /**
@@ -1549,14 +1612,17 @@ export async function handleCountryCapture(ctx: {
  *     per-domain SSO enforcement or a disabled per-method toggle. SSO is
  *     allowed for every role, so verified-domain users pass this step; it
  *     gates the non-SSO providers.
- *  4. `applyClaimAttributesAfter` — copy mapped IdP claims into person
+ *  4. `handleProfileRefreshAfter`: fill an empty avatar and, with profile
+ *     sync on, keep provider-set name and avatar following the provider.
+ *     After cleanup so a revoked session changes nothing; never throws.
+ *  5. `applyClaimAttributesAfter`: copy mapped IdP claims into person
  *     attributes. After cleanup so a revoked session writes nothing;
  *     wrapped in try/catch so a DB error never blocks sign-in.
- *  5. `handleSignInSuccessAudit` — emits `auth.signin.success` if a
+ *  6. `handleSignInSuccessAudit`: emits `auth.signin.success` if a
  *     session still exists at this point (i.e. wasn't revoked by
  *     prior steps). Runs after the gates so it only records sign-ins
  *     that actually stuck.
- *  6. `handleNewDeviceNotification` — sends a "new device" email +
+ *  7. `handleNewDeviceNotification`: sends a "new device" email +
  *     records an audit row when an additional signed device cookie
  *     for this user hasn't been seen within the last 90 days. The
  *     first recorded device is seeded silently. Alerts cannot be
@@ -1642,8 +1708,8 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
   const workspace = await getWorkspaceSettings()
 
   // One claim read per callback. The stash is take-once, so role
-  // provisioning and attribute writes must share the result rather than
-  // each calling `takeResolvedClaims`.
+  // provisioning, the profile refresh and attribute writes must share the
+  // result rather than each calling `takeResolvedClaims`.
   let claimsPromise: Promise<ClaimRead> | undefined
   const callbackUserId = ctx.context?.newSession?.user?.id
   const callbackProviderId = oidcCallbackProviderId(ctx)
@@ -1660,13 +1726,6 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
         }
       : undefined
 
-  // Before auto-provision: this one only PEEKS the resolved-claims stash, and
-  // role provisioning (below) TAKES it — so the avatar has to look first.
-  await handleAvatarBackfillAfter(
-    ctx as Parameters<typeof handleAvatarBackfillAfter>[0],
-    registeredOidcIds,
-    providers
-  )
   await handleAutoProvisionAfter(
     ctx as Parameters<typeof handleAutoProvisionAfter>[0],
     providers,
@@ -1678,6 +1737,13 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
     workspace,
     providers,
     registeredOidcIds
+  )
+  // After cleanup, so a revoked session changes no profile. Never throws.
+  await handleProfileRefreshAfter(
+    ctx as Parameters<typeof handleProfileRefreshAfter>[0],
+    registeredOidcIds,
+    providers,
+    readClaims
   )
   try {
     await applyClaimAttributesAfter(

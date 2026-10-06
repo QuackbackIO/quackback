@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { finishBinding, replayClaimMapping } from '../sso-claim-binder'
-import { finalizeProfileOutcome, normalizeBoundEmail, synthesizeName } from '../sso-profile-outcome'
+import {
+  finalizeProfileOutcome,
+  generatedNames,
+  normalizeBoundEmail,
+  synthesizeName,
+  usernameFrom,
+} from '../sso-profile-outcome'
 
 describe('sso-profile-outcome', () => {
   it('normalizes email the way genericOAuth consumes it', () => {
@@ -117,5 +123,87 @@ describe('synthesizeName with a mapped username claim', () => {
     })
     expect(outcome.name).toBe('ally')
     expect(outcome.nameSynthesized).toBe(true)
+  })
+})
+
+describe('usernameFrom', () => {
+  it('reads preferred_username, then nickname, when no claim is mapped', () => {
+    expect(usernameFrom({ preferred_username: 'pref', nickname: 'nick' })).toBe('pref')
+    expect(usernameFrom({ preferred_username: '  ', nickname: 'nick' })).toBe('nick')
+    expect(usernameFrom({})).toBeUndefined()
+  })
+
+  it('reads only the mapped claim, trimmed, including a nested path', () => {
+    expect(usernameFrom({ user: { handle: ' sam_lee ' } }, 'user.handle')).toBe('sam_lee')
+    expect(usernameFrom({ preferred_username: 'pref' }, 'user.handle')).toBeUndefined()
+    expect(usernameFrom({ user: { handle: 42 } }, 'user.handle')).toBeUndefined()
+  })
+})
+
+describe('generatedNames', () => {
+  it('holds the synthesized name and the subject-only name', () => {
+    expect(generatedNames({ preferred_username: 'ada' }, 'ACCOUNT:REGION:2119123456')).toEqual([
+      'ada',
+      'ACCOUNT REGION 2119123456',
+    ])
+  })
+
+  it('lists one name when there is no handle', () => {
+    expect(generatedNames({}, 'you@example.com')).toEqual(['you'])
+    expect(generatedNames({}, '::')).toEqual(['Member'])
+  })
+
+  it('follows a mapped username claim', () => {
+    expect(
+      generatedNames(
+        { profile: { handle: 'ally' }, preferred_username: 'x' },
+        '42',
+        'profile.handle'
+      )
+    ).toEqual(['ally', '42'])
+  })
+
+  it('always includes the name synthesizeName gives', () => {
+    const claims = { nickname: 'nick' }
+    expect(generatedNames(claims, 'acct|42')).toContain(synthesizeName(claims, 'acct|42'))
+  })
+})
+
+describe('profile outcome username and avatar', () => {
+  it('carries the username and the bound avatar', () => {
+    const bound = finishBinding(
+      replayClaimMapping({ mapping: { sources: ['idToken'] }, wantImage: true }, [
+        {
+          source: 'idToken',
+          claims: {
+            sub: '42',
+            email: 'a@example.com',
+            name: 'Ally',
+            preferred_username: 'ally',
+            picture: 'https://cdn.example.com/123/456',
+          },
+        },
+      ])
+    )
+    const outcome = finalizeProfileOutcome(bound, { allowMissingEmail: false })
+    expect(outcome.username).toBe('ally')
+    expect(outcome.image).toBe('https://cdn.example.com/123/456')
+  })
+
+  it('reads the username from the mapped claim alone', () => {
+    const bound = finishBinding(
+      replayClaimMapping({ mapping: { sources: ['idToken'] } }, [
+        {
+          source: 'idToken',
+          claims: { sub: '42', email: 'a@example.com', preferred_username: 'other' },
+        },
+      ])
+    )
+    const outcome = finalizeProfileOutcome(bound, {
+      allowMissingEmail: false,
+      usernameClaim: 'profile.handle',
+    })
+    expect(outcome.username).toBeUndefined()
+    expect(outcome.image).toBeUndefined()
   })
 })

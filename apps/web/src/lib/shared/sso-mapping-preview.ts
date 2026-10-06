@@ -9,8 +9,10 @@ import {
   identityMappingFor,
   identitySourcesFor,
   profileClaimFor,
+  profileSyncEnabled,
   type IdentityProviderClaimMapping,
   type IdentitySource,
+  type ProfileField,
 } from './oidc-claim-mapping'
 import { planClaimAttributeWrites, type AttributeDefinition } from './plan-claim-attribute-writes'
 import { resolveSsoRoleMatch } from './resolve-sso-role'
@@ -178,7 +180,9 @@ export function previewClaimMapping({
     : null
 
   const limitations: string[] = [
-    'Name and email show account-creation inputs. Existing profiles are not overwritten on later sign-ins.',
+    profileSyncEnabled(draft)
+      ? 'Name, email and avatar show what a new account gets. Later sign-ins update the name and avatar unless someone changed them in Quackback. Email is not changed.'
+      : 'Name, email and avatar show what a new account gets. Existing profiles are not changed on later sign-ins.',
     'People preview assumes no existing attributes.',
   ]
   if (stale) {
@@ -197,6 +201,56 @@ export function previewClaimMapping({
     missingSource: null,
     capture,
   }
+}
+
+/** What each profile field reads from one test sign-in. An absent key means
+ *  the field gets nothing from it. */
+export type ProfileFieldValues = Partial<Record<ProfileField, string>>
+
+/**
+ * The value each profile field takes from a test sign-in under a draft
+ * mapping, for the editor's "In the test sign-in" column. A projection of the
+ * profile outcome sign-in computes, so a mapped avatar claim never falls back
+ * to `picture`, only an http(s) URL counts, and the username follows
+ * `usernameFrom`.
+ *
+ * Every source is replayed: sign-in reads the username only when the provider
+ * sends no name, and the column shows what the test sent even when it did. The
+ * name is left out when the provider sent none, since sign-up would generate
+ * it rather than read it.
+ *
+ * Null whenever the outcome preview asks for a new test (no replayable
+ * capture, or a configured source the capture lacks), so the two never show
+ * different answers.
+ */
+export function previewProfileValues(
+  draft: unknown,
+  capture: SsoTestCapture | null | undefined
+): ProfileFieldValues | null {
+  if (!capture || !isReplayableCapture(capture)) return null
+  if (sourceMissingFromCapture(draft, capture)) return null
+  const mapping = identityMappingFor(draft)
+  const outcome = finalizeProfileOutcome(
+    finishBinding(
+      replayClaimMapping(
+        {
+          mapping,
+          requiredClaimPaths: mapping.usernameClaim ? [mapping.usernameClaim] : undefined,
+          wantImage: true,
+          exhaustive: true,
+        },
+        capture.replay.sources
+      )
+    ),
+    { allowMissingEmail: allowsMissingEmail(draft), usernameClaim: mapping.usernameClaim }
+  )
+  const values: ProfileFieldValues = {}
+  if (outcome.id) values.id = outcome.id
+  if (outcome.email) values.email = outcome.email
+  if (outcome.name && !outcome.nameSynthesized) values.name = outcome.name
+  if (outcome.username) values.username = outcome.username
+  if (outcome.image) values.image = outcome.image
+  return values
 }
 
 export function effectiveIdPath(draft: unknown): string {

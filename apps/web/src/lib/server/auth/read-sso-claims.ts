@@ -3,12 +3,12 @@
  *
  * Stash first (what the resolver actually validated this request), then the
  * stored ID token with an expired-token-refusing decode. Shared by role
- * provisioning and claim→attribute writes so a take-once stash cannot starve
- * the second reader.
+ * provisioning, claim→attribute writes and the profile refresh so a take-once
+ * stash cannot starve a later reader.
  */
 
 import { decodeSsoClaims } from './sso-claims-decode'
-import { takeResolvedClaims } from './resolved-claims-stash'
+import { takeResolvedClaims, type ResolvedProfile } from './resolved-claims-stash'
 
 export interface ClaimRead {
   claims: Record<string, unknown>
@@ -19,6 +19,8 @@ export interface ClaimRead {
    * claim missing from it proves nothing about what the IdP released.
    */
   fresh: boolean
+  /** The resolver's profile decisions for this sign-in. Set exactly when `fresh`. */
+  profile?: ResolvedProfile
 }
 
 /**
@@ -62,7 +64,7 @@ export async function readSsoClaimsWithProvenance(
   // however its claims are mapped.
   if (row?.accountId) {
     const stashed = takeResolvedClaims(providerId, row.accountId)
-    if (stashed) return { claims: stashed, fresh: true }
+    if (stashed) return { claims: stashed.claims, fresh: true, profile: stashed.profile }
   }
 
   // Refuses an expired token; see sso-claims-decode.ts for why freshness is

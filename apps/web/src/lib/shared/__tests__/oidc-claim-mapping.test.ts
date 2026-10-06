@@ -14,6 +14,9 @@ import {
   allowsMissingEmail,
   getClaimByPath,
   identityMappingFor,
+  isProfileField,
+  OIDC_PROFILE_DEFAULTS,
+  PROFILE_FIELDS,
   profileSyncEnabled,
   type ClaimRoleMapping,
   type IdentityProviderClaimMapping,
@@ -215,5 +218,25 @@ describe('avatar and username profile fields', () => {
       usernameClaim: 'handle',
     })
     expect(identityMappingFor(null)).toEqual({ sources: DEFAULT_IDENTITY_SOURCES })
+  })
+})
+
+describe('profile field vocabulary', () => {
+  it('names the standard claim every profile field reads when unmapped', () => {
+    expect(OIDC_PROFILE_DEFAULTS).toEqual({
+      id: 'sub',
+      email: 'email',
+      name: 'name',
+      username: 'preferred_username',
+      image: 'picture',
+    })
+    expect(Object.keys(OIDC_PROFILE_DEFAULTS).sort()).toEqual([...PROFILE_FIELDS].sort())
+  })
+
+  it('recognises exactly the profile fields', () => {
+    for (const field of PROFILE_FIELDS) expect(isProfileField(field)).toBe(true)
+    expect(isProfileField('picture')).toBe(false)
+    expect(isProfileField('__proto__')).toBe(false)
+    expect(isProfileField(1)).toBe(false)
   })
 })

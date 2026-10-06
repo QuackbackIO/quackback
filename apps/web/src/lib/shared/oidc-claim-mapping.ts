@@ -20,6 +20,7 @@
  */
 
 import type { Role } from './roles'
+import type { IdentityMapping } from './sso-claim-binder'
 import { isPlainRecord as isRecord } from './record'
 import type {
   ClaimRoleMapping,
@@ -47,6 +48,20 @@ export const PROFILE_FIELDS = [
   'username',
   'image',
 ] as const satisfies readonly ProfileField[]
+
+/** The claim each profile field reads when none is mapped. Unmapped, the
+ *  username reads `preferred_username`, then `nickname`. */
+export const OIDC_PROFILE_DEFAULTS = {
+  id: 'sub',
+  email: 'email',
+  name: 'name',
+  username: 'preferred_username',
+  image: 'picture',
+} as const satisfies Record<ProfileField, string>
+
+export function isProfileField(value: unknown): value is ProfileField {
+  return (PROFILE_FIELDS as readonly unknown[]).includes(value)
+}
 
 /** Where identity may be read from, in the order the resolver tries them. */
 export const IDENTITY_SOURCES = ['idToken', 'userinfo', 'accessTokenJwt'] as const
@@ -177,13 +192,10 @@ export function identitySourcesFor(stored: unknown): IdentitySource[] {
   return claimMappingFor(stored).profile?.sources ?? DEFAULT_IDENTITY_SOURCES
 }
 
-export type ProviderIdentityMapping = {
+/** The binder's mapping, plus the username claim that only name synthesis reads. */
+export type ProviderIdentityMapping = IdentityMapping & {
   sources: IdentitySource[]
-  idClaim?: string
-  emailClaim?: string
-  nameClaim?: string
   usernameClaim?: string
-  imageClaim?: string
 }
 
 /**

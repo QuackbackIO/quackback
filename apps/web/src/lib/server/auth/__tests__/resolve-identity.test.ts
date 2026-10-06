@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { resolveIdentity, pickAvatarUrl } from '../resolve-identity'
+import { resolveIdentity } from '../resolve-identity'
 import {
   WORLD_A,
   WORLD_B,
@@ -627,62 +627,34 @@ describe('resolveIdentity — subject mismatch, observe vs enforce', () => {
   })
 })
 
-describe('pickAvatarUrl — the OIDC `picture` claim', () => {
-  it('takes an absolute https URL', () => {
-    expect(pickAvatarUrl({ picture: 'https://cdn.example.com/u/42.png' })).toBe(
-      'https://cdn.example.com/u/42.png'
-    )
-  })
+describe('resolveIdentity avatar URL rules', () => {
+  async function imageFrom(claims: Record<string, unknown>, imageClaim?: string) {
+    const result = await resolveIdentity({
+      tokens: { idToken: fakeJwt({ sub: 'x', email: 'e@x.com', name: 'N', ...claims }) },
+      fetchUserInfo: async () => null,
+      wantImage: true,
+      ...(imageClaim ? { mapping: { imageClaim } } : {}),
+    })
+    if (!result.ok) throw new Error('expected ok')
+    return result.identity.image
+  }
 
-  it('accepts http too', () => {
-    expect(pickAvatarUrl({ picture: 'http://idp.internal/avatar.jpg' })).toBe(
+  it('trims an http(s) URL and refuses anything else', async () => {
+    expect(await imageFrom({ picture: '  https://x.test/a.png\n' })).toBe('https://x.test/a.png')
+    expect(await imageFrom({ picture: 'http://idp.internal/avatar.jpg' })).toBe(
       'http://idp.internal/avatar.jpg'
     )
+    expect(await imageFrom({ picture: 'javascript:alert(1)' })).toBeUndefined()
+    expect(await imageFrom({ picture: '/relative/a.png' })).toBeUndefined()
+    expect(await imageFrom({ picture: { url: 'https://x.test/a.png' } })).toBeUndefined()
   })
 
-  it('trims surrounding whitespace', () => {
-    expect(pickAvatarUrl({ picture: '  https://x.test/a.png\n' })).toBe('https://x.test/a.png')
-  })
-
-  it('returns undefined when the claim is absent, empty, or not a string', () => {
-    expect(pickAvatarUrl({})).toBeUndefined()
-    expect(pickAvatarUrl({ picture: '' })).toBeUndefined()
-    expect(pickAvatarUrl({ picture: '   ' })).toBeUndefined()
-    expect(pickAvatarUrl({ picture: 42 })).toBeUndefined()
-    expect(pickAvatarUrl({ picture: null })).toBeUndefined()
-    expect(pickAvatarUrl({ picture: { url: 'https://x.test/a.png' } })).toBeUndefined()
-  })
-
-  it('rejects a non-URL string', () => {
-    expect(pickAvatarUrl({ picture: 'not-a-url' })).toBeUndefined()
-    expect(pickAvatarUrl({ picture: '/relative/a.png' })).toBeUndefined()
-  })
-
-  it('rejects a non-http(s) scheme so it cannot become a dangerous <img src>', () => {
-    expect(pickAvatarUrl({ picture: 'data:image/png;base64,iVBORw0KGgo=' })).toBeUndefined()
-    expect(pickAvatarUrl({ picture: 'javascript:alert(1)' })).toBeUndefined()
-  })
-})
-
-describe('pickAvatarUrl with a mapped avatar claim', () => {
-  it('reads the mapped claim, including a nested path, and accepts an extension-less URL', () => {
+  it('reads a nested mapped claim with no file extension, and never falls back to picture', async () => {
     expect(
-      pickAvatarUrl({ profile: { photo: 'https://cdn.example.com/123/456' } }, 'profile.photo')
+      await imageFrom({ profile: { photo: 'https://cdn.example.com/123/456' } }, 'profile.photo')
     ).toBe('https://cdn.example.com/123/456')
-  })
-
-  it('never falls back to picture once a claim is mapped', () => {
-    expect(pickAvatarUrl({ picture: 'https://cdn.example.com/p.png' }, 'photo_url')).toBeUndefined()
-  })
-
-  it('refuses a value that is not an http(s) URL', () => {
-    expect(pickAvatarUrl({ photo_url: 'Sam Lee' }, 'photo_url')).toBeUndefined()
-    expect(pickAvatarUrl({ photo_url: 'javascript:alert(1)' }, 'photo_url')).toBeUndefined()
-  })
-
-  it('reads picture when no claim is mapped', () => {
-    expect(pickAvatarUrl({ picture: 'https://cdn.example.com/p.png' })).toBe(
-      'https://cdn.example.com/p.png'
-    )
+    expect(
+      await imageFrom({ picture: 'https://cdn.example.com/p.png' }, 'photo_url')
+    ).toBeUndefined()
   })
 })
