@@ -814,16 +814,16 @@ type SyncedProfile = { name: string | null; image: string | null }
 
 /**
  * One field of the next record: the stored value, while it equals what the
- * provider sends now or what it last wrote. A value still equal to the last
- * recorded one stays recorded, so turning sync on later can refresh it.
- * Anything else was changed by someone other than the provider.
+ * provider sends now or is still provider-set. A provider-set value stays
+ * recorded, so turning sync on later can refresh it. Anything else was changed
+ * by someone other than the provider.
  */
 function nextSyncedField(
   stored: string | null,
   providerValue: string | undefined,
-  recorded: string | null | undefined
+  providerSet: boolean
 ): string | null {
-  return stored !== null && (stored === providerValue || stored === recorded) ? stored : null
+  return stored !== null && (stored === providerValue || providerSet) ? stored : null
 }
 
 /**
@@ -836,15 +836,23 @@ function nextSyncedField(
  *  - Fill: an empty avatar takes the provider's avatar, for every provider.
  *  - Sync, when the provider's claim mapping has `profile.syncOnSignIn`:
  *    - the name follows the provider's name while the current name is
- *      provider-set: the value this provider last wrote, or a name sign-up
- *      generated for the account;
+ *      provider-set: the value recorded for the account or, for an account
+ *      with no record yet, a name sign-up generated for it. Once a record
+ *      exists, any other name is a person's edit;
  *    - the avatar follows the provider's avatar while the current avatar is the
  *      value this provider last wrote and nothing was uploaded (`imageKey`).
- *  - Record: `account_profile_sync` keeps, per field, the provider value the
- *    user's stored value equals, whether sync is on or off. It is written only
- *    when it changes, so an ordinary sign-in costs no extra write. A record
- *    that cannot be read (a database that has not created the table yet)
- *    counts as no record and is left unwritten, so the avatar fill still runs.
+ *  - Record: `account_profile_sync` keeps, per field, the provider-set value
+ *    the user's stored value equals (a generated name counts), whether sync is
+ *    on or off. A row means the account is tracked, so it is created on the
+ *    first sign-in and never deleted; after that it is written only when it
+ *    changes, so an ordinary sign-in costs no extra write. A record that
+ *    cannot be read (a database that has not created the table yet) counts as
+ *    no record and is left unwritten, so the avatar fill still runs.
+ *
+ * The user update and the principal copy commit together, and only while the
+ * name, avatar and upload are still what was read: a concurrent edit wins, and
+ * the refresh then writes nothing more. The record is written after that
+ * commit, outside it, since its table may not exist yet.
  *
  * The provider's name, avatar and generated names are the resolver's
  * decisions for this sign-in, read through the shared per-callback claim
@@ -905,6 +913,7 @@ async function refreshSsoProfile(
     and,
     eq,
     desc,
+    isNull,
   } = await import('@/lib/server/db')
 
   const owner = await db.query.user.findFirst({
@@ -920,14 +929,15 @@ async function refreshSsoProfile(
   })
   if (!row) return
 
-  let recorded: SyncedProfile | null = null
+  // `undefined`: no row, the account is not tracked yet. `null`: unreadable.
+  let recorded: SyncedProfile | undefined | null
   try {
-    const stored = await db.query.accountProfileSync.findFirst({
+    recorded = await db.query.accountProfileSync.findFirst({
       where: eq(accountProfileSync.accountId, row.id),
       columns: { name: true, image: true },
     })
-    recorded = stored ?? { name: null, image: null }
   } catch {
+    recorded = null
     log.warn(
       { code: 'sso_profile_record_unreadable', user_id: userId, provider_id: providerId },
       'sso profile record unreadable'
@@ -938,47 +948,70 @@ async function refreshSsoProfile(
   const providerName = profile.name?.trim() ? profile.name : undefined
   const providerImage = profile.image
   const imageEmpty = !owner.image?.trim()
+  const nameProviderSet = recorded
+    ? owner.name === recorded.name
+    : profile.generatedNames.includes(owner.name)
+  const imageProviderSet = owner.image !== null && owner.image === recorded?.image
 
   const changes: { name?: string; image?: string } = {}
-  if (
-    sync &&
-    providerName &&
-    owner.name !== providerName &&
-    (owner.name === recorded?.name || profile.generatedNames.includes(owner.name))
-  ) {
+  if (sync && providerName && owner.name !== providerName && nameProviderSet) {
     changes.name = providerName
   }
   if (
     providerImage &&
     owner.image !== providerImage &&
-    (imageEmpty || (sync && !owner.imageKey && owner.image === recorded?.image))
+    (imageEmpty || (sync && !owner.imageKey && imageProviderSet))
   ) {
     changes.image = providerImage
   }
 
   const fields = Object.keys(changes)
   if (fields.length > 0) {
-    await db.update(userTable).set(changes).where(eq(userTable.id, userId))
     const { syncPrincipalProfile } =
       await import('@/lib/server/domains/principals/principal.factory')
-    await syncPrincipalProfile(userId, {
-      ...(changes.name !== undefined ? { displayName: changes.name } : {}),
-      ...(changes.image !== undefined ? { avatarUrl: changes.image } : {}),
+    const applied = await db.transaction(async (tx) => {
+      const updated = await tx
+        .update(userTable)
+        .set(changes)
+        .where(
+          and(
+            eq(userTable.id, userId),
+            eq(userTable.name, owner.name),
+            owner.image === null ? isNull(userTable.image) : eq(userTable.image, owner.image),
+            owner.imageKey === null
+              ? isNull(userTable.imageKey)
+              : eq(userTable.imageKey, owner.imageKey)
+          )
+        )
+        .returning({ id: userTable.id })
+      if (updated.length === 0) return false
+      await syncPrincipalProfile(
+        userId,
+        {
+          ...(changes.name !== undefined ? { displayName: changes.name } : {}),
+          ...(changes.image !== undefined ? { avatarUrl: changes.image } : {}),
+        },
+        tx
+      )
+      return true
     })
+    if (!applied) {
+      log.debug(
+        { user_id: userId, provider_id: providerId },
+        'sso profile refresh skipped: user changed concurrently'
+      )
+      return
+    }
     log.info({ user_id: userId, provider_id: providerId, fields }, 'refreshed sso profile')
   }
 
   // Unknown state is left alone rather than overwritten.
-  if (!recorded) return
+  if (recorded === null) return
   const next: SyncedProfile = {
-    name: nextSyncedField(changes.name ?? owner.name, providerName, recorded.name),
-    image: nextSyncedField(changes.image ?? owner.image, providerImage, recorded.image),
+    name: nextSyncedField(changes.name ?? owner.name, providerName, nameProviderSet),
+    image: nextSyncedField(changes.image ?? owner.image, providerImage, imageProviderSet),
   }
-  if (next.name === recorded.name && next.image === recorded.image) return
-  if (next.name === null && next.image === null) {
-    await db.delete(accountProfileSync).where(eq(accountProfileSync.accountId, row.id))
-    return
-  }
+  if (recorded && next.name === recorded.name && next.image === recorded.image) return
   const values = { ...next, updatedAt: new Date() }
   await db
     .insert(accountProfileSync)

@@ -29,14 +29,23 @@ type Write = {
   values?: Record<string, unknown>
   conflict?: { target: unknown; set: Record<string, unknown> }
   where?: unknown
+  via?: 'db' | 'tx'
 }
 const writes: Write[] = []
-const mockUpdate = vi.fn((table: unknown) => ({
-  set: (values: Record<string, unknown>) => {
-    writes.push({ table, op: 'update', values })
-    return { where: vi.fn(async () => undefined) }
-  },
-}))
+/** Rows the user update returns: the compare-and-swap matched, by default. */
+const mockReturning = vi.fn(async (..._args: unknown[]): Promise<unknown[]> => [{ id: 'user_abc' }])
+function updater(via: 'db' | 'tx') {
+  return vi.fn((table: unknown) => ({
+    set: (values: Record<string, unknown>) => ({
+      where: (where: unknown) => {
+        writes.push({ table, op: 'update', values, where, via })
+        return { returning: mockReturning }
+      },
+    }),
+  }))
+}
+const tx = { update: updater('tx') }
+const mockTransaction = vi.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx))
 const mockInsert = vi.fn((table: unknown) => ({
   values: (values: Record<string, unknown>) => ({
     onConflictDoUpdate: vi.fn(async (conflict: Write['conflict']) => {
@@ -62,12 +71,14 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
       account: { findFirst: mockAccountFindFirst },
       accountProfileSync: { findFirst: mockRecordFindFirst },
     },
-    update: mockUpdate,
+    update: updater('db'),
     insert: mockInsert,
     delete: mockDelete,
+    transaction: mockTransaction,
   },
   and: vi.fn((...parts: unknown[]) => ({ op: 'and', parts })),
   eq: vi.fn((col: unknown, val: unknown) => ({ op: 'eq', col, val })),
+  isNull: vi.fn((col: unknown) => ({ op: 'isNull', col })),
   desc: vi.fn((col: unknown) => ({ op: 'desc', col })),
 }))
 
@@ -169,6 +180,8 @@ const recordWrites = () =>
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockReturning.mockReset()
+  mockReturning.mockImplementation(async () => [{ id: USER_ID }])
   writes.length = 0
   givenUser({})
   givenAccount(null)
@@ -263,7 +276,7 @@ describe('avatar fill (every provider)', () => {
     await handleProfileRefreshAfter(ctx(), REGISTERED, providerRow())
 
     expect(mockSyncPrincipalProfile).toHaveBeenCalledTimes(1)
-    expect(mockSyncPrincipalProfile).toHaveBeenCalledWith(USER_ID, { avatarUrl: NEW_AVATAR })
+    expect(mockSyncPrincipalProfile).toHaveBeenCalledWith(USER_ID, { avatarUrl: NEW_AVATAR }, tx)
   })
 
   it('records the avatar it fills as provider-set', async () => {
@@ -324,7 +337,7 @@ describe('name sync', () => {
     await handleProfileRefreshAfter(ctx(), REGISTERED, syncing())
 
     expect(userWrites()).toEqual([{ name: 'Ada New' }])
-    expect(mockSyncPrincipalProfile).toHaveBeenCalledWith(USER_ID, { displayName: 'Ada New' })
+    expect(mockSyncPrincipalProfile).toHaveBeenCalledWith(USER_ID, { displayName: 'Ada New' }, tx)
     expect(recordWrites()).toEqual([{ record: { name: 'Ada New' } }])
   })
 
@@ -346,7 +359,33 @@ describe('name sync', () => {
 
     expect(userWrites()).toEqual([])
     expect(mockSyncPrincipalProfile).not.toHaveBeenCalled()
-    expect(recordWrites()).toEqual([{ record: null }])
+    expect(recordWrites()).toEqual([{ record: {} }])
+  })
+
+  it('never replaces a name edited after tracking began, even one that matches a generated name', async () => {
+    givenUser({ name: 'ally' })
+    givenAccount({ name: 'Ally Lovelace' })
+    givenSignIn({ name: 'Ally Smith', generatedNames: ['ally', GENERATED] })
+
+    await handleProfileRefreshAfter(ctx(), REGISTERED, syncing())
+
+    expect(userWrites()).toEqual([])
+    expect(recordWrites()).toEqual([{ record: {} }])
+  })
+
+  it('records a generated name as provider-set, so sync turned on later replaces it', async () => {
+    givenUser({ name: GENERATED })
+    givenSignIn({ name: 'Ada New' })
+    await handleProfileRefreshAfter(ctx(), REGISTERED, providerRow())
+    expect(userWrites()).toEqual([])
+    expect(recordWrites()).toEqual([{ record: { name: GENERATED } }])
+
+    writes.length = 0
+    givenAccount({ name: GENERATED })
+    givenSignIn({ name: 'Ada New', generatedNames: [] })
+    await handleProfileRefreshAfter(ctx(), REGISTERED, syncing())
+
+    expect(userWrites()).toEqual([{ name: 'Ada New' }])
   })
 
   it('never writes a blank name, and keeps the name when the provider sent none', async () => {
@@ -371,7 +410,7 @@ describe('avatar sync', () => {
     await handleProfileRefreshAfter(ctx(), REGISTERED, syncing())
 
     expect(userWrites()).toEqual([{ image: NEW_AVATAR }])
-    expect(mockSyncPrincipalProfile).toHaveBeenCalledWith(USER_ID, { avatarUrl: NEW_AVATAR })
+    expect(mockSyncPrincipalProfile).toHaveBeenCalledWith(USER_ID, { avatarUrl: NEW_AVATAR }, tx)
     expect(recordWrites()).toEqual([{ record: { image: NEW_AVATAR } }])
   })
 
@@ -394,7 +433,7 @@ describe('avatar sync', () => {
     await handleProfileRefreshAfter(ctx(), REGISTERED, syncing())
 
     expect(userWrites()).toEqual([])
-    expect(recordWrites()).toEqual([{ record: null }])
+    expect(recordWrites()).toEqual([{ record: {} }])
   })
 
   it('leaves a provider-set avatar alone while profile sync is off', async () => {
@@ -418,10 +457,11 @@ describe('one write per sign-in', () => {
 
     expect(userWrites()).toEqual([{ name: 'Ada New', image: NEW_AVATAR }])
     expect(mockSyncPrincipalProfile).toHaveBeenCalledTimes(1)
-    expect(mockSyncPrincipalProfile).toHaveBeenCalledWith(USER_ID, {
-      displayName: 'Ada New',
-      avatarUrl: NEW_AVATAR,
-    })
+    expect(mockSyncPrincipalProfile).toHaveBeenCalledWith(
+      USER_ID,
+      { displayName: 'Ada New', avatarUrl: NEW_AVATAR },
+      tx
+    )
     expect(mockLogInfo).toHaveBeenCalledTimes(1)
     expect(mockLogInfo).toHaveBeenCalledWith(
       { user_id: USER_ID, provider_id: PROVIDER, fields: ['name', 'image'] },
@@ -493,20 +533,28 @@ describe('provenance record', () => {
     })
   })
 
-  it('deletes the row of the account it signed in with once nothing is recorded', async () => {
+  it('keeps the row with nothing recorded, so the account stays tracked', async () => {
     givenUser({ name: 'Ada (typed here)' })
     givenAccount({ name: 'Ada' })
     givenSignIn({ name: 'Ada New' })
 
     await handleProfileRefreshAfter(ctx(), REGISTERED, syncing())
 
-    expect(writes.filter((w) => w.table === recordTable)).toEqual([
-      {
-        table: recordTable,
-        op: 'delete',
-        where: { op: 'eq', col: recordTable.accountId, val: ACCOUNT_ROW_ID },
-      },
-    ])
+    expect(mockDelete).not.toHaveBeenCalled()
+    const [upsert] = writes.filter((w) => w.table === recordTable)
+    expect(upsert).toMatchObject({
+      op: 'upsert',
+      values: { accountId: ACCOUNT_ROW_ID, name: null, image: null },
+    })
+  })
+
+  it('starts tracking on the first sign-in even when nothing is provider-set', async () => {
+    givenUser({ name: 'Ada (typed here)', image: CHOSEN_AVATAR })
+    givenSignIn({ name: 'Ada', image: NEW_AVATAR })
+
+    await handleProfileRefreshAfter(ctx(), REGISTERED, providerRow())
+
+    expect(recordWrites()).toEqual([{ record: {} }])
   })
 })
 
@@ -519,7 +567,7 @@ describe('failure', () => {
     await handleProfileRefreshAfter(ctx(), REGISTERED, providerRow())
 
     expect(userWrites()).toEqual([{ image: NEW_AVATAR }])
-    expect(mockSyncPrincipalProfile).toHaveBeenCalledWith(USER_ID, { avatarUrl: NEW_AVATAR })
+    expect(mockSyncPrincipalProfile).toHaveBeenCalledWith(USER_ID, { avatarUrl: NEW_AVATAR }, tx)
     // Unknown state is left alone rather than overwritten, and is not a failure.
     expect(recordWrites()).toEqual([])
     expect(mockLogError).not.toHaveBeenCalled()
@@ -539,6 +587,17 @@ describe('failure', () => {
     expect(userWrites()).toEqual([])
   })
 
+  it('lets a generated name follow the provider when the record cannot be read', async () => {
+    givenUser({ name: GENERATED })
+    givenSignIn({ name: 'Ada New' })
+    mockRecordFindFirst.mockRejectedValue(new Error('relation does not exist'))
+
+    await handleProfileRefreshAfter(ctx(), REGISTERED, syncing())
+
+    expect(userWrites()).toEqual([{ name: 'Ada New' }])
+    expect(recordWrites()).toEqual([])
+  })
+
   it('never blocks sign-in when the refresh cannot read or write', async () => {
     mockAccountFindFirst.mockRejectedValue(new Error('connection terminated'))
 
@@ -549,5 +608,85 @@ describe('failure', () => {
       expect.objectContaining({ code: 'sso_profile_refresh_failed', user_id: USER_ID }),
       'sso profile refresh failed'
     )
+  })
+})
+
+describe('writing the user', () => {
+  it('updates the user and the principal in one transaction', async () => {
+    givenUser({ image: null })
+    givenSignIn({ image: NEW_AVATAR })
+
+    await handleProfileRefreshAfter(ctx(), REGISTERED, providerRow())
+
+    expect(mockTransaction).toHaveBeenCalledTimes(1)
+    expect(writes.filter((w) => w.table === userTable).map((w) => w.via)).toEqual(['tx'])
+    expect(mockSyncPrincipalProfile).toHaveBeenCalledWith(USER_ID, { avatarUrl: NEW_AVATAR }, tx)
+  })
+
+  it('records nothing when the principal update fails', async () => {
+    givenUser({ image: null })
+    givenSignIn({ image: NEW_AVATAR })
+    mockSyncPrincipalProfile.mockImplementationOnce(async () => {
+      throw new Error('principal write failed')
+    })
+
+    await handleProfileRefreshAfter(ctx(), REGISTERED, providerRow())
+
+    expect(recordWrites()).toEqual([])
+    expect(mockLogInfo).not.toHaveBeenCalled()
+    expect(mockLogError).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'sso_profile_refresh_failed' }),
+      'sso profile refresh failed'
+    )
+  })
+
+  it('updates only while the name, avatar and upload are still what it read', async () => {
+    givenUser({ name: 'Ada Old', image: null, imageKey: null })
+    givenAccount({ name: 'Ada Old' })
+    givenSignIn({ name: 'Ada New', image: NEW_AVATAR })
+
+    await handleProfileRefreshAfter(ctx(), REGISTERED, syncing())
+
+    const [update] = writes.filter((w) => w.table === userTable)
+    expect(update.where).toEqual({
+      op: 'and',
+      parts: expect.arrayContaining([
+        { op: 'eq', col: userTable.id, val: USER_ID },
+        { op: 'eq', col: userTable.name, val: 'Ada Old' },
+        { op: 'isNull', col: userTable.image },
+        { op: 'isNull', col: userTable.imageKey },
+      ]),
+    })
+    expect((update.where as { parts: unknown[] }).parts).toHaveLength(4)
+  })
+
+  it('compares a stored avatar by value', async () => {
+    givenUser({ name: 'Ada', image: OLD_AVATAR, imageKey: null })
+    givenAccount({ image: OLD_AVATAR })
+    givenSignIn({ image: NEW_AVATAR })
+
+    await handleProfileRefreshAfter(ctx(), REGISTERED, syncing())
+
+    const [update] = writes.filter((w) => w.table === userTable)
+    expect((update.where as { parts: unknown[] }).parts).toContainEqual({
+      op: 'eq',
+      col: userTable.image,
+      val: OLD_AVATAR,
+    })
+  })
+
+  it('writes nothing more when a concurrent edit changed the user first', async () => {
+    givenUser({ name: 'Ada Old', image: OLD_AVATAR })
+    givenAccount({ name: 'Ada Old', image: OLD_AVATAR })
+    givenSignIn({ name: 'Ada New', image: NEW_AVATAR })
+    mockReturning.mockImplementation(async () => [])
+
+    await handleProfileRefreshAfter(ctx(), REGISTERED, syncing())
+
+    expect(mockSyncPrincipalProfile).not.toHaveBeenCalled()
+    expect(recordWrites()).toEqual([])
+    expect(mockLogInfo).not.toHaveBeenCalled()
+    expect(mockLogWarn).not.toHaveBeenCalled()
+    expect(mockLogError).not.toHaveBeenCalled()
   })
 })
