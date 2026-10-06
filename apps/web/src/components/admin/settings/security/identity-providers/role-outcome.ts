@@ -100,17 +100,25 @@ export function signInRoleOutcome({
   return { source: 'none' }
 }
 
-/** "Admin (rule 1)", "Member (verified domain)" or "Portal user". */
-export function describeSignInRole(outcome: SignInRoleOutcome): string {
-  if (outcome.source === 'none') return ROLE_PRESET_LABELS.user
+/** "Admin (rule 1)", "Member (verified domain)" or "Portal user"; with
+ *  `unsaved`, "Admin (rule 1, unsaved)" and so on. */
+export function describeSignInRole(
+  outcome: SignInRoleOutcome,
+  { unsaved = false }: { unsaved?: boolean } = {}
+): string {
+  const note = (why: string | null) => {
+    const parts = [why, unsaved ? 'unsaved' : null].filter(Boolean)
+    return parts.length > 0 ? ` (${parts.join(', ')})` : ''
+  }
+  if (outcome.source === 'none') return `${ROLE_PRESET_LABELS.user}${note(null)}`
   if (outcome.source === 'unchanged') {
-    return `No change (rule ${outcome.ruleIndex + 1} names a role that no longer exists)`
+    return `No change${note(`rule ${outcome.ruleIndex + 1} names a role that no longer exists`)}`
   }
   const name =
     outcome.source === 'rule' && outcome.roleId
       ? (outcome.roleName ?? 'Custom role')
       : ROLE_PRESET_LABELS[outcome.role]
-  return outcome.source === 'rule'
-    ? `${name} (rule ${outcome.ruleIndex + 1})`
-    : `${name} (verified domain)`
+  return `${name}${note(
+    outcome.source === 'rule' ? `rule ${outcome.ruleIndex + 1}` : 'verified domain'
+  )}`
 }

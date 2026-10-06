@@ -5,6 +5,7 @@
  */
 
 import { Autocomplete } from '@/components/ui/autocomplete'
+import { cn } from '@/lib/shared/utils'
 import {
   deriveAttributeClaimPaths,
   deriveClaimSuggestions,
@@ -34,6 +35,7 @@ export function ClaimPathInput({
   suggestionsFor = 'role',
   providerKind,
   identityField,
+  className,
 }: {
   value: string
   onChange: (next: string) => void
@@ -50,6 +52,8 @@ export function ClaimPathInput({
   suggestionsFor?: 'role' | 'attribute' | 'identity'
   providerKind?: string | null
   identityField?: 'id' | 'email' | 'name'
+  /** Extra classes for the trigger. */
+  className?: string
 }) {
   const { lastSuccess, lastCapture } = useSsoTestSignIn()
   const fixture =
@@ -101,7 +105,7 @@ export function ClaimPathInput({
         </div>
       }
       disabled={disabled}
-      className="w-full"
+      className={cn('w-full', className)}
     />
   )
 }

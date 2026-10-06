@@ -59,6 +59,7 @@ import {
   type PeopleDefinition,
 } from './provider-shared'
 import { grantableRoles, verifiedDomainNames } from './role-outcome'
+import { useRolesDraft } from './roles-draft-context'
 
 /** The table needs a label per attribute; the write planner needs its typed
  *  kind. One list serves both. */
@@ -149,6 +150,8 @@ function ProfileEditor({
   const capture = useProviderCapture(provider)
   // Names a matched rule's custom role in the preview, or shows it missing.
   const { data: rolesData } = useQuery(settingsQueries.roles())
+  // Unsaved edits on the Roles card, so the preview's Role line matches them.
+  const rolesDraft = useRolesDraft()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [dialog, setDialog] = useState<{
     mode: 'add' | 'edit'
@@ -392,16 +395,19 @@ function ProfileEditor({
 
       <OutcomePreviewRail
         capture={capture}
-        draft={draftMapping}
+        draft={
+          rolesDraft ? mergeClaimMapping(draftMapping, { role: rolesDraft.role }) : draftMapping
+        }
         definitions={definitions}
         providerPolicy={{
           autoCreateUsers: provider.autoCreateUsers,
-          autoProvisionRole: provider.autoProvisionRole,
+          autoProvisionRole: rolesDraft ? rolesDraft.defaultRole : provider.autoProvisionRole,
           detailsChangedAt: provider.detailsChangedAt,
           registrationId: provider.registrationId,
         }}
         verifiedDomains={verifiedDomainNames(provider.domains)}
         roles={rolesData ? grantableRoles(rolesData.roles) : undefined}
+        roleUnsaved={rolesDraft !== null}
         dirty={dirty}
         onSaveAndTest={() => requestSave(true)}
         registrationId={provider.registrationId}

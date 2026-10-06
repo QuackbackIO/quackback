@@ -966,7 +966,11 @@ describe('<ProviderDetailPage> profile', () => {
     expect(screen.getByText('upn')).toBeInTheDocument()
     expect(screen.getAllByText('Custom')).toHaveLength(1)
     expect(screen.queryByText('Default')).not.toBeInTheDocument()
-    expect(screen.getByText('groups')).toBeInTheDocument()
+    // The role claim shows on the Roles card, not in the Profile table.
+    expect(section('mapping').queryByText('groups')).not.toBeInTheDocument()
+    expect(section('roles').getByRole('combobox', { name: 'Claim to check' })).toHaveTextContent(
+      'groups'
+    )
   })
 
   it('shows a stored profile claim this UI cannot edit instead of calling the mapping standard', () => {
@@ -1330,5 +1334,62 @@ describe('<ProviderDetailPage> remove', () => {
     await user.click(await screen.findByRole('menuitem', { name: 'Delete provider' }))
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(toastSpy.error).toHaveBeenCalledWith(expect.stringMatching(/only enabled sign-in/i))
+  })
+})
+
+describe('<ProviderDetailPage> roles preview', () => {
+  const groupsCapture: SsoTestCapture = {
+    ...matchingCapture,
+    claims: { ...matchingCapture.claims, groups: ['engineering'] },
+    replay: {
+      sources: [
+        {
+          source: 'idToken' as const,
+          claims: { sub: 's', email: 'alice@example.com', groups: ['engineering'] },
+        },
+        { source: 'userinfo' as const, claims: { sub: 's' } as Record<string, string> },
+      ],
+    },
+  }
+  const roleLine = () =>
+    within(section('mapping').getByRole('heading', { name: 'Role' }).parentElement!).getByText(
+      /Portal user|Admin|Member/
+    )
+
+  it('answers the Profile preview’s Role line for the Roles card’s unsaved rules', async () => {
+    renderPage(makeProvider({ label: 'Acme ID', lastTestCapture: groupsCapture }))
+    expect(roleLine()).toHaveTextContent(/^Portal user$/)
+
+    const roles = section('roles')
+    fireEvent.click(roles.getByRole('button', { name: 'Add rule' }))
+    // The value the test person sent is offered from the last test sign-in.
+    await userEvent.click(roles.getByRole('combobox', { name: 'Value for rule 1' }))
+    await userEvent.click(screen.getByRole('option', { name: 'engineering' }))
+    await userEvent.click(roles.getByRole('combobox', { name: 'Role for rule 1' }))
+    await userEvent.click(screen.getByRole('option', { name: 'Admin' }))
+
+    await waitFor(() => expect(roleLine()).toHaveTextContent(/^Admin \(rule 1, unsaved\)$/))
+
+    fireEvent.click(roles.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(roleLine()).toHaveTextContent(/^Portal user$/))
+  })
+
+  it('reads an unsaved default role change too', async () => {
+    renderPage(
+      makeProvider({
+        label: 'Acme ID',
+        lastTestCapture: groupsCapture,
+        domains: [{ ...verifiedDomain, name: 'example.com' }],
+        autoProvisionRole: 'member',
+      })
+    )
+    expect(roleLine()).toHaveTextContent(/^Member \(verified domain\)$/)
+    await userEvent.click(
+      section('roles').getByRole('combobox', { name: 'Role for people at a verified domain' })
+    )
+    await userEvent.click(screen.getByRole('option', { name: 'Admin' }))
+    await waitFor(() =>
+      expect(roleLine()).toHaveTextContent(/^Admin \(verified domain, unsaved\)$/)
+    )
   })
 })

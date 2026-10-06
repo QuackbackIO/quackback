@@ -28,6 +28,7 @@ import { SsoTestSignInProvider } from '../sso/use-sso-test-sign-in'
 import { ConnectionCard } from './connection-card'
 import { ProviderMenu } from './provider-menu'
 import { RolesCard } from './roles-card'
+import { RolesDraftProvider } from './roles-draft-context'
 import { SignInCard } from './sign-in-card'
 import { UserDetailsCard } from './user-details-card'
 import { isOnlyWorkingMethod } from './only-working-method'
@@ -61,11 +62,14 @@ export function ProviderDetailPage({
     // the connection test and the claim-path suggestions share one modal and
     // one "last successful test" result.
     <SsoTestSignInProvider>
-      <ProviderDetailBody
-        provider={provider}
-        autoTest={autoTest}
-        onAutoTestConsumed={onAutoTestConsumed}
-      />
+      {/* The Roles card's unsaved draft reaches the Profile card's preview. */}
+      <RolesDraftProvider>
+        <ProviderDetailBody
+          provider={provider}
+          autoTest={autoTest}
+          onAutoTestConsumed={onAutoTestConsumed}
+        />
+      </RolesDraftProvider>
     </SsoTestSignInProvider>
   )
 }

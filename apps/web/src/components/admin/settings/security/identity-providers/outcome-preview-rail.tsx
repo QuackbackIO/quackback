@@ -61,6 +61,7 @@ export function OutcomePreviewRail({
   providerPolicy,
   verifiedDomains = [],
   roles,
+  roleUnsaved = false,
   dirty,
   onSaveAndTest,
   registrationId,
@@ -74,6 +75,8 @@ export function OutcomePreviewRail({
   verifiedDomains?: string[]
   /** Roles a rule may name, so a matched custom role is named or shown missing. */
   roles?: Array<{ id: string; name: string }>
+  /** The Role line answers for the Roles card's unsaved draft. */
+  roleUnsaved?: boolean
   dirty: boolean
   onSaveAndTest?: () => void
   registrationId: string
@@ -191,7 +194,8 @@ export function OutcomePreviewRail({
                   email: identity?.email,
                   verifiedDomains,
                   defaultRole: effectiveDefaultRole(providerPolicy.autoProvisionRole),
-                })
+                }),
+                { unsaved: roleUnsaved }
               )}
             </p>
           )}

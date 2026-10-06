@@ -230,22 +230,58 @@ describe('<RolesCard> layout', () => {
     expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
   })
 
-  it('writes each rule as a sentence: If claim contains value, role', () => {
+  it('chooses the shared claim once, above the rules, and keeps each rule on one line', () => {
     renderCard(makeProvider({ claimMapping: TWO_RULES }))
+    const claim = screen.getByRole('combobox', { name: 'Claim to check' })
+    expect(claim).toHaveTextContent('groups')
+    expect(screen.getByRole('list', { name: 'Role rules' })).not.toContainElement(claim)
+    expect(screen.getAllByRole('combobox', { name: 'Claim to check' })).toHaveLength(1)
+
     const [first, second] = ruleRows()
     expect(first).toHaveTextContent(/^1\s*If\s*groups\s*contains\s*admins\s*→\s*Admin/)
-    expect(within(first!).getByRole('combobox', { name: 'Claim to check' })).toHaveTextContent(
-      'groups'
-    )
-    expect(within(first!).getByRole('combobox', { name: 'Value for rule 1' })).toHaveTextContent(
-      'admins'
-    )
-    expect(within(first!).getByRole('combobox', { name: 'Role for rule 1' })).toHaveTextContent(
-      'Admin'
-    )
-    // Rules share one claim; later rows name it rather than offering a second control.
     expect(second).toHaveTextContent(/^2\s*If\s*groups\s*contains\s*support\s*→\s*Member/)
-    expect(within(second!).queryByRole('combobox', { name: 'Claim to check' })).toBeNull()
+    // One line from the number to Remove: the sentence and its actions share a
+    // row that does not wrap at the card's width.
+    for (const [row, n] of [
+      [first!, 1],
+      [second!, 2],
+    ] as const) {
+      const sentence = within(row).getByTestId('rule-sentence')
+      expect(sentence.className).toMatch(/sm:flex-nowrap/)
+      for (const name of [`Value for rule ${n}`, `Role for rule ${n}`]) {
+        expect(sentence).toContainElement(within(row).getByRole('combobox', { name }))
+      }
+      for (const name of [`Move rule ${n} up`, `Move rule ${n} down`, `Remove rule ${n}`]) {
+        expect(sentence).toContainElement(within(row).getByRole('button', { name }))
+      }
+    }
+  })
+
+  it('keeps focus styles neutral on every control it adds', () => {
+    renderCard(makeProvider({ claimMapping: TWO_RULES }))
+    for (const name of [
+      'Role for rule 1',
+      'Role for rule 2',
+      'Role for people at a verified domain',
+    ]) {
+      const trigger = screen.getByRole('combobox', { name })
+      expect(trigger.className).toMatch(/focus:border-muted-foreground/)
+    }
+    const buttons = [
+      screen.getByRole('combobox', { name: 'Claim to check' }),
+      screen.getByRole('combobox', { name: 'Value for rule 1' }),
+      screen.getByRole('button', { name: 'Move rule 1 up' }),
+      screen.getByRole('button', { name: 'Move rule 1 down' }),
+      screen.getByRole('button', { name: 'Remove rule 1' }),
+      screen.getByRole('button', { name: 'Add rule' }),
+    ]
+    for (const el of buttons) expect(el.className).toMatch(/focus-visible:ring-muted-foreground/)
+    fireEvent.click(screen.getByRole('button', { name: 'Remove rule 2' }))
+    for (const name of ['Cancel', 'Save changes']) {
+      expect(screen.getByRole('button', { name }).className).toMatch(
+        /focus-visible:ring-muted-foreground/
+      )
+    }
   })
 
   it('shows the empty state when there are no rules', () => {

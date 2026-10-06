@@ -62,10 +62,16 @@ import {
 } from './role-outcome'
 import { useProviderCapture } from './use-connection-test'
 import { useProviderSave } from './use-provider-save'
+import { usePublishRolesDraft } from './roles-draft-context'
 import { useProviderAdmins, type ProviderAdmin } from './use-provider-admins'
 
 /** Focus borders added here stay neutral; the shared ring is not. */
 const NEUTRAL_FOCUS = 'focus-visible:border-muted-foreground focus-visible:ring-muted-foreground/30'
+/** The same for buttons and select triggers, whose shared focus styles differ. */
+const NEUTRAL_BUTTON_FOCUS = 'focus-visible:ring-muted-foreground/40'
+const NEUTRAL_SELECT_FOCUS = 'focus:border-muted-foreground'
+const NEUTRAL_LINK_FOCUS =
+  'rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-muted-foreground'
 const PRESETS: Role[] = ['admin', 'member', 'user']
 const CUSTOM_PREFIX = 'custom:'
 
@@ -174,6 +180,7 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
   const roleChanged = roleChangedFrom(baseline, draft)
   const defaultChanged = defaultChangedFrom(baseline, draft)
   const dirty = roleChanged || defaultChanged
+  usePublishRolesDraft(dirty ? { role: roleSection(draft), defaultRole: draft.defaultRole } : null)
   const proposed = mergeClaimMapping(baseline.mapping, { role: roleSection(draft) })
   const operations = roleChanged ? diffClaimMappingOperations(baseline.mapping, proposed) : []
   const risks = mappingSaveRisks(baseline.mapping, proposed, { adminTierRoleIds: tierIds })
@@ -316,6 +323,26 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
       )}
 
       <div className="space-y-2.5">
+        {draft.rules.length > 0 && (
+          // Every rule reads the same claim, so it is chosen once, above them.
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-muted-foreground">Claim</span>
+            <div className="w-56">
+              <ClaimPathInput
+                value={draft.claimPath}
+                onChange={(claimPath) => update({ claimPath })}
+                registrationId={provider.registrationId}
+                canTest
+                placeholder="groups"
+                ariaLabel="Claim to check"
+                disabled={saving}
+                capture={capture}
+                suggestionsFor="role"
+                className={NEUTRAL_BUTTON_FOCUS}
+              />
+            </div>
+          </div>
+        )}
         {draft.rules.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
             No rules yet. Everyone gets the roles below. Add a rule to give a role based on a claim
@@ -331,28 +358,20 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
                   index === firstMatch ? 'border-success/30 bg-success/5' : 'border-border/60'
                 )}
               >
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="w-4 text-center text-xs text-muted-foreground">{index + 1}</span>
+                <div
+                  data-testid="rule-sentence"
+                  className="flex flex-wrap items-center gap-2 text-sm sm:flex-nowrap"
+                >
+                  <span className="w-4 shrink-0 text-center text-xs text-muted-foreground">
+                    {index + 1}
+                  </span>
                   <span className="text-muted-foreground">If</span>
-                  {index === 0 ? (
-                    <div className="w-44">
-                      <ClaimPathInput
-                        value={draft.claimPath}
-                        onChange={(claimPath) => update({ claimPath })}
-                        registrationId={provider.registrationId}
-                        canTest
-                        placeholder="groups"
-                        ariaLabel="Claim to check"
-                        disabled={saving}
-                        capture={capture}
-                        suggestionsFor="role"
-                      />
-                    </div>
-                  ) : (
-                    <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
-                      {draft.claimPath.trim() || 'claim'}
-                    </code>
-                  )}
+                  <code
+                    title={draft.claimPath.trim()}
+                    className="max-w-32 truncate rounded bg-muted px-1.5 py-0.5 font-mono text-xs"
+                  >
+                    {draft.claimPath.trim() || 'claim'}
+                  </code>
                   <span className="text-muted-foreground">contains</span>
                   <Autocomplete
                     value={rule.whenContains}
@@ -363,7 +382,7 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
                     emptyHint="No values seen yet. Type the value to match."
                     disabled={saving}
                     size="sm"
-                    className="w-40"
+                    className={cn('w-40 shrink-0', NEUTRAL_BUTTON_FOCUS)}
                   />
                   <span aria-hidden="true" className="text-muted-foreground">
                     →
@@ -381,12 +400,12 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
                     disabled={saving}
                     onChange={(patch) => updateRule(index, patch)}
                   />
-                  <div className="ml-auto flex items-center">
+                  <div className="ml-auto flex shrink-0 items-center">
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-8 px-2"
+                      className={cn('h-8 px-2', NEUTRAL_BUTTON_FOCUS)}
                       aria-label={`Move rule ${index + 1} up`}
                       onClick={() => moveRule(index, -1)}
                       disabled={saving || index === 0}
@@ -397,7 +416,7 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-8 px-2"
+                      className={cn('h-8 px-2', NEUTRAL_BUTTON_FOCUS)}
                       aria-label={`Move rule ${index + 1} down`}
                       onClick={() => moveRule(index, 1)}
                       disabled={saving || index === draft.rules.length - 1}
@@ -408,7 +427,7 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-8 px-2"
+                      className={cn('h-8 px-2', NEUTRAL_BUTTON_FOCUS)}
                       aria-label={`Remove rule ${index + 1}`}
                       onClick={() => update({ rules: draft.rules.filter((_, i) => i !== index) })}
                       disabled={saving}
@@ -444,7 +463,7 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
           type="button"
           variant="outline"
           size="sm"
-          className="gap-1.5"
+          className={cn('gap-1.5', NEUTRAL_BUTTON_FOCUS)}
           onClick={() => update({ rules: [...draft.rules, { whenContains: '', role: 'member' }] })}
           disabled={saving}
         >
@@ -530,6 +549,7 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
             type="button"
             variant="outline"
             size="sm"
+            className={NEUTRAL_BUTTON_FOCUS}
             onClick={() => setDraft(draftFrom(baseline))}
             disabled={saving}
           >
@@ -538,6 +558,7 @@ function RolesEditor({ provider, label }: { provider: IdentityProvider; label: s
           <Button
             type="button"
             size="sm"
+            className={NEUTRAL_BUTTON_FOCUS}
             onClick={requestSave}
             disabled={saving || lockout || !valid || waiting !== null}
           >
@@ -708,7 +729,11 @@ function RuleRoleSelect({
       }}
       disabled={disabled}
     >
-      <SelectTrigger size="sm" className="w-36" aria-label={`Role for rule ${index + 1}`}>
+      <SelectTrigger
+        size="sm"
+        className={cn('w-36 shrink-0', NEUTRAL_SELECT_FOCUS)}
+        aria-label={`Role for rule ${index + 1}`}
+      >
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -775,7 +800,7 @@ function OtherwiseBlock({
         >
           <SelectTrigger
             size="sm"
-            className="w-36"
+            className={cn('w-36', NEUTRAL_SELECT_FOCUS)}
             aria-label="Role for people at a verified domain"
           >
             <SelectValue />
@@ -792,7 +817,7 @@ function OtherwiseBlock({
       {domains.length === 0 && (
         <p className="text-xs text-muted-foreground">
           This provider has no verified domain yet.{' '}
-          <a href="#signin" className={INLINE_LINK}>
+          <a href="#signin" className={cn(INLINE_LINK, NEUTRAL_LINK_FOCUS)}>
             Add one in Sign-in &amp; access
           </a>
           . Until then, only rules give team roles.
