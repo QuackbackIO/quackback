@@ -8,12 +8,14 @@ import {
   SUPPORTED_LOCALES,
   DEFAULT_LOCALE,
   isViewerMessage,
+  loadAreaMessages,
   loadMessages,
   loadPortalMessages,
   loadViewerMessages,
   loadWidgetMessages,
   isUnsubscribeMessage,
   loadUnsubscribeMessages,
+  messageArea,
   withoutPageScopedMessages,
   isSetupWizardMessage,
   loadOnboardingMessages,
@@ -215,10 +217,12 @@ describe('unsubscribe page strings', () => {
       loadUnsubscribeMessages('de'),
     ])
     const wizard = Object.keys(all).filter(isSetupWizardMessage)
+    const areas = Object.keys(all).filter((key) => messageArea(key) !== null)
     expect(
       Object.keys(viewer).length +
         Object.keys(unsubscribe).length +
         wizard.length +
+        areas.length +
         Object.keys(withoutPageScopedMessages(all)).length
     ).toBe(Object.keys(all).length)
   })
@@ -256,5 +260,36 @@ describe('setup wizard strings', () => {
     }
     walk(src)
     expect(offenders).toEqual([])
+  })
+})
+
+describe('area strings', () => {
+  it('are left out of the catalogs pages seed and load for their area', async () => {
+    const [all, widget, portal, settings] = await Promise.all([
+      loadMessages('pl'),
+      loadWidgetMessages('pl'),
+      loadPortalMessages('pl'),
+      loadAreaMessages('pl', 'settings', 'notificationPreferences'),
+    ])
+    for (const seeded of [widget, portal, withoutPageScopedMessages(all)]) {
+      expect(Object.keys(seeded).filter((key) => messageArea(key) !== null)).toEqual([])
+    }
+    expect(portal['portal.header.nav.feedback']).toBe(all['portal.header.nav.feedback'])
+    expect(settings['portal.settings.profile.avatar.title']).toBe('Awatar')
+    expect(settings['portal.settings.notifications.channel.inApp']).toBe('W aplikacji')
+    expect(
+      Object.keys(settings).every((key) =>
+        ['settings', 'notificationPreferences'].includes(messageArea(key) ?? '')
+      )
+    ).toBe(true)
+  })
+
+  it('puts a key in the first area whose prefix it has', () => {
+    expect(messageArea('portal.settings.notifications.saving')).toBe('notificationPreferences')
+    expect(messageArea('portal.settings.profile.title')).toBe('settings')
+    expect(messageArea('portal.hc.home.title')).toBe('helpCenter')
+    expect(messageArea('portal.auth.twoFactor.verify')).toBe('twoFactor')
+    expect(messageArea('portal.auth.continue')).toBeNull()
+    expect(messageArea('portal.header.nav.feedback')).toBeNull()
   })
 })

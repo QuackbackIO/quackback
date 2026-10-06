@@ -5,24 +5,44 @@ import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { InputOTP, InputOTPSixSlots } from '@/components/ui/input-otp'
 import { authClient } from '@/lib/client/auth-client'
+import { Spinner } from '@/components/shared/spinner'
+import { AreaMessages } from '@/components/shared/area-messages'
+
+interface TwoFactorEnrollStepsProps {
+  password: string
+  onComplete: () => void
+  onCancel: () => void
+  onStepChange?: (step: 'qr' | 'backup') => void
+}
 
 /**
  * Authenticator enrollment steps (QR → verify → backup codes), shared by the
  * settings page and the inline auth dialog. The caller supplies the already-
  * confirmed password (settings re-prompts; the auth dialog reuses the sign-in
- * password) and is notified on completion / cancellation.
+ * password) and is notified on completion / cancellation. Its strings load
+ * with it, since pages leave them out of the catalog they seed.
  */
-export function TwoFactorEnrollSteps({
+export function TwoFactorEnrollSteps(props: TwoFactorEnrollStepsProps): React.ReactElement {
+  return (
+    <AreaMessages
+      area="twoFactor"
+      fallback={
+        <div className="flex justify-center py-10">
+          <Spinner />
+        </div>
+      }
+    >
+      <EnrollSteps {...props} />
+    </AreaMessages>
+  )
+}
+
+function EnrollSteps({
   password,
   onComplete,
   onCancel,
   onStepChange,
-}: {
-  password: string
-  onComplete: () => void
-  onCancel: () => void
-  onStepChange?: (step: 'qr' | 'backup') => void
-}): React.ReactElement {
+}: TwoFactorEnrollStepsProps): React.ReactElement {
   const intl = useIntl()
   const [step, setStep] = useState<'loading' | 'qr' | 'backup'>('loading')
   const [code, setCode] = useState('')

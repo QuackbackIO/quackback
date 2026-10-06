@@ -508,6 +508,7 @@
   "portal.settings.twoFactor.setup.saveCodes": "Save your backup codes",
   "portal.settings.twoFactor.setup.description": "For your security, re-enter your password to enable two-factor authentication.",
   "portal.settings.twoFactor.setup.working": "Working…",
+  "portal.settings.twoFactor.setup.failed": "Could not start 2FA setup.",
   "portal.settings.twoFactor.disableDialog.failed": "Could not disable two-factor.",
   "portal.settings.twoFactor.disableDialog.title": "Disable two-factor authentication?",
   "portal.settings.twoFactor.disableDialog.description": "Confirm your password to disable two-factor. Your authenticator will stop working immediately.",

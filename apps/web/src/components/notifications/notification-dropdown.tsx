@@ -4,6 +4,7 @@ import { Link, useRouterState } from '@tanstack/react-router'
 import { FormattedMessage } from 'react-intl'
 import { InboxIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 import { Spinner } from '@/components/shared/spinner'
+import { AreaMessages } from '@/components/shared/area-messages'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { NotificationItem } from './notification-item'
@@ -67,20 +68,29 @@ export function NotificationDropdown({ onClose }: NotificationDropdownProps) {
           </p>
         </div>
       ) : hasNotifications ? (
-        <div className="max-h-72 overflow-hidden">
-          <ScrollArea className="max-h-72">
-            <div className="divide-y divide-border/40">
-              {notifications.map((notification) => (
-                <NotificationItem
-                  key={notification.id}
-                  notification={notification}
-                  onMarkAsRead={(id) => markAsRead.mutate(id)}
-                  onClick={onClose}
-                />
-              ))}
+        <AreaMessages
+          area="notificationText"
+          fallback={
+            <div className="flex items-center justify-center h-48">
+              <Spinner />
             </div>
-          </ScrollArea>
-        </div>
+          }
+        >
+          <div className="max-h-72 overflow-hidden">
+            <ScrollArea className="max-h-72">
+              <div className="divide-y divide-border/40">
+                {notifications.map((notification) => (
+                  <NotificationItem
+                    key={notification.id}
+                    notification={notification}
+                    onMarkAsRead={(id) => markAsRead.mutate(id)}
+                    onClick={onClose}
+                  />
+                ))}
+              </div>
+            </ScrollArea>
+          </div>
+        </AreaMessages>
       ) : (
         <div className="flex flex-col items-center justify-center h-48">
           <InboxIcon className="h-8 w-8 text-muted-foreground/50 mb-2" />

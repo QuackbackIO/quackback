@@ -204,7 +204,7 @@ function SetupDialog({ onClose, onComplete }: { onClose: () => void; onComplete:
               defaultMessage: 'Continue',
             })}
             fallbackError={intl.formatMessage({
-              id: 'portal.auth.twoFactor.setupFailed',
+              id: 'portal.settings.twoFactor.setup.failed',
               defaultMessage: 'Could not start 2FA setup.',
             })}
           />

@@ -508,6 +508,7 @@
   "portal.settings.twoFactor.setup.saveCodes": "Zapisz kody zapasowe",
   "portal.settings.twoFactor.setup.description": "Ze względów bezpieczeństwa wpisz ponownie hasło, aby włączyć uwierzytelnianie dwuskładnikowe.",
   "portal.settings.twoFactor.setup.working": "Przetwarzanie…",
+  "portal.settings.twoFactor.setup.failed": "Nie udało się rozpocząć konfiguracji 2FA.",
   "portal.settings.twoFactor.disableDialog.failed": "Nie udało się wyłączyć uwierzytelniania dwuskładnikowego.",
   "portal.settings.twoFactor.disableDialog.title": "Wyłączyć uwierzytelnianie dwuskładnikowe?",
   "portal.settings.twoFactor.disableDialog.description": "Potwierdź hasło, aby wyłączyć uwierzytelnianie dwuskładnikowe. Aplikacja uwierzytelniająca od razu przestanie działać.",

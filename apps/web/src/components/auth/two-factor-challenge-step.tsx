@@ -6,16 +6,33 @@ import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { InputOTP, InputOTPSixSlots } from '@/components/ui/input-otp'
 import { authClient } from '@/lib/client/auth-client'
+import { Spinner } from '@/components/shared/spinner'
+import { AreaMessages } from '@/components/shared/area-messages'
 
-/** Inline TOTP / backup-code challenge for an already-enrolled user, shown
- *  after better-auth returns `twoFactorRedirect` from signIn.email. */
-export function TwoFactorChallengeStep({
-  onComplete,
-  onCancel,
-}: {
+interface TwoFactorChallengeStepProps {
   onComplete: () => void
   onCancel: () => void
-}): React.ReactElement {
+}
+
+/** Inline TOTP / backup-code challenge for an already-enrolled user, shown
+ *  after better-auth returns `twoFactorRedirect` from signIn.email. Its strings
+ *  load with it, since pages leave them out of the catalog they seed. */
+export function TwoFactorChallengeStep(props: TwoFactorChallengeStepProps): React.ReactElement {
+  return (
+    <AreaMessages
+      area="twoFactor"
+      fallback={
+        <div className="flex justify-center py-10">
+          <Spinner />
+        </div>
+      }
+    >
+      <ChallengeStep {...props} />
+    </AreaMessages>
+  )
+}
+
+function ChallengeStep({ onComplete, onCancel }: TwoFactorChallengeStepProps): React.ReactElement {
   const intl = useIntl()
   const [code, setCode] = useState('')
   const [useBackup, setUseBackup] = useState(false)
