@@ -52,7 +52,7 @@ export function ClaimsTable({
   onPeopleFlagsChange: (next: { overrideExisting: boolean; syncOnSignIn: boolean }) => void
   onEdit: (row: ClaimsTableRow) => void
   onRemove: (row: ClaimsTableRow) => void
-  /** Names the claim column ("Acme ID claim"); "Provider claim" without one. */
+  /** Names the claim column ("Acme ID claim"), trimmed; "Provider claim" without one. */
   providerLabel?: string
   disabled?: boolean
   /** What each profile field takes from the last test sign-in. Adds the
@@ -64,67 +64,70 @@ export function ClaimsTable({
 
   return (
     <div className="space-y-4">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border/50 text-left text-muted-foreground">
-            <th scope="col" className="py-2 pr-3 font-medium whitespace-nowrap">
-              Field
-            </th>
-            <th scope="col" className="min-w-0 py-2 pr-3 font-medium">
-              {providerLabel?.trim() ? `${providerLabel.trim()} claim` : 'Provider claim'}
-            </th>
-            {showTest && (
+      {/* Scrolls sideways on a narrow screen so the page itself never does. */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border/50 text-left text-muted-foreground">
               <th scope="col" className="py-2 pr-3 font-medium whitespace-nowrap">
-                Last test sign-in
+                Field
               </th>
-            )}
-            <th scope="col" className="w-px py-2 font-medium">
-              <span className="sr-only">Actions</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {profileRows.map((row) => (
-            <ProfileRow
-              key={row.field}
-              row={row}
-              testValues={testValues}
-              disabled={disabled}
-              onEdit={() => onEdit(row)}
-            />
-          ))}
-          {additionalRows.map((row) => {
-            if (row.kind === 'role') {
-              return (
-                <RoleRowView
-                  key="role"
-                  row={row}
-                  showTest={showTest}
-                  disabled={disabled}
-                  onEdit={() => onEdit(row)}
-                  onRemove={() => onRemove(row)}
-                />
-              )
-            }
-            if (row.kind === 'people') {
-              return (
-                <PeopleRowView
-                  key={`people-${row.baselineIndex}`}
-                  row={row}
-                  showTest={showTest}
-                  disabled={disabled}
-                  onEdit={() => onEdit(row)}
-                  onRemove={() => onRemove(row)}
-                />
-              )
-            }
-            if (row.kind === 'unsupported') {
-              return <UnsupportedRowView key={row.id} row={row} showTest={showTest} />
-            }
-            return null
-          })}
-        </tbody>
-      </table>
+              <th scope="col" className="min-w-0 py-2 pr-3 font-medium">
+                {providerLabel ? `${providerLabel} claim` : 'Provider claim'}
+              </th>
+              {showTest && (
+                <th scope="col" className="py-2 pr-3 font-medium whitespace-nowrap">
+                  Last test sign-in
+                </th>
+              )}
+              <th scope="col" className="w-px py-2 font-medium">
+                <span className="sr-only">Actions</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {profileRows.map((row) => (
+              <ProfileRow
+                key={row.field}
+                row={row}
+                testValues={testValues}
+                disabled={disabled}
+                onEdit={() => onEdit(row)}
+              />
+            ))}
+            {additionalRows.map((row) => {
+              if (row.kind === 'role') {
+                return (
+                  <RoleRowView
+                    key="role"
+                    row={row}
+                    showTest={showTest}
+                    disabled={disabled}
+                    onEdit={() => onEdit(row)}
+                    onRemove={() => onRemove(row)}
+                  />
+                )
+              }
+              if (row.kind === 'people') {
+                return (
+                  <PeopleRowView
+                    key={`people-${row.baselineIndex}`}
+                    row={row}
+                    showTest={showTest}
+                    disabled={disabled}
+                    onEdit={() => onEdit(row)}
+                    onRemove={() => onRemove(row)}
+                  />
+                )
+              }
+              if (row.kind === 'unsupported') {
+                return <UnsupportedRowView key={row.id} row={row} showTest={showTest} />
+              }
+              return null
+            })}
+          </tbody>
+        </table>
+      </div>
 
       {hasPeople && (
         <div className="space-y-2">

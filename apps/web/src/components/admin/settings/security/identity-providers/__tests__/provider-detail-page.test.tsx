@@ -972,7 +972,10 @@ describe('<ProviderDetailPage> profile', () => {
         claimMapping: { profile: { sources: ['idToken', 'userinfo', 'accessTokenJwt'] } },
       })
     )
-    expect(screen.getByTestId('compatibility-sources')).toHaveTextContent('Access-token JWT')
+    // Open by default for a non-standard list; closed, its summary names it.
+    expect(screen.getByLabelText('Access-token JWT')).toBeChecked()
+    fireEvent.click(screen.getByRole('button', { name: /Compatibility/ }))
+    expect(screen.getByTestId('compatibility-section')).toHaveTextContent('Access-token JWT')
   })
 
   it('lists the five profile fields with no Default badges', () => {

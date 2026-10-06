@@ -25,12 +25,18 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { useUserAttributes } from '@/lib/client/hooks/use-user-attributes-queries'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import {
+  PROFILE_FIELDS,
   profileSyncEnabled,
   type IdentitySource,
   type ProfileField,
 } from '@/lib/shared/oidc-claim-mapping'
 import type { AttributeDefinition } from '@/lib/shared/plan-claim-attribute-writes'
-import { diffClaimMappingOperations, mappingSaveRisks } from '@/lib/shared/sso-claim-mapping-edit'
+import {
+  diffClaimMappingOperations,
+  mappingSaveRisks,
+  sourcesAreDefault,
+  type ClaimMappingOperation,
+} from '@/lib/shared/sso-claim-mapping-edit'
 import { previewProfileValues } from '@/lib/shared/sso-mapping-preview'
 import {
   ClaimRowDialog,
@@ -48,6 +54,7 @@ import {
   hasCustomProfileClaims,
   hasCustomSources,
   identityMappingIssue,
+  isCustomProfilePath,
   mergeClaimMapping,
   normalizeAttributeMapping,
   normalizeProfileClaims,
@@ -76,7 +83,13 @@ export function UserDetailsCard({ provider }: { provider: IdentityProvider }) {
         description={`What Quackback takes from ${label || 'your provider'} for each person.`}
         contentClassName="space-y-4"
       >
-        <ProfileEditor provider={provider} definitions={definitions} />
+        {/* Keyed so a draft never carries from one provider to another. */}
+        <ProfileEditor
+          key={provider.id}
+          provider={provider}
+          providerLabel={label}
+          definitions={definitions}
+        />
       </SettingsCard>
     </div>
   )
@@ -126,24 +139,118 @@ function draftProfile(base: StoredMapping, draft: Draft) {
   })
 }
 
-/** What Save would write: the draft over `base`, normalized. */
-function proposedMapping(base: StoredMapping, draft: Draft) {
-  return mergeClaimMapping(base, {
-    role: normalizeRoleMapping(draft.role),
-    profile: draftProfile(base, draft),
-    attributes: normalizeAttributeMapping(draft.attributes),
-  })
+const SECTIONS = ['profile', 'role', 'attributes'] as const
+type Section = (typeof SECTIONS)[number]
+
+/**
+ * One section of a draft in normalized form, so a stored mapping that is
+ * written unusually (an explicit standard claim, a role with no rules, People
+ * flags with no rows) reads as untouched. A blank stored path stays distinct
+ * from the standard claim: clearing it is an edit worth saving.
+ */
+function sectionKey(draft: Draft, section: Section): string {
+  if (section === 'role') {
+    const role = normalizeRoleMapping(draft.role)
+    return JSON.stringify(
+      role
+        ? [
+            role.claimPath,
+            role.rules.map((r) => [r.whenContains, r.role]),
+            role.syncOnEverySignIn === true,
+          ]
+        : null
+    )
+  }
+  if (section === 'attributes') {
+    const attributes = normalizeAttributeMapping(draft.attributes)
+    return JSON.stringify(
+      attributes
+        ? [
+            (attributes.map ?? []).map((r) => [r.claimPath.trim(), r.attributeKey]),
+            attributes.overrideExisting === true,
+            attributes.syncOnSignIn === true,
+          ]
+        : null
+    )
+  }
+  const claims: Partial<Record<ProfileField, string>> = {}
+  for (const field of PROFILE_FIELDS) {
+    const path = draft.profileClaims[field]
+    if (typeof path !== 'string') continue
+    if (path.trim() === '') claims[field] = ''
+    else if (isCustomProfilePath(field, path)) claims[field] = path.trim()
+  }
+  return JSON.stringify([
+    claims,
+    sourcesAreDefault(draft.sources) ? null : draft.sources,
+    draft.profileSync,
+  ])
 }
 
-function draftIsDirty(base: StoredMapping, draft: Draft): boolean {
-  return diffClaimMappingOperations(base, proposedMapping(base, draft)).length > 0
+/**
+ * The diff reads stored claims through the parser, which already ignores a
+ * blank path, so it sees nothing to reset. When the admin clears one in the
+ * dialog, remove the stored blank value explicitly.
+ */
+function clearedBlankPaths(base: StoredMapping, draft: Draft): ClaimMappingOperation[] {
+  const storedClaims = base?.profile?.claims ?? {}
+  return PROFILE_FIELDS.filter((field) => {
+    const before = storedClaims[field]
+    if (typeof before !== 'string' || before.trim() !== '') return false
+    const after = draft.profileClaims[field]
+    return !(typeof after === 'string' && after.trim() === '') && !isCustomProfilePath(field, after)
+  }).map((field) => ({ op: 'resetProfileClaim', field }))
+}
+
+function sectionEdited(draft: Draft, base: Draft, section: Section): boolean {
+  return sectionKey(draft, section) !== sectionKey(base, section)
+}
+
+function withSection(draft: Draft, from: Draft, section: Section): Draft {
+  if (section === 'role') return { ...draft, role: from.role }
+  if (section === 'attributes') return { ...draft, attributes: from.attributes }
+  return {
+    ...draft,
+    profileClaims: from.profileClaims,
+    sources: from.sources,
+    profileSync: from.profileSync,
+  }
+}
+
+/**
+ * Bring a draft onto a newly stored mapping. Sections the admin has not
+ * edited follow the stored values. An edited section is kept; if it also
+ * changed underneath (to something else), that is a conflict and the draft
+ * stays based on the old mapping so Save is refused instead of overwriting.
+ */
+function rebaseDraft(
+  draft: Draft,
+  base: Draft,
+  stored: StoredMapping
+): { draft: Draft; conflict: boolean } {
+  const fresh = draftFrom(stored)
+  let next = draft
+  let conflict = false
+  for (const section of SECTIONS) {
+    if (!sectionEdited(draft, base, section)) {
+      next = withSection(next, fresh, section)
+    } else if (
+      sectionEdited(fresh, base, section) &&
+      sectionKey(fresh, section) !== sectionKey(draft, section)
+    ) {
+      conflict = true
+    }
+  }
+  return { draft: next, conflict }
 }
 
 function ProfileEditor({
   provider,
+  providerLabel,
   definitions,
 }: {
   provider: IdentityProvider
+  providerLabel: string
   definitions: MappingDefinition[]
 }) {
   const { saving, saveClaimMapping } = useProviderSave(provider)
@@ -157,21 +264,24 @@ function ProfileEditor({
     role?: RoleMapping | null
   } | null>(null)
   const stored = provider.claimMapping
-  // `baseline` is what the draft is compared with and Cancel returns to: the
-  // stored mapping, or what this card just saved until the refetch lands.
+  // `baseline` is the stored mapping the draft is based on: what it is
+  // compared with, what Cancel returns to, and what Save expects to replace.
   const [baseline, setBaseline] = useState<StoredMapping>(stored)
   const [seenStored, setSeenStored] = useState<StoredMapping>(stored)
   const [draft, setDraft] = useState<Draft>(() => draftFrom(stored))
+  const baseDraft = useMemo(() => draftFrom(baseline), [baseline])
   const syncId = useId()
   const pendingTest = useRef(false)
 
-  // The stored mapping changed (a save here or on another card, or a
-  // refetch). A clean draft follows it; a draft with edits is kept.
+  // The stored mapping changed: a save here (the refetch lands during the
+  // await), a save on another card, or another admin.
   if (seenStored !== stored) {
     setSeenStored(stored)
-    setBaseline(stored)
-    if (!draftIsDirty(baseline, draft)) setDraft(draftFrom(stored))
+    const rebased = rebaseDraft(draft, baseDraft, stored)
+    setDraft(rebased.draft)
+    if (!rebased.conflict) setBaseline(stored)
   }
+  const conflict = baseline !== stored
 
   const { role: mapping, attributes, profileClaims, sources, profileSync } = draft
   const update = (patch: Partial<Draft>) => setDraft((prev) => ({ ...prev, ...patch }))
@@ -179,15 +289,23 @@ function ProfileEditor({
     setDraft((prev) => ({ ...prev, attributes: fn(prev.attributes) }))
   const allowMissingEmail = baseline?.profile?.allowMissingEmail === true
 
+  const profile = draftProfile(baseline, draft)
   const draftMapping = mergeClaimMapping(baseline, {
     role: mapping ?? undefined,
-    profile: draftProfile(baseline, draft),
+    profile,
     attributes: attributes ?? undefined,
   })
-  const proposed = proposedMapping(baseline, draft)
-  const operations = diffClaimMappingOperations(baseline, proposed)
+  const proposed = mergeClaimMapping(baseline, {
+    role: normalizeRoleMapping(mapping),
+    profile,
+    attributes: normalizeAttributeMapping(attributes),
+  })
+  const operations = [
+    ...diffClaimMappingOperations(baseline, proposed),
+    ...clearedBlankPaths(baseline, draft),
+  ]
   const risks = mappingSaveRisks(baseline, proposed)
-  const dirty = operations.length > 0
+  const dirty = SECTIONS.some((section) => sectionEdited(draft, baseDraft, section))
   // Admin rules that already existed and did not change are acknowledged
   // silently; only new or altered admin rules get a confirmation.
   const adminRulesChanged =
@@ -195,27 +313,34 @@ function ProfileEditor({
     JSON.stringify(adminRulesOf(baseline?.role)) !== JSON.stringify(adminRulesOf(proposed?.role))
   const needsConfirm = dirty && (risks.identifierChanged || adminRulesChanged)
 
+  const revert = () => {
+    setBaseline(stored)
+    setDraft(draftFrom(stored))
+  }
+
   const persist = async () => {
     const thenTest = pendingTest.current
     pendingTest.current = false
+    // The draft reads as saved once the refetched stored mapping says so.
     const saved = await saveClaimMapping(
       {
+        expectedClaimMapping: baseline,
         operations,
         acknowledgeIdentifierChange: risks.identifierChanged,
         acknowledgeAdminRules: risks.hasAdminRules,
       },
       'Profile saved.'
     )
-    if (!saved) return
-    // The server applied these operations to the stored mapping, so the
-    // result is `proposed`. Re-seed from it so the draft reads as saved.
-    setBaseline(proposed)
-    setDraft(draftFrom(proposed))
-    if (thenTest) openTest()
+    if (saved && thenTest) openTest()
   }
 
   const requestSave = (thenTest = false) => {
     if (!dirty) return
+    if (operations.length === 0) {
+      // Edited back to an equivalent of what is stored: nothing to write.
+      revert()
+      return
+    }
     pendingTest.current = thenTest
     if (needsConfirm) {
       setConfirmOpen(true)
@@ -256,29 +381,35 @@ function ProfileEditor({
   // Removing from the draft is reversible, so it gets Undo rather than a
   // confirmation. Nothing is written until Save.
   const removeRow = (row: ClaimsTableRow) => {
-    const before = { mapping, attributes }
     let label: string
+    let undo: () => void
     if (row.kind === 'role') {
+      const removed = mapping
       update({ role: null })
       label = 'role rules'
+      undo = () => update({ role: removed })
     } else if (row.kind === 'people') {
+      const index = row.baselineIndex
+      const entry = attributes?.map?.[index]
+      if (!attributes || !entry) return
+      const section = attributes
       updateAttributes((prev) => {
         if (!prev) return prev
-        const map = (prev.map ?? []).filter((_, i) => i !== row.baselineIndex)
+        const map = (prev.map ?? []).filter((_, i) => i !== index)
         return map.length === 0 ? null : { ...prev, map }
       })
       label = `the ${row.label} mapping`
+      // Put back this one row, and the section's flags if it went with it.
+      undo = () =>
+        updateAttributes((prev) => {
+          const map = [...(prev?.map ?? [])]
+          map.splice(Math.min(index, map.length), 0, entry)
+          return { ...(prev ?? section), map }
+        })
     } else {
       return
     }
-    toast(`Removed ${label}.`, {
-      action: {
-        label: 'Undo',
-        onClick: () => {
-          update({ role: before.mapping, attributes: before.attributes })
-        },
-      },
-    })
+    toast(`Removed ${label}.`, { action: { label: 'Undo', onClick: undo } })
   }
 
   const openEdit = (row: ClaimsTableRow) => {
@@ -320,6 +451,11 @@ function ProfileEditor({
 
   return (
     <div className="space-y-5">
+      {conflict && (
+        <p role="status" className="text-sm font-medium text-warning">
+          This provider&apos;s profile settings changed elsewhere. Review before saving.
+        </p>
+      )}
       {issue && <p className="text-sm font-medium text-warning">{issue}</p>}
       <ClaimsTable
         profileRows={tableModel.profile}
@@ -337,7 +473,7 @@ function ProfileEditor({
         }
         onEdit={openEdit}
         onRemove={removeRow}
-        providerLabel={provider.label}
+        providerLabel={providerLabel}
         disabled={saving}
         testValues={testValues}
       />
@@ -394,16 +530,14 @@ function ProfileEditor({
         )}
       </div>
 
-      {hasCustomSources({ profile: { sources } }) && (
-        <p data-testid="compatibility-sources" className="text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">Compatibility:</span> identity is read from{' '}
-          {sources.map((s) => SOURCE_LABELS[s]).join(', then ')}.
-        </p>
-      )}
-
       <Disclosure
         title="Compatibility"
         defaultOpen={hasCustomSources(provider.claimMapping)}
+        summary={
+          hasCustomSources({ profile: { sources } })
+            ? sources.map((s) => SOURCE_LABELS[s]).join(' → ')
+            : undefined
+        }
         testId="compatibility-section"
       >
         <IdentitySourcesEditor
@@ -431,13 +565,7 @@ function ProfileEditor({
 
       {dirty && (
         <div className="flex items-center justify-end gap-2 border-t border-border/40 pt-5">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setDraft(draftFrom(baseline))}
-            disabled={saving}
-          >
+          <Button type="button" variant="outline" size="sm" onClick={revert} disabled={saving}>
             Cancel
           </Button>
           <Button type="button" size="sm" onClick={() => requestSave(false)} disabled={saving}>
