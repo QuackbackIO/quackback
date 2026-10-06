@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { INVITATION_EXPIRY_MS } from '@/lib/server/functions/invitation-magic-link'
+import { TEAM_INVITATION_VALID_DAYS } from '@/lib/shared/team-people'
 import {
-  INVITE_VALID_DAYS,
-  addPeopleErrorCode,
   checkSeats,
   extractEmails,
   isFullEmail,
@@ -27,7 +26,8 @@ const member = { role: 'member' as const, label: 'Member' }
 
 describe('add people rules', () => {
   it('says the invite lasts as long as the server keeps it', () => {
-    expect(INVITE_VALID_DAYS * 24 * 60 * 60 * 1000).toBe(INVITATION_EXPIRY_MS)
+    expect(TEAM_INVITATION_VALID_DAYS).toBe(30)
+    expect(TEAM_INVITATION_VALID_DAYS * 24 * 60 * 60 * 1000).toBe(INVITATION_EXPIRY_MS)
   })
 
   it('knows a full email from a partial one', () => {
@@ -109,15 +109,6 @@ describe('add people rules', () => {
     ).toBe(
       'A and B are now Admins. Their ideas, votes and comments stay with them. Invitations sent to 2 people.'
     )
-  })
-
-  it('reads the error code from the error or its message', () => {
-    expect(addPeopleErrorCode(Object.assign(new Error('x'), { code: 'SEAT_LIMIT' }))).toBe(
-      'SEAT_LIMIT'
-    )
-    expect(addPeopleErrorCode(new Error('GRANT_CEILING: nope'))).toBe('GRANT_CEILING')
-    expect(addPeopleErrorCode(new Error('something else'))).toBeNull()
-    expect(addPeopleErrorCode(null)).toBeNull()
   })
 
   it('states a server seat refusal with its numbers', () => {

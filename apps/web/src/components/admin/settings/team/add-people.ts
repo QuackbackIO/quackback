@@ -5,8 +5,7 @@
  * tested on its own.
  */
 
-/** How long a team invitation works. Mirrors INVITATION_EXPIRY_MS on the server. */
-export const INVITE_VALID_DAYS = 30
+import { TEAM_INVITATION_VALID_DAYS } from '@/lib/shared/team-people'
 
 /** Someone already found by search: joins the team as soon as the dialog submits. */
 export interface PersonChip {
@@ -126,7 +125,7 @@ export function summarySentences(chips: AddChip[], role: RoleChoice): string[] {
   }
   if (invites.length > 0) {
     out.push(
-      `${joinNames(invites)} ${invites.length === 1 ? 'gets' : 'get'} an email invitation that works for ${INVITE_VALID_DAYS} days.`
+      `${joinNames(invites)} ${invites.length === 1 ? 'gets' : 'get'} an email invitation that works for ${TEAM_INVITATION_VALID_DAYS} days.`
     )
   }
   return out
@@ -137,35 +136,6 @@ export function primaryLabel(chips: AddChip[]): string {
   if (chips.length === 0) return 'Add people'
   const verb = chips.every((c) => c.kind === 'email') ? 'Invite' : 'Add'
   return `${verb} ${peopleCount(chips.length)}`
-}
-
-export const ADD_PEOPLE_ERROR_CODES = [
-  'SEAT_LIMIT',
-  'GRANT_CEILING',
-  'ALREADY_MEMBER',
-  'INVITE_PENDING',
-  'NOT_ELIGIBLE',
-  'VALIDATION_ERROR',
-] as const
-export type AddPeopleErrorCode = (typeof ADD_PEOPLE_ERROR_CODES)[number]
-
-/**
- * The domain error code a thrown error carries, read from its `code` or its
- * message. For server functions that still throw their refusals (role change);
- * adding people returns refusals as values instead.
- */
-export function addPeopleErrorCode(error: unknown): AddPeopleErrorCode | null {
-  if (!error || typeof error !== 'object') return null
-  const code = (error as { code?: unknown }).code
-  if (typeof code === 'string') {
-    const known = ADD_PEOPLE_ERROR_CODES.find((c) => c === code)
-    if (known) return known
-  }
-  const message = (error as { message?: unknown }).message
-  if (typeof message === 'string') {
-    return ADD_PEOPLE_ERROR_CODES.find((c) => message.includes(c)) ?? null
-  }
-  return null
 }
 
 /** The toast after a successful add: "Maya Chen is now a Member. Their ideas, votes and comments stay with them." */

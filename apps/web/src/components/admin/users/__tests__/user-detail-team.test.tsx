@@ -12,10 +12,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { PortalUserDetail } from '@/lib/shared/types'
 import type { PrincipalId } from '@quackback/ids'
 
+const route = vi.hoisted(() => ({ sessionUserId: null as string | null }))
+
 vi.mock('@tanstack/react-router', () => ({
   useRouteContext: (opts?: { select?: (context: never) => unknown }) => {
     const context = {
       settings: { featureFlags: { supportInbox: true } },
+      session: route.sessionUserId ? { user: { id: route.sessionUserId } } : null,
     }
     return opts?.select ? opts.select(context as never) : context
   },
@@ -146,6 +149,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   dialogs.add = null
   dialogs.change = null
+  route.sessionUserId = null
 })
 afterEach(cleanup)
 
@@ -164,7 +168,7 @@ function detail(user: PortalUserDetail, role = 'admin') {
 
 async function openMenu() {
   fireEvent.click(screen.getByLabelText('More actions'))
-  await screen.findByRole('menuitem', { name: 'Block' })
+  await screen.findAllByRole('menuitem')
 }
 
 describe('UserDetail team actions', () => {
@@ -198,6 +202,29 @@ describe('UserDetail team actions', () => {
     expect(await screen.findByRole('dialog', { name: 'change role' })).toBeInTheDocument()
     expect(dialogs.change?.principalId).toBe('principal_1')
     expect(dialogs.change?.current).toEqual({ role: 'member', label: 'Member' })
+  })
+
+  it('offers a teammate no portal-only actions', async () => {
+    renderDetail(detail({ ...BASE_USER, teamRole: { role: 'member' } }))
+    await openMenu()
+    expect(screen.getByRole('menuitem', { name: 'Change role…' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Block' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: 'Remove from portal' })).toBeNull()
+  })
+
+  it('keeps Block and Remove from portal for a portal user', async () => {
+    renderDetail(detail(BASE_USER))
+    await openMenu()
+    expect(screen.getByRole('menuitem', { name: 'Block' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Remove from portal' })).toBeInTheDocument()
+  })
+
+  it('offers no Change role on your own profile', () => {
+    route.sessionUserId = 'user_1'
+    renderDetail(detail({ ...BASE_USER, teamRole: { role: 'admin' } }))
+    // Nothing else applies to your own teammate profile, so there is no menu.
+    expect(screen.queryByLabelText('More actions')).toBeNull()
+    expect(screen.getByText('Admin')).toBeInTheDocument()
   })
 
   it('shows a custom role by name', () => {

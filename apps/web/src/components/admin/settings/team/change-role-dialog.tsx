@@ -12,12 +12,9 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { FormError } from '@/components/shared/form-error'
 import { usersKeys } from '@/lib/client/hooks/use-users-queries'
-import { updateMemberRoleFn } from '@/lib/server/functions/admin'
-import {
-  addPeopleErrorCode,
-  withArticle,
-  type RoleChoice,
-} from '@/components/admin/settings/team/add-people'
+import { changeTeamRoleFn } from '@/lib/server/functions/team-people'
+import type { ChangeRoleRefusalCode } from '@/lib/shared/team-people'
+import { withArticle, type RoleChoice } from '@/components/admin/settings/team/add-people'
 import {
   RoleNotes,
   RoleSelect,
@@ -30,9 +27,28 @@ export interface ChangeRoleDialogProps {
   onOpenChange: (open: boolean) => void
   principalId: string
   personName: string
-  current: { role: 'admin' | 'member'; roleId?: string | null }
+  /** The role the person holds now. */
+  current: RoleChoice
   canGrantAdmin: boolean
   onChanged?: (role: RoleChoice) => void
+}
+
+/** Why a change was refused, in plain words. GRANT_CEILING shows by the field instead. */
+function refusalCopy(code: ChangeRoleRefusalCode, personName: string): string {
+  switch (code) {
+    case 'LAST_ADMIN':
+      return `${personName} is the last admin. Make someone else an admin first.`
+    case 'CANNOT_MODIFY_SELF':
+      return "You can't change your own role."
+    case 'SEAT_LIMIT':
+      return 'The plan has no seats left for this role.'
+    case 'NOT_ELIGIBLE':
+      return `${personName} can't hold a team role.`
+    case 'NOT_FOUND':
+      return `${personName} is no longer on the team.`
+    default:
+      return "Couldn't change the role. Try again."
+  }
 }
 
 /** Change a teammate's role from outside the Members table. */
@@ -66,22 +82,29 @@ function ChangeRoleForm({
   const queryClient = useQueryClient()
   const initial = roleValueOf(current)
   const [value, setValue] = useState(initial)
-  const role = useRoleChoice(value)
+  const role = useRoleChoice(value, current)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<{ code: string | null; message: string } | null>(null)
-  const refused = error?.code === 'GRANT_CEILING'
+  const [error, setError] = useState<{ refusedGrant: boolean; message: string } | null>(null)
+  const refused = error?.refusedGrant ?? false
 
   const save = async () => {
     setSaving(true)
     setError(null)
     try {
-      await updateMemberRoleFn({
+      const result = await changeTeamRoleFn({
         data: {
           principalId,
           role: role.role,
           ...(role.roleId ? { roleId: role.roleId } : {}),
         },
       })
+      if (!result.ok) {
+        setError({
+          refusedGrant: result.code === 'GRANT_CEILING',
+          message: refusalCopy(result.code, personName),
+        })
+        return
+      }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['settings', 'team'] }),
         queryClient.invalidateQueries({ queryKey: ['settings', 'roles'] }),
@@ -90,9 +113,9 @@ function ChangeRoleForm({
       onChanged?.(role)
       toast.success(`${personName} is now ${withArticle(role.label)}.`)
       onClose()
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Couldn't change the role. Try again."
-      setError({ code: addPeopleErrorCode(err), message })
+    } catch {
+      // Never raw server text: a failed call reads the same whatever went wrong.
+      setError({ refusedGrant: false, message: "Couldn't change the role. Try again." })
     } finally {
       setSaving(false)
     }
@@ -118,6 +141,7 @@ function ChangeRoleForm({
           }}
           canGrantAdmin={canGrantAdmin}
           invalid={refused}
+          held={current}
         />
         <RoleNotes role={role} refused={refused} />
       </div>

@@ -5,7 +5,7 @@
  * what will happen, and one submit that adds and invites together.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Children, isValidElement, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
@@ -48,81 +48,8 @@ vi.mock('@tanstack/react-router', () => ({
     </a>
   ),
 }))
-// The Base UI select needs layout APIs happy-dom lacks: flatten it onto a
-// native select that keeps groups and disabled items.
-vi.mock('@/components/ui/select', () => {
-  function collect(node: ReactNode): ReactNode {
-    return Children.map(node, (child) => {
-      if (!isValidElement(child)) return null
-      const props = child.props as {
-        value?: string
-        disabled?: boolean
-        children?: ReactNode
-      }
-      if (child.type === SelectItem) {
-        return (
-          <option value={props.value} disabled={props.disabled}>
-            {props.children}
-          </option>
-        )
-      }
-      if (child.type === SelectLabel) return null
-      if (child.type === SelectGroup) {
-        const label = Children.toArray(props.children).find(
-          (c) => isValidElement(c) && c.type === SelectLabel
-        ) as { props: { children: string } } | undefined
-        return <optgroup label={label?.props.children}>{collect(props.children)}</optgroup>
-      }
-      return collect(props.children)
-    })
-  }
-  function Select({
-    value,
-    onValueChange,
-    children,
-  }: {
-    value: string
-    onValueChange: (v: string) => void
-    children: ReactNode
-  }) {
-    let id: string | undefined
-    let content: ReactNode = null
-    Children.forEach(children, (child) => {
-      if (!isValidElement(child)) return
-      if (child.type === SelectTrigger) id = (child.props as { id?: string }).id
-      if (child.type === SelectContent) content = (child.props as { children?: ReactNode }).children
-    })
-    return (
-      <select id={id} value={value} onChange={(e) => onValueChange(e.target.value)}>
-        {collect(content)}
-      </select>
-    )
-  }
-  function SelectTrigger(_: { id?: string; children?: ReactNode }) {
-    return null
-  }
-  function SelectContent(_: { children?: ReactNode }) {
-    return null
-  }
-  function SelectGroup(_: { children?: ReactNode }) {
-    return null
-  }
-  function SelectLabel(_: { children?: ReactNode }) {
-    return null
-  }
-  function SelectItem(_: { value: string; disabled?: boolean; children?: ReactNode }) {
-    return null
-  }
-  return {
-    Select,
-    SelectTrigger,
-    SelectContent,
-    SelectGroup,
-    SelectLabel,
-    SelectItem,
-    SelectValue: () => null,
-  }
-})
+// The Base UI select needs layout APIs happy-dom lacks.
+vi.mock('@/components/ui/select', () => import('./select-double'))
 
 import { AddPeopleDialog, type AddPeopleDialogProps } from '../add-people-dialog'
 

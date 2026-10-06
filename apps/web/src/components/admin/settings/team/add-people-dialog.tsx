@@ -23,6 +23,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { FormError } from '@/components/shared/form-error'
+import { TEAM_INVITATION_VALID_DAYS } from '@/lib/shared/team-people'
 import { CopyButton } from '@/components/shared/copy-button'
 import { cn } from '@/lib/shared/utils'
 import { useDebouncedValue } from '@/lib/client/hooks/use-debounced-value'
@@ -44,7 +45,6 @@ import {
   extractEmails,
   isFullEmail,
   peopleCount,
-  INVITE_VALID_DAYS,
   primaryLabel,
   seatOverMessage,
   seatRefusalMessage,
@@ -705,7 +705,7 @@ function ResultRow({
     title = option.kind === 'invite' ? `Invite ${option.address}` : option.address
     detail =
       option.kind === 'invite'
-        ? `Nobody with this email has signed in. They get an email invitation for ${INVITE_VALID_DAYS} days.`
+        ? `Nobody with this email has signed in. They get an email invitation for ${TEAM_INVITATION_VALID_DAYS} days.`
         : null
     trailing = option.kind === 'teammate-email' ? 'Already on the team' : null
   }

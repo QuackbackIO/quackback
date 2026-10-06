@@ -64,7 +64,7 @@ import type { RoleChoice } from '@/components/admin/settings/team/add-people'
 import { useUpdatePortalUser } from '@/lib/client/mutations'
 import { listConversationsForUserFn, getConversationFn } from '@/lib/server/functions/conversation'
 import type { PrincipalId } from '@quackback/ids'
-import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { useOpenedOnce } from '@/lib/client/hooks/use-opened-once'
 
 // Team dialogs load the first time one opens, not with the profile.
@@ -510,6 +510,7 @@ export function UserDetail({
   const [editEmail, setEditEmail] = useState('')
   const updateUser = useUpdatePortalUser()
   const settings = useWorkspaceSettings()
+  const sessionUserId = useSessionContext()?.user?.id ?? null
   const supportInboxEnabled =
     (settings?.featureFlags as FeatureFlags | undefined)?.supportInbox ?? false
   // Check if current user can manage portal users
@@ -634,6 +635,12 @@ export function UserDetail({
   // Only someone who has signed in can join the team from here; others are
   // invited by email from Members & Teams.
   const canJoinTeam = !teamRole && !user.isLead && user.hasSignedIn
+  // The server refuses a change to your own role, and blocking or removing
+  // applies to portal users only, never to a teammate.
+  const isSelf = sessionUserId != null && sessionUserId === user.userId
+  const canChangeRole = !!teamRole && !isSelf
+  const portalActions = !teamRole
+  const hasMenu = canChangeRole || canJoinTeam || portalActions
   const noEmailTooltip = 'This user has no email address to deliver a message to'
 
   return (
@@ -748,7 +755,7 @@ export function UserDetail({
                   View public profile
                 </Link>
               </Button>
-              {canManageUsers && (
+              {canManageUsers && hasMenu && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button size="icon-sm" variant="ghost" aria-label="More actions">
@@ -756,15 +763,13 @@ export function UserDetail({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    {teamRole ? (
-                      <>
-                        <DropdownMenuItem onClick={() => setChangeRoleOpen(true)}>
-                          <ShieldCheckIcon className="h-4 w-4" />
-                          Change role…
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                      </>
-                    ) : canJoinTeam ? (
+                    {canChangeRole && (
+                      <DropdownMenuItem onClick={() => setChangeRoleOpen(true)}>
+                        <ShieldCheckIcon className="h-4 w-4" />
+                        Change role…
+                      </DropdownMenuItem>
+                    )}
+                    {canJoinTeam && (
                       <>
                         <DropdownMenuItem onClick={() => setAddToTeamOpen(true)}>
                           <UserPlusIcon className="h-4 w-4" />
@@ -772,33 +777,37 @@ export function UserDetail({
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                       </>
-                    ) : null}
-                    <DropdownMenuItem
-                      variant={blocked ? 'default' : 'destructive'}
-                      onClick={() => (blocked ? unblock() : setBlockConfirmOpen(true))}
-                    >
-                      <NoSymbolIcon className="h-4 w-4" />
-                      {blocked ? 'Unblock' : 'Block'}
-                    </DropdownMenuItem>
-                    {user.isLead && (
-                      <DropdownMenuItem onClick={() => setMergeOpen(true)}>
-                        <ArrowsRightLeftIcon className="h-4 w-4" />
-                        Merge
-                      </DropdownMenuItem>
                     )}
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      variant="destructive"
-                      disabled={isRemovePending}
-                      onClick={() => setRemoveDialogOpen(true)}
-                    >
-                      {isRemovePending ? (
-                        <ArrowPathIcon className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <TrashIcon className="h-4 w-4" />
-                      )}
-                      Remove from portal
-                    </DropdownMenuItem>
+                    {portalActions && (
+                      <>
+                        <DropdownMenuItem
+                          variant={blocked ? 'default' : 'destructive'}
+                          onClick={() => (blocked ? unblock() : setBlockConfirmOpen(true))}
+                        >
+                          <NoSymbolIcon className="h-4 w-4" />
+                          {blocked ? 'Unblock' : 'Block'}
+                        </DropdownMenuItem>
+                        {user.isLead && (
+                          <DropdownMenuItem onClick={() => setMergeOpen(true)}>
+                            <ArrowsRightLeftIcon className="h-4 w-4" />
+                            Merge
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          variant="destructive"
+                          disabled={isRemovePending}
+                          onClick={() => setRemoveDialogOpen(true)}
+                        >
+                          {isRemovePending ? (
+                            <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <TrashIcon className="h-4 w-4" />
+                          )}
+                          Remove from portal
+                        </DropdownMenuItem>
+                      </>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
@@ -835,7 +844,7 @@ export function UserDetail({
                 />
               </Suspense>
             )}
-            {teamRole && changeRoleOpened && (
+            {teamRole && canChangeRole && changeRoleOpened && (
               <Suspense fallback={null}>
                 <ChangeRoleDialog
                   open={changeRoleOpen}
