@@ -212,6 +212,18 @@ const configSchema = z
     /** Configuration set applied to each send. Absent for a self-hoster. */
     emailSesConfigurationSet: z.string().optional(),
     /**
+     * Most SES sends per second THIS process makes; sends beyond it wait for a
+     * slot. The SES quota is per account and every process holding the
+     * credential draws on it, so with N sending processes set roughly the
+     * account quota divided by N. Unset, the transport paces at 10/s, under the
+     * smallest production quota of 14/s. Read by the transport itself
+     * (`sesMaxSendRate` in @quackback/email); validated here so a malformed value
+     * stops boot instead of being quietly replaced by the default.
+     */
+    emailSesMaxSendRate: z
+      .preprocess(emptyToUndefined, z.coerce.number().positive().finite())
+      .optional(),
+    /**
      * SES credentials for VERIFYING a customer-owned sending domain. A
      * different principal from the sending pair above with a different grant:
      * creating identities consumes an account-wide quota, and the send path has
@@ -383,6 +395,7 @@ function buildConfigFromEnv(): unknown {
     emailSesSecretAccessKey: env('EMAIL_SES_SECRET_ACCESS_KEY'),
     emailSesRegion: env('EMAIL_SES_REGION'),
     emailSesConfigurationSet: env('EMAIL_SES_CONFIGURATION_SET'),
+    emailSesMaxSendRate: env('EMAIL_SES_MAX_SEND_RATE'),
     emailSesIdentityAccessKeyId: env('EMAIL_SES_IDENTITY_ACCESS_KEY_ID'),
     emailSesIdentitySecretAccessKey: env('EMAIL_SES_IDENTITY_SECRET_ACCESS_KEY'),
 

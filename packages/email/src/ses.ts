@@ -36,6 +36,8 @@ import { SendEmailCommand, SESv2Client } from '@aws-sdk/client-sesv2'
 import type { SendEmailCommandOutput } from '@aws-sdk/client-sesv2'
 import { createLogger } from '@quackback/logger'
 import { sesWireMessageId } from './message-id'
+import { createSendRateLimiter, SendRateQueueFullError } from './send-rate'
+import type { SendRateLimiter } from './send-rate'
 import type { EmailAttachment } from './attachment'
 
 const log = createLogger({ base: { service_name: 'quackback-email' } }).child({
@@ -296,6 +298,25 @@ export interface SesEmailDeps {
    * publishing (bounces, complaints, deliveries) to its mail.
    */
   configurationSet?: string
+  /**
+   * What paces this send. Defaults to the process-wide limiter
+   * ({@link sesSendRateLimiter}); a test supplies its own so it owns the clock.
+   */
+  limiter?: SendRateLimiter
+}
+
+/**
+ * The provider's exception names for "too many sends this second".
+ *
+ * `TooManyRequestsException` is the v2 API's 429. `Throttling` and
+ * `ThrottlingException` are the older names for the same limit, and the first
+ * has been answered with a 400, which on status alone reads as a rejected
+ * message and would never be retried.
+ */
+const THROTTLING_CODES = new Set(['TooManyRequestsException', 'Throttling', 'ThrottlingException'])
+
+function isThrottling(status: number | null, code: string | null): boolean {
+  return status === 429 || (code !== null && THROTTLING_CODES.has(code))
 }
 
 /**
@@ -466,6 +487,49 @@ export function sesConfigurationSet(): string | undefined {
 }
 
 /**
+ * Sends per second when `EMAIL_SES_MAX_SEND_RATE` is unset.
+ *
+ * The smallest production sending quota SES grants is 14 per second, and the
+ * provider measures it over short windows, so pacing right at the quota still
+ * trips it whenever a send from elsewhere on the account (another process, a
+ * retry) lands in the same second. 10 leaves that headroom while still
+ * clearing a thousand-recipient announcement in under two minutes.
+ */
+export const DEFAULT_SES_MAX_SEND_RATE = 10
+
+/**
+ * The most sends per second this PROCESS may make, from
+ * `EMAIL_SES_MAX_SEND_RATE`.
+ *
+ * The quota is per account, and every process sharing the credential draws on
+ * it, so with N sending processes this should be roughly the account quota
+ * divided by N. A value that is not a positive number falls back to the
+ * default rather than to no limit: an unparseable setting is a typo, and a typo
+ * should not be what removes the pacing.
+ */
+export function sesMaxSendRate(): number {
+  const raw = readEnv('EMAIL_SES_MAX_SEND_RATE')?.trim()
+  if (!raw) return DEFAULT_SES_MAX_SEND_RATE
+  const rate = Number(raw)
+  return Number.isFinite(rate) && rate > 0 ? rate : DEFAULT_SES_MAX_SEND_RATE
+}
+
+/**
+ * One limiter per process, shared by every send whatever workspace it is for,
+ * because the quota it protects belongs to the credential and not to any one
+ * workspace. Rebuilt only if the configured rate changes.
+ */
+let sharedLimiter: SendRateLimiter | null = null
+
+export function sesSendRateLimiter(): SendRateLimiter {
+  const rate = sesMaxSendRate()
+  if (!sharedLimiter || sharedLimiter.ratePerSecond !== rate) {
+    sharedLimiter = createSendRateLimiter(rate)
+  }
+  return sharedLimiter
+}
+
+/**
  * One client per process, rebuilt when the credentials or region it was built
  * from change. The client owns an HTTP connection pool, so constructing one per
  * send would trade a pooled connection for a fresh handshake on every email.
@@ -551,12 +615,17 @@ function sendFailure(error: unknown, from: string): SesEmailError {
   // only on modeled service exceptions, never on a socket failure, and by the
   // time an error reaches here the SDK has already spent its own retry budget
   // acting on it.
-  const retryable = status === null || statusIsRetryable(status)
+  const throttled = isThrottling(status, code)
+  const retryable = status === null || statusIsRetryable(status) || throttled
   // The sending DOMAIN, never the address: the single most common cause of a
   // rejection here is a From whose identity is not verified in this region, and
   // a status code alone leaves that undiagnosable. The domain is configuration;
   // the local part beside it is PII.
-  log.error({ status, code, from_domain: addressDomain(from), detail }, 'ses email send failed')
+  const fields = { status, code, from_domain: addressDomain(from), detail }
+  // Throttling is "not this second", and every caller retries it, so it is a
+  // warning here; the caller that finally gives up is the one that says error.
+  if (throttled) log.warn(fields, 'ses email send throttled')
+  else log.error(fields, 'ses email send failed')
   return new SesEmailError(`SES email send failed: ${detail}`, status, code, retryable)
 }
 
@@ -626,6 +695,27 @@ export async function sendViaSes(
       },
     },
   })
+
+  // Paced at the last moment, after everything that could refuse the send
+  // without spending a slot on it.
+  const limiter = deps.limiter ?? sesSendRateLimiter()
+  try {
+    await limiter.acquire()
+  } catch (error) {
+    if (!(error instanceof SendRateQueueFullError)) throw error
+    log.warn(
+      { wait_ms: Math.round(error.waitMs), rate_per_second: limiter.ratePerSecond },
+      'ses send rate queue full; send deferred'
+    )
+    // A 429 because it is one, answered locally rather than by the provider:
+    // the same retry every caller already applies to the provider's own.
+    throw new SesEmailError(
+      'SES email send deferred: the send rate queue is full',
+      429,
+      'SendRateQueueFull',
+      true
+    )
+  }
 
   let response: SendEmailCommandOutput
   try {

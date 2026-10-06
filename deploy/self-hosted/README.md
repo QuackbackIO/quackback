@@ -101,6 +101,7 @@ With `docker-compose.prod.yml`, pin the release with `QUACKBACK_TAG` in `.env`.
 | `EMAIL_SMTP_HOST`                  | SMTP server for outbound email; with `EMAIL_SMTP_PORT`, `EMAIL_SMTP_USER`, `EMAIL_SMTP_PASS`                                                                                                                                                                             | -            |
 | `EMAIL_RESEND_API_KEY`             | Resend API key for outbound email (`RESEND_API_KEY` also works). Also fetches inbound mail bodies when receiving through Resend                                                                                                                                          | -            |
 | `EMAIL_SES_ACCESS_KEY_ID`          | Amazon SES sending key id; needs `EMAIL_SES_SECRET_ACCESS_KEY` and `EMAIL_SES_REGION` too                                                                                                                                                                                | -            |
+| `EMAIL_SES_MAX_SEND_RATE`          | Most SES sends per second from each app process; sends beyond it wait their turn. The quota is per AWS account, so with N processes sending set roughly the account quota (`aws ses get-send-quota`) divided by N                                                        | `10`         |
 | `EMAIL_SES_IDENTITY_ACCESS_KEY_ID` | Separate SES key id used only to verify a customer-owned sending domain; needs `EMAIL_SES_IDENTITY_SECRET_ACCESS_KEY`. Grant `ses:CreateEmailIdentity`, `ses:GetEmailIdentity`, `ses:PutEmailIdentityMailFromAttributes` and NOT `ses:DeleteEmailIdentity`               | -            |
 | `EMAIL_FROM`                       | From address for emails. Configure exactly one sending provider (SMTP, Amazon SES or Resend): with more than one set, the app refuses to start and names the variables. A Resend key kept only for inbound mail beside SMTP or SES needs `EMAIL_INBOUND_PROVIDER=resend` | -            |
 
@@ -289,6 +290,8 @@ All replicas must share the same PostgreSQL and S3-compatible storage.
 Sticky sessions are not required. Realtime features use PostgreSQL `LISTEN`/`NOTIFY`.
 
 Run at least one `worker` replica (or use `all`) at all times, or background jobs like email polling, workflow timers, and analytics refresh will not execute. Multiple worker replicas are safe; jobs are processed exactly once via the shared queue tables in PostgreSQL.
+
+With Amazon SES, each replica paces its own sends (`EMAIL_SES_MAX_SEND_RATE`, default 10 per second), but the sending quota belongs to the AWS account. With several replicas sending, set `EMAIL_SES_MAX_SEND_RATE` on each to roughly the account quota divided by the number of replicas.
 
 ### Docker Compose Example
 

@@ -13,6 +13,11 @@ const RETRYABLE_CODES = new Set([
   'ENOTFOUND',
   'ECONNREFUSED',
   'ConnectionRefused', // Bun's fetch error code
+  // Provider send-rate limits. SES's older `Throttling` arrives as a 400, which
+  // the status check below would read as a rejected message.
+  'TooManyRequestsException',
+  'Throttling',
+  'ThrottlingException',
 ])
 
 /**
