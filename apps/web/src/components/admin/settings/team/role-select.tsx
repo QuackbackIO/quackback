@@ -67,7 +67,11 @@ export function RoleSelect({
     ) : null
   return (
     <Select value={value} onValueChange={(v: string) => onValueChange(v)}>
-      <SelectTrigger id={id} className="w-full sm:w-[330px]" aria-invalid={invalid || undefined}>
+      <SelectTrigger
+        id={id}
+        className="w-full focus:border-muted-foreground sm:w-[330px]"
+        aria-invalid={invalid || undefined}
+      >
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

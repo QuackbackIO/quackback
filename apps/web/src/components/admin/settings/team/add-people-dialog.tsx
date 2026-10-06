@@ -595,7 +595,7 @@ function PeopleField({
     <div className="space-y-1.5">
       <Label htmlFor={inputId}>People</Label>
       <div
-        className="flex min-h-9 w-full flex-wrap items-center gap-1.5 rounded-field border border-input px-2 py-1.5 focus-within:border-ring"
+        className="flex min-h-9 w-full flex-wrap items-center gap-1.5 rounded-field border border-input px-2 py-1.5 focus-within:border-muted-foreground"
         onClick={() => inputRef.current?.focus()}
       >
         {chips.map((chip) => (
@@ -819,7 +819,7 @@ function Chip({ chip, onRemove }: { chip: AddChip; onRemove: () => void }) {
           e.stopPropagation()
           onRemove()
         }}
-        className="rounded-full p-0.5 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+        className="rounded-full p-0.5 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-muted-foreground/50 focus-visible:outline-none"
       >
         <XMarkIcon className="size-3" />
       </button>
