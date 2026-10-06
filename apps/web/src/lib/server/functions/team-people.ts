@@ -1,15 +1,21 @@
 /**
  * Server functions behind the members page "Add people" dialog: find people
  * to add, add a batch (signed-in portal users join at once, emails are
- * invited), and the seat summary the dialog shows. Undo of a join is
- * removeTeamMemberFn in ./admin.
+ * invited), change a teammate's role, and the seat summary the dialog
+ * shows. Undo of a join is removeTeamMemberFn in ./admin.
  */
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
-import type { RoleId } from '@quackback/ids'
+import type { PrincipalId, RoleId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { DomainException } from '@/lib/shared/errors'
+import {
+  ADD_REFUSAL_CODES,
+  CHANGE_ROLE_REFUSAL_CODES,
+  type AddRefusalCode,
+  type ChangeRoleRefusalCode,
+} from '@/lib/shared/team-people'
 import { requireAuth } from './auth-helpers'
 import { logger } from '@/lib/server/logger'
 
@@ -44,15 +50,7 @@ const addTeamMembersSchema = z.object({
   roleId: z.string().optional(),
 })
 
-const ADD_REFUSAL_CODES = [
-  'SEAT_LIMIT',
-  'GRANT_CEILING',
-  'ALREADY_MEMBER',
-  'INVITE_PENDING',
-  'NOT_ELIGIBLE',
-  'VALIDATION_ERROR',
-] as const
-export type AddTeamMembersRefusalCode = (typeof ADD_REFUSAL_CODES)[number]
+export type AddTeamMembersRefusalCode = AddRefusalCode
 
 export interface AddTeamMembersRefusal {
   ok: false
@@ -141,3 +139,65 @@ export const getTeamSeatsFn = createServerFn({ method: 'GET' }).handler(async ()
   const [limits, seats] = await Promise.all([getTierLimits(), countSeatUsage()])
   return { used: seats.used, limit: limits.maxTeamSeats }
 })
+
+const changeTeamRoleSchema = z.object({
+  principalId: z.string(),
+  role: z.enum(['admin', 'member']),
+  // Custom-role grant; rides role='member'. Validated in the service.
+  roleId: z.string().optional(),
+})
+
+export interface ChangeTeamRoleRefusal {
+  ok: false
+  code: ChangeRoleRefusalCode
+  message: string
+}
+
+/** Service codes reported under a different refusal code. */
+const CHANGE_ROLE_CODE_ALIASES: Record<string, ChangeRoleRefusalCode> = {
+  MEMBER_NOT_FOUND: 'NOT_FOUND',
+  ROLE_NOT_FOUND: 'NOT_FOUND',
+}
+
+function toChangeRoleRefusal(error: unknown): ChangeTeamRoleRefusal | null {
+  if (!(error instanceof DomainException)) return null
+  const code =
+    CHANGE_ROLE_CODE_ALIASES[error.code] ?? CHANGE_ROLE_REFUSAL_CODES.find((c) => c === error.code)
+  return code ? { ok: false, code, message: error.message } : null
+}
+
+/**
+ * Change a teammate's role, or add a signed-in portal user with one. The same
+ * rules as the add dialog: only an admin grants Admin or changes an admin, a
+ * custom role stays within the caller's own permissions, the last admin
+ * stays, and joining takes a seat. Expected refusals come back as
+ * `{ ok: false, code, message }`; anything unexpected throws.
+ */
+export const changeTeamRoleFn = createServerFn({ method: 'POST' })
+  .validator(changeTeamRoleSchema)
+  .handler(async ({ data }) => {
+    log.info({ principal_id: data.principalId, role: data.role }, 'change team role')
+    const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_MANAGE })
+    const { actorFromAuth } = await import('@/lib/server/audit/log')
+    const { updateMemberRole } = await import('@/lib/server/domains/principals/principal.service')
+    try {
+      const result = await updateMemberRole(
+        data.principalId as PrincipalId,
+        data.role,
+        auth.principal.id,
+        actorFromAuth(auth),
+        getRequestHeaders(),
+        {
+          assignRoleId: data.roleId as RoleId | undefined,
+          granterPermissions: auth.permissions,
+          granterRole: auth.principal.role,
+        }
+      )
+      return { ok: true as const, ...result }
+    } catch (error) {
+      const refusal = toChangeRoleRefusal(error)
+      if (!refusal) throw error
+      log.info({ code: refusal.code }, 'change team role refused')
+      return refusal
+    }
+  })

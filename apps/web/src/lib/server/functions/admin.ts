@@ -314,7 +314,8 @@ export const removeTeamMemberFn = createServerFn({ method: 'POST' })
       data.principalId as PrincipalId,
       auth.principal.id,
       actorFromAuth(auth),
-      getRequestHeaders()
+      getRequestHeaders(),
+      { granterRole: auth.principal.role }
     )
 
     log.info({ principal_id: data.principalId }, 'member removed')
@@ -1090,48 +1091,13 @@ export const mergeLeadIntoUserFn = createServerFn({ method: 'POST' })
 // Invitation Operations
 // ============================================
 
-const sendInvitationSchema = z.object({
-  email: z.string().email(),
-  name: z.string().optional(),
-  role: z.enum(['admin', 'member']),
-  // Custom-role grant carried to accept; rides role='member'.
-  roleId: z.string().optional(),
-})
-
 const invitationByIdSchema = z.object({
   // Use plain z.string() for TanStack Start compatibility
   // TypeID validation with .refine() creates ZodEffects which isn't supported in validator
   invitationId: z.string(),
 })
 
-export type SendInvitationInput = z.infer<typeof sendInvitationSchema>
 export type InvitationByIdInput = z.infer<typeof invitationByIdSchema>
-
-/**
- * Send a team invitation
- */
-export const sendInvitationFn = createServerFn({ method: 'POST' })
-  .validator(sendInvitationSchema)
-  .handler(async ({ data }) => {
-    log.info({ role: data.role }, 'send invitation')
-    const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_MANAGE })
-    const { sendTeamInvitation, teamGranterFromAuth } =
-      await import('@/lib/server/domains/principals/team-invitation')
-
-    const result = await sendTeamInvitation(
-      {
-        email: data.email,
-        name: data.name,
-        role: data.role,
-        roleId: data.roleId as RoleId | undefined,
-      },
-      teamGranterFromAuth(auth),
-      auth.settings
-    )
-
-    log.info({ invitation_id: result.invitationId, sent: result.emailSent }, 'invitation sent')
-    return result
-  })
 
 /**
  * Cancel a pending invitation

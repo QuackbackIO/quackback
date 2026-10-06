@@ -6,26 +6,30 @@
  * written, and written in one transaction. The picker query lives in
  * people-to-add.ts.
  */
-import { db } from '@/lib/server/db'
-import type { InviteId, PrincipalId, RoleId } from '@quackback/ids'
+import { and, db, eq, inArray, invitation, sql, user } from '@/lib/server/db'
+import type { InviteId, PrincipalId, RoleId, UserId } from '@quackback/ids'
 import { ConflictError, ValidationError } from '@/lib/shared/errors'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { recordAuditEvent, type AuditActor } from '@/lib/server/audit/log'
 import { cacheDel } from '@/lib/server/cache'
 import { logger } from '@/lib/server/logger'
-import { assertSeatsAvailable } from './seat-limit'
+import { assertSeatsAvailable, lockSeatLedger } from './seat-limit'
+import { mapWithConcurrency } from '@/lib/server/utils/concurrency'
 import {
   classifyTeamCandidate,
   loadTeamCandidates,
   promotePortalUsers,
+  retirePendingInvitesFor,
+  revokeRetiredInviteTokens,
   type TeamCandidate,
 } from './team-promotion'
 import {
   assertInviteGrant,
-  classifyInviteEmail,
+  classifyInviteEmails,
   deliverTeamInvite,
-  insertTeamInvite,
-  mintTeamInvite,
+  insertTeamInvites,
+  mintTeamInvites,
+  type InviteEmailStatus,
   type InviteWorkspace,
   type MintedTeamInvite,
   type TeamGranter,
@@ -35,6 +39,27 @@ const log = logger.child({ component: 'team-additions' })
 
 /** Most people (ids plus emails) one add request may carry. */
 export const MAX_TEAM_ADDITIONS = 50
+/** Invitation emails sent at once after commit. */
+const SEND_CONCURRENCY = 5
+
+/** How many of these people already hold a seat through a pending team invite to their email. */
+async function countPendingInvitesFor(people: readonly TeamCandidate[]): Promise<number> {
+  const userIds = people.map((p) => p.userId).filter((id): id is UserId => id != null)
+  if (userIds.length === 0) return 0
+  const rows = await db
+    .selectDistinct({ userId: user.id })
+    .from(user)
+    .innerJoin(invitation, sql`lower(${invitation.email}) = lower(${user.email})`)
+    .where(
+      and(
+        inArray(user.id, userIds),
+        eq(invitation.kind, 'team'),
+        eq(invitation.status, 'pending'),
+        sql`${invitation.expiresAt} > now()`
+      )
+    )
+  return rows.length
+}
 
 export interface AddTeamMembersInput {
   principalIds: string[]
@@ -104,13 +129,43 @@ function assertPromotable(
   }
 }
 
+/** Refuse emails a pending invite or a teammate already covers; run before and under the lock. */
+function assertEmailsInvitable(
+  emails: readonly string[],
+  standings: Map<string, InviteEmailStatus>,
+  promoting: ReadonlySet<string>
+): void {
+  for (const email of emails) {
+    const item = { email }
+    const standing = standings.get(email)
+    if (standing?.status === 'pending_invite') {
+      throw about(
+        new ConflictError('INVITE_PENDING', `${email} already has a pending invitation`),
+        item
+      )
+    }
+    if (standing?.status === 'member') {
+      throw about(new ConflictError('ALREADY_MEMBER', `${email} is already on the team`), item)
+    }
+    if (standing?.principalId && promoting.has(standing.principalId)) {
+      throw about(
+        new ValidationError('VALIDATION_ERROR', `${email} is listed more than once`),
+        item
+      )
+    }
+  }
+}
+
 /**
  * Add people to the team in one go: `principalIds` (portal users who have
  * signed in) join at once, `emails` are invited. Everything is validated
- * before any write; the seat count covers the whole batch and is re-checked
- * under the seat-ledger lock on the write transaction. Promotions are audited
- * as user.role.changed. Invitation mail goes out after commit; a send failure
- * does not undo the batch and is reported per invite.
+ * before any write. The write transaction takes the seat-ledger lock, then
+ * re-checks the emails (a racing add cannot leave two pending invites for one
+ * address), retires any pending team invite addressed to a person joining
+ * directly (its seat is the one they take), checks seats for the whole batch
+ * and writes. Promotions are audited as user.role.changed. Invitation mail
+ * goes out after commit, a few at a time; a send failure does not undo the
+ * batch and is reported per invite.
  */
 export async function addTeamMembers(
   input: AddTeamMembersInput,
@@ -141,69 +196,53 @@ export async function addTeamMembers(
     (await loadTeamCandidates(principalIds)).map((c) => [c.id as string, c])
   )
   const toPromote = principalIds.map((id) => assertPromotable(id, candidates.get(id), granter))
+  const promoting = new Set<string>(principalIds)
 
   for (const email of emails) {
-    const item = { email }
     if (!realEmail(email)) {
-      throw about(
-        new ValidationError('NOT_ELIGIBLE', `${email} cannot receive an invitation`),
-        item
-      )
-    }
-    const standing = await classifyInviteEmail(email)
-    if (standing.status === 'pending_invite') {
-      throw about(
-        new ConflictError('INVITE_PENDING', `${email} already has a pending invitation`),
-        item
-      )
-    }
-    if (standing.status === 'member') {
-      throw about(new ConflictError('ALREADY_MEMBER', `${email} is already on the team`), item)
-    }
-    if (standing.principalId && candidates.has(standing.principalId)) {
-      throw about(
-        new ValidationError('VALIDATION_ERROR', `${email} is listed more than once`),
-        item
-      )
+      throw about(new ValidationError('NOT_ELIGIBLE', `${email} cannot receive an invitation`), {
+        email,
+      })
     }
   }
+  assertEmailsInvitable(emails, await classifyInviteEmails(emails), promoting)
 
-  // Whole-batch seat check before minting anything.
-  await assertSeatsAvailable(total)
+  // Whole-batch seat check before minting anything. A pending invite for a
+  // person joining directly already holds their seat.
+  const holding = await countPendingInvitesFor(toPromote)
+  await assertSeatsAvailable(total - holding)
 
-  const invites: MintedTeamInvite[] = []
-  let cacheKeys: string[]
+  const minted: MintedTeamInvite[] = []
+  let written: { cacheKeys: string[]; retiredTokens: string[] }
   try {
-    for (const email of emails) invites.push(await mintTeamInvite(email))
-    cacheKeys = await db.transaction(async (tx) => {
+    const invites = await mintTeamInvites(emails, (invite) => minted.push(invite))
+    written = await db.transaction(async (tx) => {
+      await lockSeatLedger(tx)
+      assertEmailsInvitable(emails, await classifyInviteEmails(emails, tx), promoting)
+      const retiredTokens = await retirePendingInvitesFor(
+        tx,
+        toPromote.map((p) => p.userId as UserId)
+      )
       await assertSeatsAvailable(total, { executor: tx })
-      const keys = await promotePortalUsers(tx, toPromote, input.role, {
+      const cacheKeys = await promotePortalUsers(tx, toPromote, input.role, {
         assignRoleId: input.roleId,
         grantedBy: granter.principalId,
       })
-      for (const invite of invites) {
-        await insertTeamInvite(tx, invite, {
-          role: input.role,
-          roleId: input.roleId,
-          inviterId: granter.userId,
-        })
-      }
-      return keys
+      await insertTeamInvites(tx, invites, {
+        role: input.role,
+        roleId: input.roleId,
+        inviterId: granter.userId,
+      })
+      return { cacheKeys, retiredTokens }
     })
   } catch (error) {
     // Nothing was committed: retire every link minted for this batch.
-    if (invites.length > 0) {
-      try {
-        const { revokeMagicLinkTokens } = await import('@/lib/server/auth/magic-link-mint')
-        await revokeMagicLinkTokens(invites.map((i) => i.magicLinkToken))
-      } catch (revokeError) {
-        log.error({ err: revokeError }, 'revoking minted invite links failed')
-      }
-    }
+    await revokeRetiredInviteTokens(minted.map((i) => i.magicLinkToken))
     throw error
   }
 
-  for (const key of cacheKeys) await cacheDel(key)
+  for (const key of written.cacheKeys) await cacheDel(key)
+  await revokeRetiredInviteTokens(written.retiredTokens)
 
   if (ctx.actor) {
     for (const person of toPromote) {
@@ -221,8 +260,9 @@ export async function addTeamMembers(
     }
   }
 
-  const invited: AddTeamMembersResult['invited'] = []
-  for (const invite of invites) {
+  const invited: AddTeamMembersResult['invited'] = new Array(minted.length)
+  const ordered = emails.map((email) => minted.find((m) => m.email === email)!)
+  await mapWithConcurrency(ordered, SEND_CONCURRENCY, async (invite, i) => {
     let sent = false
     try {
       sent = (
@@ -231,13 +271,13 @@ export async function addTeamMembers(
     } catch (error) {
       log.error({ err: error, invitation_id: invite.invitationId }, 'invitation email failed')
     }
-    invited.push({
+    invited[i] = {
       email: invite.email,
       invitationId: invite.invitationId,
       emailSent: sent,
       ...(sent ? {} : { inviteLink: invite.inviteLink }),
-    })
-  }
+    }
+  })
 
   return {
     added: toPromote.map((p) => ({ principalId: p.id, name: p.name })),

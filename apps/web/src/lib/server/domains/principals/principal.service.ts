@@ -33,8 +33,15 @@ import type { TeamMember } from './principal.types'
 import { resolveUserAvatarUrl } from './principal-display'
 import { logger } from '@/lib/server/logger'
 import { setPrincipalRole } from './principal.factory'
-import { classifyTeamCandidate, loadTeamCandidates, promotePortalUsers } from './team-promotion'
-import { assertSeatsAvailable } from './seat-limit'
+import {
+  classifyTeamCandidate,
+  loadTeamCandidates,
+  promotePortalUsers,
+  retirePendingInvitesFor,
+  revokeRetiredInviteTokens,
+} from './team-promotion'
+import { assertSeatsAvailable, lockSeatLedger } from './seat-limit'
+import { assertCanChangeTeamRole } from '@/lib/server/domains/roles/role.grants'
 import { cacheDel } from '@/lib/server/cache'
 
 const log = logger.child({ component: 'principals' })
@@ -281,7 +288,7 @@ export async function updateMemberRole(
     /** The granter's legacy role; granting Admin requires 'admin'. */
     granterRole?: Role | null
   }
-): Promise<void> {
+): Promise<{ role: 'admin' | 'member'; roleId?: RoleId; roleName?: string }> {
   // Cannot modify own role
   if (principalId === actingPrincipalId) {
     throw new ForbiddenError('CANNOT_MODIFY_SELF', 'You cannot change your own role')
@@ -325,6 +332,8 @@ export async function updateMemberRole(
     if (!isTeammate && !isPortalUser) {
       throw new NotFoundError('MEMBER_NOT_FOUND', 'Team member not found')
     }
+    // Only an admin changes an admin's role.
+    assertCanChangeTeamRole(targetMember.role, opts?.granterRole)
     if (isPortalUser) {
       const [candidate] = await loadTeamCandidates([principalId])
       if (!candidate || classifyTeamCandidate(candidate) !== 'eligible') {
@@ -351,15 +360,23 @@ export async function updateMemberRole(
 
     if (isPortalUser) {
       // Joining the team takes a seat: count and write on one transaction
-      // under the seat-ledger lock so racing additions cannot overfill.
-      const cacheKeys = await db.transaction(async (tx) => {
+      // under the seat-ledger lock so racing additions cannot overfill. A
+      // pending team invite for the person is retired first, so its seat is
+      // the one they take and it can never be accepted later.
+      const { cacheKeys, retiredTokens } = await db.transaction(async (tx) => {
+        await lockSeatLedger(tx)
+        const retiredTokens = await retirePendingInvitesFor(tx, [targetMember.userId as UserId])
         await assertSeatsAvailable(1, { executor: tx })
-        return promotePortalUsers(tx, [{ id: principalId, userId: targetMember.userId }], newRole, {
-          assignRoleId: opts?.assignRoleId,
-          grantedBy: actingPrincipalId,
-        })
+        const cacheKeys = await promotePortalUsers(
+          tx,
+          [{ id: principalId, userId: targetMember.userId }],
+          newRole,
+          { assignRoleId: opts?.assignRoleId, grantedBy: actingPrincipalId }
+        )
+        return { cacheKeys, retiredTokens }
       })
       for (const key of cacheKeys) await cacheDel(key)
+      await revokeRetiredInviteTokens(retiredTokens)
     } else {
       // Update the role (the factory busts PRINCIPAL_BY_USER from the row's
       // userId and reconciles the workspace assignment in the same transaction).
@@ -387,6 +404,11 @@ export async function updateMemberRole(
         },
       })
     }
+    return {
+      role: newRole,
+      ...(opts?.assignRoleId ? { roleId: opts.assignRoleId } : {}),
+      ...(assignedRoleName ? { roleName: assignedRoleName } : {}),
+    }
   } catch (error) {
     if (error instanceof DomainException) {
       throw error
@@ -406,7 +428,11 @@ export async function removeTeamMember(
   principalId: PrincipalId,
   actingPrincipalId: PrincipalId,
   actor: AuditActor | null = null,
-  headers?: Headers
+  headers?: Headers,
+  opts?: {
+    /** The remover's legacy role; removing an admin requires 'admin' (fail closed). */
+    granterRole?: Role | null
+  }
 ): Promise<void> {
   // Cannot remove self
   if (principalId === actingPrincipalId) {
@@ -427,6 +453,9 @@ export async function removeTeamMember(
     if (!isTeamMember(targetMember.role) || targetMember.type === 'support') {
       throw new NotFoundError('MEMBER_NOT_FOUND', 'Team member not found')
     }
+
+    // Only an admin removes an admin.
+    assertCanChangeTeamRole(targetMember.role, opts?.granterRole)
 
     // If removing an admin, ensure at least one human admin remains
     if (isAdmin(targetMember.role)) {

@@ -162,7 +162,15 @@ export const Route = createFileRoute('/api/v1/principals/$principalId')({
           const { removeTeamMember } =
             await import('@/lib/server/domains/principals/principal.service')
 
-          await removeTeamMember(principalId, auth.principalId, apiKeyActor(auth), request.headers)
+          await removeTeamMember(
+            principalId,
+            auth.principalId,
+            apiKeyActor(auth),
+            request.headers,
+            {
+              granterRole: auth.role,
+            }
+          )
 
           return noContentResponse()
         } catch (error) {

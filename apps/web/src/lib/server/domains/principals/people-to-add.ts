@@ -117,26 +117,51 @@ const personColumns = {
   imageKey: user.imageKey,
 }
 
+/** Sessions read per page, and pages at most, while collecting recent people. */
+const RECENT_SESSION_PAGE = 50
+const RECENT_MAX_PAGES = 6
+
+/**
+ * The most recently active portal users, newest first. Walks session rows
+ * newest-first on session_updatedAt_idx a page at a time (keyset on
+ * updated_at, id), joining each to its portal-user principal, and stops once
+ * five distinct people are found. A live non-widget session is itself proof
+ * of sign-in, so no further eligibility check is needed.
+ */
 async function recentPortalUserRows(callerPrincipalId: PrincipalId): Promise<PersonRow[]> {
-  const lastActive = sql`(
-    SELECT max(${session.updatedAt}) FROM ${session}
-    WHERE ${session.userId} = ${principal.userId} AND ${session.scope} <> 'widget'
-  )`
-  const rows = await db
-    .select(personColumns)
-    .from(principal)
-    .innerJoin(user, eq(user.id, principal.userId))
-    .where(
-      and(
-        eq(principal.type, 'user'),
-        eq(principal.role, 'user'),
-        ne(principal.id, callerPrincipalId),
-        hasSignedInSql()
+  const found = new Map<string, PersonRow>()
+  let cursor: { updatedAt: Date; id: string } | null = null
+  for (let page = 0; page < RECENT_MAX_PAGES && found.size < RECENT_LIMIT; page++) {
+    const rows: Array<PersonRow & { sessionId: string; sessionAt: Date }> = await db
+      .select({ ...personColumns, sessionId: session.id, sessionAt: session.updatedAt })
+      .from(session)
+      .innerJoin(principal, eq(principal.userId, session.userId))
+      .innerJoin(user, eq(user.id, session.userId))
+      .where(
+        and(
+          ne(session.scope, 'widget'),
+          cursor
+            ? sql`(${session.updatedAt}, ${session.id}) < (${cursor.updatedAt.toISOString()}::timestamptz, ${cursor.id})`
+            : undefined,
+          eq(principal.type, 'user'),
+          eq(principal.role, 'user'),
+          ne(principal.id, callerPrincipalId)
+        )
       )
-    )
-    .orderBy(sql`${lastActive} DESC NULLS LAST`, desc(principal.createdAt))
-    .limit(RECENT_LIMIT)
-  return rows as PersonRow[]
+      .orderBy(desc(session.updatedAt), desc(session.id))
+      .limit(RECENT_SESSION_PAGE)
+    for (const row of rows) {
+      if (found.size >= RECENT_LIMIT) break
+      if (!found.has(row.principalId)) {
+        const { sessionId: _s, sessionAt: _a, ...person } = row
+        found.set(row.principalId, person as PersonRow)
+      }
+    }
+    if (rows.length < RECENT_SESSION_PAGE) break
+    const last = rows[rows.length - 1]!
+    cursor = { updatedAt: new Date(last.sessionAt), id: last.sessionId }
+  }
+  return [...found.values()]
 }
 
 async function searchPeopleRows(

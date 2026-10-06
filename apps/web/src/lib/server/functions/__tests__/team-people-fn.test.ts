@@ -5,11 +5,18 @@
  * `{ ok: false, code, message, ... }` and lets anything else throw.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ConflictError, ForbiddenError, ValidationError } from '@/lib/shared/errors'
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '@/lib/shared/errors'
+import {
+  ADD_REFUSAL_CODES,
+  CHANGE_ROLE_REFUSAL_CODES,
+  TEAM_INVITATION_VALID_DAYS,
+} from '@/lib/shared/team-people'
+import { INVITATION_EXPIRY_MS } from '../invitation-magic-link'
 
 const hoisted = vi.hoisted(() => ({
   requireAuth: vi.fn(),
   addTeamMembers: vi.fn(),
+  updateMemberRole: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-start', () => ({
@@ -29,7 +36,11 @@ vi.mock('@/lib/server/domains/principals/team-additions', () => ({
   addTeamMembers: (...args: unknown[]) => hoisted.addTeamMembers(...args),
 }))
 
-const { addTeamMembersFn } = await import('../team-people')
+vi.mock('@/lib/server/domains/principals/principal.service', () => ({
+  updateMemberRole: (...args: unknown[]) => hoisted.updateMemberRole(...args),
+}))
+
+const { addTeamMembersFn, changeTeamRoleFn } = await import('../team-people')
 const { SeatLimitError } = await import('@/lib/server/domains/principals/seat-limit')
 
 const input = { principalIds: ['principal_a'], emails: ['x@example.com'], role: 'member' as const }
@@ -102,5 +113,81 @@ describe('addTeamMembersFn', () => {
   it('still throws anything that is not an expected refusal', async () => {
     hoisted.addTeamMembers.mockRejectedValue(new Error('database down'))
     await expect(addTeamMembersFn({ data: input })).rejects.toThrow('database down')
+  })
+})
+
+describe('changeTeamRoleFn', () => {
+  const data = { principalId: 'principal_t', role: 'member' as const, roleId: 'role_x' }
+
+  it("passes the caller's role and permissions as the ceiling and returns the new role", async () => {
+    hoisted.updateMemberRole.mockResolvedValue({
+      role: 'member',
+      roleId: 'role_x',
+      roleName: 'Support lead',
+    })
+    expect(await changeTeamRoleFn({ data })).toEqual({
+      ok: true,
+      role: 'member',
+      roleId: 'role_x',
+      roleName: 'Support lead',
+    })
+    const [principalId, role, acting, actor, , opts] = hoisted.updateMemberRole.mock.calls[0]
+    expect([principalId, role, acting]).toEqual(['principal_t', 'member', 'principal_me'])
+    expect(actor).toMatchObject({ userId: 'user_me', role: 'admin' })
+    expect(opts).toEqual({
+      assignRoleId: 'role_x',
+      granterPermissions: ['member.manage'],
+      granterRole: 'admin',
+    })
+  })
+
+  it.each([
+    [new ForbiddenError('GRANT_CEILING', 'Only an admin can change an admin'), 'GRANT_CEILING'],
+    [new ForbiddenError('LAST_ADMIN', 'Cannot demote the last admin'), 'LAST_ADMIN'],
+    [
+      new ForbiddenError('CANNOT_MODIFY_SELF', 'You cannot change your own role'),
+      'CANNOT_MODIFY_SELF',
+    ],
+    [new SeatLimitError({ needed: 1, free: 0, used: 3, max: 3 }), 'SEAT_LIMIT'],
+    [new ValidationError('NOT_ELIGIBLE', 'has not signed in'), 'NOT_ELIGIBLE'],
+    [new NotFoundError('MEMBER_NOT_FOUND', 'Team member not found'), 'NOT_FOUND'],
+  ])('returns %s as a refusal', async (error, code) => {
+    hoisted.updateMemberRole.mockRejectedValue(error)
+    expect(await changeTeamRoleFn({ data })).toEqual({ ok: false, code, message: error.message })
+  })
+
+  it('still throws anything unexpected', async () => {
+    hoisted.updateMemberRole.mockRejectedValue(new Error('database down'))
+    await expect(changeTeamRoleFn({ data })).rejects.toThrow('database down')
+  })
+})
+
+describe('shared team-people constants', () => {
+  it('lists every refusal code the functions return', () => {
+    expect([...ADD_REFUSAL_CODES].sort()).toEqual(
+      [
+        'ALREADY_MEMBER',
+        'GRANT_CEILING',
+        'INVITE_PENDING',
+        'NOT_ELIGIBLE',
+        'SEAT_LIMIT',
+        'VALIDATION_ERROR',
+      ].sort()
+    )
+    expect([...CHANGE_ROLE_REFUSAL_CODES].sort()).toEqual(
+      [
+        'CANNOT_MODIFY_SELF',
+        'GRANT_CEILING',
+        'LAST_ADMIN',
+        'NOT_ELIGIBLE',
+        'NOT_FOUND',
+        'SEAT_LIMIT',
+      ].sort()
+    )
+  })
+
+  it('derives the invitation lifetime from one number of days', () => {
+    expect(TEAM_INVITATION_VALID_DAYS).toBe(30)
+    expect(INVITATION_EXPIRY_MS).toBe(TEAM_INVITATION_VALID_DAYS * 24 * 60 * 60 * 1000)
   })
 })

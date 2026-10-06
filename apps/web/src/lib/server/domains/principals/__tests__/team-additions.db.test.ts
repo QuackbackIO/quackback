@@ -67,7 +67,16 @@ const { findPeopleToAdd } = await import('../people-to-add')
 const { invalidateTierLimitsCache } =
   await import('@/lib/server/domains/settings/tier-limits.service')
 
+// Statements sent on the fixture connection, recorded while `recording` is on.
+let recording = false
+const statements: string[] = []
+
 const fixture = await createDbTestFixture({
+  logger: {
+    logQuery: (query: string) => {
+      if (recording) statements.push(query)
+    },
+  },
   probe: async (db) => {
     await db.select({ id: principal.id, type: principal.type }).from(principal).limit(0)
     await db.select({ id: account.id }).from(account).limit(0)
@@ -571,5 +580,136 @@ describe.skipIf(!fixture.available)('addTeamMembers', () => {
     expect(result.invited[0]).toMatchObject({ emailSent: false })
     expect(result.invited[0].inviteLink).toContain(result.invited[0].invitationId)
     expect(await pendingInvites()).toHaveLength(1)
+  })
+})
+
+describe.skipIf(!fixture.available)('addTeamMembers: invites, races and volume', () => {
+  it('offers and adds someone whose only sign-in record is an email sign-in', async () => {
+    const admin = await seedPerson({ role: 'admin', ...signedIn })
+    const t = tag()
+    const emailOnly = await seedPerson({ name: `Email ${t}` })
+    await testDb.insert(auditLog).values({
+      eventType: 'auth.signin.success',
+      actorUserId: emailOnly.userId,
+      metadata: { method: 'magic-link' },
+    })
+
+    const found = await findPeopleToAdd({
+      query: t,
+      callerPrincipalId: admin.principalId,
+      canSearchPeople: true,
+    })
+    expect(found.people.map((p) => p.principalId)).toEqual([emailOnly.principalId])
+
+    const result = await addTeamMembers(
+      { principalIds: [emailOnly.principalId], emails: [], role: 'member' },
+      granterFor(admin, 'admin'),
+      ctx
+    )
+    expect(result.added).toHaveLength(1)
+  })
+
+  it("retires a person's pending team invite when adding them directly, reusing its seat", async () => {
+    const admin = await seedPerson({ role: 'admin', ...signedIn })
+    const a = await seedPerson({ ...signedIn })
+    const inviteId = createId('invite')
+    await testDb.insert(invitation).values({
+      id: inviteId,
+      email: a.email!.toUpperCase(),
+      role: 'admin',
+      status: 'pending',
+      expiresAt: new Date(Date.now() + 86_400_000),
+      inviterId: admin.userId,
+      createdAt: new Date(),
+      magicLinkTokens: ['old-invite-token'],
+    })
+    await setFreeSeats(1) // a's invite holds one seat; the new email needs the free one
+
+    await addTeamMembers(
+      { principalIds: [a.principalId], emails: ['new@example.com'], role: 'member' },
+      granterFor(admin, 'admin'),
+      ctx
+    )
+
+    expect(await roleOf(a.principalId)).toBe('member')
+    const [old] = await testDb.select().from(invitation).where(eq(invitation.id, inviteId))
+    expect(old.status).toBe('canceled')
+    expect(hoisted.revokeMagicLinkTokens).toHaveBeenCalledWith(['old-invite-token'])
+    expect((await pendingInvites()).map((i) => i.email)).toEqual(['new@example.com'])
+  })
+
+  it('re-checks pending invites under the lock: a racing invite for the same email wins', async () => {
+    const admin = await seedPerson({ role: 'admin', ...signedIn })
+    // The racing request lands after validation, while links are being minted.
+    hoisted.mint.mockImplementation(async (email: string, callbackPath: string) => {
+      await testDb.insert(invitation).values({
+        id: createId('invite'),
+        email,
+        role: 'member',
+        status: 'pending',
+        expiresAt: new Date(Date.now() + 86_400_000),
+        inviterId: admin.userId,
+        createdAt: new Date(),
+      })
+      return { url: `https://acme.test${callbackPath}`, token: `t-${email}`, sealedAddress: email }
+    })
+
+    await expect(
+      addTeamMembers(
+        { principalIds: [], emails: ['race@example.com'], role: 'member' },
+        granterFor(admin, 'admin'),
+        ctx
+      )
+    ).rejects.toMatchObject({ code: 'INVITE_PENDING', email: 'race@example.com' })
+    expect(await pendingInvites()).toHaveLength(1)
+    expect(hoisted.revokeMagicLinkTokens).toHaveBeenCalledWith(['t-race@example.com'])
+  })
+
+  it('classifies a batch of emails in bulk, not per address', async () => {
+    const admin = await seedPerson({ role: 'admin', ...signedIn })
+    const emails = Array.from({ length: 10 }, (_, i) => `bulk${i}@example.com`)
+
+    statements.length = 0
+    recording = true
+    try {
+      await addTeamMembers(
+        { principalIds: [], emails, role: 'member' },
+        granterFor(admin, 'admin'),
+        ctx
+      )
+    } finally {
+      recording = false
+    }
+    // Per-address lookups (the seat counts also read the table, without an email filter).
+    const invitationReads = statements.filter(
+      (q) => /^select/i.test(q.trim()) && /from "invitation"/i.test(q) && /"email"/.test(q)
+    )
+    // One read before the lock and one re-check under it.
+    expect(invitationReads.length).toBeLessThanOrEqual(2)
+    expect(await pendingInvites()).toHaveLength(10)
+  })
+
+  it('sends invitation emails a few at a time after commit', async () => {
+    const admin = await seedPerson({ role: 'admin', ...signedIn })
+    let inFlight = 0
+    let peak = 0
+    hoisted.sendInvitationEmail.mockImplementation(async () => {
+      inFlight++
+      peak = Math.max(peak, inFlight)
+      await new Promise((r) => setTimeout(r, 20))
+      inFlight--
+      return { sent: true }
+    })
+    const emails = Array.from({ length: 12 }, (_, i) => `send${i}@example.com`)
+
+    const result = await addTeamMembers(
+      { principalIds: [], emails, role: 'member' },
+      granterFor(admin, 'admin'),
+      ctx
+    )
+    expect(result.invited.every((i) => i.emailSent)).toBe(true)
+    expect(hoisted.sendInvitationEmail).toHaveBeenCalledTimes(12)
+    expect(peak).toBeGreaterThan(1)
+    expect(peak).toBeLessThanOrEqual(5)
   })
 })

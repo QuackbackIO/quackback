@@ -1,8 +1,7 @@
 /**
- * Team invitations by email: who may be invited, the grant ceiling on the
- * invited role, and the mint / insert / deliver steps. sendTeamInvitation is
- * the single-invite flow behind sendInvitationFn; the batch add-people path
- * composes the same steps so both apply one set of rules.
+ * Team invitations by email: where an address stands, the grant ceiling on
+ * the invited role, and the mint / insert / deliver steps the add-people
+ * batch (team-additions.ts, the one invite path) composes.
  */
 import {
   generateId,
@@ -11,19 +10,33 @@ import {
   type RoleId,
   type UserId,
 } from '@quackback/ids'
-import { and, db, eq, invitation, principal, sql, user, type Transaction } from '@/lib/server/db'
+import {
+  and,
+  db,
+  eq,
+  inArray,
+  invitation,
+  principal,
+  sql,
+  user,
+  type Database,
+  type Transaction,
+} from '@/lib/server/db'
 import { sendInvitationEmail } from '@quackback/email'
 import { getBaseUrl } from '@/lib/server/config'
 import {
   INVITATION_EXPIRY_MS,
   generateInvitationMagicLink,
 } from '@/lib/server/functions/invitation-magic-link'
-import { ConflictError, ValidationError } from '@/lib/shared/errors'
-import { isSyntheticAnonEmail } from '@/lib/shared/anonymous-email'
+import { ValidationError } from '@/lib/shared/errors'
 import type { PermissionKey } from '@/lib/shared/permissions'
 import type { Role } from '@/lib/shared/roles'
 import type { AuthContext } from '@/lib/server/functions/auth-helpers'
 import { assertCanGrantTeamRole } from '@/lib/server/domains/roles/role.grants'
+import { mapWithConcurrency } from '@/lib/server/utils/concurrency'
+
+/** Links minted at once; each mint writes a verification row. */
+const MINT_CONCURRENCY = 5
 
 /** The person granting team access, as resolved at the request gate. */
 export interface TeamGranter {
@@ -63,53 +76,77 @@ export type InviteEmailStatus =
   | { status: 'member'; principalId: PrincipalId }
 
 /**
- * Where an email stands for a team invite: a pending team invite, an existing
- * teammate, or invitable ('new', which includes a portal user holding that
- * address: accepting the invite promotes them). `email` must be lowercased.
+ * Where each email stands for a team invite: a pending team invite, an
+ * existing teammate, or invitable ('new', which includes a portal user
+ * holding that address: accepting the invite promotes them). Two queries for
+ * the whole list, matched case-insensitively. `emails` must be lowercased.
+ * Pass the write transaction as `executor` to re-check under the seat-ledger
+ * lock.
  */
-export async function classifyInviteEmail(email: string): Promise<InviteEmailStatus> {
-  const [existingInvitation, existingUser] = await Promise.all([
-    db.query.invitation.findFirst({
-      where: and(
-        eq(invitation.email, email),
-        eq(invitation.status, 'pending'),
-        eq(invitation.kind, 'team')
+export async function classifyInviteEmails(
+  emails: readonly string[],
+  executor: Database | Transaction = db
+): Promise<Map<string, InviteEmailStatus>> {
+  const out = new Map<string, InviteEmailStatus>()
+  if (emails.length === 0) return out
+  const list = [...emails]
+  const [pending, people] = await Promise.all([
+    executor
+      .select({
+        id: invitation.id,
+        email: sql<string>`lower(${invitation.email})`,
+        createdAt: invitation.createdAt,
+        role: invitation.role,
+        roleId: invitation.roleId,
+      })
+      .from(invitation)
+      .where(
+        and(
+          eq(invitation.kind, 'team'),
+          eq(invitation.status, 'pending'),
+          inArray(sql`lower(${invitation.email})`, list)
+        )
       ),
-    }),
-    db.query.user.findFirst({
-      where: sql`lower(${user.email}) = ${email}`,
-    }),
+    executor
+      .select({
+        userId: user.id,
+        email: sql<string>`lower(${user.email})`,
+        principalId: principal.id,
+        role: principal.role,
+      })
+      .from(user)
+      .leftJoin(principal, eq(principal.userId, user.id))
+      .where(inArray(sql`lower(${user.email})`, list)),
   ])
 
-  if (existingInvitation) {
-    return {
-      status: 'pending_invite',
-      invitationId: existingInvitation.id as InviteId,
-      invitedAt: existingInvitation.createdAt,
-      role: existingInvitation.role ?? 'member',
-      roleId: (existingInvitation.roleId as RoleId | null) ?? null,
+  for (const p of people) {
+    if (p.principalId && p.role && p.role !== 'user') {
+      out.set(p.email, { status: 'member', principalId: p.principalId as PrincipalId })
+    } else {
+      out.set(p.email, {
+        status: 'new',
+        principalId: (p.principalId as PrincipalId | null) ?? undefined,
+        userId: p.userId as UserId,
+      })
     }
   }
-  if (!existingUser) return { status: 'new' }
-
-  const existingPrincipal = await db.query.principal.findFirst({
-    where: eq(principal.userId, existingUser.id),
-  })
-  if (existingPrincipal && existingPrincipal.role !== 'user') {
-    return { status: 'member', principalId: existingPrincipal.id as PrincipalId }
+  // A pending invite is reported ahead of the person it addresses.
+  for (const inv of pending) {
+    out.set(inv.email, {
+      status: 'pending_invite',
+      invitationId: inv.id as InviteId,
+      invitedAt: inv.createdAt,
+      role: inv.role ?? 'member',
+      roleId: (inv.roleId as RoleId | null) ?? null,
+    })
   }
-  return {
-    status: 'new',
-    principalId: (existingPrincipal?.id as PrincipalId | undefined) ?? undefined,
-    userId: existingUser.id as UserId,
-  }
+  for (const email of list) if (!out.has(email)) out.set(email, { status: 'new' })
+  return out
 }
 
-/** Refuse an address that can never receive the invite (a minted placeholder). */
-export function assertDeliverableInviteEmail(email: string): void {
-  if (isSyntheticAnonEmail(email)) {
-    throw new ValidationError('NOT_ELIGIBLE', 'This address cannot receive an invitation')
-  }
+/** classifyInviteEmails for one address. */
+export async function classifyInviteEmail(email: string): Promise<InviteEmailStatus> {
+  return (await classifyInviteEmails([email])).get(email) ?? { status: 'new' }
 }
 
 /**
@@ -147,7 +184,7 @@ export interface MintedTeamInvite {
  * in its token set (cancel revokes every token in the set). The invitation id
  * is fixed here, so the callback path is already known.
  */
-export async function mintTeamInvite(email: string): Promise<MintedTeamInvite> {
+async function mintTeamInvite(email: string): Promise<MintedTeamInvite> {
   const invitationId = generateId('invite')
   const portalUrl = getBaseUrl()
   const callbackURL = `/complete-signup/${invitationId}`
@@ -161,26 +198,45 @@ export async function mintTeamInvite(email: string): Promise<MintedTeamInvite> {
   }
 }
 
-/** Insert the pending team invite on the caller's (seat-locked) transaction. */
-export async function insertTeamInvite(
-  tx: Transaction,
-  invite: MintedTeamInvite,
-  details: { name?: string | null; role: 'admin' | 'member'; roleId?: RoleId; inviterId: UserId }
-): Promise<void> {
-  const now = new Date()
-  await tx.insert(invitation).values({
-    id: invite.invitationId,
-    email: invite.email,
-    name: details.name || null,
-    role: details.role,
-    roleId: details.roleId ?? null,
-    status: 'pending',
-    expiresAt: new Date(now.getTime() + INVITATION_EXPIRY_MS),
-    lastSentAt: now,
-    inviterId: details.inviterId,
-    createdAt: now,
-    magicLinkTokens: [invite.magicLinkToken],
+/**
+ * Mint links for a batch of emails, a few at a time. Links minted before a
+ * failure are returned through `onMinted` so the caller can revoke them.
+ */
+export async function mintTeamInvites(
+  emails: readonly string[],
+  onMinted: (invite: MintedTeamInvite) => void
+): Promise<MintedTeamInvite[]> {
+  const minted: MintedTeamInvite[] = new Array(emails.length)
+  await mapWithConcurrency(emails, MINT_CONCURRENCY, async (email, i) => {
+    minted[i] = await mintTeamInvite(email)
+    onMinted(minted[i])
   })
+  return minted
+}
+
+/** Insert the pending team invites on the caller's (seat-locked) transaction, in one statement. */
+export async function insertTeamInvites(
+  tx: Transaction,
+  invites: readonly MintedTeamInvite[],
+  details: { role: 'admin' | 'member'; roleId?: RoleId; inviterId: UserId }
+): Promise<void> {
+  if (invites.length === 0) return
+  const now = new Date()
+  await tx.insert(invitation).values(
+    invites.map((invite) => ({
+      id: invite.invitationId,
+      email: invite.email,
+      name: null,
+      role: details.role,
+      roleId: details.roleId ?? null,
+      status: 'pending',
+      expiresAt: new Date(now.getTime() + INVITATION_EXPIRY_MS),
+      lastSentAt: now,
+      inviterId: details.inviterId,
+      createdAt: now,
+      magicLinkTokens: [invite.magicLinkToken],
+    }))
+  )
 }
 
 /** Send the invitation email. Returns whether it went out. */
@@ -202,55 +258,4 @@ export async function deliverTeamInvite(
     logoUrl,
   })
   return { sent: result.sent }
-}
-
-/**
- * Invite one person to the team by email. Refuses an address with a pending
- * team invite or belonging to a teammate; a portal user may be invited (the
- * accept promotes them). The seat count and the insert share one transaction
- * under the seat-ledger lock so two concurrent invites cannot both take the
- * last seat.
- */
-export async function sendTeamInvitation(
-  input: { email: string; name?: string; role: 'admin' | 'member'; roleId?: RoleId },
-  granter: TeamGranter,
-  workspace: InviteWorkspace
-): Promise<{ invitationId: InviteId; emailSent: boolean; inviteLink?: string }> {
-  const email = input.email.toLowerCase()
-  assertDeliverableInviteEmail(email)
-
-  const standing = await classifyInviteEmail(email)
-  if (standing.status === 'pending_invite') {
-    throw new ConflictError('INVITE_PENDING', 'An invitation has already been sent to this email')
-  }
-  if (standing.status === 'member') {
-    throw new ConflictError('ALREADY_MEMBER', 'A team member with this email already exists')
-  }
-
-  await assertInviteGrant(input.role, input.roleId, granter)
-
-  const invite = await mintTeamInvite(email)
-
-  await db.transaction(async (tx) => {
-    const { enforceSeatLimit } = await import('./seat-limit')
-    await enforceSeatLimit({ executor: tx })
-    await insertTeamInvite(tx, invite, {
-      name: input.name,
-      role: input.role,
-      roleId: input.roleId,
-      inviterId: granter.userId,
-    })
-  })
-
-  const result = await deliverTeamInvite(invite, {
-    inviterName: granter.name,
-    inviteeName: input.name,
-    workspace,
-  })
-
-  return {
-    invitationId: invite.invitationId,
-    emailSent: result.sent,
-    inviteLink: !result.sent ? invite.inviteLink : undefined,
-  }
 }

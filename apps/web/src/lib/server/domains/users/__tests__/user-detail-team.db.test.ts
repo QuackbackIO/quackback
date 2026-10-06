@@ -10,6 +10,7 @@ import { createId, type PrincipalId, type RoleId, type UserId } from '@quackback
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
   account,
+  auditLog,
   eq,
   principal,
   principalRoleAssignments,
@@ -92,6 +93,17 @@ describe.skipIf(!fixture.available)('getPortalUserDetail team fields', () => {
       const detail = await getPortalUserDetail(id, { includeTeammates: true })
       expect(detail).toMatchObject({ principalId: id, teamRole: null, hasSignedIn: true })
     }
+  })
+
+  it('signed in by email with no session left: the sign-in record counts', async () => {
+    const id = await seedPerson({ role: 'user' })
+    const [row] = await testDb.select().from(principal).where(eq(principal.id, id))
+    await testDb.insert(auditLog).values({
+      eventType: 'auth.signin.success',
+      actorUserId: row.userId,
+      metadata: { method: 'magic-link' },
+    })
+    expect(await getPortalUserDetail(id)).toMatchObject({ hasSignedIn: true })
   })
 
   it.each(['none', 'widget'] as const)('has not signed in (%s)', async (signIn) => {

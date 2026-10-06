@@ -136,7 +136,7 @@ registerPath('/members/{principalId}', {
     description:
       "Update a team member's role, or add a portal user to the team by giving them a role. " +
       'A portal user must have signed in (a provider account or a portal session); they join ' +
-      'at once and take a seat. Only an admin key grants the admin role. Cannot modify your own role.',
+      'at once and take a seat. Only an admin key grants the admin role or changes an admin. Cannot modify your own role.',
     parameters: [
       {
         name: 'principalId',
@@ -194,7 +194,7 @@ registerPath('/members/{principalId}', {
     tags: ['Members'],
     summary: 'Remove a team member',
     description:
-      'Remove a team member from the workspace (converts them to a portal user). Cannot remove yourself or the last admin.',
+      'Remove a team member from the workspace (converts them to a portal user). Cannot remove yourself or the last admin; only an admin key removes an admin.',
     parameters: [
       {
         name: 'principalId',

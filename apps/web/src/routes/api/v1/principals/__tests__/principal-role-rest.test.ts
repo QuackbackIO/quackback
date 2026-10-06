@@ -123,5 +123,7 @@ describe('DELETE /api/v1/principals/:principalId', () => {
     expect(principalId).toBe(TARGET)
     expect(acting).toBe(AUTH_CONTEXT.principalId)
     expect(actor).toMatchObject({ type: 'api_key', userId: 'user_owner' })
+    // Only an admin key removes an admin: the service gets the key owner's role.
+    expect(mockRemoveTeamMember.mock.calls[0][4]).toEqual({ granterRole: 'member' })
   })
 })

@@ -4,8 +4,8 @@
  * add-people path so the two can never disagree about eligibility.
  *
  * Eligible means a real person who has signed in: an identified human
- * principal (type 'user' with a user row) on the portal tier whose user holds
- * a provider account link or a portal/dashboard session. Anonymous visitors,
+ * principal (type 'user' with a user row) on the portal tier whose user has
+ * signed in (see hasSignedInSql). Anonymous visitors,
  * leads, contacts created by an admin or import that never signed in,
  * widget-only identities, service and support principals are never promoted
  * this way; a person with a real email can still be invited by email.
@@ -13,9 +13,11 @@
 import {
   account,
   and,
+  auditLog,
   db,
   eq,
   inArray,
+  invitation,
   principal,
   session,
   sql,
@@ -27,10 +29,21 @@ import type { PrincipalId, RoleId, UserId } from '@quackback/ids'
 import { ConflictError } from '@/lib/shared/errors'
 import { isTeamMember } from '@/lib/shared/roles'
 import { setPrincipalRole } from './principal.factory'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'team-promotion' })
 
 /**
  * SQL predicate over the outer query's `principal.user_id`: the user has
- * signed in, through a provider account link or a non-widget session.
+ * signed in. Any one of three records proves it:
+ *  - a provider account link (OAuth, OIDC, password), which outlives sessions;
+ *  - a non-widget session, while one is live;
+ *  - a recorded `auth.signin.success` that was not an anonymous widget mint.
+ *    Email sign-ins (magic link, one-time code) create no account row, and
+ *    signing out deletes the session, so this audit row, written for every
+ *    sign-in method, is what keeps them eligible (kept for the audit
+ *    retention window).
+ * Admin-created or imported contacts and widget-only identities have none.
  */
 export function hasSignedInSql() {
   return sql<boolean>`(
@@ -38,6 +51,12 @@ export function hasSignedInSql() {
     OR EXISTS (
       SELECT 1 FROM ${session}
       WHERE ${session.userId} = ${principal.userId} AND ${session.scope} <> 'widget'
+    )
+    OR EXISTS (
+      SELECT 1 FROM ${auditLog}
+      WHERE ${auditLog.actorUserId} = ${principal.userId}
+        AND ${auditLog.eventType} = 'auth.signin.success'
+        AND coalesce(${auditLog.metadata}->>'method', '') <> 'anonymous'
     )
   )`
 }
@@ -131,4 +150,45 @@ export async function promotePortalUsers(
     keys.push(...cacheKeysToBust)
   }
   return keys
+}
+
+/**
+ * Retire the pending team invitations addressed to these users' real emails,
+ * inside the caller's transaction, before they join the team directly: an
+ * invite left pending would keep holding a seat and could later be accepted
+ * with a different role. The invite's seat is freed in the same write, so the
+ * person's direct add reuses it. Returns the retired invites' magic-link
+ * tokens for the caller to revoke after commit.
+ */
+export async function retirePendingInvitesFor(
+  tx: Transaction,
+  userIds: readonly UserId[]
+): Promise<string[]> {
+  if (userIds.length === 0) return []
+  const retired = await tx
+    .update(invitation)
+    .set({ status: 'canceled' })
+    .where(
+      and(
+        eq(invitation.kind, 'team'),
+        eq(invitation.status, 'pending'),
+        sql`lower(${invitation.email}) IN (
+          SELECT lower(${user.email}) FROM ${user}
+          WHERE ${inArray(user.id, [...userIds])} AND ${user.email} IS NOT NULL
+        )`
+      )
+    )
+    .returning({ magicLinkTokens: invitation.magicLinkTokens })
+  return retired.flatMap((r) => r.magicLinkTokens ?? [])
+}
+
+/** Best-effort revoke of retired invite links after commit. */
+export async function revokeRetiredInviteTokens(tokens: string[]): Promise<void> {
+  if (tokens.length === 0) return
+  try {
+    const { revokeMagicLinkTokens } = await import('@/lib/server/auth/magic-link-mint')
+    await revokeMagicLinkTokens(tokens)
+  } catch (error) {
+    log.error({ err: error }, 'revoking retired invite links failed')
+  }
 }

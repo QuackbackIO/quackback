@@ -52,3 +52,18 @@ export function assertCanGrantTeamRole(
     throw new ForbiddenError('GRANT_CEILING', 'Only an admin can grant the Admin role')
   }
 }
+
+/**
+ * The ceiling on changing someone who already holds Admin: demoting an admin
+ * or removing them from the team is reserved to admins, so member.manage
+ * cannot strip an admin of the tier it may not grant. Fails closed when the
+ * granter's role is unknown. The last-admin guard still applies on top.
+ */
+export function assertCanChangeTeamRole(
+  targetRole: string,
+  granterRole: Role | null | undefined
+): void {
+  if (isAdmin(targetRole) && !isAdmin(granterRole)) {
+    throw new ForbiddenError('GRANT_CEILING', 'Only an admin can change or remove an admin')
+  }
+}

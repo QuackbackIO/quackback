@@ -190,7 +190,6 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/admin.ts`::removeUserTagFn | people.manage |
 | `lib/server/functions/admin.ts`::deletePortalUserFn | people.manage |
 | `lib/server/functions/admin.ts`::mergeLeadIntoUserFn | people.manage |
-| `lib/server/functions/admin.ts`::sendInvitationFn | member.manage |
 | `lib/server/functions/admin.ts`::cancelInvitationFn | member.manage |
 | `lib/server/functions/admin.ts`::resendInvitationFn | member.manage |
 | `lib/server/functions/admin.ts`::fetchSegmentAttributeValuesFn | segment.view |
@@ -699,6 +698,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/team-people.ts`::searchPeopleToAddFn | member.manage |
 | `lib/server/functions/team-people.ts`::addTeamMembersFn | member.manage |
 | `lib/server/functions/team-people.ts`::getTeamSeatsFn | member.view |
+| `lib/server/functions/team-people.ts`::changeTeamRoleFn | member.manage |
 | `lib/server/functions/teammate-preferences.ts`::getMyLanguagePreferenceFn | END_USER (any authenticated) |
 | `lib/server/functions/teammate-preferences.ts`::setMyLanguagePreferenceFn | END_USER (any authenticated) |
 | `lib/server/functions/teams.ts`::listTeamsFn | member.view |

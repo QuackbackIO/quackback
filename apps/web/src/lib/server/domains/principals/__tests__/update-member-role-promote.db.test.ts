@@ -15,6 +15,7 @@ import {
   and,
   auditLog,
   eq,
+  invitation,
   isNull,
   principal,
   principalRoleAssignments,
@@ -64,13 +65,18 @@ type Seeded = { userId: UserId; principalId: PrincipalId }
 async function seedPerson(opts: {
   role: 'admin' | 'member' | 'user'
   type?: 'user' | 'anonymous' | 'support'
-  signIn?: 'account' | 'portal-session' | 'widget-session' | 'none'
-}): Promise<Seeded> {
+  signIn?:
+    | 'account'
+    | 'portal-session'
+    | 'widget-session'
+    | 'email-signin-audit'
+    | 'anonymous-signin-audit'
+    | 'none'
+}): Promise<Seeded & { email: string }> {
   const userId = createId('user') as UserId
   const principalId = createId('principal') as PrincipalId
-  await testDb
-    .insert(user)
-    .values({ id: userId, name: `P ${suffix()}`, email: `p-${suffix()}@example.com` })
+  const email = `p-${suffix()}@example.com`
+  await testDb.insert(user).values({ id: userId, name: `P ${suffix()}`, email })
   await testDb.insert(principal).values({
     id: principalId,
     userId,
@@ -92,8 +98,39 @@ async function seedPerson(opts: {
       updatedAt: new Date(),
       scope: signIn === 'widget-session' ? 'widget' : 'portal',
     })
+  } else if (signIn === 'email-signin-audit' || signIn === 'anonymous-signin-audit') {
+    // A sign-in whose session is gone (signed out or revoked): only the
+    // sign-in record remains. Email sign-ins leave no account row.
+    await testDb.insert(auditLog).values({
+      eventType: 'auth.signin.success',
+      actorUserId: userId,
+      metadata: { method: signIn === 'email-signin-audit' ? 'magic-link' : 'anonymous' },
+    })
   }
-  return { userId, principalId }
+  return { userId, principalId, email }
+}
+
+async function seedPendingInvite(email: string, inviterId: UserId) {
+  const id = createId('invite')
+  await testDb.insert(invitation).values({
+    id,
+    email,
+    role: 'member',
+    status: 'pending',
+    expiresAt: new Date(Date.now() + 86_400_000),
+    inviterId,
+    createdAt: new Date(),
+    magicLinkTokens: [`tok-${id}`],
+  })
+  return id
+}
+
+async function inviteStatus(id: string) {
+  const [row] = await testDb
+    .select()
+    .from(invitation)
+    .where(eq(invitation.id, id as never))
+  return row.status
 }
 
 /** Set the workspace seat cap to `used + free` so exactly `free` seats remain. */
@@ -312,7 +349,9 @@ describe.skipIf(!fixture.available)('undo: removing someone just promoted', () =
       granterPermissions: ALL_PERMISSIONS,
       granterRole: 'admin',
     })
-    await removeTeamMember(target.principalId, admin.principalId, actor)
+    await removeTeamMember(target.principalId, admin.principalId, actor, undefined, {
+      granterRole: 'admin',
+    })
 
     expect(await roleOf(target.principalId)).toBe('user')
     const assigned = await testDb
@@ -322,5 +361,106 @@ describe.skipIf(!fixture.available)('undo: removing someone just promoted', () =
     expect(assigned).toEqual([])
     const rows = await auditRows(target.principalId)
     expect(rows.map((r) => r.eventType).sort()).toEqual(['user.removed', 'user.role.changed'])
+  })
+})
+
+describe.skipIf(!fixture.available)('signed in by email, with no live session', () => {
+  it('counts a recorded email sign-in as signed in', async () => {
+    const admin = await seedPerson({ role: 'admin' })
+    const target = await seedPerson({ role: 'user', signIn: 'email-signin-audit' })
+
+    await updateMemberRole(target.principalId, 'member', admin.principalId, actor, undefined, {
+      granterPermissions: ALL_PERMISSIONS,
+      granterRole: 'admin',
+    })
+    expect(await roleOf(target.principalId)).toBe('member')
+  })
+
+  it('does not count an anonymous widget sign-in', async () => {
+    const admin = await seedPerson({ role: 'admin' })
+    const target = await seedPerson({ role: 'user', signIn: 'anonymous-signin-audit' })
+
+    await expect(
+      updateMemberRole(target.principalId, 'member', admin.principalId, actor, undefined, {
+        granterPermissions: ALL_PERMISSIONS,
+        granterRole: 'admin',
+      })
+    ).rejects.toMatchObject({ code: 'NOT_ELIGIBLE' })
+  })
+})
+
+describe.skipIf(!fixture.available)('a pending team invite for the person', () => {
+  it('reuses the invite seat and retires the invite in the same write', async () => {
+    const admin = await seedPerson({ role: 'admin' })
+    const target = await seedPerson({ role: 'user' })
+    const inviteId = await seedPendingInvite(target.email, admin.userId)
+    await setFreeSeats(0) // the pending invite already holds their seat
+
+    await updateMemberRole(target.principalId, 'admin', admin.principalId, actor, undefined, {
+      granterPermissions: ALL_PERMISSIONS,
+      granterRole: 'admin',
+    })
+
+    expect(await roleOf(target.principalId)).toBe('admin')
+    expect(await inviteStatus(inviteId)).toBe('canceled')
+    expect((await countSeatUsage(testDb)).pendingInvites).toBe(0)
+  })
+})
+
+describe.skipIf(!fixture.available)('only an admin changes or removes an admin', () => {
+  it('refuses a non-admin demoting an admin', async () => {
+    const manager = await seedPerson({ role: 'member' })
+    await seedPerson({ role: 'admin' })
+    const target = await seedPerson({ role: 'admin' })
+
+    await expect(
+      updateMemberRole(target.principalId, 'member', manager.principalId, actor, undefined, {
+        granterPermissions: ALL_PERMISSIONS,
+        granterRole: 'member',
+      })
+    ).rejects.toMatchObject({ code: 'GRANT_CEILING' })
+    expect(await roleOf(target.principalId)).toBe('admin')
+  })
+
+  it('refuses a non-admin removing an admin, and fails closed without a granter role', async () => {
+    const manager = await seedPerson({ role: 'member' })
+    await seedPerson({ role: 'admin' })
+    const target = await seedPerson({ role: 'admin' })
+
+    await expect(
+      removeTeamMember(target.principalId, manager.principalId, actor, undefined, {
+        granterRole: 'member',
+      })
+    ).rejects.toMatchObject({ code: 'GRANT_CEILING' })
+    await expect(
+      removeTeamMember(target.principalId, manager.principalId, actor)
+    ).rejects.toMatchObject({ code: 'GRANT_CEILING' })
+    expect(await roleOf(target.principalId)).toBe('admin')
+  })
+
+  it('lets an admin demote and remove an admin, keeping the last-admin guard', async () => {
+    const admin = await seedPerson({ role: 'admin' })
+    const other = await seedPerson({ role: 'admin' })
+
+    await updateMemberRole(other.principalId, 'member', admin.principalId, actor, undefined, {
+      granterPermissions: ALL_PERMISSIONS,
+      granterRole: 'admin',
+    })
+    expect(await roleOf(other.principalId)).toBe('member')
+    await expect(
+      removeTeamMember(admin.principalId, other.principalId, actor, undefined, {
+        granterRole: 'admin',
+      })
+    ).rejects.toMatchObject({ code: 'LAST_ADMIN' })
+  })
+
+  it('lets a non-admin remove a member', async () => {
+    const manager = await seedPerson({ role: 'member' })
+    const target = await seedPerson({ role: 'member' })
+
+    await removeTeamMember(target.principalId, manager.principalId, actor, undefined, {
+      granterRole: 'member',
+    })
+    expect(await roleOf(target.principalId)).toBe('user')
   })
 })
