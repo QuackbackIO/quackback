@@ -742,36 +742,42 @@ describe('changelog.ts getPublicChangelogFn — portal-visibility gate', () => {
     mockResolvePortalAccess.mockResolvedValue({ granted: false, reason: 'unauthorized' })
     const h = await loadModule(CHANGELOG)
 
-    await expect(h[GET_PUBLIC_CHANGELOG]({ data: { id: 'cl_secret' } })).rejects.toThrow()
+    await expect(
+      h[GET_PUBLIC_CHANGELOG]({ data: { id: 'changelog_01h455vb4pex5vsknk084sn02q' } })
+    ).rejects.toThrow()
     expect(mockGetPublicChangelogById).not.toHaveBeenCalled()
   })
 
   it('returns the changelog entry when access is granted (public portal)', async () => {
     mockResolvePortalAccess.mockResolvedValue({ granted: true, reason: 'public' })
     mockGetPublicChangelogById.mockResolvedValue({
-      id: 'cl_1',
+      id: 'changelog_01h455vb4pex5vsknk084sn02q',
       title: 'Release v1',
       content: 'body',
       publishedAt: new Date('2026-01-01'),
     })
     const h = await loadModule(CHANGELOG)
-    const result = (await h[GET_PUBLIC_CHANGELOG]({ data: { id: 'cl_1' } })) as {
+    const result = (await h[GET_PUBLIC_CHANGELOG]({
+      data: { id: 'changelog_01h455vb4pex5vsknk084sn02q' },
+    })) as {
       id: string
     }
-    expect(result.id).toBe('cl_1')
+    expect(result.id).toBe('changelog_01h455vb4pex5vsknk084sn02q')
   })
 
   it('returns the changelog entry when a team member accesses a private portal', async () => {
     mockResolvePortalAccess.mockResolvedValue({ granted: true, reason: 'team' })
     mockGetPublicChangelogById.mockResolvedValue({
-      id: 'cl_2',
+      id: 'changelog_01h455vb4pex5vsknk084sn02r',
       title: 'Release v2',
       content: 'body',
       publishedAt: new Date('2026-02-01'),
     })
     const h = await loadModule(CHANGELOG)
-    const result = (await h[GET_PUBLIC_CHANGELOG]({ data: { id: 'cl_2' } })) as { id: string }
-    expect(result.id).toBe('cl_2')
+    const result = (await h[GET_PUBLIC_CHANGELOG]({
+      data: { id: 'changelog_01h455vb4pex5vsknk084sn02r' },
+    })) as { id: string }
+    expect(result.id).toBe('changelog_01h455vb4pex5vsknk084sn02r')
   })
 })
 
