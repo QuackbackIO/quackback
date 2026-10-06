@@ -1,10 +1,10 @@
 /**
- * Identity provider detail — one page per provider, three sections.
+ * Identity provider detail — one page per provider, four sections.
  *
- * Connection: is it working. Sign-in & access: who is sent here and what they
- * get. Profile: what is read about them. Each section saves only its own
- * fields; a domain change and a claim-mapping change carry very different risk
- * and are never the same commit.
+ * Connection: is it working. Sign-in & access: who is sent here. Profile:
+ * what is read about them. Roles: which role they get. Each section saves only
+ * its own fields; a domain change and a claim-mapping change carry very
+ * different risk and are never the same commit.
  *
  * The header carries Enabled as a real control. Configuring, testing and
  * saving a provider nobody can actually use was the most reachable dead end
@@ -27,6 +27,7 @@ import { countEnabledAuthMethods } from '../auth-method-count'
 import { SsoTestSignInProvider } from '../sso/use-sso-test-sign-in'
 import { ConnectionCard } from './connection-card'
 import { ProviderMenu } from './provider-menu'
+import { RolesCard } from './roles-card'
 import { SignInCard } from './sign-in-card'
 import { UserDetailsCard } from './user-details-card'
 import { isOnlyWorkingMethod } from './only-working-method'
@@ -87,6 +88,7 @@ function ProviderDetailBody({
       <ConnectionCard provider={provider} />
       <SignInCard provider={provider} />
       <UserDetailsCard provider={provider} />
+      <RolesCard provider={provider} />
     </ProviderPageShell>
   )
 }

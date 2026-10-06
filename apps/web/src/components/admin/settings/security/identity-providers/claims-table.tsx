@@ -4,8 +4,8 @@
  * operations API.
  *
  * One table, not two. Account ID, email, name, username and avatar are the
- * profile; role rules and People attributes are extra mappings the admin
- * added. Standard rows carry no badge; only an exception is marked, as
+ * profile; People attributes are extra mappings the admin added. Role rules
+ * live on the Roles card. Standard rows carry no badge; only an exception is marked, as
  * "Custom". Each profile row says in one muted line what it expects, and once the provider has a test sign-in a third column shows what
  * each field takes from it under the current draft, so a claim is chosen by
  * what the provider actually sent.
@@ -16,7 +16,6 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { DEFAULT_IDENTITY_SOURCES, type IdentitySource } from '@/lib/shared/oidc-claim-mapping'
-import type { Role } from '@/lib/shared/roles'
 import type { ProfileFieldValues } from '@/lib/shared/sso-mapping-preview'
 import { PictureWithUrl } from './claim-picture'
 import {
@@ -24,16 +23,9 @@ import {
   SOURCE_LABELS,
   type ClaimsPeopleRow,
   type ClaimsProfileRow,
-  type ClaimsRoleRow,
   type ClaimsTableRow,
   type ClaimsUnsupportedRow,
 } from './provider-shared'
-
-const ROLE_LABEL: Record<Role, string> = {
-  admin: 'Admin',
-  member: 'Member',
-  user: 'User',
-}
 
 export function ClaimsTable({
   profileRows,
@@ -94,18 +86,6 @@ export function ClaimsTable({
             />
           ))}
           {additionalRows.map((row) => {
-            if (row.kind === 'role') {
-              return (
-                <RoleRowView
-                  key="role"
-                  row={row}
-                  showTest={showTest}
-                  disabled={disabled}
-                  onEdit={() => onEdit(row)}
-                  onRemove={() => onRemove(row)}
-                />
-              )
-            }
             if (row.kind === 'people') {
               return (
                 <PeopleRowView
@@ -266,54 +246,6 @@ function ProfileRow({
         <IconButton label={`Edit ${row.label} mapping`} onClick={onEdit} disabled={disabled}>
           <PencilIcon className="h-3.5 w-3.5" />
         </IconButton>
-      </td>
-    </tr>
-  )
-}
-
-function RoleRowView({
-  row,
-  showTest,
-  disabled,
-  onEdit,
-  onRemove,
-}: {
-  row: ClaimsRoleRow
-  showTest: boolean
-  disabled?: boolean
-  onEdit: () => void
-  onRemove: () => void
-}) {
-  return (
-    <tr className="border-b border-border/50 last:border-0 align-top">
-      <td className="py-2.5 pr-3">
-        <div className="font-medium">Role</div>
-        <ul className="mt-1 space-y-0.5 text-muted-foreground">
-          {row.rules.map((rule, index) => (
-            <li key={index}>
-              <span className="font-mono text-xs">{rule.whenContains}</span> {'->'}{' '}
-              {ROLE_LABEL[rule.role]}
-            </li>
-          ))}
-          {row.rules.length === 0 && <li>No rules yet.</li>}
-        </ul>
-        {row.syncOnEverySignIn && (
-          <p className="mt-1 text-muted-foreground">Reapplied on every sign-in.</p>
-        )}
-      </td>
-      <td className="py-2.5 pr-3">
-        <ClaimPath>{row.claimPath}</ClaimPath>
-      </td>
-      <NoTestValue show={showTest} />
-      <td className="py-2.5">
-        <div className="flex items-center justify-end gap-1">
-          <IconButton label="Edit role rules" onClick={onEdit} disabled={disabled}>
-            <PencilIcon className="h-3.5 w-3.5" />
-          </IconButton>
-          <IconButton label="Remove role rules" onClick={onRemove} disabled={disabled} destructive>
-            <TrashIcon className="h-3.5 w-3.5" />
-          </IconButton>
-        </div>
       </td>
     </tr>
   )

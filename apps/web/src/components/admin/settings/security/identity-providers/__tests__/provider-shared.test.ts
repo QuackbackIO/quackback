@@ -291,13 +291,12 @@ describe('buildClaimsTableModel', () => {
 })
 
 describe('availableAddTargets', () => {
-  it('offers Role when absent and unused People keys only', () => {
+  it('offers unused People keys only, never role rules', () => {
     const defs = [
       { key: 'department', label: 'Department', type: 'string' },
       { key: 'plan', label: 'Plan', type: 'string' },
     ]
     expect(availableAddTargets({ mapping: null, definitions: defs })).toEqual([
-      { kind: 'role' },
       { kind: 'people', key: 'department', label: 'Department', attrType: 'string' },
       { kind: 'people', key: 'plan', label: 'Plan', attrType: 'string' },
     ])

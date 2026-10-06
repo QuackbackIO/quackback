@@ -95,6 +95,16 @@ vi.mock('@/lib/client/queries/admin', () => ({
   },
 }))
 
+vi.mock('@/lib/client/queries/settings', () => ({
+  settingsQueries: {
+    roles: () => ({
+      queryKey: ['settings', 'roles'],
+      queryFn: async () => ({ roles: [], maxCustomRoles: null }),
+      staleTime: Infinity,
+    }),
+  },
+}))
+
 vi.mock('../../sso/test-sign-in-button', () => ({
   TestSignInButton: ({ children }: { children?: React.ReactNode }) => (
     <button type="button">{children ?? 'Test sign-in'}</button>
@@ -283,27 +293,23 @@ describe('UserDetailsCard save coordination', () => {
     expect(lastMapping().acknowledgeIdentifierChange).toBe(true)
   })
 
-  it('a new admin rule confirms before saving', async () => {
-    renderCard(makeProvider({ claimMapping: null }))
+  it('has no role rules: no Role rules target and no role row', async () => {
+    renderCard(
+      makeProvider({
+        claimMapping: {
+          role: {
+            claimPath: 'groups',
+            rules: [{ whenContains: 'platform-admins', role: 'admin' }],
+          },
+        },
+      })
+    )
+    expect(screen.queryByText('platform-admins')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /role rules/i })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Add mapping' }))
-    // Role rules is the first available target, so the rules body is showing.
-    fireEvent.click(screen.getByRole('button', { name: 'Add rule' }))
-    fireEvent.click(screen.getByRole('combobox', { name: 'Claim value to match (rule 1)' }))
-    fireEvent.change(screen.getByPlaceholderText('Search or type…'), {
-      target: { value: 'platform-admins' },
-    })
-    fireEvent.click(screen.getByText(/Use ["“]platform-admins["”]/))
-    await userEvent.click(screen.getByRole('combobox', { name: 'Quackback role (rule 1)' }))
-    await userEvent.click(screen.getByRole('option', { name: 'Admin' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
-    save()
-    expect(screen.getByText(/A rule grants admin access/)).toBeInTheDocument()
-    expect(mappingSpy).not.toHaveBeenCalled()
-    confirmSave()
-    await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
-    expect(lastMapping().acknowledgeAdminRules).toBe(true)
-    const saved = lastSaved() as { role?: { rules?: unknown[] } }
-    expect(saved.role?.rules).toEqual([{ whenContains: 'platform-admins', role: 'admin' }])
+    await userEvent.click(screen.getByRole('combobox', { name: 'Set from this provider' }))
+    expect(screen.queryByRole('option', { name: /Role rules/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /Department/ })).toBeInTheDocument()
   })
 
   it('an unrelated edit beside an existing admin rule is acknowledged, not re-confirmed', async () => {
@@ -699,9 +705,8 @@ describe('UserDetailsCard always open', () => {
       })
     )
     expect(screen.getByText('Email mapping has no claim path')).toBeInTheDocument()
-    expect(
-      screen.getByText('Role rules are not applied while account creation is off.')
-    ).toBeInTheDocument()
+    // The account-creation note moved to the Roles card with the rules.
+    expect(screen.queryByText(/Role rules are not applied/)).not.toBeInTheDocument()
     expect(screen.getByTestId('compatibility-sources')).toHaveTextContent(
       'Compatibility: identity is read from ID token, then Userinfo, then Access-token JWT.'
     )

@@ -167,64 +167,7 @@ describe('ClaimRowDialog', () => {
     expect(screen.queryByPlaceholderText(/metadata/i)).not.toBeInTheDocument()
   })
 
-  it('disables Apply when a new role rule has no value', async () => {
-    const onCommit = vi.fn()
-    render(
-      <ClaimRowDialog
-        open
-        mode="edit"
-        lockedTarget={{ type: 'role' }}
-        availableTargets={[]}
-        definitions={DEFS}
-        initialRole={{
-          claimPath: 'groups',
-          rules: [{ whenContains: 'engineering', role: 'member' }],
-        }}
-        registrationId="oidc_x"
-        canTest
-        onOpenChange={vi.fn()}
-        onCommit={onCommit}
-      />
-    )
-    expect(screen.getByRole('button', { name: 'Apply' })).not.toBeDisabled()
-    await userEvent.click(screen.getByRole('button', { name: 'Add rule' }))
-    expect(screen.getByRole('button', { name: 'Apply' })).toBeDisabled()
-    expect(onCommit).not.toHaveBeenCalled()
-  })
-
-  it('prefers the capture prop over lastSuccess for role value suggestions', async () => {
-    ssoTestRef.lastSuccess = {
-      ...defaultCapture,
-      claims: { sub: 'person-123', groups: ['from-success'] },
-    }
-    ssoTestRef.lastCapture = ssoTestRef.lastSuccess
-    render(
-      <ClaimRowDialog
-        open
-        mode="edit"
-        lockedTarget={{ type: 'role' }}
-        availableTargets={[]}
-        definitions={DEFS}
-        initialRole={{
-          claimPath: 'groups',
-          rules: [{ whenContains: 'engineering', role: 'member' }],
-        }}
-        registrationId="oidc_x"
-        canTest
-        capture={{
-          ...defaultCapture,
-          claims: { sub: 'person-123', groups: ['from-capture'] },
-        }}
-        onOpenChange={vi.fn()}
-        onCommit={vi.fn()}
-      />
-    )
-    await userEvent.click(screen.getByRole('combobox', { name: 'Claim value to match (rule 1)' }))
-    expect(screen.getByText('from-capture')).toBeInTheDocument()
-    expect(screen.queryByText('from-success')).not.toBeInTheDocument()
-  })
-
-  it('offers Role and unused People targets only', async () => {
+  it('offers unused People targets only, never role rules', async () => {
     const targets = availableAddTargets({
       mapping: { attributes: { map: [{ claimPath: 'dept', attributeKey: 'department' }] } },
       definitions: DEFS,
@@ -242,7 +185,8 @@ describe('ClaimRowDialog', () => {
       />
     )
     await userEvent.click(screen.getByRole('combobox', { name: 'Set from this provider' }))
-    expect(screen.getByRole('option', { name: /Role rules/ })).toBeInTheDocument()
+    // Role rules live on the Roles card.
+    expect(screen.queryByRole('option', { name: /Role rules/ })).not.toBeInTheDocument()
     expect(screen.getByRole('option', { name: /Plan/ })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: /Department/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('option', { name: /Account ID/ })).not.toBeInTheDocument()

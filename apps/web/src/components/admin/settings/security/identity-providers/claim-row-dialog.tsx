@@ -34,25 +34,21 @@ import {
 import type { SsoTestCapture } from '@/lib/shared/sso-test-capture'
 import { AvatarClaimPicker, checkAvatarClaim, testSignInClaims } from './avatar-claim-picker'
 import { ClaimPathInput } from './claim-path-input'
-import { RoleMappingRulesBody } from './claim-mapping-editor'
 import {
   PEOPLE_TYPE_LABEL,
   PROFILE_FIELD_SPECS,
   isCustomProfilePath,
   type AddClaimTarget,
   type PeopleDefinition,
-  type RoleMapping,
 } from './provider-shared'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
 
 export type ClaimRowDialogTarget =
   | { type: 'profile'; field: ProfileField }
-  | { type: 'role' }
   | { type: 'people'; attributeKey: string; baselineIndex?: number }
 
 export type ClaimRowDialogCommit =
   | { type: 'profile'; field: ProfileField; path: string | null }
-  | { type: 'role'; mapping: RoleMapping }
   | { type: 'people'; attributeKey: string; claimPath: string; baselineIndex?: number }
 
 export function ClaimRowDialog({
@@ -62,13 +58,11 @@ export function ClaimRowDialog({
   availableTargets,
   definitions,
   initialPath,
-  initialRole,
   registrationId,
   canTest,
   capture,
   draft,
   providerKind,
-  autoCreateUsers,
   onOpenChange,
   onCommit,
 }: {
@@ -78,7 +72,6 @@ export function ClaimRowDialog({
   availableTargets: AddClaimTarget[]
   definitions: PeopleDefinition[]
   initialPath?: string
-  initialRole?: RoleMapping | null
   registrationId: string
   canTest: boolean
   capture?: SsoTestCapture | null
@@ -86,18 +79,15 @@ export function ClaimRowDialog({
    *  it, so it reads the same sources sign-in will. */
   draft?: IdentityProviderClaimMapping | null
   providerKind?: string | null
-  autoCreateUsers?: boolean
   onOpenChange: (open: boolean) => void
   onCommit: (commit: ClaimRowDialogCommit) => void
 }) {
   const [target, setTarget] = useState<ClaimRowDialogTarget | null>(lockedTarget ?? null)
   const [path, setPath] = useState(initialPath ?? '')
-  const [role, setRole] = useState<RoleMapping>(initialRole ?? { claimPath: 'groups', rules: [] })
   const descriptionId = useId()
 
   const firstAvailable = (item: AddClaimTarget | undefined): ClaimRowDialogTarget | null => {
     if (!item) return null
-    if (item.kind === 'role') return { type: 'role' }
     return { type: 'people', attributeKey: item.key }
   }
 
@@ -105,19 +95,14 @@ export function ClaimRowDialog({
     if (!open) return
     setTarget(lockedTarget ?? firstAvailable(availableTargets[0]))
     setPath(initialPath ?? '')
-    setRole(initialRole ?? { claimPath: 'groups', rules: [] })
     // Reset only when the dialog opens. Parent re-renders rebuild availableTargets.
   }, [open])
 
   const resolvedTarget: ClaimRowDialogTarget | null =
     lockedTarget ??
-    (target?.type === 'people'
+    (target?.type === 'people' || target?.type === 'profile'
       ? target
-      : target?.type === 'role'
-        ? target
-        : target?.type === 'profile'
-          ? target
-          : firstAvailable(availableTargets[0]))
+      : firstAvailable(availableTargets[0]))
 
   const peopleDef =
     resolvedTarget?.type === 'people'
@@ -145,9 +130,7 @@ export function ClaimRowDialog({
       ? 'Add mapping'
       : profileField
         ? `Edit ${PROFILE_FIELD_SPECS[profileField].label} mapping`
-        : resolvedTarget?.type === 'role'
-          ? 'Edit role rules'
-          : `Edit ${peopleDef?.label ?? 'attribute'} mapping`
+        : `Edit ${peopleDef?.label ?? 'attribute'} mapping`
 
   const canSubmit = (() => {
     if (!resolvedTarget) return false
@@ -156,13 +139,7 @@ export function ClaimRowDialog({
       if (avatarCheck?.kind === 'not_url') return false
       return mode === 'edit' || path.trim().length > 0
     }
-    if (resolvedTarget.type === 'people') {
-      return path.trim().length > 0 && resolvedTarget.attributeKey.trim().length > 0
-    }
-    return (
-      role.claimPath.trim().length > 0 &&
-      role.rules.every((rule) => rule.whenContains.trim().length > 0)
-    )
+    return path.trim().length > 0 && resolvedTarget.attributeKey.trim().length > 0
   })()
 
   const apply = () => {
@@ -176,8 +153,6 @@ export function ClaimRowDialog({
         field: resolvedTarget.field,
         path: isCustomProfilePath(resolvedTarget.field, trimmed) ? trimmed : null,
       })
-    } else if (resolvedTarget.type === 'role') {
-      onCommit({ type: 'role', mapping: role })
     } else {
       onCommit({
         type: 'people',
@@ -213,8 +188,7 @@ export function ClaimRowDialog({
               {availableTargets.length === 0 ? (
                 <div className="space-y-2 text-sm">
                   <p className="text-muted-foreground">
-                    Role rules are already mapped. Define an attribute under Users to map another
-                    claim.
+                    Define an attribute under Users to map another claim.
                   </p>
                   <Link to="/admin/settings/people" className={INLINE_LINK}>
                     Open Users settings
@@ -223,17 +197,9 @@ export function ClaimRowDialog({
               ) : (
                 <Select
                   value={
-                    resolvedTarget?.type === 'role'
-                      ? 'role'
-                      : resolvedTarget?.type === 'people'
-                        ? `people:${resolvedTarget.attributeKey}`
-                        : ''
+                    resolvedTarget?.type === 'people' ? `people:${resolvedTarget.attributeKey}` : ''
                   }
                   onValueChange={(value) => {
-                    if (value === 'role') {
-                      setTarget({ type: 'role' })
-                      return
-                    }
                     const key = value.replace(/^people:/, '')
                     setTarget({ type: 'people', attributeKey: key })
                   }}
@@ -242,39 +208,23 @@ export function ClaimRowDialog({
                     <SelectValue placeholder="Choose what to set" />
                   </SelectTrigger>
                   <SelectContent>
-                    {availableTargets.map((item) =>
-                      item.kind === 'role' ? (
-                        <SelectItem key="role" value="role">
-                          Role rules
-                        </SelectItem>
-                      ) : (
-                        <SelectItem key={item.key} value={`people:${item.key}`}>
-                          <span className="flex flex-col text-left">
-                            <span>{item.label}</span>
-                            <span className="text-xs font-normal text-muted-foreground">
-                              {item.key}, {PEOPLE_TYPE_LABEL[item.attrType] ?? item.attrType}
-                            </span>
+                    {availableTargets.map((item) => (
+                      <SelectItem key={item.key} value={`people:${item.key}`}>
+                        <span className="flex flex-col text-left">
+                          <span>{item.label}</span>
+                          <span className="text-xs font-normal text-muted-foreground">
+                            {item.key}, {PEOPLE_TYPE_LABEL[item.attrType] ?? item.attrType}
                           </span>
-                        </SelectItem>
-                      )
-                    )}
+                        </span>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               )}
             </div>
           )}
 
-          {resolvedTarget?.type === 'role' ? (
-            <RoleMappingRulesBody
-              mapping={role}
-              disabled={false}
-              registrationId={registrationId}
-              canTest={canTest}
-              capture={capture}
-              autoCreateUsers={autoCreateUsers}
-              onChange={setRole}
-            />
-          ) : avatarCheck ? (
+          {avatarCheck ? (
             <AvatarClaimPicker
               value={path}
               onChange={setPath}

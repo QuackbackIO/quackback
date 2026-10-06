@@ -33,8 +33,12 @@ export function useProviderSave(provider: IdentityProvider) {
   const saveMappingFn = useServerFn(saveIdentityProviderClaimMappingFn)
   const [saving, setSaving] = useState(false)
 
-  /** Returns true when the write landed, so a card can clear its drafts. */
-  const save = async (patch: ProviderPatch, successMessage = 'Saved.'): Promise<boolean> => {
+  /** Returns true when the write landed, so a card can clear its drafts.
+   *  A null message saves quietly, for the first of two writes behind one Save. */
+  const save = async (
+    patch: ProviderPatch,
+    successMessage: string | null = 'Saved.'
+  ): Promise<boolean> => {
     setSaving(true)
     try {
       await upsert({
@@ -47,7 +51,7 @@ export function useProviderSave(provider: IdentityProvider) {
         },
       })
       await queryClient.invalidateQueries({ queryKey: IDENTITY_PROVIDERS_KEY })
-      toast.success(successMessage)
+      if (successMessage) toast.success(successMessage)
       return true
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not save the identity provider.')
@@ -63,7 +67,9 @@ export function useProviderSave(provider: IdentityProvider) {
       acknowledgeIdentifierChange?: boolean
       acknowledgeAdminRules?: boolean
     },
-    successMessage = 'Claim mapping saved.'
+    successMessage: string | null = 'Claim mapping saved.',
+    /** Shows a refusal where it belongs. Returns true when it did, so no toast follows. */
+    onError?: (err: unknown) => boolean
   ): Promise<IdentityProvider | false> => {
     setSaving(true)
     try {
@@ -77,9 +83,10 @@ export function useProviderSave(provider: IdentityProvider) {
         },
       })) as IdentityProvider | undefined
       await queryClient.invalidateQueries({ queryKey: IDENTITY_PROVIDERS_KEY })
-      toast.success(successMessage)
+      if (successMessage) toast.success(successMessage)
       return saved ?? (provider as IdentityProvider)
     } catch (err) {
+      if (onError?.(err)) return false
       toast.error(err instanceof Error ? err.message : 'Could not save the identity provider.')
       return false
     } finally {

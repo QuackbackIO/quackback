@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { generateId } from '@quackback/ids'
 import { OutcomePreviewRail } from '../outcome-preview-rail'
 import type { SsoTestCapture } from '@/lib/shared/sso-test-capture'
 import type { IdentityProviderClaimMapping } from '@/lib/shared/oidc-claim-mapping'
@@ -79,7 +80,10 @@ function renderRail(over: {
   draft?: IdentityProviderClaimMapping | null
   dirty?: boolean
   autoCreateUsers?: boolean
+  autoProvisionRole?: 'user' | 'member' | 'admin' | null
   detailsChangedAt?: string | null
+  verifiedDomains?: string[]
+  roles?: Array<{ id: string; name: string }>
 }) {
   return render(
     <OutcomePreviewRail
@@ -89,8 +93,11 @@ function renderRail(over: {
       providerPolicy={{
         ...policy,
         autoCreateUsers: over.autoCreateUsers ?? true,
+        autoProvisionRole: over.autoProvisionRole ?? null,
         detailsChangedAt: over.detailsChangedAt,
       }}
+      verifiedDomains={over.verifiedDomains}
+      roles={over.roles}
       dirty={over.dirty ?? false}
       registrationId={REG}
       canTest
@@ -163,9 +170,8 @@ describe('OutcomePreviewRail', () => {
         },
       },
     })
-    // Only the matched rule is shown; the editor holds the full list.
-    expect(screen.getByText(/rule 2 matched/)).toBeInTheDocument()
-    expect(screen.getByText('engineering')).toBeInTheDocument()
+    // Only the outcome is shown; the Roles card holds the full list.
+    expect(screen.getByText('Member (rule 2)')).toBeInTheDocument()
     expect(screen.queryByText('platform-admins')).not.toBeInTheDocument()
     expect(screen.getByText(/even outside this provider's verified domains/)).toBeInTheDocument()
     expect(screen.getByText(/does not limit this admin rule/)).toBeInTheDocument()
@@ -243,8 +249,47 @@ describe('OutcomePreviewRail', () => {
     expect(screen.getByText('photo_url')).toBeInTheDocument()
   })
 
-  it('shows Member (runtime default) when Accounts role is null', () => {
-    renderRail({ draft: { role: { claimPath: 'groups', rules: [] } } })
-    expect(screen.getByText(/Member \(runtime default\)/)).toBeInTheDocument()
+  it('names a matched custom role, or says a missing one changes nothing', () => {
+    const roleId = generateId('role')
+    const draft = {
+      role: {
+        claimPath: 'groups',
+        rules: [{ whenContains: 'engineering', role: 'member' as const, roleId }],
+      },
+    }
+    const { unmount } = renderRail({ draft, roles: [{ id: roleId, name: 'Support' }] })
+    expect(screen.getByText('Support (rule 1)')).toBeInTheDocument()
+    unmount()
+    renderRail({ draft, roles: [] })
+    const line = screen.getByText('No change (rule 1 names a role that no longer exists)')
+    expect(line.className).toMatch(/text-warning/)
+  })
+
+  it('names the matching rule as "Admin (rule 1)"', () => {
+    renderRail({
+      draft: {
+        role: { claimPath: 'groups', rules: [{ whenContains: 'Engineering', role: 'admin' }] },
+      },
+    })
+    expect(screen.getByText('Admin (rule 1)')).toBeInTheDocument()
+  })
+
+  it('gives an unmatched person at a verified domain the default, Member when never saved', () => {
+    renderRail({
+      draft: { role: { claimPath: 'groups', rules: [{ whenContains: 'sales', role: 'admin' }] } },
+      verifiedDomains: ['example.test'],
+    })
+    expect(screen.getByText('Member (verified domain)')).toBeInTheDocument()
+  })
+
+  it('uses the saved default role at a verified domain', () => {
+    renderRail({ autoProvisionRole: 'user', verifiedDomains: ['example.test'] })
+    expect(screen.getByText('Portal user (verified domain)')).toBeInTheDocument()
+  })
+
+  it('leaves an unmatched person outside the verified domains a portal user', () => {
+    renderRail({ verifiedDomains: ['acme.com'] })
+    expect(screen.getByText('Portal user')).toBeInTheDocument()
+    expect(screen.queryByText(/Member/)).not.toBeInTheDocument()
   })
 })

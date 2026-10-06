@@ -3,7 +3,7 @@
  * the captured sources through the same binder production uses.
  *
  * The visible result is the short version: the person, their avatar when
- * one resolves, their email, and the role rule that applied. Provenance, raw claims and per-source snapshots are
+ * one resolves, their email, and the role sign-in would give them. Provenance, raw claims and per-source snapshots are
  * for troubleshooting and live under "View test details". Diagnostic data is
  * admin-only and never logged.
  */
@@ -23,7 +23,6 @@ import {
   effectiveEmailPath,
   effectiveIdPath,
   previewClaimMapping,
-  runtimeFallbackRole,
   type MappingPreviewPolicy,
 } from '@/lib/shared/sso-mapping-preview'
 import type { IdentityProviderClaimMapping } from '@/lib/shared/oidc-claim-mapping'
@@ -33,6 +32,7 @@ import { TestSignInButton } from '../sso/test-sign-in-button'
 import { AttributeWritesPreview } from './attribute-writes-preview'
 import { PictureWithUrl } from './claim-picture'
 import { PROFILE_FIELD_SPECS } from './provider-shared'
+import { describeSignInRole, effectiveDefaultRole, signInRoleOutcome } from './role-outcome'
 
 const PROTOCOL_KEYS = new Set([
   'iss',
@@ -59,6 +59,8 @@ export function OutcomePreviewRail({
   draft,
   definitions,
   providerPolicy,
+  verifiedDomains = [],
+  roles,
   dirty,
   onSaveAndTest,
   registrationId,
@@ -68,6 +70,10 @@ export function OutcomePreviewRail({
   draft: IdentityProviderClaimMapping | null
   definitions: AttributeDefinition[]
   providerPolicy: MappingPreviewPolicy
+  /** The provider's verified domains: the default role applies only there. */
+  verifiedDomains?: string[]
+  /** Roles a rule may name, so a matched custom role is named or shown missing. */
+  roles?: Array<{ id: string; name: string }>
   dirty: boolean
   onSaveAndTest?: () => void
   registrationId: string
@@ -78,6 +84,7 @@ export function OutcomePreviewRail({
     capture,
     definitions,
     providerPolicy,
+    roles,
   })
   const cta = dirty ? 'Save and test' : capture ? 'Test again' : 'Test sign-in'
 
@@ -99,7 +106,6 @@ export function OutcomePreviewRail({
     )
   }
 
-  const fallback = runtimeFallbackRole(providerPolicy.autoProvisionRole)
   const roleRules = draft?.role?.rules ?? []
   const hasAdminRule = roleRules.some((r) => r.role === 'admin')
   const identity = preview.identity
@@ -172,19 +178,21 @@ export function OutcomePreviewRail({
           <h3 className={cn(MENU_LABEL, 'mb-1.5 font-mono')}>Role</h3>
           {providerPolicy.autoCreateUsers === false ? (
             <p>Roles are not applied because account creation is off.</p>
-          ) : preview.roleMatch && draft?.role ? (
-            <p>
-              <span className="font-medium">{preview.roleMatch.role}</span>, rule{' '}
-              {preview.roleMatch.ruleIndex + 1} matched{' '}
-              <span className="font-mono text-xs">
-                {draft.role.rules[preview.roleMatch.ruleIndex]?.whenContains}
-              </span>{' '}
-              in <span className="font-mono text-xs">{draft.role.claimPath}</span>.
-            </p>
           ) : (
-            <p>
-              {roleRules.length > 0 ? 'No rule matched. ' : ''}
-              {fallback.label} at verified domains.
+            <p
+              className={cn(
+                'font-medium',
+                preview.roleMatch?.roleMissing === true && 'text-warning'
+              )}
+            >
+              {describeSignInRole(
+                signInRoleOutcome({
+                  ruleMatch: preview.roleMatch,
+                  email: identity?.email,
+                  verifiedDomains,
+                  defaultRole: effectiveDefaultRole(providerPolicy.autoProvisionRole),
+                })
+              )}
             </p>
           )}
           {hasAdminRule && providerPolicy.autoCreateUsers !== false && (

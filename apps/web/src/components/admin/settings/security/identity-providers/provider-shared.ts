@@ -11,7 +11,6 @@
  */
 import { toast } from 'sonner'
 import { oidcRedirectUri, type OidcRedirectStyle } from '@/lib/shared/oidc-redirect'
-import type { Role } from '@/lib/shared/roles'
 import {
   DEFAULT_IDENTITY_SOURCES,
   IDENTITY_SOURCES,
@@ -97,8 +96,6 @@ export const SIGN_IN_TAB = {
 export const SSO_CRUMBS = [{ label: 'Access & Security', ...SIGN_IN_TAB }]
 
 export const IDP_KIND_OPTIONS: IdpKind[] = ['okta', 'auth0', 'entra', 'keycloak', 'google', 'other']
-
-export const ROLES: Role[] = ['admin', 'member', 'user']
 
 /** The role section of `claim_mapping` — the claim→role rules. */
 export type RoleMapping = NonNullable<IdentityProviderClaimMapping['role']>
@@ -331,13 +328,6 @@ export type ClaimsProfileRow = {
   isDefault: boolean
 }
 
-export type ClaimsRoleRow = {
-  kind: 'role'
-  claimPath: string
-  rules: Array<{ whenContains: string; role: Role }>
-  syncOnEverySignIn: boolean
-}
-
 export type ClaimsPeopleRow = {
   kind: 'people'
   baselineIndex: number
@@ -356,11 +346,9 @@ export type ClaimsUnsupportedRow = {
   detail: string
 }
 
-export type ClaimsTableRow =
-  ClaimsProfileRow | ClaimsRoleRow | ClaimsPeopleRow | ClaimsUnsupportedRow
+export type ClaimsTableRow = ClaimsProfileRow | ClaimsPeopleRow | ClaimsUnsupportedRow
 
-export type AddClaimTarget =
-  { kind: 'role' } | { kind: 'people'; key: string; label: string; attrType: string }
+export type AddClaimTarget = { kind: 'people'; key: string; label: string; attrType: string }
 
 /**
  * The five profile fields, always present, in table order, each showing its
@@ -391,16 +379,8 @@ export function buildClaimsTableModel({
   definitions: PeopleDefinition[]
 }): { profile: ClaimsProfileRow[]; additional: ClaimsTableRow[] } {
   const profile = buildProfileRows(mapping)
+  // Role rules are the Roles card's; this table lists what is read about a person.
   const additional: ClaimsTableRow[] = []
-  const role = mapping?.role
-  if (role && (role.claimPath || (role.rules?.length ?? 0) > 0 || role.syncOnEverySignIn)) {
-    additional.push({
-      kind: 'role',
-      claimPath: role.claimPath || 'groups',
-      rules: role.rules ?? [],
-      syncOnEverySignIn: role.syncOnEverySignIn === true,
-    })
-  }
   const defByKey = new Map(definitions.map((d) => [d.key, d]))
   const map = mapping?.attributes?.map ?? []
   const keyCounts = new Map<string, number>()
@@ -450,13 +430,6 @@ export function availableAddTargets({
   definitions: PeopleDefinition[]
 }): AddClaimTarget[] {
   const targets: AddClaimTarget[] = []
-  const hasRole = Boolean(
-    mapping?.role &&
-    (mapping.role.claimPath ||
-      (mapping.role.rules?.length ?? 0) > 0 ||
-      mapping.role.syncOnEverySignIn)
-  )
-  if (!hasRole) targets.push({ kind: 'role' })
   const used = new Set(
     (mapping?.attributes?.map ?? []).map((row) => row.attributeKey).filter(Boolean)
   )

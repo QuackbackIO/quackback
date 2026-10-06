@@ -76,17 +76,11 @@ describe('ClaimsTable', () => {
 
   it('labels edit and remove actions accessibly and never removes a profile row', () => {
     renderTable({
-      role: {
-        claimPath: 'groups',
-        rules: [{ whenContains: 'engineering', role: 'member' }],
-      },
       attributes: { map: [{ claimPath: 'org.department', attributeKey: 'department' }] },
     })
     expect(screen.getByRole('button', { name: 'Edit Account ID mapping' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Edit Email mapping' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Edit Name mapping' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Edit role rules' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Remove role rules' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Edit Department mapping' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Remove Department mapping' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Remove Email/ })).not.toBeInTheDocument()
@@ -130,19 +124,16 @@ describe('ClaimsTable', () => {
     expect(screen.queryByRole('button', { name: /Remove locale/ })).not.toBeInTheDocument()
   })
 
-  it('lists the role rules without repeating the domain warning', () => {
+  it('has no role row: role rules live on the Roles card', () => {
     renderTable({
       role: {
         claimPath: 'groups',
-        rules: [
-          { whenContains: 'platform-admins', role: 'admin' },
-          { whenContains: 'engineering', role: 'member' },
-        ],
+        rules: [{ whenContains: 'platform-admins', role: 'admin' }],
       },
     })
-    expect(screen.getByText('platform-admins')).toBeInTheDocument()
-    expect(screen.getByText('engineering')).toBeInTheDocument()
-    expect(screen.queryByText(/verified domains/)).not.toBeInTheDocument()
+    expect(screen.queryByText('platform-admins')).not.toBeInTheDocument()
+    expect(screen.queryByText('Role')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /role rules/ })).not.toBeInTheDocument()
   })
 })
 
@@ -244,15 +235,14 @@ describe('ClaimsTable test sign-in column', () => {
     expect(within(avatar).getByText('https://cdn.example.com/photos/123')).toBeInTheDocument()
   })
 
-  it('leaves the test column empty for role and People rows', () => {
+  it('leaves the test column empty for People rows', () => {
     renderTable(
       {
-        role: { claimPath: 'groups', rules: [{ whenContains: 'eng', role: 'member' }] },
         attributes: { map: [{ claimPath: 'dept', attributeKey: 'department' }] },
       },
       { testValues: TEST_VALUES }
     )
-    for (const name of ['Edit role rules', 'Edit Department mapping']) {
+    for (const name of ['Edit Department mapping']) {
       const cells = within(screen.getByRole('button', { name }).closest('tr')!).getAllByRole('cell')
       expect(cells).toHaveLength(4)
       expect(cells[2]).toBeEmptyDOMElement()

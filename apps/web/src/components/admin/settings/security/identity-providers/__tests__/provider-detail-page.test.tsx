@@ -176,6 +176,11 @@ vi.mock('@/lib/client/queries/settings', () => ({
       queryFn: async () => state.authConfig,
       staleTime: Infinity,
     }),
+    roles: () => ({
+      queryKey: ['settings', 'roles'],
+      queryFn: async () => ({ roles: [], maxCustomRoles: null }),
+      staleTime: Infinity,
+    }),
     providerAccountCount: (id: string) => ({
       queryKey: ['settings', 'identityProviders', id, 'accountCount'],
       queryFn: async () => ({ count: state.accountCount }),
@@ -200,6 +205,11 @@ vi.mock('@/lib/client/queries/admin', () => ({
 }))
 
 vi.mock('sonner', () => ({ toast: toastSpy }))
+
+// The lockout guard's admin list; the Roles card tests drive it.
+vi.mock('../use-provider-admins', () => ({
+  useProviderAdmins: () => ({ isPending: false, data: [] }),
+}))
 
 // Stub the Test sign-in button used inside the preview rail so the page does
 // not pull in the test-flow server fns. Pass `disabled` through.
@@ -277,6 +287,7 @@ function renderPage(provider: IdentityProvider, props: { autoTest?: boolean } = 
     count: state.accountCount,
   })
   qc.setQueryData(['admin', 'userAttributes'], state.userAttributes)
+  qc.setQueryData(['settings', 'roles'], { roles: [], maxCustomRoles: null })
   return render(
     <IntlProvider locale="en" defaultLocale="en">
       <QueryClientProvider client={qc}>
@@ -292,7 +303,8 @@ const saveConnection = () => fireEvent.click(screen.getByRole('button', { name: 
 const openConnectionOptions = () =>
   fireEvent.click(screen.getByRole('button', { name: /Connection options/ }))
 /** Sign-in & access and Profile both end in Save changes. */
-const section = (id: 'connection' | 'signin' | 'mapping') => within(document.getElementById(id)!)
+const section = (id: 'connection' | 'signin' | 'mapping' | 'roles') =>
+  within(document.getElementById(id)!)
 const saveSignIn = () =>
   fireEvent.click(section('signin').getByRole('button', { name: 'Save changes' }))
 const saveUserDetails = () => {
@@ -328,11 +340,14 @@ beforeEach(() => {
 })
 
 describe('<ProviderDetailPage> page shell', () => {
-  it('renders the three sections and nothing else', () => {
+  it('renders the four sections and nothing else', () => {
     renderPage(makeProvider({}))
-    expect(screen.getByRole('heading', { name: 'Connection' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Sign-in & access' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Profile' })).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Connection',
+      'Sign-in & access',
+      'Profile',
+      'Roles',
+    ])
     expect(
       screen.getByText('What Quackback takes from Acme SSO for each person.')
     ).toBeInTheDocument()
@@ -816,7 +831,7 @@ describe('<ProviderDetailPage> sign-in & access', () => {
     expect(screen.getByText(/Before you require SSO/)).toBeInTheDocument()
   })
 
-  it('saves the button, creation and role choices together and nothing else', async () => {
+  it('saves the button and creation choices together and nothing else', async () => {
     renderPage(makeProvider({ showButton: false, autoCreateUsers: true }))
     fireEvent.click(screen.getByRole('switch', { name: 'Show sign-in button' }))
     saveSignIn()
@@ -824,22 +839,24 @@ describe('<ProviderDetailPage> sign-in & access', () => {
     expect(lastUpsert()).toMatchObject({
       showButton: true,
       autoCreateUsers: true,
-      autoProvisionRole: 'user',
       label: 'Acme SSO',
     })
+    // The default role belongs to the Roles card.
+    expect(lastUpsert()).not.toHaveProperty('autoProvisionRole')
     expect(lastUpsert()).not.toHaveProperty('claimMapping')
     expect(lastUpsert()).not.toHaveProperty('scopes')
     expect(mappingSpy).not.toHaveBeenCalled()
   })
 
-  it('nulls the new account role when creation is turned off', async () => {
+  it('has no role control, and turning creation off keeps the stored default role', async () => {
     renderPage(makeProvider({ autoCreateUsers: true, autoProvisionRole: 'member' }))
-    expect(screen.getByLabelText('New account role')).toBeInTheDocument()
+    expect(section('signin').queryByLabelText('New account role')).not.toBeInTheDocument()
+    expect(section('signin').queryByRole('combobox')).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('switch', { name: 'Create accounts on first sign-in' }))
-    expect(screen.queryByLabelText('New account role')).not.toBeInTheDocument()
     saveSignIn()
     await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
-    expect(lastUpsert()).toMatchObject({ autoCreateUsers: false, autoProvisionRole: null })
+    expect(lastUpsert()).toMatchObject({ autoCreateUsers: false })
+    expect(lastUpsert()).not.toHaveProperty('autoProvisionRole')
   })
 
   it('keeps the display name and logo under Sign-in appearance', async () => {
