@@ -10,6 +10,7 @@ import {
   ClaimMappingEditError,
   adminTierRoleIds,
   applyClaimMappingEdits,
+  canManageSso,
   diffClaimMappingOperations,
   mappingSaveRisks,
   mappingWouldStripUnsupported,
@@ -350,5 +351,47 @@ describe('claimValuesAt', () => {
     expect(claimValuesAt({ team: 'ops' }, 'team')).toEqual(['ops'])
     expect(claimValuesAt({ team: 7 }, 'team')).toEqual([])
     expect(claimValuesAt({}, 'missing')).toEqual([])
+  })
+})
+
+describe('rule indexes follow stored positions', () => {
+  const stored = {
+    role: {
+      claimPath: 'groups',
+      rules: [
+        { whenContains: 'support', role: 'owner' },
+        { whenContains: 'support', role: 'member', roleId: 'nope' },
+        { whenContains: 'support', role: 'member', roleId: SUPPORT },
+      ],
+    },
+  }
+
+  it('resolveSsoRoleMatch skips unreadable rules but keeps their positions', () => {
+    expect(resolveSsoRoleMatch({ groups: ['support'] }, stored.role)).toEqual({
+      role: 'member',
+      roleId: SUPPORT,
+      ruleIndex: 2,
+    })
+  })
+
+  it('the preview reports the same stored position as the per-rule matches', () => {
+    const draft = stored as unknown as IdentityProviderClaimMapping
+    const preview = previewClaimMapping({
+      draft,
+      capture: capture(['support']),
+      definitions: [],
+      providerPolicy: policy,
+    })
+    expect(preview.roleMatch?.ruleIndex).toBe(2)
+    expect(previewRoleRuleMatches(draft, capture(['support']))?.firstMatchIndex).toBe(2)
+  })
+})
+
+describe('canManageSso', () => {
+  it('is holding the permission that manages SSO, narrower than the admin tier', () => {
+    expect(canManageSso([PERMISSIONS.AUTH_MANAGE])).toBe(true)
+    expect(canManageSso([PERMISSIONS.MEMBER_MANAGE])).toBe(false)
+    expect(canManageSso(SYSTEM_ROLE_PERMISSIONS.admin)).toBe(true)
+    expect(canManageSso(SYSTEM_ROLE_PERMISSIONS.manager)).toBe(false)
   })
 })

@@ -4,9 +4,10 @@
  * change has: the role exists, is not the Owner preset, and its bundle sits
  * within the saver's own permissions.
  *
- * Only rules the save adds or changes are checked. A rule already stored was
- * checked when it was saved, and one whose role has since been deleted must not
- * block an unrelated edit to the same provider; at sign-in it grants nothing.
+ * Any change to the role section re-grants every role its rules give, since
+ * reordering, repointing the claim or turning sync on changes who gets what.
+ * The one exception is an unchanged rule whose role has since been deleted: it
+ * grants nothing at sign-in, so it must not block the edit.
  */
 import { db, eq, inArray, permissions, rolePermissions } from '@/lib/server/db'
 import type { RoleId } from '@quackback/ids'
@@ -14,6 +15,7 @@ import type { PermissionKey } from '@/lib/shared/permissions'
 import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 import {
   adminTierRoleIds,
+  roleRuleGrantsToCheck,
   roleRuleRoleIds,
   type RoleRuleGrantCheck,
 } from '@/lib/shared/sso-claim-mapping-edit'
@@ -32,8 +34,9 @@ export async function checkRoleRuleGrants(
   after: unknown,
   granter: readonly PermissionKey[] | undefined
 ): Promise<{ adminTierRoleIds: Set<string> }> {
-  const granted = roleRuleRoleIds(after, { newSince: before })
+  const granted = roleRuleGrantsToCheck(before, after)
   if (granted.length > 0) {
+    const added = new Set(roleRuleRoleIds(after, { newSince: before }))
     // Fail closed: a caller that did not pass its own resolved set cannot grant.
     if (!granter) {
       throw new ForbiddenError('GRANT_CEILING', 'Assigner permission set is required')
@@ -43,6 +46,7 @@ export async function checkRoleRuleGrants(
         await assertGrantableRole(roleId as RoleId, granter)
       } catch (error) {
         if (error instanceof NotFoundError) {
+          if (!added.has(roleId)) continue
           throw new ValidationError(
             'ROLE_RULE_UNKNOWN_ROLE',
             'A role rule names a role that no longer exists. Pick another role.'

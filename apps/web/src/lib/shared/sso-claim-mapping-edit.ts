@@ -18,7 +18,7 @@ import {
 } from './oidc-claim-mapping'
 import type { Role } from './roles'
 import { isPlainRecord as isRecord } from './record'
-import { WORKSPACE_ADMIN_PERMISSIONS, type PermissionKey } from './permissions'
+import { PERMISSIONS, WORKSPACE_ADMIN_PERMISSIONS, type PermissionKey } from './permissions'
 
 export const MAX_CLAIM_PATH_LENGTH = 256
 
@@ -377,6 +377,15 @@ export function isAdminTierBundle(permissionKeys: readonly string[]): boolean {
   return permissionKeys.some((key) => WORKSPACE_ADMIN_PERMISSIONS.includes(key as PermissionKey))
 }
 
+/**
+ * Whether a permission bundle can manage SSO, and so fix this provider's
+ * settings. Narrower than the admin tier: the save confirmation asks about
+ * any admin-level grant, while lockout decisions ask who could undo a mistake.
+ */
+export function canManageSso(permissionKeys: readonly string[]): boolean {
+  return permissionKeys.includes(PERMISSIONS.AUTH_MANAGE)
+}
+
 /** The ids of the roles whose bundle reaches the admin tier. */
 export function adminTierRoleIds(
   roles: ReadonlyArray<{ id: string; permissionKeys: readonly string[] }>
@@ -433,6 +442,18 @@ function storedRoleRules(mapping: unknown): unknown[] {
  * `newSince`, only those of rules that mapping lacked (added, or changed in
  * value, tier or role): the grants a save from `newSince` would make.
  */
+/**
+ * The workspace roles a save must be able to grant. Any change to the role
+ * section (claim path, rule order, rules added, removed or edited, the sync
+ * flag) can change who gets which role, so it re-grants every role its rules
+ * give; an untouched role section grants nothing new.
+ */
+export function roleRuleGrantsToCheck(before: unknown, after: unknown): string[] {
+  const section = (m: unknown) => (isRecord(m) ? m.role : undefined)
+  if (storedJsonEqual(section(before), section(after))) return []
+  return roleRuleRoleIds(after)
+}
+
 export function roleRuleRoleIds(mapping: unknown, opts: { newSince?: unknown } = {}): string[] {
   const kept =
     opts.newSince === undefined

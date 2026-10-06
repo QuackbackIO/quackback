@@ -212,4 +212,41 @@ describe.skipIf(!fixture.available)('saving role rules that grant a workspace ro
     }).catch((e: unknown) => e)
     expect(err).toBeInstanceOf(ForbiddenError)
   })
+
+  it('any change to the role section needs every role the rules give to be grantable', async () => {
+    const billing = await insertRole([PERMISSIONS.BILLING_MANAGE])
+    const stored = {
+      role: {
+        claimPath: 'groups',
+        rules: [
+          { whenContains: 'eng', role: 'member' },
+          { whenContains: 'billing', role: 'member', roleId: billing },
+        ],
+      },
+    }
+    const id = await insertProvider(stored)
+    const check = roleRuleGrantCheck([PERMISSIONS.AUTH_MANAGE])
+    // A change outside the role section grants nothing new.
+    await saveIdentityProviderClaimMapping(id, {
+      expectedClaimMapping: stored,
+      operations: [{ op: 'setProfileSync', syncOnSignIn: true }],
+      checkRoleGrants: check,
+      acknowledgeAdminRules: true,
+    })
+    const [row] = await testDb.select().from(identityProvider).where(eq(identityProvider.id, id))
+    for (const op of [
+      { op: 'setRoleSync' as const, syncOnEverySignIn: true },
+      { op: 'reorderRoleRule' as const, from: 1, to: 0 },
+      { op: 'setRolePath' as const, claimPath: 'roles' },
+      { op: 'removeRoleRule' as const, index: 0 },
+    ]) {
+      const err = await saveIdentityProviderClaimMapping(id, {
+        expectedClaimMapping: row!.claimMapping,
+        operations: [op],
+        checkRoleGrants: check,
+        acknowledgeAdminRules: true,
+      }).catch((e: unknown) => e)
+      expect(err, op.op).toBeInstanceOf(ForbiddenError)
+    }
+  })
 })

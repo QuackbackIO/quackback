@@ -36,12 +36,13 @@ import {
   effectiveProfileSignature,
   mappingSaveRisks,
   mappingWouldStripUnsupported,
-  roleRuleRoleIds,
+  roleRuleGrantsToCheck,
   storedJsonEqual,
   type ClaimMappingOperation,
   type RoleRuleGrantCheck,
 } from '@/lib/shared/sso-claim-mapping-edit'
 import { logger } from '@/lib/server/logger'
+import { isPlainRecord } from '@/lib/shared/record'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { absolutizeOffHostAssetUrl } from '@/lib/server/storage/asset-url'
 import {
@@ -608,6 +609,19 @@ export async function upsertIdentityProvider(
           }
           patch.claimMapping = input.claimMapping
         }
+        // A new default role or a new mapping can each turn sync into a lockout.
+        const nextMapping =
+          input.claimMapping !== undefined ? input.claimMapping : existing.claimMapping
+        const nextDefault =
+          input.autoProvisionRole !== undefined
+            ? input.autoProvisionRole
+            : existing.autoProvisionRole
+        if (
+          !storedJsonEqual(existing.claimMapping, nextMapping) ||
+          existing.autoProvisionRole !== nextDefault
+        ) {
+          await refuseSyncLockout(existing.id, nextMapping, nextDefault)
+        }
         if (input.showButton !== undefined) patch.showButton = input.showButton
 
         // Restamp the freshness baseline when a connection-affecting field
@@ -917,6 +931,24 @@ export async function persistTestResult(
 }
 
 /**
+ * Refuse a save that would, with sync on, demote every person able to fix it.
+ * See `syncLockoutCount`.
+ */
+async function refuseSyncLockout(
+  id: IdentityProviderId,
+  mapping: unknown,
+  defaultRole: Role | null
+): Promise<void> {
+  const { syncLockoutCount } = await import('./identity-provider-accounts')
+  const n = await syncLockoutCount(id, mapping, defaultRole)
+  if (n === 0) return
+  throw new ValidationError(
+    'SYNC_LOCKOUT',
+    `Saving would stop ${n} ${n === 1 ? 'person' : 'people'} from managing SSO the next time they sign in. Add a rule that gives them a role that can manage SSO, make the default role Admin, or keep sync off.`
+  )
+}
+
+/**
  * Run the caller's grant check over a mapping save. Without one, a save that
  * grants a workspace role is refused (fail closed) and no role counts as
  * admin-tier, which only matters for rules that were already stored.
@@ -927,7 +959,7 @@ async function runRoleGrantCheck(
   check: RoleRuleGrantCheck | undefined
 ): Promise<{ adminTierRoleIds: ReadonlySet<string> }> {
   if (check) return check(before, after)
-  if (roleRuleRoleIds(after, { newSince: before }).length > 0) {
+  if (roleRuleGrantsToCheck(before, after).length > 0) {
     throw new ForbiddenError('GRANT_CEILING', 'Assigner permission set is required')
   }
   return { adminTierRoleIds: new Set() }
@@ -978,6 +1010,10 @@ export async function saveIdentityProviderClaimMapping(
           'MAPPING_ADMIN_ACK_REQUIRED',
           'Saving admin role rules requires explicit acknowledgement.'
         )
+      }
+      const roleSection = (m: unknown) => (isPlainRecord(m) ? m.role : undefined)
+      if (!storedJsonEqual(roleSection(existing.claimMapping), roleSection(next))) {
+        await refuseSyncLockout(id, next, existing.autoProvisionRole)
       }
       const restamp =
         effectiveProfileSignature(existing.claimMapping) !== effectiveProfileSignature(next)

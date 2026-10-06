@@ -212,7 +212,7 @@ export function previewClaimMapping({
   const identity = replayIdentity(draft, capture)
   const mapping = claimMappingFor(draft)
   const roleMatch = namedRoleMatch(
-    resolveSsoRoleMatch(identity.acceptedClaims, mapping.role),
+    resolveSsoRoleMatch(identity.acceptedClaims, isRecord(draft) ? draft.role : undefined),
     roles
   )
   const peoplePlan = mapping.attributes
@@ -357,17 +357,4 @@ export function effectiveEmailPath(draft: unknown): string {
 
 export function effectiveNamePath(draft: unknown): string {
   return profileClaimFor(draft, 'name') ?? 'name'
-}
-
-export function runtimeFallbackRole(autoProvisionRole: Role | null): {
-  role: Role
-  label: string
-} {
-  if (autoProvisionRole == null) return { role: 'member', label: 'Member (runtime default)' }
-  const labels: Record<Role, string> = {
-    admin: 'Admin',
-    member: 'Member',
-    user: 'User',
-  }
-  return { role: autoProvisionRole, label: labels[autoProvisionRole] }
 }

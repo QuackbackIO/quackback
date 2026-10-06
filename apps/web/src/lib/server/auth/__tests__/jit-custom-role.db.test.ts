@@ -64,7 +64,7 @@ const suffix = () => `${Date.now().toString(36)}-${Math.random().toString(36).sl
 
 async function seedUser(role: 'admin' | 'member' | 'user' | null, assignRoleId?: RoleId) {
   const userId = createId('user') as UserId
-  const email = `p-${suffix()}@elsewhere.test`
+  const email = `p-${suffix()}@elsewhere.com`
   await testDb.insert(user).values({ id: userId, name: 'P', email })
   let principalId: PrincipalId | null = null
   if (role) {
@@ -99,9 +99,10 @@ async function state(userId: UserId) {
 
 async function signIn(
   who: { userId: UserId; email: string },
-  rules: Array<{ whenContains: string; role: 'admin' | 'member' | 'user'; roleId?: string }>,
+  rules: Array<Record<string, unknown>>,
   groups: string[],
-  syncOnEverySignIn = false
+  syncOnEverySignIn = false,
+  verifiedDomain?: string
 ) {
   await handleAutoProvisionAfter(
     {
@@ -119,7 +120,18 @@ async function signIn(
         claimMapping: {
           role: { claimPath: 'groups', rules, ...(syncOnEverySignIn ? { syncOnEverySignIn } : {}) },
         },
-        domains: [],
+        domains: verifiedDomain
+          ? [
+              {
+                id: 'domain_x',
+                name: verifiedDomain,
+                verificationToken: 't',
+                verifiedAt: '2026-01-01',
+                enforced: false,
+                createdAt: '2026-01-01',
+              },
+            ]
+          : [],
       },
     ] as unknown as Parameters<typeof handleAutoProvisionAfter>[1],
     new Set(['oidc_x']),
@@ -213,5 +225,58 @@ describe.skipIf(!fixture.available)('SSO role rules granting a workspace role', 
     }
     expect(hoisted.recordAuditEvent).not.toHaveBeenCalled()
     expect(hoisted.warn).toHaveBeenCalledTimes(2)
+  })
+
+  it('under sync, a plain-member rule moves a custom-role holder back to the plain member role, audited', async () => {
+    const support = await insertRole('Support')
+    const who = await seedUser('member', support)
+    // First sign-in mode leaves a returning teammate alone.
+    await signIn(who, [{ whenContains: 'eng', role: 'member' }], ['eng'])
+    expect(await state(who.userId)).toEqual({ role: 'member', assignments: [support] })
+
+    await signIn(who, [{ whenContains: 'eng', role: 'member' }], ['eng'], true)
+    const [manager] = await testDb.select().from(roles).where(eq(roles.key, SYSTEM_ROLES.MANAGER))
+    expect(await state(who.userId)).toEqual({ role: 'member', assignments: [manager!.id] })
+    expect(hoisted.recordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'user.role.changed',
+        before: { role: 'member', assignedRole: 'Support' },
+        after: { role: 'member' },
+      })
+    )
+  })
+
+  it('under sync, the verified-domain default clears a custom role too', async () => {
+    const support = await insertRole('Support')
+    const who = await seedUser('member', support)
+    const domain = who.email.split('@')[1]!
+    await signIn(who, [{ whenContains: 'admins', role: 'admin' }], ['eng'], true, domain)
+    const [manager] = await testDb.select().from(roles).where(eq(roles.key, SYSTEM_ROLES.MANAGER))
+    expect(await state(who.userId)).toEqual({ role: 'member', assignments: [manager!.id] })
+  })
+
+  it('first sign-in mode looks up no rule role for a returning teammate', async () => {
+    const who = await seedUser('member')
+    await signIn(
+      who,
+      [{ whenContains: 'support', role: 'member', roleId: createId('role') }],
+      ['support']
+    )
+    expect(hoisted.warn).not.toHaveBeenCalled()
+  })
+
+  it('the warning names the rule by its stored position, unreadable rules included', async () => {
+    const who = await seedUser('user')
+    const gone = createId('role')
+    await signIn(
+      who,
+      [
+        { whenContains: 'support', role: 'owner' },
+        { whenContains: 'support', role: 'member', roleId: gone },
+      ],
+      ['support']
+    )
+    const [ctx] = hoisted.warn.mock.calls[0] as [Record<string, unknown>, string]
+    expect(ctx).toMatchObject({ code: 'sso_role_rule_role_missing', rule_index: 1 })
   })
 })

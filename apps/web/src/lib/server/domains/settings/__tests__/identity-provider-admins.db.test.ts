@@ -21,6 +21,7 @@ import {
   principalRoleAssignments,
   rolePermissions,
   roles,
+  ssoVerifiedDomain,
   user,
 } from '@/lib/server/db'
 import { PERMISSIONS, SYSTEM_ROLES } from '@/lib/shared/permissions'
@@ -83,7 +84,7 @@ async function seedPerson(opts: {
   await testDb.insert(user).values({
     id: userId,
     name: opts.name ?? 'Person',
-    email: opts.email ?? `p-${suffix()}@example.test`,
+    email: opts.email ?? `p-${suffix()}@example.com`,
   })
   await testDb.insert(principal).values({
     id: principalId,
@@ -114,13 +115,18 @@ describe.skipIf(!fixture.available)('listProviderAdmins', () => {
     const other = await insertProvider()
     const support = await insertRole('Support', [PERMISSIONS.CONVERSATION_VIEW])
     const ops = await insertRole('Ops', [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.AUTH_MANAGE])
+    const people = await insertRole('People', [PERMISSIONS.MEMBER_MANAGE])
     const [owner] = await testDb.select().from(roles).where(eq(roles.key, SYSTEM_ROLES.OWNER))
+    await testDb.insert(ssoVerifiedDomain).values([
+      { name: 'example.com', verificationToken: 't1', verifiedAt: new Date(), providerId: idp.id },
+      { name: 'pending.com', verificationToken: 't2', verifiedAt: null, providerId: idp.id },
+    ])
 
     const admin = await seedPerson({
       providerId: idp.registrationId,
       role: 'admin',
       name: 'Ada',
-      email: 'ada@example.test',
+      email: 'ada@example.com',
       assignRoleId: owner!.id as RoleId,
     })
     const agent = await seedPerson({
@@ -135,7 +141,15 @@ describe.skipIf(!fixture.available)('listProviderAdmins', () => {
       providerId: idp.registrationId,
       role: 'member',
       name: 'Cy',
+      email: 'cy@pending.com',
       assignRoleId: ops,
+    })
+    const hr = await seedPerson({
+      providerId: idp.registrationId,
+      role: 'member',
+      name: 'Di',
+      email: 'di@example.com',
+      assignRoleId: people,
     })
     // Not teammates, or not through this provider: left out.
     await seedPerson({ providerId: idp.registrationId, role: 'user' })
@@ -145,13 +159,15 @@ describe.skipIf(!fixture.available)('listProviderAdmins', () => {
 
     const rows = await listProviderAdmins(idp.id, agent.principalId)
     const byId = new Map(rows.map((r) => [r.principalId, r]))
-    expect(rows).toHaveLength(3)
+    expect(rows).toHaveLength(4)
     expect(byId.get(admin.principalId)).toEqual({
       principalId: admin.principalId,
       name: 'Ada',
-      email: 'ada@example.test',
+      email: 'ada@example.com',
       role: 'admin',
       adminTier: true,
+      canManageSso: true,
+      atVerifiedDomain: true,
       isCaller: false,
     })
     expect(byId.get(agent.principalId)).toEqual({
@@ -162,6 +178,8 @@ describe.skipIf(!fixture.available)('listProviderAdmins', () => {
       roleId: support,
       roleName: 'Support',
       adminTier: false,
+      canManageSso: false,
+      atVerifiedDomain: false,
       isCaller: true,
     })
     expect(byId.get(opsLead.principalId)).toMatchObject({
@@ -169,7 +187,15 @@ describe.skipIf(!fixture.available)('listProviderAdmins', () => {
       roleId: ops,
       roleName: 'Ops',
       adminTier: true,
+      canManageSso: true,
+      atVerifiedDomain: false,
       isCaller: false,
+    })
+    // Admin-tier by bundle, but unable to fix SSO.
+    expect(byId.get(hr.principalId)).toMatchObject({
+      adminTier: true,
+      canManageSso: false,
+      atVerifiedDomain: true,
     })
   })
 
