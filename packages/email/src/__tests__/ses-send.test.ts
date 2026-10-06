@@ -20,7 +20,10 @@ import type { SendRateLimiter } from '../send-rate'
 import type { SesSendClient } from '../ses'
 import {
   getEmailProvider,
+  sendChangelogPublishedEmail,
   sendConversationMessageEmail,
+  sendNewCommentEmail,
+  sendPostMentionEmail,
   sendRawEmail,
   sendStatusChangeEmail,
 } from '../index'
@@ -968,6 +971,66 @@ describe('dispatch on the ses rung', () => {
     expect(command.input.Content?.Simple?.Body?.Html?.Data).toContain('I checked the invoice.')
     expect(command.input.Content?.Simple?.Body?.Html?.Data).not.toContain('New reply from Acme')
     expect(command.input.Content?.Simple?.Body?.Html?.Data).not.toContain('Unsubscribe')
+  })
+
+  it('carries RFC 8058 one-click unsubscribe headers on a changelog email', async () => {
+    process.env.EMAIL_FROM = 'notifications@platform.test'
+    await sendChangelogPublishedEmail({
+      to: 'customer@example.test',
+      changelogTitle: 'May release',
+      changelogUrl: 'https://acme.example/changelog/1',
+      contentPreview: 'New things',
+      workspaceName: 'Acme',
+      unsubscribeUrl: 'https://acme.example/unsubscribe?token=tok-changelog',
+    })
+    const command = sdkSend.mock.calls[0][0] as SendEmailCommand
+    expect(command.input.Content?.Simple?.Headers).toEqual([
+      { Name: 'List-Unsubscribe', Value: '<https://acme.example/unsubscribe?token=tok-changelog>' },
+      { Name: 'List-Unsubscribe-Post', Value: 'List-Unsubscribe=One-Click' },
+    ])
+  })
+
+  it('carries them on a post update email, with that email’s own link', async () => {
+    process.env.EMAIL_FROM = 'notifications@platform.test'
+    await sendNewCommentEmail({
+      to: 'customer@example.test',
+      postTitle: 'Dark mode',
+      postUrl: 'https://acme.example/b/x/posts/1',
+      commenterName: 'Ada',
+      commentPreview: 'Shipped!',
+      isTeamMember: true,
+      workspaceName: 'Acme',
+      unsubscribeUrl: 'https://acme.example/unsubscribe?token=tok-post',
+    })
+    const command = sdkSend.mock.calls[0][0] as SendEmailCommand
+    expect(command.input.Content?.Simple?.Headers).toEqual([
+      { Name: 'List-Unsubscribe', Value: '<https://acme.example/unsubscribe?token=tok-post>' },
+      { Name: 'List-Unsubscribe-Post', Value: 'List-Unsubscribe=One-Click' },
+    ])
+  })
+
+  it('offers no one-click over plain http, and no header at all without a link', async () => {
+    process.env.EMAIL_FROM = 'notifications@platform.test'
+    const mention = (unsubscribeUrl?: string) =>
+      sendPostMentionEmail({
+        to: 'customer@example.test',
+        mentionerName: 'Ada',
+        postTitle: 'Dark mode',
+        excerpt: '',
+        postUrl: 'http://localhost:3000/b/x/posts/1',
+        workspaceName: 'Acme',
+        unsubscribeUrl,
+      })
+
+    await mention('http://localhost:3000/unsubscribe?token=tok-dev')
+    expect((sdkSend.mock.calls[0][0] as SendEmailCommand).input.Content?.Simple?.Headers).toEqual([
+      { Name: 'List-Unsubscribe', Value: '<http://localhost:3000/unsubscribe?token=tok-dev>' },
+    ])
+
+    await mention('')
+    expect(
+      (sdkSend.mock.calls[1][0] as SendEmailCommand).input.Content?.Simple?.Headers
+    ).toBeUndefined()
   })
 
   it('carries attachments all the way from sendRawEmail to the SES wire shape', async () => {

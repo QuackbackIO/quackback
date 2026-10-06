@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { getEmailProvider, sendRawEmail, sendStatusChangeEmail } from '../index'
+import {
+  getEmailProvider,
+  sendChangelogPublishedEmail,
+  sendRawEmail,
+  sendStatusChangeEmail,
+} from '../index'
 import { ResendEmailError } from '../resend'
 import { withEmailIdempotencyKey } from '../idempotency'
 import { sendingAs } from './brands'
@@ -141,6 +146,24 @@ describe('resend sending', () => {
     expect(payload.html).toMatch(/Dark mode/)
     expect(payload.text).toMatch(/Dark mode/)
     expect(payload).not.toHaveProperty('react')
+  })
+
+  it('carries RFC 8058 one-click unsubscribe headers on a changelog email', async () => {
+    process.env.EMAIL_RESEND_API_KEY = 're_test'
+    process.env.EMAIL_FROM = 'Acme <noreply@acme.test>'
+    await sendChangelogPublishedEmail({
+      to: 'c@example.test',
+      changelogTitle: 'May release',
+      changelogUrl: 'https://x.test/changelog/1',
+      contentPreview: 'New things',
+      workspaceName: 'Acme',
+      unsubscribeUrl: 'https://x.test/unsubscribe?token=tok-1',
+    })
+    const payload = resendSend.mock.calls[0][0]
+    expect(payload.headers).toEqual({
+      'List-Unsubscribe': '<https://x.test/unsubscribe?token=tok-1>',
+      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+    })
   })
 
   it('sends one idempotency key for every attempt of one send, and a new one per send', async () => {

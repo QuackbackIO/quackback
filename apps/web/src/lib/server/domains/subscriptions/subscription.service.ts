@@ -534,17 +534,8 @@ export async function batchGenerateUnsubscribeTokens(
   return new Map(tokens.map((t) => [t.principalId, t.token]))
 }
 
-/**
- * Process an unsubscribe token
- * Returns the action performed with post details for redirect, or null if token is invalid/expired
- */
-export async function processUnsubscribeToken(token: string): Promise<{
-  action: string
-  principalId: PrincipalId
-  postId: PostId | null
-  post?: { title: string; boardSlug: string }
-} | null> {
-  log.debug('process unsubscribe token')
+/** A token that exists, is unused and has not expired; null otherwise. */
+async function findLiveUnsubscribeToken(token: string) {
   const tokenRecord = await db.query.unsubscribeTokens.findFirst({
     where: eq(unsubscribeTokens.token, token),
   })
@@ -559,6 +550,46 @@ export async function processUnsubscribeToken(token: string): Promise<{
 
   if (new Date() > tokenRecord.expiresAt) {
     return null // Expired
+  }
+
+  return tokenRecord
+}
+
+/**
+ * What an unsubscribe token would do, without doing it or spending the token.
+ *
+ * Opening an emailed link must change nothing (mail scanners prefetch every
+ * link), so the page reads this to ask first. Null when the token is unknown,
+ * used or expired.
+ */
+export async function previewUnsubscribeToken(
+  token: string
+): Promise<{ action: string; postTitle?: string } | null> {
+  const tokenRecord = await findLiveUnsubscribeToken(token)
+  if (!tokenRecord) return null
+
+  if (!tokenRecord.postId) return { action: tokenRecord.action }
+  const post = await db.query.posts.findFirst({
+    where: eq(posts.id, tokenRecord.postId),
+    columns: { title: true },
+  })
+  return { action: tokenRecord.action, postTitle: post?.title }
+}
+
+/**
+ * Process an unsubscribe token
+ * Returns the action performed with post details for redirect, or null if token is invalid/expired
+ */
+export async function processUnsubscribeToken(token: string): Promise<{
+  action: string
+  principalId: PrincipalId
+  postId: PostId | null
+  post?: { title: string; boardSlug: string }
+} | null> {
+  log.debug('process unsubscribe token')
+  const tokenRecord = await findLiveUnsubscribeToken(token)
+  if (!tokenRecord) {
+    return null
   }
 
   // Mark as used

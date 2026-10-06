@@ -10,6 +10,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { SubscriptionLevel } from '@/lib/server/domains/subscriptions/subscription.service'
 import { db, postVotes, eq, and, inArray } from '@/lib/server/db'
 import { relatedPostIdsSubquery } from '@/lib/server/domains/posts/post.merge-ids'
+import { isUnsubscribeToken } from '@/lib/shared/unsubscribe-token'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'subscriptions' })
@@ -183,12 +184,15 @@ export const adminUpdateVoterSubscriptionFn = createServerFn({ method: 'POST' })
     return { postId: data.postId, principalId: data.principalId, level: data.level }
   })
 
-// Token-based unsubscribe (no auth required - token is the auth)
-const processUnsubscribeTokenSchema = z.object({
-  token: z.string().uuid(),
+// Token-based unsubscribe (no auth required - token is the auth).
+// The token is accepted as any string and checked in the handler, so a
+// malformed link gets the typed `invalid` result rather than a thrown
+// validation error.
+const unsubscribeTokenInputSchema = z.object({
+  token: z.string(),
 })
 
-export type ProcessUnsubscribeTokenInput = z.infer<typeof processUnsubscribeTokenSchema>
+export type ProcessUnsubscribeTokenInput = z.infer<typeof unsubscribeTokenInputSchema>
 
 export interface UnsubscribeResult {
   success: boolean
@@ -200,9 +204,12 @@ export interface UnsubscribeResult {
 }
 
 export const processUnsubscribeTokenFn = createServerFn({ method: 'POST' })
-  .validator(processUnsubscribeTokenSchema)
+  .validator(unsubscribeTokenInputSchema)
   .handler(async ({ data }): Promise<UnsubscribeResult> => {
     log.debug('process unsubscribe token')
+    if (!isUnsubscribeToken(data.token)) {
+      return { success: false, error: 'invalid' }
+    }
     try {
       const { processUnsubscribeToken } =
         await import('@/lib/server/domains/subscriptions/subscription.service')
@@ -224,5 +231,31 @@ export const processUnsubscribeTokenFn = createServerFn({ method: 'POST' })
     } catch (error) {
       log.error({ err: error }, 'process unsubscribe token failed')
       return { success: false, error: 'failed' }
+    }
+  })
+
+export type UnsubscribePreview =
+  | { status: 'confirm'; action: string; postTitle?: string }
+  | { status: 'error'; error: 'invalid' | 'failed' }
+
+/**
+ * Read-only: what the link would unsubscribe from. Opening the page calls only
+ * this, so a scanner that prefetches the link changes nothing.
+ */
+export const previewUnsubscribeTokenFn = createServerFn({ method: 'GET' })
+  .validator(unsubscribeTokenInputSchema)
+  .handler(async ({ data }): Promise<UnsubscribePreview> => {
+    if (!isUnsubscribeToken(data.token)) {
+      return { status: 'error', error: 'invalid' }
+    }
+    try {
+      const { previewUnsubscribeToken } =
+        await import('@/lib/server/domains/subscriptions/subscription.service')
+      const preview = await previewUnsubscribeToken(data.token)
+      if (!preview) return { status: 'error', error: 'invalid' }
+      return { status: 'confirm', action: preview.action, postTitle: preview.postTitle }
+    } catch (error) {
+      log.error({ err: error }, 'preview unsubscribe token failed')
+      return { status: 'error', error: 'failed' }
     }
   })
