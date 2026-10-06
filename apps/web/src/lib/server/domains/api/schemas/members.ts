@@ -57,6 +57,18 @@ const ForbiddenErrorSchema = z
   })
   .meta({ description: 'Forbidden error' })
 
+const SeatLimitErrorSchema = z
+  .object({
+    error: z.literal('tier_limit_exceeded'),
+    limit: z.literal('maxTeamSeats'),
+    message: z.string(),
+    current: z.number().optional(),
+    max: z.number().optional(),
+    needed: z.number().meta({ description: 'Seats the request needs' }),
+    free: z.number().meta({ description: 'Seats free on the plan' }),
+  })
+  .meta({ description: 'Seat limit error' })
+
 // Register GET /members
 registerPath('/members', {
   get: {
@@ -121,7 +133,10 @@ registerPath('/members/{principalId}', {
   patch: {
     tags: ['Members'],
     summary: 'Update a team member',
-    description: "Update a team member's role. Cannot modify your own role.",
+    description:
+      "Update a team member's role, or add a portal user to the team by giving them a role. " +
+      'A portal user must have signed in (a provider account or a portal session); they join ' +
+      'at once and take a seat. Only an admin key grants the admin role. Cannot modify your own role.',
     parameters: [
       {
         name: 'principalId',
@@ -156,8 +171,13 @@ registerPath('/members/{principalId}', {
         description: 'Unauthorized',
         content: { 'application/json': { schema: UnauthorizedErrorSchema } },
       },
+      402: {
+        description: 'Adding a portal user needs a seat and none is free',
+        content: { 'application/json': { schema: SeatLimitErrorSchema } },
+      },
       403: {
-        description: 'Cannot modify own role or last admin',
+        description:
+          'Cannot modify own role or last admin, or the role is above what the key may grant (GRANT_CEILING)',
         content: { 'application/json': { schema: ForbiddenErrorSchema } },
       },
       404: {

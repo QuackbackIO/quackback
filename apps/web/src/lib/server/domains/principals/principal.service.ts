@@ -19,14 +19,23 @@ import {
   type Principal,
 } from '@/lib/server/db'
 import type { PrincipalId, RoleId, UserId } from '@quackback/ids'
-import { InternalError, ForbiddenError, NotFoundError, ValidationError } from '@/lib/shared/errors'
-import { isTeamMember, isAdmin } from '@/lib/shared/roles'
+import {
+  DomainException,
+  InternalError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from '@/lib/shared/errors'
+import { isTeamMember, isAdmin, type Role } from '@/lib/shared/roles'
 import type { PermissionKey } from '@/lib/shared/permissions'
 import { recordAuditEvent, type AuditActor } from '@/lib/server/audit/log'
 import type { TeamMember } from './principal.types'
 import { resolveUserAvatarUrl } from './principal-display'
 import { logger } from '@/lib/server/logger'
 import { setPrincipalRole } from './principal.factory'
+import { classifyTeamCandidate, loadTeamCandidates, promotePortalUsers } from './team-promotion'
+import { assertSeatsAvailable } from './seat-limit'
+import { cacheDel } from '@/lib/server/cache'
 
 const log = logger.child({ component: 'principals' })
 
@@ -242,15 +251,23 @@ export async function countMembers(): Promise<number> {
 }
 
 /**
- * Update a team member's role. `opts.assignRoleId` grants a specific role
- * from the roles table instead of the legacy preset mapping — the member's
- * legacy column stays 'member' (the teammate wall and seat predicates key on
- * it) while the workspace assignment carries the actual grant. Owner is
- * excluded: that tier rides the legacy 'admin' role and its promotion path.
+ * Set a person's team role: change an existing teammate's role, or add a
+ * signed-in portal user to the team at once (no accept step). `opts.assignRoleId`
+ * grants a specific role from the roles table instead of the legacy preset
+ * mapping; the legacy column stays 'member' (the teammate wall and seat
+ * predicates key on it) while the workspace assignment carries the actual
+ * grant. Owner is excluded: that tier rides the legacy 'admin' role, which
+ * only an admin may grant (`opts.granterRole`, fail closed).
+ *
+ * Adding a portal user takes a seat, checked on the write transaction.
+ * Eligibility (a real person who has signed in) lives in team-promotion.ts.
  *
  * @throws ForbiddenError if trying to modify own role
+ * @throws ForbiddenError GRANT_CEILING if a non-admin grants Admin, or a role above the granter
  * @throws ForbiddenError if this would leave no admins
- * @throws NotFoundError if principal not found or not a team member
+ * @throws ValidationError NOT_ELIGIBLE if the portal user has never signed in
+ * @throws TierLimitError SEAT_LIMIT if adding a portal user needs a seat that is not free
+ * @throws NotFoundError if the principal is not a teammate or a portal user
  */
 export async function updateMemberRole(
   principalId: PrincipalId,
@@ -258,7 +275,12 @@ export async function updateMemberRole(
   actingPrincipalId: PrincipalId,
   actor: AuditActor | null = null,
   headers?: Headers,
-  opts?: { assignRoleId?: RoleId; granterPermissions?: readonly PermissionKey[] }
+  opts?: {
+    assignRoleId?: RoleId
+    granterPermissions?: readonly PermissionKey[]
+    /** The granter's legacy role; granting Admin requires 'admin'. */
+    granterRole?: Role | null
+  }
 ): Promise<void> {
   // Cannot modify own role
   if (principalId === actingPrincipalId) {
@@ -282,9 +304,10 @@ export async function updateMemberRole(
     const target = await assertGrantableRole(opts.assignRoleId, opts.granterPermissions)
     assignedRoleName = target.name
   }
+  const { assertCanGrantTeamRole } = await import('@/lib/server/domains/roles/role.grants')
+  assertCanGrantTeamRole(newRole, opts?.granterRole)
 
   try {
-    // Find the target principal
     const targetMember = await db.query.principal.findFirst({
       where: eq(principal.id, principalId),
     })
@@ -293,10 +316,23 @@ export async function updateMemberRole(
       throw new NotFoundError('MEMBER_NOT_FOUND', 'Team member not found')
     }
 
-    // Ensure target is a customer teammate. Cloud support (type=support) is an
-    // admin for privilege but is not on the customer roster.
-    if (!isTeamMember(targetMember.role) || targetMember.type === 'support') {
+    // A customer teammate changes role; a portal user joins the team. Cloud
+    // support (type=support) is an admin for privilege but is not on the
+    // customer roster, and anonymous or service principals never join.
+    const isTeammate = isTeamMember(targetMember.role) && targetMember.type !== 'support'
+    const isPortalUser =
+      targetMember.role === 'user' && targetMember.type === 'user' && targetMember.userId != null
+    if (!isTeammate && !isPortalUser) {
       throw new NotFoundError('MEMBER_NOT_FOUND', 'Team member not found')
+    }
+    if (isPortalUser) {
+      const [candidate] = await loadTeamCandidates([principalId])
+      if (!candidate || classifyTeamCandidate(candidate) !== 'eligible') {
+        throw new ValidationError(
+          'NOT_ELIGIBLE',
+          `${candidate?.name || 'This person'} hasn't signed in yet. Invite them by email instead.`
+        )
+      }
     }
 
     // If demoting an admin to member, ensure at least one human admin remains
@@ -313,18 +349,31 @@ export async function updateMemberRole(
 
     const previousRole = targetMember.role
 
-    // Update the role (the factory busts PRINCIPAL_BY_USER from the row's
-    // userId and reconciles the workspace assignment in the same transaction).
-    await setPrincipalRole({ principalId }, newRole, {
-      knownUserId: targetMember.userId,
-      assignRoleId: opts?.assignRoleId,
-      assignGrantedBy: actingPrincipalId,
-    })
+    if (isPortalUser) {
+      // Joining the team takes a seat: count and write on one transaction
+      // under the seat-ledger lock so racing additions cannot overfill.
+      const cacheKeys = await db.transaction(async (tx) => {
+        await assertSeatsAvailable(1, { executor: tx })
+        return promotePortalUsers(tx, [{ id: principalId, userId: targetMember.userId }], newRole, {
+          assignRoleId: opts?.assignRoleId,
+          grantedBy: actingPrincipalId,
+        })
+      })
+      for (const key of cacheKeys) await cacheDel(key)
+    } else {
+      // Update the role (the factory busts PRINCIPAL_BY_USER from the row's
+      // userId and reconciles the workspace assignment in the same transaction).
+      await setPrincipalRole({ principalId }, newRole, {
+        knownUserId: targetMember.userId,
+        assignRoleId: opts?.assignRoleId,
+        assignGrantedBy: actingPrincipalId,
+      })
+    }
 
     // Audit the role change. Already audited from the SSO/JIT path
     // (`auth/hooks.ts` emits user.role.changed there). Admin manual
-    // role flips need the same coverage or the audit log doesn't tell
-    // the full story of who got which role.
+    // role flips and additions from the portal need the same coverage or
+    // the audit log doesn't tell the full story of who got which role.
     if (actor) {
       await recordAuditEvent({
         event: 'user.role.changed',
@@ -339,7 +388,7 @@ export async function updateMemberRole(
       })
     }
   } catch (error) {
-    if (error instanceof ForbiddenError || error instanceof NotFoundError) {
+    if (error instanceof DomainException) {
       throw error
     }
     log.error({ err: error }, 'failed to update principal role')

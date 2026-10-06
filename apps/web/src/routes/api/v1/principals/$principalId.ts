@@ -24,6 +24,17 @@ const updateMemberSchema = z.object({
     .optional(),
 })
 
+/** The audit actor for a change made with an API key: the key owner, as a key. */
+function apiKeyActor(auth: Awaited<ReturnType<typeof withApiKeyAuth>>) {
+  return {
+    userId: auth.principal?.userId ?? null,
+    email: auth.principal?.user?.email ?? null,
+    role: auth.role,
+    type: 'api_key' as const,
+    authMethod: 'api_key' as const,
+  }
+}
+
 /** Fetch a team member with user details, or throw NotFoundError. */
 async function fetchTeamMemberWithUser(principalId: PrincipalId) {
   const { getMemberById } = await import('@/lib/server/domains/principals/principal.service')
@@ -79,7 +90,8 @@ export const Route = createFileRoute('/api/v1/principals/$principalId')({
 
       /**
        * PATCH /api/v1/principals/:principalId
-       * Update a team member's role
+       * Update a team member's role, or add a portal user who has signed in
+       * to the team (takes a seat). Only an admin key grants the Admin role.
        */
       PATCH: async ({ request, params }) => {
         try {
@@ -111,13 +123,15 @@ export const Route = createFileRoute('/api/v1/principals/$principalId')({
             principalId,
             parsed.data.role,
             actingPrincipalId,
-            null,
-            undefined,
+            apiKeyActor(auth),
+            request.headers,
             {
               assignRoleId: parsed.data.roleId as RoleId | undefined,
               // API keys carry the owner-preset authority model; the ceiling for
-              // an assignment grant is the key owner's resolved set.
+              // an assignment grant is the key owner's resolved set, and the
+              // Admin role needs an admin key owner.
               granterPermissions: [...resolveActorPermissions(auth.role)],
+              granterRole: auth.role,
             }
           )
 
@@ -135,7 +149,7 @@ export const Route = createFileRoute('/api/v1/principals/$principalId')({
        */
       DELETE: async ({ request, params }) => {
         try {
-          const { principalId: actingPrincipalId } = await withApiKeyAuth(request, {
+          const auth = await withApiKeyAuth(request, {
             permission: PERMISSIONS.MEMBER_MANAGE,
           })
 
@@ -148,7 +162,7 @@ export const Route = createFileRoute('/api/v1/principals/$principalId')({
           const { removeTeamMember } =
             await import('@/lib/server/domains/principals/principal.service')
 
-          await removeTeamMember(principalId, actingPrincipalId)
+          await removeTeamMember(principalId, auth.principalId, apiKeyActor(auth), request.headers)
 
           return noContentResponse()
         } catch (error) {

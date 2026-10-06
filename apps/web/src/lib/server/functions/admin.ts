@@ -1,30 +1,14 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
-import {
-  generateId,
-  type InviteId,
-  type UserId,
-  type PrincipalId,
-  type SegmentId,
-} from '@quackback/ids'
+import { type InviteId, type UserId, type PrincipalId, type SegmentId } from '@quackback/ids'
 import type { BoardId, PostTagId, RoleId, UserTagId } from '@quackback/ids'
 import { getSetupState, isOnboardingComplete as checkComplete } from '@/lib/server/db'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
 import { requireAuth } from './auth-helpers'
 import { getSession } from '@/lib/server/auth/session'
 import { getSettings } from './workspace'
-import {
-  db,
-  invitation,
-  principal,
-  user,
-  integrations,
-  eq,
-  and,
-  gt,
-  inArray,
-} from '@/lib/server/db'
+import { db, invitation, principal, integrations, eq, and, gt, inArray } from '@/lib/server/db'
 import {
   findHumanAdmin,
   isOpenToBootstrapClaim,
@@ -265,6 +249,7 @@ export const updateMemberRoleFn = createServerFn({ method: 'POST' })
       {
         assignRoleId: data.roleId as RoleId | undefined,
         granterPermissions: auth.permissions,
+        granterRole: auth.principal.role,
       }
     )
 
@@ -890,7 +875,10 @@ export const getPortalUserFn = createServerFn({ method: 'GET' })
     log.debug({ principal_id: data.principalId }, 'get portal user')
     await requireAuth({ permission: PERMISSIONS.PEOPLE_VIEW })
 
-    const result = await getPortalUserDetail(data.principalId as PrincipalId)
+    // Teammates stay visible after they join the team from this page.
+    const result = await getPortalUserDetail(data.principalId as PrincipalId, {
+      includeTeammates: true,
+    })
 
     if (!result) {
       log.debug({ principal_id: data.principalId }, 'get portal user not found')
@@ -1127,102 +1115,22 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ role: data.role }, 'send invitation')
     const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_MANAGE })
+    const { sendTeamInvitation, teamGranterFromAuth } =
+      await import('@/lib/server/domains/principals/team-invitation')
 
-    const email = data.email.toLowerCase()
-
-    // Parallelize invitation and user validation queries
-    const [existingInvitation, existingUser] = await Promise.all([
-      db.query.invitation.findFirst({
-        where: and(
-          eq(invitation.email, email),
-          eq(invitation.status, 'pending'),
-          eq(invitation.kind, 'team')
-        ),
-      }),
-      db.query.user.findFirst({
-        where: eq(user.email, email),
-      }),
-    ])
-
-    if (existingInvitation) {
-      throw new Error('An invitation has already been sent to this email')
-    }
-
-    if (existingUser) {
-      // Check if they already have a team member role (admin or member)
-      const existingPrincipal = await db.query.principal.findFirst({
-        where: eq(principal.userId, existingUser.id),
-      })
-
-      if (existingPrincipal && existingPrincipal.role !== 'user') {
-        throw new Error('A team member with this email already exists')
-      }
-      // Portal users (role='user' or no member record) can be invited to become team members
-    }
-
-    // A custom-role grant rides role='member', never points at the Owner
-    // preset, and is capped by the inviter's own permission set (assignment
-    // is a grant — same ceiling as authoring).
-    if (data.roleId) {
-      if (data.role !== 'member') {
-        throw new Error('Custom role invites use the member role')
-      }
-      const { assertGrantableRole } = await import('@/lib/server/domains/roles/role.grants')
-      await assertGrantableRole(data.roleId as RoleId, auth.permissions)
-    }
-
-    const invitationId = generateId('invite')
-    const expiresAt = new Date(Date.now() + INVITATION_EXPIRY_MS)
-    const now = new Date()
-
-    // Mint the magic link before the insert so the row records its token in
-    // its token set (cancel revokes every token in the set). invitationId is
-    // fixed above, so the callback path is already known.
-    const portalUrl = getBaseUrl()
-    const callbackURL = `/complete-signup/${invitationId}`
-    const minted = await generateInvitationMagicLink(email, callbackURL, portalUrl)
-    const { url: inviteLink, token: magicLinkToken } = minted
-
-    // Seat count and the pending-invite insert share one transaction and a
-    // settings-row lock so two concurrent invites cannot both take the last seat.
-    await db.transaction(async (tx) => {
-      const { enforceSeatLimit } = await import('@/lib/server/domains/principals/seat-limit')
-      await enforceSeatLimit({ executor: tx })
-      await tx.insert(invitation).values({
-        id: invitationId,
-        email,
-        name: data.name || null,
+    const result = await sendTeamInvitation(
+      {
+        email: data.email,
+        name: data.name,
         role: data.role,
-        roleId: (data.roleId as RoleId | undefined) ?? null,
-        status: 'pending',
-        expiresAt,
-        lastSentAt: now,
-        inviterId: auth.user.id,
-        createdAt: now,
-        magicLinkTokens: [magicLinkToken],
-      })
-    })
+        roleId: data.roleId as RoleId | undefined,
+      },
+      teamGranterFromAuth(auth),
+      auth.settings
+    )
 
-    const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
-    const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
-    // Sealed class: the invitee has no account yet, so the address the token
-    // was minted for is the only correct recipient.
-    const { sealedRecipient } = await import('@/lib/server/email/recipient')
-    const result = await sendInvitationEmail({
-      to: sealedRecipient(minted),
-      invitedByName: auth.user.name,
-      inviteeName: data.name || undefined,
-      workspaceName: auth.settings.name,
-      inviteLink,
-      logoUrl,
-    })
-
-    log.info({ invitation_id: invitationId, sent: result.sent }, 'invitation sent')
-    return {
-      invitationId,
-      emailSent: result.sent,
-      inviteLink: !result.sent ? inviteLink : undefined,
-    }
+    log.info({ invitation_id: result.invitationId, sent: result.emailSent }, 'invitation sent')
+    return result
   })
 
 /**

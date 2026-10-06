@@ -1,3 +1,7 @@
+/**
+ * The admin grant ceiling on team invites: only an admin invites someone as
+ * Admin, and a placeholder address is never invited.
+ */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const hoisted = vi.hoisted(() => ({
@@ -73,15 +77,9 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
 
 const { sendInvitationFn } = await import('../admin')
 
-describe('sendInvitationFn seat reservation', () => {
+describe('sendInvitationFn grant ceiling', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    hoisted.requireAuth.mockResolvedValue({
-      user: { id: 'user_inviter', name: 'Inviter' },
-      principal: { id: 'principal_inviter', role: 'admin', type: 'user' },
-      settings: { name: 'Acme', logoKey: null },
-      permissions: [],
-    })
     hoisted.invitationFindFirst.mockResolvedValue(undefined)
     hoisted.userFindFirst.mockResolvedValue(undefined)
     hoisted.generateInvitationMagicLink.mockResolvedValue({
@@ -101,19 +99,49 @@ describe('sendInvitationFn seat reservation', () => {
     })
   })
 
-  it('runs enforceSeatLimit and the invite insert on the same transaction', async () => {
-    await sendInvitationFn({
-      data: { email: 'new@acme.test', role: 'member' },
+  function authAs(role: 'admin' | 'member') {
+    hoisted.requireAuth.mockResolvedValue({
+      user: { id: 'user_inviter', name: 'Inviter' },
+      principal: { id: 'principal_inviter', role, type: 'user' },
+      settings: { name: 'Acme', logoKey: null },
+      permissions: ['member.manage', 'member.view'],
     })
+  }
 
-    expect(hoisted.transaction).toHaveBeenCalledOnce()
-    expect(hoisted.enforceSeatLimit).toHaveBeenCalledOnce()
-    const seatArgs = hoisted.enforceSeatLimit.mock.calls[0]?.[0] as { executor: unknown }
-    expect(seatArgs.executor).toBeDefined()
+  it('refuses a non-admin inviting someone as Admin, before minting or writing anything', async () => {
+    authAs('member')
+
+    await expect(
+      sendInvitationFn({ data: { email: 'new@acme.test', role: 'admin' } })
+    ).rejects.toMatchObject({ code: 'GRANT_CEILING' })
+    expect(hoisted.generateInvitationMagicLink).not.toHaveBeenCalled()
+    expect(hoisted.insertValues).not.toHaveBeenCalled()
+  })
+
+  it('lets a non-admin invite a member', async () => {
+    authAs('member')
+
+    await sendInvitationFn({ data: { email: 'new@acme.test', role: 'member' } })
     expect(hoisted.insertValues).toHaveBeenCalledOnce()
-    expect(hoisted.insert).not.toHaveBeenCalled()
-    const inserted = hoisted.insertValues.mock.calls[0]?.[0] as { email: string; status: string }
-    expect(inserted.email).toBe('new@acme.test')
-    expect(inserted.status).toBe('pending')
+    const inserted = hoisted.insertValues.mock.calls[0]?.[0] as { role: string }
+    expect(inserted.role).toBe('member')
+  })
+
+  it('lets an admin invite an Admin', async () => {
+    authAs('admin')
+
+    await sendInvitationFn({ data: { email: 'new@acme.test', role: 'admin' } })
+    expect(hoisted.insertValues).toHaveBeenCalledOnce()
+  })
+
+  it('never invites a minted placeholder address', async () => {
+    authAs('admin')
+
+    await expect(
+      sendInvitationFn({
+        data: { email: 'sso-steam-abc@anon.quackback.io', role: 'member' },
+      })
+    ).rejects.toMatchObject({ code: 'NOT_ELIGIBLE' })
+    expect(hoisted.generateInvitationMagicLink).not.toHaveBeenCalled()
   })
 })
