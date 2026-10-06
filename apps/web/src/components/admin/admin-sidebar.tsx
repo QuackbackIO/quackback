@@ -417,7 +417,8 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
 
             {/* Bottom Section */}
             <div className="flex flex-col gap-0.5 px-2">
-              <PlanNoticeQuiet notice={planNotice ?? null} />
+              {/* Mounted only for a notice, so a page without one renders nothing here. */}
+              {planNotice && <PlanNoticeQuiet notice={planNotice} />}
               <LaunchPlanDock />
               {/* Settings (admin-only) */}
               {showSettings && (
