@@ -65,6 +65,13 @@ vi.mock('@/lib/server/functions/sso', () => ({
   saveIdentityProviderClaimMappingFn: mappingSpy,
 }))
 
+// happy-dom never loads images and reports every one as already failed;
+// keep them loading so a test drives failure with an error event.
+Object.defineProperty(HTMLImageElement.prototype, 'complete', {
+  configurable: true,
+  get: () => false,
+})
+
 const DEPARTMENT = {
   id: 'ua_1',
   key: 'department',
@@ -466,6 +473,128 @@ describe('UserDetailsCard save coordination', () => {
     ).toEqual([
       { claimPath: 'dept', attributeKey: 'department' },
       { claimPath: 'costCenter', attributeKey: 'department' },
+    ])
+  })
+})
+
+/** The card at rest, before Customize. */
+function renderSummary(provider: IdentityProvider) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  qc.setQueryData(['admin', 'userAttributes'], [DEPARTMENT])
+  return render(
+    <QueryClientProvider client={qc}>
+      <UserDetailsCard provider={provider} />
+    </QueryClientProvider>
+  )
+}
+
+const syncBox = () =>
+  screen.getByRole('checkbox', { name: 'Update name and avatar on every sign-in' })
+
+function captureWith(claims: Record<string, import('@/lib/shared/json').JsonValue>) {
+  const base = makeProvider().lastTestCapture!
+  return {
+    ...base,
+    claims,
+    replay: {
+      sources: [
+        { source: 'idToken' as const, claims },
+        { source: 'userinfo' as const, claims: { sub: 'person-123' } },
+      ],
+    },
+  }
+}
+
+describe('UserDetailsCard profile sync', () => {
+  it('is off by default and says profiles are set once', () => {
+    renderCard(makeProvider())
+    expect(syncBox()).not.toBeChecked()
+    expect(
+      screen.getByText('Name and avatar are set when an account is created.')
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText('Email and name are set when an account is created.')
+    ).not.toBeInTheDocument()
+  })
+
+  it('turning it on saves a profile sync operation', async () => {
+    renderCard(makeProvider({ claimMapping: null }))
+    await userEvent.click(syncBox())
+    expect(syncBox()).toBeChecked()
+    expect(
+      screen.getByText(
+        'Keeps profiles in step with your provider. Names or pictures someone changed in Quackback are kept.'
+      )
+    ).toBeInTheDocument()
+    save()
+    await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(lastMapping().operations).toEqual([{ op: 'setProfileSync', syncOnSignIn: true }])
+    expect(lastSaved()).toEqual({ profile: { syncOnSignIn: true } })
+  })
+
+  it('turning a stored sync off saves it off', async () => {
+    renderCard(makeProvider({ claimMapping: { profile: { syncOnSignIn: true } } }))
+    expect(syncBox()).toBeChecked()
+    await userEvent.click(syncBox())
+    save()
+    await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
+    expect(lastMapping().operations).toEqual([{ op: 'setProfileSync', syncOnSignIn: false }])
+    expect(lastSaved()).toBeNull()
+  })
+
+  it('the summary says name and avatar update on every sign-in only while sync is on', () => {
+    const off = renderSummary(makeProvider({ claimMapping: null }))
+    expect(screen.queryByText('Name and avatar update on every sign-in.')).not.toBeInTheDocument()
+    off.unmount()
+    renderSummary(makeProvider({ claimMapping: { profile: { syncOnSignIn: true } } }))
+    expect(screen.getByText('Name and avatar update on every sign-in.')).toBeInTheDocument()
+    expect(screen.getByText('Uses standard profile fields')).toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+  })
+})
+
+describe('UserDetailsCard test sign-in column', () => {
+  it('shows what each field took from the last test sign-in, once there is one', () => {
+    const untested = renderCard(makeProvider({ lastTestCapture: null }))
+    expect(
+      screen.queryByRole('columnheader', { name: 'In the test sign-in' })
+    ).not.toBeInTheDocument()
+    untested.unmount()
+    renderCard(makeProvider())
+    expect(screen.getByRole('columnheader', { name: 'In the test sign-in' })).toBeInTheDocument()
+    expect(screen.getAllByText('person-123').length).toBeGreaterThan(0)
+    expect(screen.getByText('Not sent, initials are shown')).toBeInTheDocument()
+    expect(screen.getByText('Name is used')).toBeInTheDocument()
+  })
+
+  it('maps the avatar from a claim in the test sign-in and previews it in the table', async () => {
+    renderCard(
+      makeProvider({
+        claimMapping: null,
+        lastTestCapture: captureWith({
+          sub: 'person-123',
+          email: 'jane@example.test',
+          name: 'Jane',
+          photo_url: 'https://cdn.example.com/photos/123',
+        }),
+      })
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Avatar mapping' }))
+    const dialog = screen.getByRole('dialog')
+    const list = within(dialog).getByRole('list', { name: 'Claims in your last test sign-in' })
+    const photo = within(list)
+      .getAllByRole('button')
+      .find((b) => b.querySelector('code')?.textContent === 'photo_url')!
+    await userEvent.click(photo)
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Apply' }))
+    const avatarRow = screen.getByText('Avatar', { selector: 'span' }).closest('tr')!
+    expect(within(avatarRow).getByText('photo_url')).toBeInTheDocument()
+    expect(within(avatarRow).getByText('https://cdn.example.com/photos/123')).toBeInTheDocument()
+    save()
+    await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
+    expect(lastMapping().operations).toEqual([
+      { op: 'setProfileClaim', field: 'image', path: 'photo_url' },
     ])
   })
 })

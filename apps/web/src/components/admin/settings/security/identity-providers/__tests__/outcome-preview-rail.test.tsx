@@ -21,6 +21,13 @@ vi.mock('@/lib/client/hooks/use-user-attributes-queries', () => ({
   }),
 }))
 
+// happy-dom never loads images and reports every one as already failed;
+// keep them loading so a test drives failure with an error event.
+Object.defineProperty(HTMLImageElement.prototype, 'complete', {
+  configurable: true,
+  get: () => false,
+})
+
 const REG = 'oidc_x'
 const defs = [{ key: 'department', type: 'string' as const, label: 'Department' }]
 const policy = {
@@ -200,6 +207,40 @@ describe('OutcomePreviewRail', () => {
     })
     expect(screen.queryByText(/kept existing/i)).not.toBeInTheDocument()
     expect(screen.getByText(/Assumes the user has no attributes yet/)).toBeInTheDocument()
+  })
+
+  it('shows the avatar the draft resolves, and only when one does', () => {
+    const none = renderRail({})
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+    expect(screen.queryByText('Avatar')).not.toBeInTheDocument()
+    none.unmount()
+    const { container } = renderRail({
+      draft: { profile: { claims: { image: 'photo_url' } } },
+      capture: v2({
+        replay: {
+          sources: [
+            {
+              source: 'idToken',
+              claims: {
+                sub: 'person-123',
+                email: 'jane@example.test',
+                name: 'Jane',
+                photo_url: 'https://cdn.example.com/photos/123',
+              },
+            },
+            { source: 'userinfo', claims: { sub: 'person-123' } },
+          ],
+        },
+      }),
+    })
+    expect(container.querySelector('dl img')).toHaveAttribute(
+      'src',
+      'https://cdn.example.com/photos/123'
+    )
+    expect(screen.getAllByText('https://cdn.example.com/photos/123').length).toBeGreaterThan(0)
+    // Troubleshooting names the claim the avatar came from.
+    expect(screen.getAllByText('Avatar')).toHaveLength(2)
+    expect(screen.getByText('photo_url')).toBeInTheDocument()
   })
 
   it('shows Member (runtime default) when Accounts role is null', () => {

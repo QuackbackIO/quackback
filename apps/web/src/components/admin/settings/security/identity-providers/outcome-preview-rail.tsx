@@ -2,8 +2,8 @@
  * What the last test sign-in would produce under the current draft. Replays
  * the captured sources through the same binder production uses.
  *
- * The visible result is the short version — the person, their email, and the
- * role rule that applied. Provenance, raw claims and per-source snapshots are
+ * The visible result is the short version: the person, their avatar when
+ * one resolves, their email, and the role rule that applied. Provenance, raw claims and per-source snapshots are
  * for troubleshooting and live under "View test details". Diagnostic data is
  * admin-only and never logged.
  */
@@ -31,7 +31,8 @@ import type { AttributeDefinition } from '@/lib/shared/plan-claim-attribute-writ
 import type { ProfileOutcome } from '@/lib/shared/sso-profile-outcome'
 import { TestSignInButton } from '../sso/test-sign-in-button'
 import { AttributeWritesPreview } from './attribute-writes-preview'
-import { PROFILE_ROW_LABELS } from './provider-shared'
+import { PictureWithUrl } from './claim-picture'
+import { PROFILE_FIELD_SPECS } from './provider-shared'
 
 const PROTOCOL_KEYS = new Set([
   'iss',
@@ -147,6 +148,14 @@ export function OutcomePreviewRail({
               <span className="text-muted-foreground"> (generated)</span>
             )}
           </dd>
+          {identity.image && (
+            <>
+              <dt className="text-muted-foreground">Avatar</dt>
+              <dd className="min-w-0">
+                <PictureWithUrl url={identity.image} className="size-6" iconClassName="size-3" />
+              </dd>
+            </>
+          )}
           <dt className="text-muted-foreground">Email</dt>
           <dd className="min-w-0 break-all">
             <EmailValue identity={identity} draft={draft} />
@@ -274,7 +283,7 @@ export function TestDetails({
   }
   const sources = isReplayableCapture(capture) ? capture.replay.sources : []
   const provenance = identity
-    ? (['id', 'email', 'name'] as const).flatMap((field) => {
+    ? (['id', 'email', 'name', 'image'] as const).flatMap((field) => {
         const from = identity.provenance[field]
         return from ? [{ field, path: from.path, source: SOURCE_WORDS[from.source] }] : []
       })
@@ -290,7 +299,7 @@ export function TestDetails({
             <dl className="grid grid-cols-[6.6em_1fr] gap-x-3 gap-y-1">
               {provenance.map((p) => (
                 <div key={p.field} className="contents">
-                  <dt className="text-muted-foreground">{PROFILE_ROW_LABELS[p.field]}</dt>
+                  <dt className="text-muted-foreground">{PROFILE_FIELD_SPECS[p.field].label}</dt>
                   <dd className="min-w-0 break-all">
                     <span className="font-mono text-xs">{p.path}</span>
                     <span className="text-muted-foreground"> from {p.source}</span>

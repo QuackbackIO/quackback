@@ -954,14 +954,14 @@ describe('<ProviderDetailPage> user details', () => {
     renderPage(
       makeProvider({
         claimMapping: {
-          profile: { claims: { username: 'preferred_username' } as Record<string, string> },
+          profile: { claims: { locale: 'locale' } as Record<string, string> },
         },
       })
     )
-    // id / email / name are still standard, but the resting view must not
-    // collapse to the one-sentence summary and hide the stored row.
+    // The five profile fields are still standard, but the resting view must
+    // not collapse to the one-sentence summary and hide the stored row.
     expect(screen.getByRole('table')).toBeInTheDocument()
-    expect(screen.getByText('username')).toBeInTheDocument()
+    expect(screen.getByText('locale')).toBeInTheDocument()
     expect(screen.getByText(/not editable here/)).toBeInTheDocument()
   })
 
@@ -974,20 +974,25 @@ describe('<ProviderDetailPage> user details', () => {
     expect(screen.getByTestId('compatibility-sources')).toHaveTextContent('Access-token JWT')
   })
 
-  it('opens the compact editor with the three profile fields and no Default badges', () => {
+  it('opens the compact editor with the five profile fields and no Default badges', () => {
     renderPage(makeProvider({ claimMapping: null }))
     customize()
     for (const [label, path] of [
       ['Account ID', 'sub'],
       ['Email', 'email'],
       ['Name', 'name'],
+      ['Username', 'preferred_username'],
+      ['Avatar', 'picture'],
     ]) {
       expect(screen.getByText(label)).toBeInTheDocument()
       expect(screen.getByText(path)).toBeInTheDocument()
     }
     expect(screen.queryByText('Default')).not.toBeInTheDocument()
     expect(
-      screen.getByText('Email and name are set when an account is created.')
+      screen.getByRole('checkbox', { name: 'Update name and avatar on every sign-in' })
+    ).not.toBeChecked()
+    expect(
+      screen.getByText('Name and avatar are set when an account is created.')
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add mapping' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Customize' })).not.toBeInTheDocument()

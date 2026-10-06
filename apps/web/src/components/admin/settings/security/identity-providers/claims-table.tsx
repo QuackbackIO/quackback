@@ -3,9 +3,13 @@
  * Presentation only — the card owns the draft and persists through the
  * operations API.
  *
- * One table, not two. Account ID, email and name are the profile; role rules
- * and People attributes are extra mappings the admin added. Standard rows
- * carry no badge; only an exception is marked, as "Custom".
+ * One table, not two. Account ID, email, name, username and avatar are the
+ * profile; role rules and People attributes are extra mappings the admin
+ * added. Standard rows carry no badge; only an exception is marked, as
+ * "Custom". In the editor each profile row says in one muted line what it
+ * expects, and once the provider has a test sign-in a third column shows what
+ * each field takes from it under the current draft, so a claim is chosen by
+ * what the provider actually sent.
  */
 import { PencilIcon, TrashIcon } from '@heroicons/react/24/solid'
 import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline'
@@ -14,7 +18,10 @@ import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { DEFAULT_IDENTITY_SOURCES, type IdentitySource } from '@/lib/shared/oidc-claim-mapping'
 import type { Role } from '@/lib/shared/roles'
+import type { ProfileFieldValues } from '@/lib/shared/sso-mapping-preview'
+import { PictureWithUrl } from './claim-picture'
 import {
+  PROFILE_FIELD_SPECS,
   SOURCE_LABELS,
   type ClaimsPeopleRow,
   type ClaimsProfileRow,
@@ -38,6 +45,7 @@ export function ClaimsTable({
   onRemove,
   editable,
   disabled,
+  testValues,
 }: {
   profileRows: ClaimsProfileRow[]
   additionalRows: ClaimsTableRow[]
@@ -48,8 +56,12 @@ export function ClaimsTable({
   /** False in the read-only summary: no action column, no flag checkboxes. */
   editable: boolean
   disabled?: boolean
+  /** What each profile field takes from the last test sign-in. Adds the
+   *  "In the test sign-in" column; omitted when there is no test. */
+  testValues?: ProfileFieldValues | null
 }) {
   const hasPeople = additionalRows.some((row) => row.kind === 'people')
+  const showTest = testValues != null
 
   return (
     <div className="space-y-4">
@@ -62,6 +74,11 @@ export function ClaimsTable({
             <th scope="col" className="min-w-0 py-2 pr-3 font-medium">
               Provider claim
             </th>
+            {showTest && (
+              <th scope="col" className="py-2 pr-3 font-medium whitespace-nowrap">
+                In the test sign-in
+              </th>
+            )}
             {editable && (
               <th scope="col" className="w-px py-2 font-medium">
                 <span className="sr-only">Actions</span>
@@ -74,6 +91,7 @@ export function ClaimsTable({
             <ProfileRow
               key={row.field}
               row={row}
+              testValues={testValues}
               editable={editable}
               disabled={disabled}
               onEdit={() => onEdit(row)}
@@ -85,6 +103,7 @@ export function ClaimsTable({
                 <RoleRowView
                   key="role"
                   row={row}
+                  showTest={showTest}
                   editable={editable}
                   disabled={disabled}
                   onEdit={() => onEdit(row)}
@@ -97,6 +116,7 @@ export function ClaimsTable({
                 <PeopleRowView
                   key={`people-${row.baselineIndex}`}
                   row={row}
+                  showTest={showTest}
                   editable={editable}
                   disabled={disabled}
                   onEdit={() => onEdit(row)}
@@ -105,7 +125,14 @@ export function ClaimsTable({
               )
             }
             if (row.kind === 'unsupported') {
-              return <UnsupportedRowView key={row.id} row={row} editable={editable} />
+              return (
+                <UnsupportedRowView
+                  key={row.id}
+                  row={row}
+                  showTest={showTest}
+                  editable={editable}
+                />
+              )
             }
             return null
           })}
@@ -189,13 +216,44 @@ function IconButton({
   )
 }
 
+/** An empty cell in the test column, for rows that are not profile fields. */
+function NoTestValue({ show }: { show: boolean }) {
+  return show ? <td className="py-2.5 pr-3" /> : null
+}
+
+/**
+ * The value one profile field takes from the test sign-in. The avatar shows
+ * the picture itself. A field that gets nothing says what happens instead.
+ */
+function TestValue({
+  field,
+  values,
+}: {
+  field: ClaimsProfileRow['field']
+  values: ProfileFieldValues
+}) {
+  const emptyText = PROFILE_FIELD_SPECS[field].emptyTestText
+  if (field === 'image') {
+    return <PictureWithUrl url={values.image} missingText={emptyText} className="size-8" />
+  }
+  const value = values[field]
+  if (!value) return <span className="text-muted-foreground">{emptyText}</span>
+  return (
+    <span className="block truncate" title={value}>
+      {value}
+    </span>
+  )
+}
+
 function ProfileRow({
   row,
+  testValues,
   editable,
   disabled,
   onEdit,
 }: {
   row: ClaimsProfileRow
+  testValues?: ProfileFieldValues | null
   editable: boolean
   disabled?: boolean
   onEdit: () => void
@@ -207,10 +265,20 @@ function ProfileRow({
           <span className="font-medium">{row.label}</span>
           {!row.isDefault && <CustomBadge />}
         </div>
+        {editable && (
+          <p className="mt-0.5 text-xs whitespace-nowrap text-muted-foreground">{row.hint}</p>
+        )}
       </td>
       <td className="py-2.5 pr-3">
         <ClaimPath>{row.path}</ClaimPath>
       </td>
+      {testValues && (
+        // max-w-0 with w-full gives this column the remaining width, so long
+        // values truncate instead of widening the table.
+        <td className="w-full max-w-0 py-2.5 pr-3">
+          <TestValue field={row.field} values={testValues} />
+        </td>
+      )}
       {editable && (
         <td className="py-2.5">
           <IconButton label={`Edit ${row.label} mapping`} onClick={onEdit} disabled={disabled}>
@@ -224,12 +292,14 @@ function ProfileRow({
 
 function RoleRowView({
   row,
+  showTest,
   editable,
   disabled,
   onEdit,
   onRemove,
 }: {
   row: ClaimsRoleRow
+  showTest: boolean
   editable: boolean
   disabled?: boolean
   onEdit: () => void
@@ -255,6 +325,7 @@ function RoleRowView({
       <td className="py-2.5 pr-3">
         <ClaimPath>{row.claimPath}</ClaimPath>
       </td>
+      <NoTestValue show={showTest} />
       {editable && (
         <td className="py-2.5">
           <div className="flex items-center justify-end gap-1">
@@ -278,12 +349,14 @@ function RoleRowView({
 
 function PeopleRowView({
   row,
+  showTest,
   editable,
   disabled,
   onEdit,
   onRemove,
 }: {
   row: ClaimsPeopleRow
+  showTest: boolean
   editable: boolean
   disabled?: boolean
   onEdit: () => void
@@ -310,6 +383,7 @@ function PeopleRowView({
       <td className="py-2.5 pr-3">
         <ClaimPath>{row.claimPath}</ClaimPath>
       </td>
+      <NoTestValue show={showTest} />
       {editable && (
         <td className="py-2.5">
           <div className="flex items-center justify-end gap-1">
@@ -331,7 +405,15 @@ function PeopleRowView({
   )
 }
 
-function UnsupportedRowView({ row, editable }: { row: ClaimsUnsupportedRow; editable: boolean }) {
+function UnsupportedRowView({
+  row,
+  showTest,
+  editable,
+}: {
+  row: ClaimsUnsupportedRow
+  showTest: boolean
+  editable: boolean
+}) {
   return (
     <tr className="border-b border-border/50 last:border-0 align-top">
       <td className="py-2.5 pr-3">
@@ -339,6 +421,7 @@ function UnsupportedRowView({ row, editable }: { row: ClaimsUnsupportedRow; edit
         <p className="mt-0.5 text-muted-foreground">{row.detail}</p>
       </td>
       <td className="py-2.5 pr-3 text-muted-foreground">Not editable here</td>
+      <NoTestValue show={showTest} />
       {editable && <td className="py-2.5" />}
     </tr>
   )

@@ -2,9 +2,11 @@
  * User details — what Quackback reads from this provider about a person.
  *
  * Most providers need nothing here: standard OpenID Connect claims identify
- * the account (`sub`), and set its email and name. So the resting state is a
- * sentence, not a table: "Uses standard profile fields", with Customize. The
- * table appears when something is custom, or when the admin opens the editor.
+ * the account (`sub`), and set its email, name and avatar. So the resting
+ * state is a sentence, not a table: "Uses standard profile fields", with
+ * Customize. The table appears when something is custom, or when the admin
+ * opens the editor. Name and avatar are set when an account is created, and
+ * on every sign-in when profile sync is on.
  *
  * The editor edits a local draft; Save diffs closed operations against the
  * stored JSON so unrelated sections survive. Removing a draft row is
@@ -12,17 +14,24 @@
  * grant admin, still asks first — those are the two edits that change who
  * gets into what.
  */
-import { useMemo, useRef, useState } from 'react'
+import { useId, useMemo, useRef, useState } from 'react'
 import { PlusIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { useUserAttributes } from '@/lib/client/hooks/use-user-attributes-queries'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
-import type { IdentitySource } from '@/lib/shared/oidc-claim-mapping'
+import {
+  profileSyncEnabled,
+  type IdentitySource,
+  type ProfileField,
+} from '@/lib/shared/oidc-claim-mapping'
 import type { AttributeDefinition } from '@/lib/shared/plan-claim-attribute-writes'
 import { diffClaimMappingOperations, mappingSaveRisks } from '@/lib/shared/sso-claim-mapping-edit'
+import { previewProfileValues } from '@/lib/shared/sso-mapping-preview'
 import {
   ClaimRowDialog,
   type ClaimRowDialogCommit,
@@ -117,23 +126,30 @@ function UserDetailsSummary({
 
   const model = buildClaimsTableModel({ mapping, definitions })
   const customProfile = hasCustomProfileClaims(mapping)
+  const profileRows = customProfile ? model.profile : []
 
   return (
     <div className="space-y-4 text-sm">
       {issue && <p className="font-medium text-warning">{issue}</p>}
       {!customProfile && <p className="font-medium">Uses standard profile fields</p>}
-      <ClaimsTable
-        profileRows={customProfile ? model.profile : []}
-        additionalRows={model.additional}
-        peopleFlags={{
-          overrideExisting: mapping?.attributes?.overrideExisting === true,
-          syncOnSignIn: mapping?.attributes?.syncOnSignIn === true,
-        }}
-        onPeopleFlagsChange={() => {}}
-        onEdit={() => {}}
-        onRemove={() => {}}
-        editable={false}
-      />
+      {/* Sync or a source change alone leaves no rows to list. */}
+      {profileRows.length + model.additional.length > 0 && (
+        <ClaimsTable
+          profileRows={profileRows}
+          additionalRows={model.additional}
+          peopleFlags={{
+            overrideExisting: mapping?.attributes?.overrideExisting === true,
+            syncOnSignIn: mapping?.attributes?.syncOnSignIn === true,
+          }}
+          onPeopleFlagsChange={() => {}}
+          onEdit={() => {}}
+          onRemove={() => {}}
+          editable={false}
+        />
+      )}
+      {profileSyncEnabled(mapping) && (
+        <p className="text-muted-foreground">Name and avatar update on every sign-in.</p>
+      )}
       {mapping?.role && !provider.autoCreateUsers && (
         <p className="text-muted-foreground">
           Role rules are not applied while account creation is off.
@@ -175,14 +191,14 @@ function UserDetailsEditor({
   const [attributes, setAttributes] = useState<AttributeMapping | null>(
     provider.claimMapping?.attributes ?? null
   )
-  const [profileClaims, setProfileClaims] = useState<{
-    id?: string
-    email?: string
-    name?: string
-  }>(() => ({ ...(provider.claimMapping?.profile?.claims ?? {}) }))
+  const [profileClaims, setProfileClaims] = useState<Partial<Record<ProfileField, string>>>(() => ({
+    ...(provider.claimMapping?.profile?.claims ?? {}),
+  }))
   const [sources, setSources] = useState<IdentitySource[]>(() =>
     draftSources(provider.claimMapping)
   )
+  const [profileSync, setProfileSync] = useState(() => profileSyncEnabled(provider.claimMapping))
+  const syncId = useId()
   const pendingTest = useRef(false)
   // The missing-email policy is owned by Sign-in & access; carried through
   // untouched so this editor's Save cannot flip it.
@@ -192,6 +208,7 @@ function UserDetailsEditor({
     ...withAllowMissingEmail({ claims: profileClaims, sources }, allowMissingEmail),
     claims: profileClaims,
     sources,
+    syncOnSignIn: profileSync,
   })
   const draftMapping = mergeClaimMapping(provider.claimMapping, {
     role: mapping ?? undefined,
@@ -333,6 +350,8 @@ function UserDetailsEditor({
   })
   const addTargets = availableAddTargets({ mapping: draftMapping, definitions })
   const customProfile = hasCustomProfileClaims({ profile: { claims: profileClaims } })
+  // What each profile field takes from the last test sign-in under this draft.
+  const testValues = previewProfileValues(draftMapping, capture)
 
   return (
     <div className="space-y-5">
@@ -354,11 +373,29 @@ function UserDetailsEditor({
         onRemove={removeRow}
         editable
         disabled={saving}
+        testValues={testValues}
       />
 
-      <p className="text-sm text-muted-foreground">
-        Email and name are set when an account is created.
-      </p>
+      <div className="flex items-start gap-2 text-sm">
+        <Checkbox
+          id={syncId}
+          checked={profileSync}
+          onCheckedChange={(v) => setProfileSync(v === true)}
+          disabled={saving}
+          aria-describedby={`${syncId}-note`}
+          className="mt-0.5"
+        />
+        <div className="space-y-1">
+          <Label htmlFor={syncId} className="cursor-pointer">
+            Update name and avatar on every sign-in
+          </Label>
+          <p id={`${syncId}-note`} className="text-muted-foreground">
+            {profileSync
+              ? 'Keeps profiles in step with your provider. Names or pictures someone changed in Quackback are kept.'
+              : 'Name and avatar are set when an account is created.'}
+          </p>
+        </div>
+      </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <Button
@@ -434,6 +471,7 @@ function UserDetailsEditor({
         registrationId={provider.registrationId}
         canTest
         capture={capture}
+        draft={draftMapping}
         providerKind={provider.kind}
         autoCreateUsers={provider.autoCreateUsers}
         onOpenChange={(open) => {
