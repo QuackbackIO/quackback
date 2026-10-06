@@ -2,6 +2,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render, screen } from '@testing-library/react'
 import { StrictMode } from 'react'
+import { IntlProvider } from 'react-intl'
+import en from '@/locales/en.json'
 
 vi.mock('../install-messenger-sheet', () => ({ InstallMessengerSheet: () => null }))
 vi.mock('../invite-team-sheet', () => ({
@@ -64,12 +66,18 @@ describe('setup email links', () => {
 })
 
 describe('the admin layout', () => {
-  it('opens a going-live sheet on request', async () => {
+  // A catalog that holds the sheets' strings, so they open without loading any.
+  const renderLayout = () =>
     render(
-      <AdminProductTourProvider>
-        <p>page</p>
-      </AdminProductTourProvider>
+      <IntlProvider locale="en" messages={en}>
+        <AdminProductTourProvider>
+          <p>page</p>
+        </AdminProductTourProvider>
+      </IntlProvider>
     )
+
+  it('opens a going-live sheet on request', async () => {
+    renderLayout()
     expect(screen.queryByRole('region', { name: 'Invite your team' })).toBeNull()
     await act(async () => openGoingLiveSheet('invite-team'))
     expect(await screen.findByRole('region', { name: 'Invite your team' })).toBeTruthy()
@@ -77,11 +85,7 @@ describe('the admin layout', () => {
 
   it('opens the step a setup email links to', async () => {
     window.history.replaceState(null, '', '/admin?open=invite-team')
-    render(
-      <AdminProductTourProvider>
-        <p>page</p>
-      </AdminProductTourProvider>
-    )
+    renderLayout()
     expect(await screen.findByRole('region', { name: 'Invite your team' })).toBeTruthy()
     expect(window.location.search).toBe('')
   })
