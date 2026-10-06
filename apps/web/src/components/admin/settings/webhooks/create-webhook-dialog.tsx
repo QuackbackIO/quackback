@@ -120,7 +120,7 @@ export function CreateWebhookDialog({
   // Create form view
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Create webhook</DialogTitle>
           <DialogDescription>

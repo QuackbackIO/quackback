@@ -38,4 +38,14 @@ describe('EditWebhookDialog', () => {
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Rotate secret' })).toBeInTheDocument()
   })
+
+  it('scrolls inside the viewport when the event list is taller than the screen', () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <EditWebhookDialog webhook={hook} open onOpenChange={() => {}} />
+      </QueryClientProvider>
+    )
+    const content = screen.getByRole('dialog')
+    expect(content).toHaveClass('max-h-[calc(100dvh-2rem)]', 'overflow-y-auto')
+  })
 })
