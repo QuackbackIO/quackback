@@ -29,7 +29,7 @@ import { upsertIdentityProviderFn } from '@/lib/server/functions/sso'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import { inferIdpKind, IDP_KIND_NAMES } from '../idp-shortcuts'
 import { RecoveryCodesSection } from '../sso/recovery-codes-section'
-import { isOnlyWorkingMethod } from './provider-shared'
+import { isOnlyWorkingMethod } from './only-working-method'
 import { SsoUpgradeNotice } from './sso-upgrade-notice'
 
 export function IdentityProvidersSection({
