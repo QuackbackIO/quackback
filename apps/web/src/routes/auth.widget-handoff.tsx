@@ -19,9 +19,10 @@
  *      renders.
  *
  * Why the server fn wrapper?
- *   The actual OTT consumption logic needs `setResponseHeader` from `@tanstack/react-start/server`. Vite's
- *   import-protection plugin denies that specifier in client-bundled code,
- *   and route files end up in the client bundle via `routeTree.gen.ts`.
+ *   The actual OTT consumption logic needs `setResponseHeader` from
+ *   `@tanstack/react-start/server`. Vite's import-protection plugin denies
+ *   that specifier in client-bundled code, and route files end up in the
+ *   client bundle via `routeTree.gen.ts`.
  *   Wrapping the logic in a `createServerFn` confines the server-only
  *   imports to the server bundle — same pattern used by `widget.tsx`'s
  *   `setIframeHeaders`.
