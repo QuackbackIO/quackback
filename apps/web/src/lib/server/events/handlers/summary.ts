@@ -26,7 +26,7 @@ export const summaryHook: HookHandler = {
       await generateAndSavePostSummary(postId)
     } catch (err) {
       if (err instanceof TierLimitError) {
-        log.info({ err, post_id: postId }, 'summary skipped: ai not available on plan')
+        log.info({ err, post_id: postId }, 'summary skipped: ai budget unavailable')
       } else {
         log.error({ err, post_id: postId }, 'summary hook failed')
       }

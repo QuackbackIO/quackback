@@ -127,7 +127,7 @@ export async function generatePostEmbedding(
     .then(({ checkPostForMergeCandidates }) => checkPostForMergeCandidates(postId))
     .catch((err) => {
       if (err instanceof TierLimitError) {
-        log.info({ post_id: postId, err }, 'merge check skipped: ai not available on plan')
+        log.info({ post_id: postId, err }, 'merge check skipped: ai budget unavailable')
       } else {
         log.error({ post_id: postId, err }, 'merge check failed')
       }

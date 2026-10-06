@@ -71,7 +71,7 @@ export const aiHook: HookHandler = {
       if (sentimentResult.status === 'rejected') {
         const reason = sentimentResult.reason
         if (reason instanceof TierLimitError) {
-          log.info({ err: reason, post_id: postId }, 'sentiment skipped: ai not available on plan')
+          log.info({ err: reason, post_id: postId }, 'sentiment skipped: ai budget unavailable')
         } else {
           log.error({ err: reason, post_id: postId }, 'sentiment failed')
         }
@@ -79,7 +79,7 @@ export const aiHook: HookHandler = {
       if (embeddingResult.status === 'rejected') {
         const reason = embeddingResult.reason
         if (reason instanceof TierLimitError) {
-          log.info({ err: reason, post_id: postId }, 'embedding skipped: ai not available on plan')
+          log.info({ err: reason, post_id: postId }, 'embedding skipped: ai budget unavailable')
         } else {
           log.error({ err: reason, post_id: postId }, 'embedding failed')
         }
