@@ -18,11 +18,7 @@ export const Route = createFileRoute('/_portal/settings')({
   // Settings strings stay out of the catalog every other page seeds; these
   // pages read them with the page.
   loader: async ({ context }) => ({
-    messages: await loadAreaMessages(
-      context.acceptLanguageLocale ?? DEFAULT_LOCALE,
-      'settings',
-      'notificationPreferences'
-    ),
+    messages: await loadAreaMessages(context.acceptLanguageLocale ?? DEFAULT_LOCALE, 'settings'),
   }),
   component: SettingsLayout,
 })
