@@ -1,13 +1,12 @@
 /**
- * The User details table: which provider claim sets each Quackback field.
- * Presentation only — the card owns the draft and persists through the
+ * The Profile table: which provider claim sets each Quackback field.
+ * Presentation only; the card owns the draft and persists through the
  * operations API.
  *
  * One table, not two. Account ID, email, name, username and avatar are the
  * profile; role rules and People attributes are extra mappings the admin
  * added. Standard rows carry no badge; only an exception is marked, as
- * "Custom". In the editor each profile row says in one muted line what it
- * expects, and once the provider has a test sign-in a third column shows what
+ * "Custom". Each profile row says in one muted line what it expects, and once the provider has a test sign-in a third column shows what
  * each field takes from it under the current draft, so a claim is chosen by
  * what the provider actually sent.
  */
@@ -43,7 +42,7 @@ export function ClaimsTable({
   onPeopleFlagsChange,
   onEdit,
   onRemove,
-  editable,
+  providerLabel,
   disabled,
   testValues,
 }: {
@@ -53,11 +52,11 @@ export function ClaimsTable({
   onPeopleFlagsChange: (next: { overrideExisting: boolean; syncOnSignIn: boolean }) => void
   onEdit: (row: ClaimsTableRow) => void
   onRemove: (row: ClaimsTableRow) => void
-  /** False in the read-only summary: no action column, no flag checkboxes. */
-  editable: boolean
+  /** Names the claim column ("Acme ID claim"); "Provider claim" without one. */
+  providerLabel?: string
   disabled?: boolean
   /** What each profile field takes from the last test sign-in. Adds the
-   *  "In the test sign-in" column; omitted when there is no test. */
+   *  "Last test sign-in" column; omitted when there is no test. */
   testValues?: ProfileFieldValues | null
 }) {
   const hasPeople = additionalRows.some((row) => row.kind === 'people')
@@ -69,21 +68,19 @@ export function ClaimsTable({
         <thead>
           <tr className="border-b border-border/50 text-left text-muted-foreground">
             <th scope="col" className="py-2 pr-3 font-medium whitespace-nowrap">
-              Profile field
+              Field
             </th>
             <th scope="col" className="min-w-0 py-2 pr-3 font-medium">
-              Provider claim
+              {providerLabel?.trim() ? `${providerLabel.trim()} claim` : 'Provider claim'}
             </th>
             {showTest && (
               <th scope="col" className="py-2 pr-3 font-medium whitespace-nowrap">
-                In the test sign-in
+                Last test sign-in
               </th>
             )}
-            {editable && (
-              <th scope="col" className="w-px py-2 font-medium">
-                <span className="sr-only">Actions</span>
-              </th>
-            )}
+            <th scope="col" className="w-px py-2 font-medium">
+              <span className="sr-only">Actions</span>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -92,7 +89,6 @@ export function ClaimsTable({
               key={row.field}
               row={row}
               testValues={testValues}
-              editable={editable}
               disabled={disabled}
               onEdit={() => onEdit(row)}
             />
@@ -104,7 +100,6 @@ export function ClaimsTable({
                   key="role"
                   row={row}
                   showTest={showTest}
-                  editable={editable}
                   disabled={disabled}
                   onEdit={() => onEdit(row)}
                   onRemove={() => onRemove(row)}
@@ -117,7 +112,6 @@ export function ClaimsTable({
                   key={`people-${row.baselineIndex}`}
                   row={row}
                   showTest={showTest}
-                  editable={editable}
                   disabled={disabled}
                   onEdit={() => onEdit(row)}
                   onRemove={() => onRemove(row)}
@@ -125,21 +119,14 @@ export function ClaimsTable({
               )
             }
             if (row.kind === 'unsupported') {
-              return (
-                <UnsupportedRowView
-                  key={row.id}
-                  row={row}
-                  showTest={showTest}
-                  editable={editable}
-                />
-              )
+              return <UnsupportedRowView key={row.id} row={row} showTest={showTest} />
             }
             return null
           })}
         </tbody>
       </table>
 
-      {hasPeople && editable && (
+      {hasPeople && (
         <div className="space-y-2">
           <div className="flex items-start gap-2 text-sm">
             <Checkbox
@@ -248,13 +235,11 @@ function TestValue({
 function ProfileRow({
   row,
   testValues,
-  editable,
   disabled,
   onEdit,
 }: {
   row: ClaimsProfileRow
   testValues?: ProfileFieldValues | null
-  editable: boolean
   disabled?: boolean
   onEdit: () => void
 }) {
@@ -265,9 +250,7 @@ function ProfileRow({
           <span className="font-medium">{row.label}</span>
           {!row.isDefault && <CustomBadge />}
         </div>
-        {editable && (
-          <p className="mt-0.5 text-xs whitespace-nowrap text-muted-foreground">{row.hint}</p>
-        )}
+        <p className="mt-0.5 text-xs whitespace-nowrap text-muted-foreground">{row.hint}</p>
       </td>
       <td className="py-2.5 pr-3">
         <ClaimPath>{row.path}</ClaimPath>
@@ -279,13 +262,11 @@ function ProfileRow({
           <TestValue field={row.field} values={testValues} />
         </td>
       )}
-      {editable && (
-        <td className="py-2.5">
-          <IconButton label={`Edit ${row.label} mapping`} onClick={onEdit} disabled={disabled}>
-            <PencilIcon className="h-3.5 w-3.5" />
-          </IconButton>
-        </td>
-      )}
+      <td className="py-2.5">
+        <IconButton label={`Edit ${row.label} mapping`} onClick={onEdit} disabled={disabled}>
+          <PencilIcon className="h-3.5 w-3.5" />
+        </IconButton>
+      </td>
     </tr>
   )
 }
@@ -293,14 +274,12 @@ function ProfileRow({
 function RoleRowView({
   row,
   showTest,
-  editable,
   disabled,
   onEdit,
   onRemove,
 }: {
   row: ClaimsRoleRow
   showTest: boolean
-  editable: boolean
   disabled?: boolean
   onEdit: () => void
   onRemove: () => void
@@ -326,23 +305,16 @@ function RoleRowView({
         <ClaimPath>{row.claimPath}</ClaimPath>
       </td>
       <NoTestValue show={showTest} />
-      {editable && (
-        <td className="py-2.5">
-          <div className="flex items-center justify-end gap-1">
-            <IconButton label="Edit role rules" onClick={onEdit} disabled={disabled}>
-              <PencilIcon className="h-3.5 w-3.5" />
-            </IconButton>
-            <IconButton
-              label="Remove role rules"
-              onClick={onRemove}
-              disabled={disabled}
-              destructive
-            >
-              <TrashIcon className="h-3.5 w-3.5" />
-            </IconButton>
-          </div>
-        </td>
-      )}
+      <td className="py-2.5">
+        <div className="flex items-center justify-end gap-1">
+          <IconButton label="Edit role rules" onClick={onEdit} disabled={disabled}>
+            <PencilIcon className="h-3.5 w-3.5" />
+          </IconButton>
+          <IconButton label="Remove role rules" onClick={onRemove} disabled={disabled} destructive>
+            <TrashIcon className="h-3.5 w-3.5" />
+          </IconButton>
+        </div>
+      </td>
     </tr>
   )
 }
@@ -350,14 +322,12 @@ function RoleRowView({
 function PeopleRowView({
   row,
   showTest,
-  editable,
   disabled,
   onEdit,
   onRemove,
 }: {
   row: ClaimsPeopleRow
   showTest: boolean
-  editable: boolean
   disabled?: boolean
   onEdit: () => void
   onRemove: () => void
@@ -384,36 +354,26 @@ function PeopleRowView({
         <ClaimPath>{row.claimPath}</ClaimPath>
       </td>
       <NoTestValue show={showTest} />
-      {editable && (
-        <td className="py-2.5">
-          <div className="flex items-center justify-end gap-1">
-            <IconButton label={`Edit ${row.label} mapping`} onClick={onEdit} disabled={disabled}>
-              <PencilIcon className="h-3.5 w-3.5" />
-            </IconButton>
-            <IconButton
-              label={`Remove ${row.label} mapping`}
-              onClick={onRemove}
-              disabled={disabled}
-              destructive
-            >
-              <TrashIcon className="h-3.5 w-3.5" />
-            </IconButton>
-          </div>
-        </td>
-      )}
+      <td className="py-2.5">
+        <div className="flex items-center justify-end gap-1">
+          <IconButton label={`Edit ${row.label} mapping`} onClick={onEdit} disabled={disabled}>
+            <PencilIcon className="h-3.5 w-3.5" />
+          </IconButton>
+          <IconButton
+            label={`Remove ${row.label} mapping`}
+            onClick={onRemove}
+            disabled={disabled}
+            destructive
+          >
+            <TrashIcon className="h-3.5 w-3.5" />
+          </IconButton>
+        </div>
+      </td>
     </tr>
   )
 }
 
-function UnsupportedRowView({
-  row,
-  showTest,
-  editable,
-}: {
-  row: ClaimsUnsupportedRow
-  showTest: boolean
-  editable: boolean
-}) {
+function UnsupportedRowView({ row, showTest }: { row: ClaimsUnsupportedRow; showTest: boolean }) {
   return (
     <tr className="border-b border-border/50 last:border-0 align-top">
       <td className="py-2.5 pr-3">
@@ -422,7 +382,7 @@ function UnsupportedRowView({
       </td>
       <td className="py-2.5 pr-3 text-muted-foreground">Not editable here</td>
       <NoTestValue show={showTest} />
-      {editable && <td className="py-2.5" />}
+      <td className="py-2.5" />
     </tr>
   )
 }

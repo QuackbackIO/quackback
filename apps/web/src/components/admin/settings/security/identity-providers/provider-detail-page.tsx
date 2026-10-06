@@ -2,7 +2,7 @@
  * Identity provider detail — one page per provider, three sections.
  *
  * Connection: is it working. Sign-in & access: who is sent here and what they
- * get. User details: what is read about them. Each section saves only its own
+ * get. Profile: what is read about them. Each section saves only its own
  * fields; a domain change and a claim-mapping change carry very different risk
  * and are never the same commit.
  *

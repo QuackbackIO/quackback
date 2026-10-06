@@ -1,18 +1,18 @@
 /**
- * User details — what Quackback reads from this provider about a person.
+ * Profile: what Quackback takes from this provider about a person.
  *
- * Most providers need nothing here: standard OpenID Connect claims identify
- * the account (`sub`), and set its email, name and avatar. So the resting
- * state is a sentence, not a table: "Uses standard profile fields", with
- * Customize. The table appears when something is custom, or when the admin
- * opens the editor. Name and avatar are set when an account is created, and
- * on every sign-in when profile sync is on.
+ * The table is always open. Standard OpenID Connect claims identify the
+ * account (`sub`) and set its email, name, username and avatar, so most
+ * providers never change a row; only an exception is marked "Custom". Name and
+ * avatar are set when an account is created, and on every sign-in when
+ * profile sync is on.
  *
- * The editor edits a local draft; Save diffs closed operations against the
+ * Edits change a local draft. Cancel and Save changes appear only while the
+ * draft differs from what is stored; Save diffs closed operations against the
  * stored JSON so unrelated sections survive. Removing a draft row is
  * reversible (Undo toast). Saving an Account ID change, or role rules that
- * grant admin, still asks first — those are the two edits that change who
- * gets into what.
+ * grant admin, still asks first: those are the two edits that change who gets
+ * into what.
  */
 import { useId, useMemo, useRef, useState } from 'react'
 import { PlusIcon } from '@heroicons/react/24/solid'
@@ -52,7 +52,6 @@ import {
   normalizeAttributeMapping,
   normalizeProfileClaims,
   normalizeRoleMapping,
-  userDetailsAreStandard,
   withAllowMissingEmail,
   type AttributeMapping,
   type ClaimsTableRow,
@@ -67,31 +66,17 @@ import { useConnectionTest, useProviderCapture } from './use-connection-test'
 import { useProviderSave } from './use-provider-save'
 
 export function UserDetailsCard({ provider }: { provider: IdentityProvider }) {
-  const [editing, setEditing] = useState(false)
   const definitions = useDefinitions()
+  const label = provider.label.trim()
 
   return (
     <div id="mapping" className="scroll-mt-6">
       <SettingsCard
-        title="User details"
+        title="Profile"
+        description={`What Quackback takes from ${label || 'your provider'} for each person.`}
         contentClassName="space-y-4"
-        action={
-          editing ? undefined : (
-            <Button type="button" variant="outline" size="sm" onClick={() => setEditing(true)}>
-              Customize
-            </Button>
-          )
-        }
       >
-        {editing ? (
-          <UserDetailsEditor
-            provider={provider}
-            definitions={definitions}
-            onDone={() => setEditing(false)}
-          />
-        ) : (
-          <UserDetailsSummary provider={provider} definitions={definitions} />
-        )}
+        <ProfileEditor provider={provider} definitions={definitions} />
       </SettingsCard>
     </div>
   )
@@ -105,77 +90,61 @@ function useDefinitions(): MappingDefinition[] {
   )
 }
 
-function UserDetailsSummary({
-  provider,
-  definitions,
-}: {
-  provider: IdentityProvider
-  definitions: MappingDefinition[]
-}) {
-  const mapping = provider.claimMapping
-  const issue = identityMappingIssue(mapping)
+type StoredMapping = IdentityProvider['claimMapping']
 
-  if (userDetailsAreStandard(mapping)) {
-    return (
-      <div className="space-y-1 text-sm">
-        <p className="font-medium">Uses standard profile fields</p>
-        <p className="text-muted-foreground">No role rules or custom attributes.</p>
-      </div>
-    )
-  }
-
-  const model = buildClaimsTableModel({ mapping, definitions })
-  const customProfile = hasCustomProfileClaims(mapping)
-  const profileRows = customProfile ? model.profile : []
-
-  return (
-    <div className="space-y-4 text-sm">
-      {issue && <p className="font-medium text-warning">{issue}</p>}
-      {!customProfile && <p className="font-medium">Uses standard profile fields</p>}
-      {/* Sync or a source change alone leaves no rows to list. */}
-      {profileRows.length + model.additional.length > 0 && (
-        <ClaimsTable
-          profileRows={profileRows}
-          additionalRows={model.additional}
-          peopleFlags={{
-            overrideExisting: mapping?.attributes?.overrideExisting === true,
-            syncOnSignIn: mapping?.attributes?.syncOnSignIn === true,
-          }}
-          onPeopleFlagsChange={() => {}}
-          onEdit={() => {}}
-          onRemove={() => {}}
-          editable={false}
-        />
-      )}
-      {profileSyncEnabled(mapping) && (
-        <p className="text-muted-foreground">Name and avatar update on every sign-in.</p>
-      )}
-      {mapping?.role && !provider.autoCreateUsers && (
-        <p className="text-muted-foreground">
-          Role rules are not applied while account creation is off.
-        </p>
-      )}
-      {hasCustomSources(mapping) && (
-        <p data-testid="compatibility-sources">
-          <span className="font-medium">Compatibility:</span> identity is read from{' '}
-          {draftSources(mapping)
-            .map((s) => SOURCE_LABELS[s])
-            .join(', then ')}
-          .
-        </p>
-      )}
-    </div>
-  )
+/** The editable parts of the mapping. Everything else is carried through. */
+interface Draft {
+  role: RoleMapping | null
+  attributes: AttributeMapping | null
+  profileClaims: Partial<Record<ProfileField, string>>
+  sources: IdentitySource[]
+  profileSync: boolean
 }
 
-function UserDetailsEditor({
+function draftFrom(mapping: StoredMapping): Draft {
+  return {
+    role: mapping?.role ?? null,
+    attributes: mapping?.attributes ?? null,
+    profileClaims: { ...(mapping?.profile?.claims ?? {}) },
+    sources: draftSources(mapping),
+    profileSync: profileSyncEnabled(mapping),
+  }
+}
+
+/** The draft's profile section. The missing-email policy is owned by Sign-in
+ *  & access, so it is carried from `base` untouched and Save cannot flip it. */
+function draftProfile(base: StoredMapping, draft: Draft) {
+  const allowMissingEmail = base?.profile?.allowMissingEmail === true
+  return normalizeProfileClaims({
+    ...withAllowMissingEmail(
+      { claims: draft.profileClaims, sources: draft.sources },
+      allowMissingEmail
+    ),
+    claims: draft.profileClaims,
+    sources: draft.sources,
+    syncOnSignIn: draft.profileSync,
+  })
+}
+
+/** What Save would write: the draft over `base`, normalized. */
+function proposedMapping(base: StoredMapping, draft: Draft) {
+  return mergeClaimMapping(base, {
+    role: normalizeRoleMapping(draft.role),
+    profile: draftProfile(base, draft),
+    attributes: normalizeAttributeMapping(draft.attributes),
+  })
+}
+
+function draftIsDirty(base: StoredMapping, draft: Draft): boolean {
+  return diffClaimMappingOperations(base, proposedMapping(base, draft)).length > 0
+}
+
+function ProfileEditor({
   provider,
   definitions,
-  onDone,
 }: {
   provider: IdentityProvider
   definitions: MappingDefinition[]
-  onDone: () => void
 }) {
   const { saving, saveClaimMapping } = useProviderSave(provider)
   const { openTest } = useConnectionTest(provider)
@@ -187,48 +156,43 @@ function UserDetailsEditor({
     path?: string
     role?: RoleMapping | null
   } | null>(null)
-  const [mapping, setMapping] = useState<RoleMapping | null>(provider.claimMapping?.role ?? null)
-  const [attributes, setAttributes] = useState<AttributeMapping | null>(
-    provider.claimMapping?.attributes ?? null
-  )
-  const [profileClaims, setProfileClaims] = useState<Partial<Record<ProfileField, string>>>(() => ({
-    ...(provider.claimMapping?.profile?.claims ?? {}),
-  }))
-  const [sources, setSources] = useState<IdentitySource[]>(() =>
-    draftSources(provider.claimMapping)
-  )
-  const [profileSync, setProfileSync] = useState(() => profileSyncEnabled(provider.claimMapping))
+  const stored = provider.claimMapping
+  // `baseline` is what the draft is compared with and Cancel returns to: the
+  // stored mapping, or what this card just saved until the refetch lands.
+  const [baseline, setBaseline] = useState<StoredMapping>(stored)
+  const [seenStored, setSeenStored] = useState<StoredMapping>(stored)
+  const [draft, setDraft] = useState<Draft>(() => draftFrom(stored))
   const syncId = useId()
   const pendingTest = useRef(false)
-  // The missing-email policy is owned by Sign-in & access; carried through
-  // untouched so this editor's Save cannot flip it.
-  const allowMissingEmail = provider.claimMapping?.profile?.allowMissingEmail === true
 
-  const profile = normalizeProfileClaims({
-    ...withAllowMissingEmail({ claims: profileClaims, sources }, allowMissingEmail),
-    claims: profileClaims,
-    sources,
-    syncOnSignIn: profileSync,
-  })
-  const draftMapping = mergeClaimMapping(provider.claimMapping, {
+  // The stored mapping changed (a save here or on another card, or a
+  // refetch). A clean draft follows it; a draft with edits is kept.
+  if (seenStored !== stored) {
+    setSeenStored(stored)
+    setBaseline(stored)
+    if (!draftIsDirty(baseline, draft)) setDraft(draftFrom(stored))
+  }
+
+  const { role: mapping, attributes, profileClaims, sources, profileSync } = draft
+  const update = (patch: Partial<Draft>) => setDraft((prev) => ({ ...prev, ...patch }))
+  const updateAttributes = (fn: (prev: AttributeMapping | null) => AttributeMapping | null) =>
+    setDraft((prev) => ({ ...prev, attributes: fn(prev.attributes) }))
+  const allowMissingEmail = baseline?.profile?.allowMissingEmail === true
+
+  const draftMapping = mergeClaimMapping(baseline, {
     role: mapping ?? undefined,
-    profile,
+    profile: draftProfile(baseline, draft),
     attributes: attributes ?? undefined,
   })
-  const proposed = mergeClaimMapping(provider.claimMapping, {
-    role: normalizeRoleMapping(mapping),
-    profile,
-    attributes: normalizeAttributeMapping(attributes),
-  })
-  const operations = diffClaimMappingOperations(provider.claimMapping, proposed)
-  const risks = mappingSaveRisks(provider.claimMapping, proposed)
+  const proposed = proposedMapping(baseline, draft)
+  const operations = diffClaimMappingOperations(baseline, proposed)
+  const risks = mappingSaveRisks(baseline, proposed)
   const dirty = operations.length > 0
   // Admin rules that already existed and did not change are acknowledged
   // silently; only new or altered admin rules get a confirmation.
   const adminRulesChanged =
     risks.hasAdminRules &&
-    JSON.stringify(adminRulesOf(provider.claimMapping?.role)) !==
-      JSON.stringify(adminRulesOf(proposed?.role))
+    JSON.stringify(adminRulesOf(baseline?.role)) !== JSON.stringify(adminRulesOf(proposed?.role))
   const needsConfirm = dirty && (risks.identifierChanged || adminRulesChanged)
 
   const persist = async () => {
@@ -240,18 +204,18 @@ function UserDetailsEditor({
         acknowledgeIdentifierChange: risks.identifierChanged,
         acknowledgeAdminRules: risks.hasAdminRules,
       },
-      'User details saved.'
+      'Profile saved.'
     )
     if (!saved) return
-    onDone()
+    // The server applied these operations to the stored mapping, so the
+    // result is `proposed`. Re-seed from it so the draft reads as saved.
+    setBaseline(proposed)
+    setDraft(draftFrom(proposed))
     if (thenTest) openTest()
   }
 
   const requestSave = (thenTest = false) => {
-    if (!dirty) {
-      onDone()
-      return
-    }
+    if (!dirty) return
     pendingTest.current = thenTest
     if (needsConfirm) {
       setConfirmOpen(true)
@@ -262,19 +226,19 @@ function UserDetailsEditor({
 
   const commitDialog = (commit: ClaimRowDialogCommit) => {
     if (commit.type === 'profile') {
-      setProfileClaims((prev) => {
-        const next = { ...prev }
+      setDraft((prev) => {
+        const next = { ...prev.profileClaims }
         if (commit.path == null) delete next[commit.field]
         else next[commit.field] = commit.path
-        return next
+        return { ...prev, profileClaims: next }
       })
       return
     }
     if (commit.type === 'role') {
-      setMapping(commit.mapping)
+      update({ role: commit.mapping })
       return
     }
-    setAttributes((prev) => {
+    updateAttributes((prev) => {
       const map = [...(prev?.map ?? [])]
       if (typeof commit.baselineIndex === 'number' && map[commit.baselineIndex]) {
         map[commit.baselineIndex] = {
@@ -295,10 +259,10 @@ function UserDetailsEditor({
     const before = { mapping, attributes }
     let label: string
     if (row.kind === 'role') {
-      setMapping(null)
+      update({ role: null })
       label = 'role rules'
     } else if (row.kind === 'people') {
-      setAttributes((prev) => {
+      updateAttributes((prev) => {
         if (!prev) return prev
         const map = (prev.map ?? []).filter((_, i) => i !== row.baselineIndex)
         return map.length === 0 ? null : { ...prev, map }
@@ -311,8 +275,7 @@ function UserDetailsEditor({
       action: {
         label: 'Undo',
         onClick: () => {
-          setMapping(before.mapping)
-          setAttributes(before.attributes)
+          update({ role: before.mapping, attributes: before.attributes })
         },
       },
     })
@@ -352,9 +315,12 @@ function UserDetailsEditor({
   const customProfile = hasCustomProfileClaims({ profile: { claims: profileClaims } })
   // What each profile field takes from the last test sign-in under this draft.
   const testValues = previewProfileValues(draftMapping, capture)
+  const issue = identityMappingIssue(baseline)
+  const hasRoleRules = tableModel.additional.some((row) => row.kind === 'role')
 
   return (
     <div className="space-y-5">
+      {issue && <p className="text-sm font-medium text-warning">{issue}</p>}
       <ClaimsTable
         profileRows={tableModel.profile}
         additionalRows={tableModel.additional}
@@ -363,7 +329,7 @@ function UserDetailsEditor({
           syncOnSignIn: attributes?.syncOnSignIn === true,
         }}
         onPeopleFlagsChange={(flags) =>
-          setAttributes((prev) => ({
+          updateAttributes((prev) => ({
             map: prev?.map ?? [],
             ...(flags.overrideExisting ? { overrideExisting: true } : {}),
             ...(flags.syncOnSignIn ? { syncOnSignIn: true } : {}),
@@ -371,7 +337,7 @@ function UserDetailsEditor({
         }
         onEdit={openEdit}
         onRemove={removeRow}
-        editable
+        providerLabel={provider.label}
         disabled={saving}
         testValues={testValues}
       />
@@ -380,7 +346,7 @@ function UserDetailsEditor({
         <Checkbox
           id={syncId}
           checked={profileSync}
-          onCheckedChange={(v) => setProfileSync(v === true)}
+          onCheckedChange={(v) => update({ profileSync: v === true })}
           disabled={saving}
           aria-describedby={`${syncId}-note`}
           className="mt-0.5"
@@ -396,6 +362,12 @@ function UserDetailsEditor({
           </p>
         </div>
       </div>
+
+      {hasRoleRules && !provider.autoCreateUsers && (
+        <p className="text-sm text-muted-foreground">
+          Role rules are not applied while account creation is off.
+        </p>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         <Button
@@ -414,7 +386,7 @@ function UserDetailsEditor({
             type="button"
             size="sm"
             variant="ghost"
-            onClick={() => setProfileClaims({})}
+            onClick={() => update({ profileClaims: {} })}
             disabled={saving}
           >
             Use standard profile fields
@@ -422,17 +394,23 @@ function UserDetailsEditor({
         )}
       </div>
 
+      {hasCustomSources({ profile: { sources } }) && (
+        <p data-testid="compatibility-sources" className="text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">Compatibility:</span> identity is read from{' '}
+          {sources.map((s) => SOURCE_LABELS[s]).join(', then ')}.
+        </p>
+      )}
+
       <Disclosure
         title="Compatibility"
         defaultOpen={hasCustomSources(provider.claimMapping)}
-        summary={
-          hasCustomSources({ profile: { sources } })
-            ? sources.map((s) => SOURCE_LABELS[s]).join(' → ')
-            : undefined
-        }
         testId="compatibility-section"
       >
-        <IdentitySourcesEditor sources={sources} onChange={setSources} disabled={saving} />
+        <IdentitySourcesEditor
+          sources={sources}
+          onChange={(next) => update({ sources: next })}
+          disabled={saving}
+        />
       </Disclosure>
 
       <OutcomePreviewRail
@@ -451,14 +429,22 @@ function UserDetailsEditor({
         canTest
       />
 
-      <div className="flex items-center justify-end gap-2 border-t border-border/40 pt-5">
-        <Button type="button" variant="outline" size="sm" onClick={onDone} disabled={saving}>
-          Cancel
-        </Button>
-        <Button type="button" size="sm" onClick={() => requestSave(false)} disabled={saving}>
-          {saving ? 'Saving…' : 'Save changes'}
-        </Button>
-      </div>
+      {dirty && (
+        <div className="flex items-center justify-end gap-2 border-t border-border/40 pt-5">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setDraft(draftFrom(baseline))}
+            disabled={saving}
+          >
+            Cancel
+          </Button>
+          <Button type="button" size="sm" onClick={() => requestSave(false)} disabled={saving}>
+            {saving ? 'Saving…' : 'Save changes'}
+          </Button>
+        </div>
+      )}
 
       <ClaimRowDialog
         open={dialog != null}

@@ -209,7 +209,7 @@ export type ProfileFieldValues = Partial<Record<ProfileField, string>>
 
 /**
  * The value each profile field takes from a test sign-in under a draft
- * mapping, for the editor's "In the test sign-in" column. A projection of the
+ * mapping, for the Profile card's "Last test sign-in" column. A projection of the
  * profile outcome sign-in computes, so a mapped avatar claim never falls back
  * to `picture`, only an http(s) URL counts, and the username follows
  * `usernameFrom`.

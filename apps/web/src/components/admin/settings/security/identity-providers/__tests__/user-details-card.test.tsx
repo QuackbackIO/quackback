@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
 /**
- * <UserDetailsCard> save coordination: the editor edits a draft, Save diffs
- * operations against the stored JSON, and the two risky edits (Account ID,
- * new admin rules) still confirm before writing.
+ * <UserDetailsCard>, titled Profile: the mapping table is always open. Edits
+ * change a draft; Cancel and Save changes appear only while the draft differs
+ * from what is stored. Save diffs operations against the stored JSON, and the
+ * two risky edits (Account ID, new admin rules) still confirm before writing.
  */
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
@@ -106,7 +107,7 @@ function makeProvider(over: Partial<IdentityProvider> = {}): IdentityProvider {
   return {
     id: 'idp_x' as IdentityProviderId,
     registrationId: 'oidc_x',
-    label: 'Acme SSO',
+    label: 'Acme ID',
     kind: null,
     configured: true,
     discoveryUrl: 'https://idp.example/.well-known/openid-configuration',
@@ -163,16 +164,16 @@ function makeProvider(over: Partial<IdentityProvider> = {}): IdentityProvider {
 function renderCard(provider: IdentityProvider) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   qc.setQueryData(['admin', 'userAttributes'], [DEPARTMENT])
-  const view = render(
+  return render(
     <QueryClientProvider client={qc}>
       <UserDetailsCard provider={provider} />
     </QueryClientProvider>
   )
-  fireEvent.click(screen.getByRole('button', { name: 'Customize' }))
-  return view
 }
 
 const save = () => fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+const saveButton = () => screen.queryByRole('button', { name: 'Save changes' })
+const cancelButton = () => screen.queryByRole('button', { name: 'Cancel' })
 const confirmSave = () =>
   fireEvent.click(
     within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Save changes' })
@@ -217,11 +218,10 @@ describe('UserDetailsCard save coordination', () => {
     renderCard(makeProvider({ claimMapping: null }))
     editAccountId()
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
-    save()
-    // No operations: the editor simply closes.
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Customize' })).toBeInTheDocument()
-    )
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    // No operations, so nothing to save or cancel.
+    expect(saveButton()).not.toBeInTheDocument()
+    expect(cancelButton()).not.toBeInTheDocument()
     expect(mappingSpy).not.toHaveBeenCalled()
   })
 
@@ -374,7 +374,7 @@ describe('UserDetailsCard save coordination', () => {
     renderCard(provider)
     fireEvent.click(screen.getByRole('button', { name: /Compatibility/ }))
     expect(screen.getByTestId('identity-sources-editor')).toBeInTheDocument()
-    save()
+    expect(saveButton()).not.toBeInTheDocument()
     expect(mappingSpy).not.toHaveBeenCalled()
     expect(effectiveProfileSignature(null)).toBe(effectiveProfileSignature(provider.claimMapping))
     expect(
@@ -442,7 +442,7 @@ describe('UserDetailsCard save coordination', () => {
     await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
     expect(openTest).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Edit Department mapping' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Customize' })).not.toBeInTheDocument()
+    expect(saveButton()).toBeInTheDocument()
   })
 
   it('editing the second duplicate People row updates that row', async () => {
@@ -476,17 +476,6 @@ describe('UserDetailsCard save coordination', () => {
     ])
   })
 })
-
-/** The card at rest, before Customize. */
-function renderSummary(provider: IdentityProvider) {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  qc.setQueryData(['admin', 'userAttributes'], [DEPARTMENT])
-  return render(
-    <QueryClientProvider client={qc}>
-      <UserDetailsCard provider={provider} />
-    </QueryClientProvider>
-  )
-}
 
 const syncBox = () =>
   screen.getByRole('checkbox', { name: 'Update name and avatar on every sign-in' })
@@ -542,27 +531,17 @@ describe('UserDetailsCard profile sync', () => {
     expect(lastMapping().operations).toEqual([{ op: 'setProfileSync', syncOnSignIn: false }])
     expect(lastSaved()).toBeNull()
   })
-
-  it('the summary says name and avatar update on every sign-in only while sync is on', () => {
-    const off = renderSummary(makeProvider({ claimMapping: null }))
-    expect(screen.queryByText('Name and avatar update on every sign-in.')).not.toBeInTheDocument()
-    off.unmount()
-    renderSummary(makeProvider({ claimMapping: { profile: { syncOnSignIn: true } } }))
-    expect(screen.getByText('Name and avatar update on every sign-in.')).toBeInTheDocument()
-    expect(screen.getByText('Uses standard profile fields')).toBeInTheDocument()
-    expect(screen.queryByRole('table')).not.toBeInTheDocument()
-  })
 })
 
 describe('UserDetailsCard test sign-in column', () => {
   it('shows what each field took from the last test sign-in, once there is one', () => {
     const untested = renderCard(makeProvider({ lastTestCapture: null }))
     expect(
-      screen.queryByRole('columnheader', { name: 'In the test sign-in' })
+      screen.queryByRole('columnheader', { name: 'Last test sign-in' })
     ).not.toBeInTheDocument()
     untested.unmount()
     renderCard(makeProvider())
-    expect(screen.getByRole('columnheader', { name: 'In the test sign-in' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Last test sign-in' })).toBeInTheDocument()
     expect(screen.getAllByText('person-123').length).toBeGreaterThan(0)
     expect(screen.getByText('Not sent, initials are shown')).toBeInTheDocument()
     expect(screen.getByText('Name is used')).toBeInTheDocument()
@@ -596,5 +575,135 @@ describe('UserDetailsCard test sign-in column', () => {
     expect(lastMapping().operations).toEqual([
       { op: 'setProfileClaim', field: 'image', path: 'photo_url' },
     ])
+  })
+})
+
+describe('UserDetailsCard always open', () => {
+  it('shows the Profile table with no click and no Customize button', () => {
+    renderCard(makeProvider({ claimMapping: null }))
+    expect(screen.getByRole('heading', { name: 'Profile' })).toBeInTheDocument()
+    expect(
+      screen.getByText('What Quackback takes from Acme ID for each person.')
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'User details' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Customize' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Uses standard profile fields')).not.toBeInTheDocument()
+    expect(screen.getByRole('table')).toBeInTheDocument()
+    expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
+      'Field',
+      'Acme ID claim',
+      'Last test sign-in',
+      'Actions',
+    ])
+    for (const label of ['Account ID', 'Email', 'Name', 'Username', 'Avatar']) {
+      expect(screen.getByRole('button', { name: `Edit ${label} mapping` })).toBeInTheDocument()
+    }
+    expect(screen.getByRole('button', { name: 'Add mapping' })).toBeInTheDocument()
+    expect(syncBox()).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Compatibility/ })).toBeInTheDocument()
+  })
+
+  it('falls back to Provider claim when the provider has no label', () => {
+    renderCard(makeProvider({ label: '' }))
+    expect(screen.getByRole('columnheader', { name: 'Provider claim' })).toBeInTheDocument()
+  })
+
+  it('shows Cancel and Save changes only once the draft differs from what is saved', async () => {
+    renderCard(makeProvider({ claimMapping: null }))
+    expect(saveButton()).not.toBeInTheDocument()
+    expect(cancelButton()).not.toBeInTheDocument()
+    await userEvent.click(syncBox())
+    expect(saveButton()).toBeInTheDocument()
+    expect(cancelButton()).toBeInTheDocument()
+    // Undoing the edit by hand makes the draft clean again.
+    await userEvent.click(syncBox())
+    expect(saveButton()).not.toBeInTheDocument()
+  })
+
+  it('Cancel reverts the draft and writes nothing', async () => {
+    renderCard(
+      makeProvider({
+        claimMapping: {
+          attributes: { map: [{ claimPath: 'dept', attributeKey: 'department' }] },
+        },
+      })
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Department mapping' }))
+    expect(screen.queryByText('dept')).not.toBeInTheDocument()
+    fireEvent.click(cancelButton()!)
+    expect(screen.getByText('dept')).toBeInTheDocument()
+    expect(saveButton()).not.toBeInTheDocument()
+    expect(cancelButton()).not.toBeInTheDocument()
+    expect(mappingSpy).not.toHaveBeenCalled()
+  })
+
+  it('Save persists the draft, keeps it showing and hides the footer', async () => {
+    renderCard(makeProvider({ claimMapping: null }))
+    await addDepartmentMapping()
+    save()
+    await waitFor(() => expect(mappingSpy).toHaveBeenCalled())
+    expect(lastSaved()).toEqual({
+      attributes: { map: [{ claimPath: 'dept', attributeKey: 'department' }] },
+    })
+    await waitFor(() => expect(saveButton()).not.toBeInTheDocument())
+    expect(cancelButton()).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit Department mapping' })).toBeInTheDocument()
+    expect(toastSpy.success).toHaveBeenCalledWith('Profile saved.')
+  })
+
+  it('a confirmation still gates Save, and the footer stays until it is accepted', async () => {
+    renderCard(makeProvider({ claimMapping: { profile: { claims: { id: 'oid' } } } }))
+    editAccountId()
+    await userEvent.click(screen.getByRole('button', { name: 'Use sub' }))
+    save()
+    expect(screen.getByRole('alertdialog')).toHaveTextContent(/Changing the Account ID/)
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(mappingSpy).not.toHaveBeenCalled()
+    expect(saveButton()).toBeInTheDocument()
+  })
+
+  it('a stored mapping that changes under a clean draft is shown, not reverted', () => {
+    const provider = makeProvider({ claimMapping: null })
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    qc.setQueryData(['admin', 'userAttributes'], [DEPARTMENT])
+    const view = render(
+      <QueryClientProvider client={qc}>
+        <UserDetailsCard provider={provider} />
+      </QueryClientProvider>
+    )
+    view.rerender(
+      <QueryClientProvider client={qc}>
+        <UserDetailsCard
+          provider={{
+            ...provider,
+            claimMapping: {
+              attributes: { map: [{ claimPath: 'dept', attributeKey: 'department' }] },
+            },
+          }}
+        />
+      </QueryClientProvider>
+    )
+    expect(screen.getByRole('button', { name: 'Edit Department mapping' })).toBeInTheDocument()
+    expect(saveButton()).not.toBeInTheDocument()
+  })
+
+  it('keeps the notes the resting summary used to carry', () => {
+    renderCard(
+      makeProvider({
+        autoCreateUsers: false,
+        claimMapping: {
+          profile: { claims: { email: '  ' }, sources: ['idToken', 'userinfo', 'accessTokenJwt'] },
+          role: { claimPath: 'groups', rules: [{ whenContains: 'eng', role: 'member' }] },
+        },
+      })
+    )
+    expect(screen.getByText('Email mapping has no claim path')).toBeInTheDocument()
+    expect(
+      screen.getByText('Role rules are not applied while account creation is off.')
+    ).toBeInTheDocument()
+    expect(screen.getByTestId('compatibility-sources')).toHaveTextContent(
+      'Compatibility: identity is read from ID token, then Userinfo, then Access-token JWT.'
+    )
   })
 })

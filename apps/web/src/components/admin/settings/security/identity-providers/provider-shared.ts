@@ -434,26 +434,12 @@ export function buildClaimsTableModel({
 
 /**
  * Whether the provider reads identity from a non-standard source list. Shown
- * as a compatibility exception; the controls live under Customize.
+ * as a compatibility exception on the Profile card.
  */
 export function hasCustomSources(
   mapping: IdentityProviderClaimMapping | null | undefined
 ): boolean {
   return !sourcesAreDefault(mapping?.profile?.sources)
-}
-
-/** Whether User details can rest on "Uses standard profile fields": nothing
- *  is mapped, added or switched on beyond the standard profile. */
-export function userDetailsAreStandard(
-  mapping: IdentityProviderClaimMapping | null | undefined
-): boolean {
-  if (hasCustomProfileClaims(mapping)) return false
-  if (mapping?.profile?.syncOnSignIn === true) return false
-  if (extraProfileClaimKeys(mapping).length > 0) return false
-  if (mapping?.role) return false
-  if ((mapping?.attributes?.map?.length ?? 0) > 0) return false
-  if (hasCustomSources(mapping)) return false
-  return true
 }
 
 export function availableAddTargets({

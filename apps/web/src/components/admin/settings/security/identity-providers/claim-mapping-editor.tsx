@@ -2,7 +2,7 @@
  * Role rules: which claim to read and which value grants which role. The
  * claim path and each rule value are creatable autocompletes sourced from the
  * last matching test sign-in (free text still allowed). Rendered inside the
- * Add/Edit mapping dialog; the User details editor owns persistence.
+ * Add/Edit mapping dialog; the Profile card owns persistence.
  */
 import { PlusIcon, TrashIcon } from '@heroicons/react/24/solid'
 import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline'

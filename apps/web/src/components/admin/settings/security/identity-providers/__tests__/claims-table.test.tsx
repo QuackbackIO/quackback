@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi } from 'vitest'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { IdentitySourcesEditor, ClaimsTable } from '../claims-table'
 import { buildClaimsTableModel } from '../provider-shared'
@@ -37,7 +37,6 @@ function renderTable(
       onPeopleFlagsChange={onFlags}
       onEdit={onEdit}
       onRemove={onRemove}
-      editable
       {...over}
     />
   )
@@ -45,11 +44,14 @@ function renderTable(
 }
 
 describe('ClaimsTable', () => {
-  it('uses Profile field then Provider claim column headers', () => {
-    renderTable(null)
+  it('names the claim column after the provider, or Provider claim without a label', () => {
+    renderTable(null, { providerLabel: 'Acme ID' })
     const headers = screen.getAllByRole('columnheader')
-    expect(headers[0]).toHaveTextContent('Profile field')
-    expect(headers[1]).toHaveTextContent('Provider claim')
+    expect(headers[0]).toHaveTextContent('Field')
+    expect(headers[1]).toHaveTextContent('Acme ID claim')
+    cleanup()
+    renderTable(null)
+    expect(screen.getAllByRole('columnheader')[1]).toHaveTextContent('Provider claim')
   })
 
   it('shows the three profile fields in one table with no Default badges', () => {
@@ -88,16 +90,6 @@ describe('ClaimsTable', () => {
     expect(screen.getByRole('button', { name: 'Edit Department mapping' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Remove Department mapping' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Remove Email/ })).not.toBeInTheDocument()
-  })
-
-  it('renders read-only with no action column or flag checkboxes', () => {
-    renderTable(
-      { attributes: { map: [{ claimPath: 'dept', attributeKey: 'department' }] } },
-      { editable: false }
-    )
-    expect(screen.getAllByRole('columnheader')).toHaveLength(2)
-    expect(screen.queryByRole('button')).not.toBeInTheDocument()
-    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
   })
 
   it('preserves orphaned and duplicate People rows', () => {
@@ -154,7 +146,7 @@ describe('ClaimsTable', () => {
   })
 })
 
-/** The table row whose Profile field label is exactly `label`. */
+/** The table row whose Field label is exactly `label`. */
 function rowFor(label: string): HTMLElement {
   const row = screen.getByText(label, { selector: 'span' }).closest('tr')
   if (!row) throw new Error(`No row for ${label}`)
@@ -205,19 +197,21 @@ describe('ClaimsTable test sign-in column', () => {
         onPeopleFlagsChange={vi.fn()}
         onEdit={vi.fn()}
         onRemove={vi.fn()}
-        editable
         testValues={null}
       />
     )
     expect(screen.getAllByRole('columnheader')).toHaveLength(3)
-    expect(screen.queryByText('In the test sign-in')).not.toBeInTheDocument()
+    expect(screen.queryByText('Last test sign-in')).not.toBeInTheDocument()
     untested.unmount()
-    renderTable(null, { testValues: { ...TEST_VALUES, username: 'jane.d' } })
+    renderTable(null, {
+      providerLabel: 'Acme ID',
+      testValues: { ...TEST_VALUES, username: 'jane.d' },
+    })
     const headers = screen.getAllByRole('columnheader')
     expect(headers.map((h) => h.textContent)).toEqual([
-      'Profile field',
-      'Provider claim',
-      'In the test sign-in',
+      'Field',
+      'Acme ID claim',
+      'Last test sign-in',
       'Actions',
     ])
     expect(within(rowFor('Account ID')).getByText('person-123')).toBeInTheDocument()

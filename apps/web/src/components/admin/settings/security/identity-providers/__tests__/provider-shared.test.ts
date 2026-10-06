@@ -17,7 +17,6 @@ import {
   normalizeAttributeMapping,
   normalizeProfileClaims,
   normalizeRoleMapping,
-  userDetailsAreStandard,
   withAllowMissingEmail,
 } from '../provider-shared'
 
@@ -399,11 +398,5 @@ describe('username, avatar and profile sync', () => {
     expect(hasCustomProfileClaims({ profile: { claims: { image: 'photo_url' } } })).toBe(true)
     expect(hasCustomProfileClaims({ profile: { claims: { username: 'handle' } } })).toBe(true)
     expect(hasCustomProfileClaims({ profile: { claims: { image: 'picture' } } })).toBe(false)
-  })
-
-  it('is standard with the standard avatar claim stored, and not standard with sync on', () => {
-    expect(userDetailsAreStandard({ profile: { claims: { image: 'picture' } } })).toBe(true)
-    expect(userDetailsAreStandard({ profile: { syncOnSignIn: true } })).toBe(false)
-    expect(userDetailsAreStandard({ profile: { claims: { image: 'photo_url' } } })).toBe(false)
   })
 })
