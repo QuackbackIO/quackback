@@ -88,7 +88,12 @@ import { ALL_PERMISSIONS, PERMISSIONS, SYSTEM_ROLE_PERMISSIONS } from '@/lib/sha
 
 function renderSidebar(
   userRole: 'admin' | 'member',
-  opts: { flags?: Record<string, boolean>; name?: string; permissions?: string[] } = {}
+  opts: {
+    flags?: Record<string, boolean>
+    name?: string
+    permissions?: string[]
+    planNotice?: Parameters<typeof AdminSidebar>[0]['planNotice']
+  } = {}
 ) {
   mockRole.current = userRole
   mockGetRouteContext.mockReturnValue({
@@ -105,7 +110,7 @@ function renderSidebar(
     <IntlProvider locale="en" messages={{}}>
       <TooltipProvider>
         <SearchPaletteContext.Provider value={searchContext}>
-          <AdminSidebar />
+          <AdminSidebar planNotice={opts.planNotice} />
         </SearchPaletteContext.Provider>
       </TooltipProvider>
     </IntlProvider>
@@ -366,6 +371,21 @@ describe('AdminSidebar rail', () => {
     const links = [...dialog.querySelectorAll('nav a')].map((a) => a.getAttribute('href'))
     expect(links.slice(0, 3)).toEqual(['/admin', '/admin/feedback', '/admin/roadmap'])
   })
+})
+
+it('shows a running trial quietly in the footer, and nothing there without a notice', () => {
+  renderSidebar('admin', {
+    planNotice: {
+      label: 'Pro trial',
+      expiresAt: new Date(Date.now() + 14 * 86_400_000 - 60_000).toISOString(),
+      actionUrl: '/admin/settings/billing',
+    },
+  })
+  expect(screen.getByRole('link', { name: 'Pro trial · 14 days' })).toBeTruthy()
+  cleanup()
+  renderSidebar('admin', { planNotice: null })
+  expect(screen.queryByText(/Pro trial/)).toBeNull()
+  cleanup()
 })
 
 it('opens the shared palette from the sidebar search button, the one tour stop', () => {
