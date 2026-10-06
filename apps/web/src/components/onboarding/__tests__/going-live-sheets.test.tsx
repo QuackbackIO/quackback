@@ -1,17 +1,27 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render } from '@testing-library/react'
+import { act, cleanup, render, screen } from '@testing-library/react'
 import { StrictMode } from 'react'
 
 vi.mock('../install-messenger-sheet', () => ({ InstallMessengerSheet: () => null }))
-vi.mock('../invite-team-sheet', () => ({ InviteTeamSheet: () => null }))
+vi.mock('../invite-team-sheet', () => ({
+  InviteTeamSheet: ({ open }: { open: boolean }) =>
+    open ? <div role="region" aria-label="Invite your team" /> : null,
+}))
+vi.mock('@/components/admin/ask/copilot-on-home', () => ({ useCopilotOnHome: () => false }))
 
 import {
-  GoingLiveSheets,
   OPEN_TRY_MESSENGER_EVENT as LIVE_EVENT,
   consumeSetupLink,
+  useGoingLiveSheets,
 } from '../going-live-sheets'
+import { openGoingLiveSheet } from '../going-live-events'
+import { AdminProductTourProvider } from '../admin-product-tour'
 import { OPEN_TRY_MESSENGER_EVENT } from '../try-messenger-button'
+
+function SheetHost() {
+  return <>{useGoingLiveSheets()}</>
+}
 
 afterEach(() => {
   cleanup()
@@ -41,14 +51,38 @@ describe('setup email links', () => {
     const listen = (event: Event) => heard.push((event as CustomEvent).detail)
     render(
       <StrictMode>
-        <GoingLiveSheets />
+        <SheetHost />
       </StrictMode>
     )
-    // The host registers after this effect, as the admin layout's parent does.
+    // The Try Messenger host can register after this effect.
     window.addEventListener(OPEN_TRY_MESSENGER_EVENT, listen)
     await new Promise((resolve) => setTimeout(resolve, 10))
     window.removeEventListener(OPEN_TRY_MESSENGER_EVENT, listen)
     expect(heard).toEqual(['idea'])
+    expect(window.location.search).toBe('')
+  })
+})
+
+describe('the admin layout', () => {
+  it('opens a going-live sheet on request', async () => {
+    render(
+      <AdminProductTourProvider>
+        <p>page</p>
+      </AdminProductTourProvider>
+    )
+    expect(screen.queryByRole('region', { name: 'Invite your team' })).toBeNull()
+    await act(async () => openGoingLiveSheet('invite-team'))
+    expect(await screen.findByRole('region', { name: 'Invite your team' })).toBeTruthy()
+  })
+
+  it('opens the step a setup email links to', async () => {
+    window.history.replaceState(null, '', '/admin?open=invite-team')
+    render(
+      <AdminProductTourProvider>
+        <p>page</p>
+      </AdminProductTourProvider>
+    )
+    expect(await screen.findByRole('region', { name: 'Invite your team' })).toBeTruthy()
     expect(window.location.search).toBe('')
   })
 })
