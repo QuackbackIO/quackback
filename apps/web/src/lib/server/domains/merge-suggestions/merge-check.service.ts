@@ -130,8 +130,10 @@ async function _doSweep(): Promise<void> {
   // A workspace whose plan has no AI (or whose budget is spent) can only fail
   // every check, and failed rows stay stale, so it would re-fail the same
   // posts every sweep. Ask once up front instead.
+  // Expiring old suggestions needs no AI, so it still runs.
   if (!(await aiBudgetAvailable())) {
     log.debug('merge sweep skipped: ai budget unavailable')
+    await expireStaleSuggestions()
     return
   }
 
@@ -221,13 +223,17 @@ async function _doSweep(): Promise<void> {
   }
 
   // Expire old suggestions
-  const expired = await expireStaleMergeSuggestions()
-  if (expired > 0) {
-    log.info({ expired_count: expired }, 'expired stale suggestions')
-  }
+  await expireStaleSuggestions()
 
   if (totalProcessed > 0) {
     log.info({ total_processed: totalProcessed, total_failed: totalFailed }, 'sweep complete')
+  }
+}
+
+async function expireStaleSuggestions(): Promise<void> {
+  const expired = await expireStaleMergeSuggestions()
+  if (expired > 0) {
+    log.info({ expired_count: expired }, 'expired stale suggestions')
   }
 }
 

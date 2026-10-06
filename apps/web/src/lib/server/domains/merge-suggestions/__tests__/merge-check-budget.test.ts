@@ -13,6 +13,7 @@ const h = vi.hoisted(() => ({
   limit: vi.fn(),
   postFindFirst: vi.fn(),
   budgetAvailable: vi.fn(),
+  expire: vi.fn(async () => 0),
   log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 
@@ -35,7 +36,7 @@ vi.mock('../merge-assessment.service', () => ({
 
 vi.mock('../merge-suggestion.service', () => ({
   createMergeSuggestion: vi.fn(),
-  expireStaleMergeSuggestions: vi.fn(async () => 0),
+  expireStaleMergeSuggestions: () => h.expire(),
 }))
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
@@ -122,6 +123,15 @@ describe('sweepMergeSuggestions with no AI budget', () => {
     expect(h.limit).not.toHaveBeenCalled()
     expect(h.assess).not.toHaveBeenCalled()
     expect(h.log.error).not.toHaveBeenCalled()
+  })
+
+  it('still expires stale suggestions when the budget is unavailable', async () => {
+    h.budgetAvailable.mockResolvedValue(false)
+
+    const { sweepMergeSuggestions } = await import('../merge-check.service')
+    await sweepMergeSuggestions()
+
+    expect(h.expire).toHaveBeenCalledTimes(1)
   })
 
   it('stops at the first TierLimitError and logs once at info', async () => {
