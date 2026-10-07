@@ -1225,9 +1225,11 @@ describe('send rate', () => {
       )
     )
     expect(at).toHaveLength(4)
-    // A little slack under 50ms for timer rounding; unpaced, these land within
-    // a millisecond of each other.
-    for (let i = 1; i < at.length; i++) expect(at[i] - at[i - 1]).toBeGreaterThanOrEqual(45)
+    // Slots are booked 50ms apart up front, so the last send leaves at least
+    // ~150ms after the first; unpaced, all four land within a millisecond.
+    // Measured across the whole run, not per gap: a loaded runner can delay
+    // one send, which shortens the gap after it without breaking the pace.
+    expect(at[at.length - 1] - at[0]).toBeGreaterThanOrEqual(120)
   })
 
   it('turns a full line into a retryable rate-limit error without sending', async () => {
