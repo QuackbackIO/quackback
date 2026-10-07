@@ -23,7 +23,6 @@ import {
   watchMyTicketFn,
   unwatchMyTicketFn,
 } from '@/lib/server/functions/tickets'
-import { unfurlLinkFn } from '@/lib/server/functions/link-preview'
 
 export const portalVisitorRpc = {
   getMyConversation: getMyConversationFn,
@@ -40,7 +39,6 @@ export const portalVisitorRpc = {
   getMyTicketWatchStatus: getMyTicketWatchStatusFn,
   watchMyTicket: watchMyTicketFn,
   unwatchMyTicket: unwatchMyTicketFn,
-  unfurlLink: unfurlLinkFn,
 }
 
 export type VisitorSurfaceRpc = typeof portalVisitorRpc

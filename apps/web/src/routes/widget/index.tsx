@@ -302,8 +302,6 @@ export const Route = createFileRoute('/widget/')({
               avatarUrl: settings.publicWidgetConfig.messenger.assistant.avatarUrl || null,
             }
           : null,
-      linkPreviews:
-        (settings?.featureFlags as { supportInbox?: boolean } | undefined)?.supportInbox ?? false,
       defaultBoard: settings?.publicWidgetConfig?.defaultBoard,
       portalAccess: {
         isPrivate: settings?.publicPortalConfig?.portalAccess?.isPrivate ?? false,
@@ -413,7 +411,6 @@ function WidgetPage() {
     orgSlug,
     boardPermissions,
     tabs,
-    linkPreviews,
     defaultBoard,
     portalAccess,
     portalOrigin,
@@ -978,7 +975,6 @@ function WidgetPage() {
             helpEnabled={tabs.help}
             onArticleSelect={handleHelpArticleSelect}
             conversationTarget={conversationTarget === null ? undefined : conversationTarget}
-            linkPreviews={linkPreviews}
             // A fresh thread exists to be typed into; a resumed one to be read.
             // Mobile hosts skip it — the software keyboard would cover the thread.
             autofocusComposer={conversationTarget === 'new' && !hostIsMobile}

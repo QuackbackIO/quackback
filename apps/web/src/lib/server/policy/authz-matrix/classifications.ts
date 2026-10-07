@@ -307,9 +307,6 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/widget/conversation.ts::widgetMintConversationStreamTokenFn': END_USER(
     'widget visitor mints their SSE stream token'
   ),
-  'lib/server/functions/widget/conversation.ts::widgetUnfurlLinkFn': END_USER(
-    'link unfurl for the widget messenger'
-  ),
   'lib/server/functions/widget/user.ts::widgetGetUserStatsFn': END_USER(
     'widget visitor reads own engagement stats'
   ),
@@ -573,8 +570,8 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
     resolvesTo: PERMISSIONS.TICKET_VIEW,
     why: 'transcript export carries internal notes; team-only on top of the TICKET_VIEW permission gate',
   },
-  'lib/server/functions/link-preview.ts::runUnfurlLink::isTeamMember': NOT_A_GATE(
-    'team bypasses the portal-access check; entries are the bare requireAuth / requireWidgetAuth'
+  'lib/server/functions/link-preview.ts::unfurlLinkFn::isTeamMember': NOT_A_GATE(
+    'team bypasses the portal-access check; entry is the bare requireAuth'
   ),
   'lib/server/functions/portal.ts::resolvePublicRoadmapQuery::isTeamMember': NOT_A_GATE(
     'shared by fetchPublicRoadmapPosts and fetchPublicRoadmapColumns: team may narrow by segment; non-team callers get the public result shape'

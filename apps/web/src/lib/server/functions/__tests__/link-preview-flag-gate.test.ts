@@ -60,7 +60,6 @@ type AnyHandler = (args: { data: Record<string, unknown> }) => Promise<unknown>
 
 const handlers: AnyHandler[] = []
 vi.mock('@tanstack/react-start', () => ({
-  createServerOnlyFn: <T>(fn: T) => fn,
   createServerFn: () => {
     const chain = {
       validator() {

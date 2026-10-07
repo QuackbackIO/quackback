@@ -1,9 +1,8 @@
 /**
  * Link preview card rendered below a conversation message bubble.
  *
- * - Fetches preview data through the surface's unfurl endpoint (auth-gated,
- *   rate-limited, cached): the site's `unfurlLinkFn`, or the widget's own
- *   entry inside the widget. Renders nothing while loading or when null.
+ * - Fetches preview data via the `unfurlLinkFn` server fn (auth-gated,
+ *   rate-limited, cached). Renders nothing while loading or when null.
  * - Image is proxied server-side (never hotlinked).
  * - All outbound links carry rel="noopener noreferrer nofollow".
  * - No dangerouslySetInnerHTML anywhere in this component.
@@ -12,7 +11,7 @@
 import { useQuery } from '@tanstack/react-query'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { extractPreviewableUrls } from '@/lib/shared/conversation/extract-urls'
-import { useVisitorSurfaceRpc } from '@/lib/client/visitor-surface-rpc'
+import { unfurlLinkFn } from '@/lib/server/functions/link-preview'
 
 interface LinkPreviewCardProps {
   url: string
@@ -25,11 +24,10 @@ interface LinkPreviewCardProps {
  * server returns null (bad URL, flag off, no OG data, rate-limited, etc.).
  */
 export function LinkPreviewCard({ url, getAuthHeaders }: LinkPreviewCardProps) {
-  const { unfurlLink } = useVisitorSurfaceRpc()
   const { data: preview } = useQuery({
     queryKey: ['link-preview', url],
     queryFn: () =>
-      unfurlLink({
+      unfurlLinkFn({
         data: { url },
         ...(getAuthHeaders ? { headers: getAuthHeaders() } : {}),
       }),

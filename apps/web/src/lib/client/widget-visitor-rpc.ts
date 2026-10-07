@@ -6,7 +6,6 @@ import {
   widgetSubmitCsatFn,
   widgetMarkConversationReadFn,
   widgetSendConversationTypingFn,
-  widgetUnfurlLinkFn,
 } from '@/lib/server/functions/widget/conversation'
 import {
   widgetGetConversationLinkedTicketFn,
@@ -34,5 +33,4 @@ export const widgetVisitorRpc: VisitorSurfaceRpc = {
   getMyTicketWatchStatus: widgetGetMyTicketWatchStatusFn,
   watchMyTicket: widgetWatchMyTicketFn,
   unwatchMyTicket: widgetUnwatchMyTicketFn,
-  unfurlLink: widgetUnfurlLinkFn,
 }

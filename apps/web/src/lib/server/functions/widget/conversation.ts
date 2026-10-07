@@ -6,7 +6,6 @@ import {
   myConversationSchema,
   csatSchema,
 } from '@/lib/shared/schemas/conversation'
-import { unfurlLinkSchema } from '../link-preview'
 
 export const widgetSendConversationMessageFn = createServerFn({ method: 'POST' })
   .validator(sendMessageSchema)
@@ -87,12 +86,3 @@ export const widgetMintConversationStreamTokenFn = createServerFn({ method: 'GET
     return runMintConversationStreamToken(await requireWidgetAuth())
   }
 )
-
-/** Link previews in the widget messenger. The site entry denies widget sessions. */
-export const widgetUnfurlLinkFn = createServerFn({ method: 'GET' })
-  .validator(unfurlLinkSchema)
-  .handler(async ({ data }) => {
-    const { requireWidgetAuth } = await import('../widget-auth')
-    const { runUnfurlLink } = await import('../link-preview')
-    return runUnfurlLink(() => requireWidgetAuth(), data)
-  })
