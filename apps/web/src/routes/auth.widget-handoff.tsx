@@ -121,12 +121,14 @@ type HandoffResult =
  * Server-to-server call to BA's one-time-token verify endpoint.
  *
  * The browser's cookie header is deliberately NOT forwarded. The token alone
- * identifies the session to install, and the verify handler never reads the
- * caller's cookies. Forwarding them is actively harmful: BA's origin check
- * rejects a cookie-bearing request that carries no Origin header with a 403,
- * and any visitor who already holds a cookie on the portal host (a theme
- * preference, a CDN clearance cookie) would be refused as if the link had
- * expired.
+ * identifies the session to install. The only caller cookie the verify
+ * handler reads is the "don't remember me" flag, and that belongs to whatever
+ * session the browser held before, not to the one being installed.
+ * Forwarding cookies is actively harmful: BA's origin check rejects a
+ * cookie-bearing request that carries no Origin header with a 403, and any
+ * visitor who already holds a cookie on the portal host (a theme preference,
+ * a CDN clearance cookie, an earlier hand-off's session) would be refused as
+ * if the link had expired.
  */
 export function verifyHandoffToken(baseUrl: string, ott: string): Promise<Response> {
   return fetch(`${baseUrl}/api/auth/one-time-token/verify`, {
@@ -145,8 +147,9 @@ export function verifyHandoffToken(baseUrl: string, ott: string): Promise<Respon
  * Runs in the same h3 request scope as the route loader when called
  * server-side, so `setResponseHeader('Set-Cookie', ...)` here applies to
  * the OUTER request's response — the redirect carries the session cookie.
+ * Exported for tests.
  */
-const consumeWidgetHandoffFn = createServerFn({ method: 'POST' })
+export const consumeWidgetHandoffFn = createServerFn({ method: 'POST' })
   .validator(searchSchema)
   .handler(async ({ data }): Promise<HandoffResult> => {
     const { config } = await import('@/lib/server/config')
