@@ -12,6 +12,7 @@ import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixt
 import {
   and,
   boards,
+  changelogSubscriptions,
   eq,
   postSubscriptions,
   posts,
@@ -49,6 +50,25 @@ vi.mock('@tanstack/react-start', async (importOriginal) => ({
 vi.mock('@/lib/server/functions/locale', () => ({
   loadUnsubscribeIntl: async () => ({ locale: 'en', messages: {} }),
 }))
+
+// The real changelog opt-out, with a switch to make its next call fail the
+// way a dropped connection would.
+const changelogFault = vi.hoisted(() => ({ next: null as Error | null }))
+vi.mock('@/lib/server/domains/changelog/changelog-subscription.service', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@/lib/server/domains/changelog/changelog-subscription.service')
+    >()
+  return {
+    ...actual,
+    unsubscribeChangelog: async (principalId: PrincipalId) => {
+      const fault = changelogFault.next
+      changelogFault.next = null
+      if (fault) throw fault
+      return actual.unsubscribeChangelog(principalId)
+    },
+  }
+})
 
 import { Route } from '../unsubscribe'
 import { processUnsubscribeTokenFn } from '@/lib/server/functions/subscriptions'
@@ -227,6 +247,84 @@ describe.skipIf(!fixture.available)('/unsubscribe (real DB, rolled back)', () =>
       const res = await oneClick(token)
       expect(res.status).toBe(200)
     }
+    expect(await isSubscribed(s)).toBe(true)
+  })
+
+  it('a failed opt-out leaves the token live, so the retry it asks for still unsubscribes', async () => {
+    const s = await seed()
+    await testDb
+      .insert(changelogSubscriptions)
+      .values({ principalId: s.principalId, source: 'self_serve' })
+    const token = crypto.randomUUID()
+    await testDb.insert(unsubscribeTokens).values({
+      token,
+      principalId: s.principalId,
+      postId: null,
+      action: 'unsubscribe_changelog',
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    })
+    const optedOutAt = async () => {
+      const [row] = await testDb
+        .select({ at: changelogSubscriptions.unsubscribedAt })
+        .from(changelogSubscriptions)
+        .where(eq(changelogSubscriptions.principalId, s.principalId))
+      return row?.at ?? null
+    }
+
+    changelogFault.next = new Error('connection terminated')
+    const failed = await oneClick(token)
+    expect(failed.status).toBe(503)
+    expect(await optedOutAt()).toBeNull()
+    expect(await tokenUsedAt(token)).toBeNull()
+
+    const retried = await oneClick(token)
+    expect(retried.status).toBe(200)
+    expect(await optedOutAt()).not.toBeNull()
+    const spentAt = await tokenUsedAt(token)
+    expect(spentAt).not.toBeNull()
+
+    // Spent once: a replay neither acts again nor moves the stamp.
+    expect((await oneClick(token)).status).toBe(200)
+    expect(await tokenUsedAt(token)).toEqual(spentAt)
+  })
+
+  it('accepts the one-click body as multipart/form-data too', async () => {
+    const s = await seed()
+    const form = new FormData()
+    form.set('List-Unsubscribe', 'One-Click')
+    const post = routeOptions.server!.handlers!.POST
+    const res = await post({
+      request: new Request(`https://acme.test/unsubscribe?token=${s.token}`, {
+        method: 'POST',
+        body: form,
+      }),
+    })
+    expect(res.status).toBe(200)
+    expect(await isSubscribed(s)).toBe(false)
+  })
+
+  it('refuses an oversized body without reading past the cap, and changes nothing', async () => {
+    const s = await seed()
+    let pulled = 0
+    const chunk = new TextEncoder().encode('List-Unsubscribe=One-Click&pad=' + 'x'.repeat(512))
+    // A chunked body with no Content-Length that never ends on its own.
+    const endless = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += chunk.byteLength
+        controller.enqueue(chunk)
+      },
+    })
+    const post = routeOptions.server!.handlers!.POST
+    const res = await post({
+      request: new Request(`https://acme.test/unsubscribe?token=${s.token}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: endless,
+        duplex: 'half',
+      } as RequestInit),
+    })
+    expect(res.status).toBe(400)
+    expect(pulled).toBeLessThan(16 * 1024)
     expect(await isSubscribed(s)).toBe(true)
   })
 

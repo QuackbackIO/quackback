@@ -592,11 +592,8 @@ export async function processUnsubscribeToken(token: string): Promise<{
     return null
   }
 
-  // Mark as used
-  await db
-    .update(unsubscribeTokens)
-    .set({ usedAt: new Date() })
-    .where(eq(unsubscribeTokens.id, tokenRecord.id))
+  // The token is spent only after the action lands (below), so a failure
+  // anywhere before then leaves the link working for a retry.
 
   // Get principal's organization for workspace context
   const principalRecord = await db.query.principal.findFirst({
@@ -642,6 +639,14 @@ export async function processUnsubscribeToken(token: string): Promise<{
       break
     }
   }
+
+  // Spend the token once. Every action above is idempotent, so a concurrent
+  // request that also got this far repeated a harmless write; the condition
+  // keeps the first stamp.
+  await db
+    .update(unsubscribeTokens)
+    .set({ usedAt: new Date() })
+    .where(and(eq(unsubscribeTokens.id, tokenRecord.id), isNull(unsubscribeTokens.usedAt)))
 
   return {
     action: tokenRecord.action,

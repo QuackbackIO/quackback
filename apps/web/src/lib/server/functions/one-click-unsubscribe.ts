@@ -19,17 +19,48 @@ const log = logger.child({ component: 'one-click-unsubscribe' })
 /** Bodies here are one short form field; anything larger is not one. */
 const MAX_BODY_BYTES = 1_024
 
+/**
+ * The body, read no further than the cap. A chunked request carries no
+ * Content-Length to refuse up front, so the stream itself is cut off rather
+ * than buffered whole. Null when the body is over the cap.
+ */
+async function readCappedBody(request: Request): Promise<Uint8Array<ArrayBuffer> | null> {
+  if (Number(request.headers.get('content-length') ?? 0) > MAX_BODY_BYTES) return null
+  if (!request.body) return new Uint8Array()
+  const reader = request.body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    total += value.byteLength
+    if (total > MAX_BODY_BYTES) {
+      await reader.cancel().catch(() => undefined)
+      return null
+    }
+    chunks.push(value)
+  }
+  const body = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    body.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return body
+}
+
+/** RFC 8058 allows the field as urlencoded or multipart form data. */
 async function isOneClickBody(request: Request): Promise<boolean> {
-  if (Number(request.headers.get('content-length') ?? 0) > MAX_BODY_BYTES) return false
   try {
+    const body = await readCappedBody(request)
+    if (!body) return false
     const contentType = request.headers.get('content-type') ?? ''
     if (contentType.toLowerCase().startsWith('multipart/form-data')) {
-      const form = await request.formData()
+      const form = await new Response(body, { headers: { 'content-type': contentType } }).formData()
       return form.get('List-Unsubscribe') === 'One-Click'
     }
-    const body = await request.text()
-    if (body.length > MAX_BODY_BYTES) return false
-    return new URLSearchParams(body).get('List-Unsubscribe') === 'One-Click'
+    const text = new TextDecoder().decode(body)
+    return new URLSearchParams(text).get('List-Unsubscribe') === 'One-Click'
   } catch {
     return false
   }
