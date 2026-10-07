@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { requestEmailSignin } from '@/lib/server/auth/email-signin'
+import { EmailSigninRefusedError, requestEmailSignin } from '@/lib/server/auth/email-signin'
 import { checkMagicLinkSendRateLimit } from '@/lib/server/auth/signin-rate-limit'
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import { AUTH_BLOCK_MESSAGES } from '@/lib/shared/auth-block-messages'
@@ -106,6 +106,14 @@ export async function handlePortalSignin(request: Request): Promise<Response> {
     await requestEmailSignin({ email, callbackURL })
     return Response.json({ ok: true })
   } catch (err) {
+    // Domain-level, so it says nothing about whether the address holds an
+    // account (see EmailSigninRefusedError).
+    if (err instanceof EmailSigninRefusedError) {
+      return Response.json(
+        { error: AUTH_BLOCK_MESSAGES[err.code], code: err.code },
+        { status: 403 }
+      )
+    }
     // A limiter saying no is an expected answer, not a fault, and it arrives as
     // a thrown `TOO_MANY_REQUESTS` when it is raised anywhere downstream rather
     // than by the check above. Reported as a 500 it loses its `Retry-After`,

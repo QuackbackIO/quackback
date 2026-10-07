@@ -74,6 +74,13 @@ vi.mock('@quackback/email', () => ({
 }))
 
 vi.mock('@/lib/server/storage/s3', () => ({ getEmailSafeUrl: () => null }))
+// No verified domains here: "Require SSO" has its own suite.
+vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
+  listIdentityProviders: vi.fn(async () => []),
+}))
+vi.mock('../registered-providers', () => ({
+  getRegisteredOidcProviderIds: vi.fn(async () => new Set()),
+}))
 vi.mock('@/lib/server/config', () => ({ config: { baseUrl: 'https://acme.quackback.io' } }))
 
 import { requestEmailSignin } from '../email-signin'
