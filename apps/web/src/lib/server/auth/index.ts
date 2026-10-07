@@ -301,10 +301,10 @@ async function createAuth() {
     placeholderEmailFor: resolvePlaceholderEmail,
     // A failure here must never block the sign-in: Better Auth then answers as
     // it would have without the vouch.
-    onProviderEmail: async (registrationId, email) => {
+    onProviderEmail: async (registrationId, accountId, email) => {
       try {
         const { vouchForEnforcedAddress } = await import('./enforcing-provider-email')
-        await vouchForEnforcedAddress({ registrationId, email, providers: providerRows })
+        await vouchForEnforcedAddress({ registrationId, accountId, email, providers: providerRows })
       } catch (error) {
         log.error({ err: error, registrationId }, 'enforcing provider vouch failed')
       }

@@ -186,7 +186,7 @@ export interface BuildGenericOAuthConfigsArgs {
    * vouch for an existing account at that domain. Must not throw; injected so
    * this module keeps needing no DB import.
    */
-  onProviderEmail?: (registrationId: string, email: string) => Promise<void>
+  onProviderEmail?: (registrationId: string, accountId: string, email: string) => Promise<void>
   /** Attached to every config so `user.locale` populates from sign-in. */
   mapProfileToUser?: (profile: unknown) => Record<string, unknown>
 }
@@ -341,7 +341,7 @@ export async function buildGenericOAuthConfigs({
       // Only an address the provider released, never a placeholder or a
       // stored address standing in for one.
       if (email && outcome.kind !== 'placeholder_required') {
-        await onProviderEmail?.(provider.registrationId, email)
+        await onProviderEmail?.(provider.registrationId, id, email)
       }
 
       // Better-Auth logs the entire userInfo on email_is_missing. Returning

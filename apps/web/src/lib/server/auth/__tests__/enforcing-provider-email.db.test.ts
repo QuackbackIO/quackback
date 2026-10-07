@@ -85,6 +85,7 @@ describe.skipIf(!fixture.available)('vouchForEnforcedAddress', () => {
 
     await vouchForEnforcedAddress({
       registrationId: 'oidc_acme',
+      accountId: `sub-${suffix()}`,
       email: email.toUpperCase(),
       providers: providers(true),
     })
@@ -101,6 +102,7 @@ describe.skipIf(!fixture.available)('vouchForEnforcedAddress', () => {
 
     await vouchForEnforcedAddress({
       registrationId: 'oidc_other',
+      accountId: `sub-${suffix()}`,
       email,
       providers: providers(true),
     })
@@ -114,6 +116,7 @@ describe.skipIf(!fixture.available)('vouchForEnforcedAddress', () => {
 
     await vouchForEnforcedAddress({
       registrationId: 'oidc_acme',
+      accountId: `sub-${suffix()}`,
       email,
       providers: providers(false),
     })
@@ -121,11 +124,13 @@ describe.skipIf(!fixture.available)('vouchForEnforcedAddress', () => {
     expect(await state(userId)).toEqual({ verified: false, sessions: 1 })
   })
 
-  it('leaves an account the provider is already linked to alone', async () => {
+  // Another identity of this provider owns the account the address sits on, so
+  // this sign-in does not land there and may not vouch for it.
+  it('leaves an account another identity of the provider owns alone', async () => {
     const email = `sam-${suffix()}@acme.com`
     const userId = await seed(email)
     await testDb.insert(account).values({
-      accountId: `sub-${suffix()}`,
+      accountId: `someone-else-${suffix()}`,
       providerId: 'oidc_acme',
       userId,
       createdAt: new Date(),
@@ -134,7 +139,53 @@ describe.skipIf(!fixture.available)('vouchForEnforcedAddress', () => {
 
     await vouchForEnforcedAddress({
       registrationId: 'oidc_acme',
+      accountId: `sub-${suffix()}`,
       email,
+      providers: providers(true),
+    })
+
+    expect(await state(userId)).toEqual({ verified: false, sessions: 1 })
+  })
+
+  // An admin corrected the address of someone already on the provider; their
+  // next sign-in restores verification, and their session stays.
+  it('re-verifies the linked account this identity signs in to', async () => {
+    const email = `sam-${suffix()}@acme.com`
+    const userId = await seed(email)
+    const sub = `sub-${suffix()}`
+    await testDb.insert(account).values({
+      accountId: sub,
+      providerId: 'oidc_acme',
+      userId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+
+    await vouchForEnforcedAddress({
+      registrationId: 'oidc_acme',
+      accountId: sub,
+      email,
+      providers: providers(true),
+    })
+
+    expect(await state(userId)).toEqual({ verified: true, sessions: 1 })
+  })
+
+  it('does not vouch for a linked account whose address is not the one asserted', async () => {
+    const userId = await seed(`old-${suffix()}@acme.com`)
+    const sub = `sub-${suffix()}`
+    await testDb.insert(account).values({
+      accountId: sub,
+      providerId: 'oidc_acme',
+      userId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+
+    await vouchForEnforcedAddress({
+      registrationId: 'oidc_acme',
+      accountId: sub,
+      email: `new-${suffix()}@acme.com`,
       providers: providers(true),
     })
 
@@ -147,6 +198,7 @@ describe.skipIf(!fixture.available)('vouchForEnforcedAddress', () => {
 
     await vouchForEnforcedAddress({
       registrationId: 'oidc_acme',
+      accountId: `sub-${suffix()}`,
       email,
       providers: providers(true),
     })

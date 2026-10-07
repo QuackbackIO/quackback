@@ -619,7 +619,7 @@ describe('production profile mapping adapter', () => {
       idToken: idToken({ sub: 's1', email: 'sam@acme.com', name: 'Sam' }),
       accessToken: undefined,
     })
-    expect(onProviderEmail).toHaveBeenCalledWith('oidc_abc', 'sam@acme.com')
+    expect(onProviderEmail).toHaveBeenCalledWith('oidc_abc', 's1', 'sam@acme.com')
 
     onProviderEmail.mockClear()
     const [placeholder] = await build({ profile: { allowMissingEmail: true } })
