@@ -35,7 +35,12 @@ const message = (err: unknown, fallback: string) =>
  * proves the current address first so a stolen session cannot silently rebind
  * it.
  */
-export function EmailField() {
+export function EmailField({
+  ssoManaged = false,
+}: {
+  /** The address belongs to a domain that requires SSO; the server refuses changes too. */
+  ssoManaged?: boolean
+}) {
   const { data, refetch } = useQuery({
     queryKey: ['email-change-state'],
     queryFn: () => getEmailChangeStateFn(),
@@ -63,7 +68,7 @@ export function EmailField() {
     )
   }
 
-  const { currentEmail, requiresCurrentCode, ssoManaged } = data
+  const { currentEmail, requiresCurrentCode } = data
 
   // Starting the flow: for an account with a real address, the first code goes
   // to it. For a placeholder account there is nothing to send to, so the new

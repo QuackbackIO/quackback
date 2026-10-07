@@ -231,7 +231,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
                   disabled={isSubmitting}
                 />
               </div>
-              <EmailField />
+              <EmailField ssoManaged={ssoEnforced} />
             </div>
             <div className="flex justify-end">
               <Button type="submit" disabled={isSubmitting}>

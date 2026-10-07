@@ -26,6 +26,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { requireAuth } from './auth-helpers'
+import type { UserId } from '@quackback/ids'
 
 import { ValidationError } from '@/lib/shared/errors'
 import { realEmail } from '@/lib/shared/anonymous-email'
@@ -58,23 +59,10 @@ async function userRow(ctx: Awaited<ReturnType<typeof requireAuth>>) {
   return row
 }
 
-/**
- * Which of these addresses sit at a verified domain that requires SSO. Such an
- * address belongs to that domain's provider: moving off it would let the
- * person sign in with an email link instead of the provider, and moving onto
- * it would put the account behind a provider it may not sign in with. Same
- * rule and owner-scoped fail-open as sign-in.
- */
-async function ssoManaged(...addresses: Array<string | null>): Promise<boolean> {
-  const present = addresses.filter((a): a is string => !!a)
-  if (present.length === 0) return false
-  const { listIdentityProviders } =
-    await import('@/lib/server/domains/settings/identity-providers.service')
-  const { getRegisteredOidcProviderIds } = await import('@/lib/server/auth/registered-providers')
-  const { isHardBound } = await import('@/lib/server/auth/auth-restrictions')
-  const providers = await listIdentityProviders()
-  const registered = await getRegisteredOidcProviderIds(providers)
-  return present.some((a) => isHardBound('magic-link', a, providers, registered))
+/** "Require SSO" for this flow: see `auth/sso-managed-email.ts`. */
+async function ssoBlocked(userId: UserId, from: string | null, to: string | null) {
+  const { isEmailMoveSsoBlocked } = await import('@/lib/server/auth/sso-managed-email')
+  return isEmailMoveSsoBlocked({ userId, from, to })
 }
 
 const SSO_MANAGED_MESSAGE = 'Addresses at this domain are managed by single sign-on.'
@@ -86,11 +74,7 @@ const SSO_MANAGED_MESSAGE = 'Addresses at this domain are managed by single sign
 export const getEmailChangeStateFn = createServerFn({ method: 'GET' }).handler(async () => {
   const row = await userRow(await requireAuth())
   const current = realEmail(row.email)
-  return {
-    currentEmail: current,
-    requiresCurrentCode: current !== null,
-    ssoManaged: await ssoManaged(current),
-  }
+  return { currentEmail: current, requiresCurrentCode: current !== null }
 })
 
 /**
@@ -104,7 +88,9 @@ export const sendCurrentAddressCodeFn = createServerFn({ method: 'POST' }).handl
   if (!current) {
     throw new ValidationError('NO_CURRENT_EMAIL', 'This account has no confirmed address yet.')
   }
-  if (await ssoManaged(current)) throw new ValidationError('SSO_MANAGED', SSO_MANAGED_MESSAGE)
+  if (await ssoBlocked(row.id, current, null)) {
+    throw new ValidationError('SSO_MANAGED', SSO_MANAGED_MESSAGE)
+  }
 
   // Rate limited like its sibling. Better Auth's own OTP limits are declared as
   // path matchers on the HTTP router, so calling `auth.api.*` in process goes
@@ -149,7 +135,7 @@ export const requestEmailChangeFn = createServerFn({ method: 'POST' })
     if (current && current.toLowerCase() === email) {
       throw new ValidationError('SAME_EMAIL', 'That is already your email address.')
     }
-    if (await ssoManaged(current, email)) {
+    if (await ssoBlocked(row.id, current, email)) {
       throw new ValidationError('SSO_MANAGED', SSO_MANAGED_MESSAGE)
     }
 
@@ -231,9 +217,9 @@ export const confirmEmailChangeFn = createServerFn({ method: 'POST' })
     if (holder) return { ok: false as const, reason: 'invalid_or_taken' as const }
 
     // Checked again here, not only at step 1: a domain can start requiring SSO
-    // between the two steps. The session's address is current for this
-    // request, which is all a domain check needs.
-    if (await ssoManaged(realEmail(ctx.user.email), email)) {
+    // between the two steps, and the address can change under the session.
+    const row = await userRow(ctx)
+    if (await ssoBlocked(row.id, realEmail(row.email), email)) {
       return { ok: false as const, reason: 'sso_managed' as const }
     }
 

@@ -56,13 +56,10 @@ export async function requestEmailSignin(opts: {
   // `/magic-link/verify`, whose address travels inside the token, so the
   // hook layer that enforces this for every other email path never sees it.
   // Same rule and same owner-scoped fail-open as `hooks.before`.
-  const { listIdentityProviders } =
-    await import('@/lib/server/domains/settings/identity-providers.service')
-  const { getRegisteredOidcProviderIds } = await import('./registered-providers')
+  const { loadSsoDomains } = await import('./sso-managed-email')
   const { isHardBound } = await import('./auth-restrictions')
-  const providers = await listIdentityProviders()
-  const registeredOidcIds = await getRegisteredOidcProviderIds(providers)
-  if (isHardBound('magic-link', opts.email, providers, registeredOidcIds)) {
+  const { providers, registered } = await loadSsoDomains()
+  if (isHardBound('magic-link', opts.email, providers, registered)) {
     throw new EmailSigninRefusedError('verified_domain_requires_sso')
   }
 

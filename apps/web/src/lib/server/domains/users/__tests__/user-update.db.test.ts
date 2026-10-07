@@ -11,11 +11,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
 import { createId, type PrincipalId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { principal, user, eq } from '@/lib/server/db'
+import { account, principal, user, eq } from '@/lib/server/db'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
+}))
+
+// No verified domains unless a test sets one; the provider registry is not what
+// this suite is about, so it stands in rather than needing provider rows.
+const sso = vi.hoisted(() => ({ providers: [] as unknown[] }))
+vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
+  listIdentityProviders: async () => sso.providers,
+}))
+vi.mock('@/lib/server/auth/registered-providers', () => ({
+  getRegisteredOidcProviderIds: async () => new Set(['oidc_acme']),
 }))
 
 import { updatePortalUserProfile } from '../user.update'
@@ -262,6 +272,81 @@ describe.skipIf(!fixture.available)('updatePortalUserProfile', () => {
       .from(user)
       .where(eq(user.id, person.userId))
     expect(row.emailVerified).toBe(true)
+  })
+
+  describe('a domain that requires SSO', () => {
+    beforeEach(() => {
+      sso.providers = [
+        {
+          id: 'idp_acme',
+          registrationId: 'oidc_acme',
+          showButton: true,
+          domains: [{ name: 'acme.com', enforced: true, verifiedAt: '2026-01-01T00:00:00Z' }],
+        },
+      ]
+    })
+    afterEach(() => {
+      sso.providers = []
+    })
+
+    it('refuses to move someone off a managed address', async () => {
+      const person = await seedUser({ name: 'Sam', email: `sam-${runSuffix()}@acme.com` })
+
+      await expect(
+        updatePortalUserProfile({
+          principalId: person.principalId,
+          email: `sam-${runSuffix()}@gmail.com`,
+        })
+      ).rejects.toThrow(/single sign-on/i)
+    })
+
+    it('refuses to move someone onto a managed domain they do not sign in through', async () => {
+      const person = await seedUser({ name: 'Pat', email: `pat-${runSuffix()}@example.com` })
+
+      await expect(
+        updatePortalUserProfile({
+          principalId: person.principalId,
+          email: `pat-${runSuffix()}@acme.com`,
+        })
+      ).rejects.toThrow(/single sign-on/i)
+    })
+
+    it('lets someone who signs in through the owning provider get an address there', async () => {
+      const person = await seedUser({ name: 'Lee', email: null })
+      await testDb.insert(account).values({
+        accountId: `sub-${runSuffix()}`,
+        providerId: 'oidc_acme',
+        userId: person.userId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      const address = `lee-${runSuffix()}@acme.com`
+
+      await updatePortalUserProfile({ principalId: person.principalId, email: address })
+
+      const [row] = await testDb
+        .select({ email: user.email })
+        .from(user)
+        .where(eq(user.id, person.userId))
+      expect(row.email).toBe(address)
+    })
+
+    it('still renames someone at a managed address', async () => {
+      const address = `kim-${runSuffix()}@acme.com`
+      const person = await seedUser({ name: 'Kim', email: address })
+
+      await updatePortalUserProfile({
+        principalId: person.principalId,
+        name: 'Kim Lee',
+        email: address,
+      })
+
+      const [row] = await testDb
+        .select({ name: user.name, email: user.email })
+        .from(user)
+        .where(eq(user.id, person.userId))
+      expect(row).toEqual({ name: 'Kim Lee', email: address })
+    })
   })
 
   it('updates the display name on user and principal', async () => {

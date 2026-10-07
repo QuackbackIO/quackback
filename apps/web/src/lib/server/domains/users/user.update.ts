@@ -15,9 +15,10 @@
  */
 
 import { db, eq, and, sql, ne, principal, user } from '@/lib/server/db'
-import type { PrincipalId } from '@quackback/ids'
+import type { PrincipalId, UserId } from '@quackback/ids'
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { acceptableContactEmail } from '@/lib/server/domains/principals/contact-email'
+import { realEmail } from '@/lib/shared/anonymous-email'
 import { syncPrincipalProfileById } from '@/lib/server/domains/principals/principal.factory'
 
 export interface UpdatePortalUserProfileInput {
@@ -26,6 +27,24 @@ export interface UpdatePortalUserProfileInput {
   name?: string
   /** New address; null clears it; undefined leaves it alone. */
   email?: string | null
+}
+
+/**
+ * "Require SSO" applies to an admin's edit as it does to the person's own: an
+ * address at a domain that requires SSO belongs to that domain's provider.
+ * Unchanged addresses pass, so renaming someone at such a domain still works.
+ */
+async function assertEmailMoveAllowed(userId: UserId, to: string | null): Promise<void> {
+  const [row] = await db.select({ email: user.email }).from(user).where(eq(user.id, userId))
+  const from = realEmail(row?.email)
+  if (from?.toLowerCase() === to) return
+  const { isEmailMoveSsoBlocked } = await import('@/lib/server/auth/sso-managed-email')
+  if (await isEmailMoveSsoBlocked({ userId, from, to })) {
+    throw new ValidationError(
+      'SSO_MANAGED',
+      'Addresses at this domain are managed by single sign-on.'
+    )
+  }
 }
 
 export async function updatePortalUserProfile(
@@ -53,12 +72,14 @@ export async function updatePortalUserProfile(
       }
       await db.update(principal).set({ contactEmail }).where(eq(principal.id, input.principalId))
     } else if (input.email === null) {
+      await assertEmailMoveAllowed(target.userId, null)
       await db
         .update(user)
         .set({ email: null, emailVerified: false })
         .where(eq(user.id, target.userId))
     } else {
       const normalized = input.email.toLowerCase().trim()
+      await assertEmailMoveAllowed(target.userId, normalized)
       const existing = await db
         .select({ id: user.id })
         .from(user)
