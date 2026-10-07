@@ -92,7 +92,8 @@ Quackback.init({
   placement: 'right' | 'left', // default 'right'
   defaultBoard: 'bugs', // filter widget to one board
   launcher: true, // false = hide default button
-  locale: 'en' | 'fr' | 'de' | 'es' | 'ar' | 'ru' | 'pt-BR' | 'zh-CN' | 'zh-TW' | 'nl' | 'pl', // override auto-detect
+  locale:
+    'en' | 'fr' | 'de' | 'es' | 'ar' | 'ru' | 'pt-BR' | 'zh-CN' | 'zh-TW' | 'nl' | 'pl' | 'th', // override auto-detect
   identity: { id, email, name } | { ssoToken }, // bundle identify into init
 })
 ```

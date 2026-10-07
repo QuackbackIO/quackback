@@ -86,6 +86,11 @@ describe('normalizeLocale', () => {
     expect(normalizeLocale('pl-PL')).toBe('pl')
     expect(normalizeLocale('PL-pl')).toBe('pl')
   })
+  it('maps Thai tags to th', () => {
+    expect(normalizeLocale('th')).toBe('th')
+    expect(normalizeLocale('th-TH')).toBe('th')
+    expect(normalizeLocale('TH-th')).toBe('th')
+  })
 })
 
 describe('resolveLocale', () => {
@@ -127,6 +132,11 @@ describe('resolveLocale', () => {
     expect(resolveLocale('pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7')).toBe('pl')
     expect(resolveLocale('pl,de;q=0.8')).toBe('pl')
     expect(resolveLocale('en', 'pl')).toBe('pl')
+  })
+  it('resolves Thai from the header and explicit override', () => {
+    expect(resolveLocale('th-TH,th;q=0.9,en;q=0.8')).toBe('th')
+    expect(resolveLocale('en', 'th-TH')).toBe('th')
+    expect(resolveLocale('th;q=0,en;q=0.5')).toBe('en')
   })
   it('respects an explicit Chinese locale override', () => {
     expect(resolveLocale('en', 'zh-Hant')).toBe('zh-tw')
