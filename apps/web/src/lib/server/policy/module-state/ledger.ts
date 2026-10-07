@@ -130,7 +130,7 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     reason:
       'Remembers which allowance windows already logged the over-allowance warning. Window start ' +
       'times are shared by every workspace on calendar months, so a cross-workspace hit would ' +
-      'silence another workspace\'s one warning for the period.',
+      "silence another workspace's one warning for the period.",
   },
   {
     file: 'apps/web/src/lib/server/auth/index.ts',
@@ -361,6 +361,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       "Keyed by one response's body stream, an object that exists only for the request that produced " +
       'it, so a lookup can only ever find its own request. It is a WeakMap and the entry is removed ' +
       'when taken, so nothing outlives the response.',
+  },
+  {
+    file: 'apps/web/src/lib/server/runtime-error-log.ts',
+    name: 'loggedAtBoundary',
+    category: 'workspace-scoped-key',
+    keyedBy: 'noteLoggedAtBoundary(error',
+    reason:
+      'Keyed by the error object one request threw, which only that request holds, so a lookup can ' +
+      'only find its own request. It is a WeakSet holding no values: a hit only suppresses a second ' +
+      'log line for an error already logged, and the entry goes when the error is collected.',
   },
   {
     file: 'apps/web/src/lib/server/workspaces/pool-cache.ts',

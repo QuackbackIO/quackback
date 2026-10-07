@@ -5,6 +5,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import type { PrincipalId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { ValidationError } from '@/lib/shared/errors'
 
 export interface GitHubOAuthState {
   type: 'github_oauth'
@@ -36,7 +37,8 @@ export const getGitHubConnectUrl = createServerFn({ method: 'GET' })
     const { hasPlatformCredentials } =
       await import('@/lib/server/domains/platform-credentials/platform-credential.service')
     if (!(await hasPlatformCredentials('github'))) {
-      throw new Error(
+      throw new ValidationError(
+        'PLATFORM_CREDENTIALS_NOT_CONFIGURED',
         'GitHub platform credentials not configured. Configure them in integration settings first.'
       )
     }
@@ -68,6 +70,8 @@ export interface GitHubChannelStatus {
   lastErrorAt: string | null
   lastOutboundAt: string | null
   lastInboundAt: string | null
+  /** False until GitHub app credentials exist, so Connect cannot succeed yet. */
+  credentialsConfigured: boolean
 }
 
 export const getGitHubChannelStatusFn = createServerFn({ method: 'GET' }).handler(
@@ -76,6 +80,8 @@ export const getGitHubChannelStatusFn = createServerFn({ method: 'GET' }).handle
     const { db, integrations, eq } = await import('@/lib/server/db')
     const { getLiveGitHubConnectionAccount, githubAccessTokenPresent } =
       await import('@/lib/server/domains/channel-accounts/github-connection')
+    const { hasPlatformCredentials } =
+      await import('@/lib/server/domains/platform-credentials/platform-credential.service')
 
     await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     const integration = await db.query.integrations.findFirst({
@@ -107,6 +113,7 @@ export const getGitHubChannelStatusFn = createServerFn({ method: 'GET' }).handle
       lastErrorAt: integration?.lastErrorAt?.toISOString() ?? null,
       lastOutboundAt: integration?.lastOutboundAt?.toISOString() ?? null,
       lastInboundAt: integration?.lastInboundAt?.toISOString() ?? null,
+      credentialsConfigured: await hasPlatformCredentials('github'),
     }
   }
 )
