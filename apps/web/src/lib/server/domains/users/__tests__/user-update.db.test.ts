@@ -36,6 +36,7 @@ const runSuffix = () => `${Date.now().toString(36)}-${Math.random().toString(36)
 async function seedUser(opts: {
   name: string
   email: string | null
+  emailVerified?: boolean
 }): Promise<{ userId: UserId; principalId: PrincipalId }> {
   const userId = createId('user') as UserId
   const principalId = createId('principal') as PrincipalId
@@ -43,7 +44,7 @@ async function seedUser(opts: {
     id: userId,
     name: opts.name,
     email: opts.email,
-    emailVerified: false,
+    emailVerified: opts.emailVerified ?? false,
   })
   await testDb.insert(principal).values({
     id: principalId,
@@ -225,6 +226,42 @@ describe.skipIf(!fixture.available)('updatePortalUserProfile', () => {
       .from(user)
       .where(eq(user.id, second.userId))
     expect(row.email).toBe(own)
+  })
+
+  // An admin can type any address. Leaving it marked verified would let a
+  // provider that matches on verified addresses sign someone else in to this
+  // account, on nothing but the admin's word.
+  it('clears emailVerified when an admin changes the address', async () => {
+    const person = await seedUser({
+      name: 'Verified Person',
+      email: `verified-${runSuffix()}@example.com`,
+      emailVerified: true,
+    })
+
+    await updatePortalUserProfile({
+      principalId: person.principalId,
+      email: `typed-${runSuffix()}@example.com`,
+    })
+
+    const [row] = await testDb
+      .select({ emailVerified: user.emailVerified })
+      .from(user)
+      .where(eq(user.id, person.userId))
+    expect(row.emailVerified).toBe(false)
+  })
+
+  it('keeps emailVerified when the address is unchanged or only the name moves', async () => {
+    const address = `same-${runSuffix()}@example.com`
+    const person = await seedUser({ name: 'Same Person', email: address, emailVerified: true })
+
+    await updatePortalUserProfile({ principalId: person.principalId, email: address.toUpperCase() })
+    await updatePortalUserProfile({ principalId: person.principalId, name: 'Renamed' })
+
+    const [row] = await testDb
+      .select({ emailVerified: user.emailVerified })
+      .from(user)
+      .where(eq(user.id, person.userId))
+    expect(row.emailVerified).toBe(true)
   })
 
   it('updates the display name on user and principal', async () => {

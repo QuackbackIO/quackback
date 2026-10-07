@@ -53,7 +53,10 @@ export async function updatePortalUserProfile(
       }
       await db.update(principal).set({ contactEmail }).where(eq(principal.id, input.principalId))
     } else if (input.email === null) {
-      await db.update(user).set({ email: null }).where(eq(user.id, target.userId))
+      await db
+        .update(user)
+        .set({ email: null, emailVerified: false })
+        .where(eq(user.id, target.userId))
     } else {
       const normalized = input.email.toLowerCase().trim()
       const existing = await db
@@ -64,7 +67,16 @@ export async function updatePortalUserProfile(
       if (existing.length > 0) {
         throw new ConflictError('EMAIL_IN_USE', 'Email already in use')
       }
-      await db.update(user).set({ email: normalized }).where(eq(user.id, target.userId))
+      // An admin's typed address is not a proven one. Verification survives
+      // only when the address itself is unchanged; otherwise providers that
+      // match on verified addresses could sign someone else in to this account.
+      await db
+        .update(user)
+        .set({
+          email: normalized,
+          emailVerified: sql`CASE WHEN LOWER(${user.email}) = ${normalized} THEN ${user.emailVerified} ELSE false END`,
+        })
+        .where(eq(user.id, target.userId))
     }
     updated = true
   }
