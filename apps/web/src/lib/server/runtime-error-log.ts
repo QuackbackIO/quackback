@@ -12,10 +12,12 @@
  * log stream turns each of those lines into a separate, unstructured entry.
  *
  * The commonest cause by far is a client closing the connection mid-request:
- * the framework rethrows the request signal's AbortError however the request
- * was going. That is not a fault, and the request boundary already records it,
- * so those prints are dropped. An error the boundary already logged is dropped
- * too. Anything else is logged once as a structured line.
+ * the framework rethrows the request signal's reason, an AbortError, however
+ * the request was going. That is not a fault, and the request boundary records
+ * it, so the boundary marks the disconnect and the print is dropped. An error
+ * the boundary already logged is marked and dropped too. Anything else,
+ * including an AbortError that is not the client's (our own cancelled work),
+ * is logged once as a structured line.
  *
  * Only that exact call shape is intercepted: a single argument that is an
  * unhandled `HTTPError`. Every other `console.error` call passes through.
@@ -23,21 +25,48 @@
 import type { AppLogger } from '@quackback/logger'
 import { logger } from '@/lib/server/logger'
 
-/** Errors the request boundary has already written to the log. */
-const loggedAtBoundary = new WeakSet<object>()
+/**
+ * Errors the request boundary has already accounted for: logged, or a client
+ * disconnect it recorded. Kept on `globalThis` rather than in module scope
+ * because the console wrapper outlives a dev module reload (its install guard
+ * lives on the console): the old wrapper and the reloaded boundary must read
+ * and write the same set.
+ */
+const accountedKey = Symbol.for('quackback.runtimeErrorLog.accounted')
+const accountedFor: WeakSet<object> = ((globalThis as Record<symbol, unknown>)[accountedKey] ??=
+  new WeakSet<object>()) as WeakSet<object>
 
 /** Record that the request boundary logged this error, so it is not logged twice. */
 export function noteLoggedAtBoundary(error: unknown): void {
-  if (error && typeof error === 'object') loggedAtBoundary.add(error)
+  if (error && typeof error === 'object') accountedFor.add(error)
 }
 
 /**
- * The error a request's abort signal carries. Under Bun a client disconnect
- * surfaces as `DOMException('The connection was closed.', 'AbortError')`.
- * Read structurally: a DOMException is not an `Error` subclass everywhere.
+ * Whether `error` is this request's client disconnect: the request's own
+ * signal has aborted and the error is its reason, or an AbortError raised
+ * because of it. Under Bun the reason is
+ * `DOMException('The connection was closed.', 'AbortError')`. An AbortError
+ * while the client is still connected is our own cancelled work, not this.
+ * The name is read structurally: a DOMException is not an `Error` subclass
+ * everywhere.
  */
-export function isAbortError(error: unknown): boolean {
+export function isClientDisconnect(error: unknown, request: Request): boolean {
+  const { signal } = request
+  if (!signal.aborted) return false
+  if (error === signal.reason) return true
   return !!error && typeof error === 'object' && (error as { name?: unknown }).name === 'AbortError'
+}
+
+/**
+ * Account for this request's disconnect whenever it happens. The framework can
+ * rethrow the signal's reason after the boundary has already returned, where
+ * the boundary's catch never sees it.
+ */
+export function noteClientDisconnectOf(request: Request): void {
+  const { signal } = request
+  const note = () => noteLoggedAtBoundary(signal.reason)
+  if (signal.aborted) note()
+  else signal.addEventListener('abort', note, { once: true })
 }
 
 interface UnhandledHttpError {
@@ -75,8 +104,7 @@ export function installRuntimeErrorLog({
       return
     }
     const original = first.cause ?? first
-    if (isAbortError(original)) return
-    if (original && typeof original === 'object' && loggedAtBoundary.has(original)) return
+    if (original && typeof original === 'object' && accountedFor.has(original)) return
     log.error({ err: original, status: first.status }, 'unhandled request error')
   }
   target[installed] = true

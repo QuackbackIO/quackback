@@ -61,25 +61,10 @@ export function GitHubChannelPage() {
             <p className="text-sm">
               Connect a GitHub account to bring issues and comments into the inbox as conversations.
             </p>
-            {status?.credentialsConfigured === false ? (
-              // Connect would only fail until the GitHub app credentials exist.
-              <p className="text-sm text-muted-foreground">
-                Add GitHub app credentials in the{' '}
-                <Link
-                  to="/admin/settings/integrations/$type"
-                  params={{ type: 'github' }}
-                  className="font-medium text-foreground underline"
-                >
-                  GitHub integration
-                </Link>{' '}
-                first.
-              </p>
-            ) : (
-              <GitHubConnectionActions
-                isConnected={false}
-                returnPath="/admin/settings/channels/github"
-              />
-            )}
+            <GitHubConnectionActions
+              isConnected={false}
+              returnPath="/admin/settings/channels/github"
+            />
             <p className="text-xs text-muted-foreground">
               One connection per workspace, shared with the Feedback tracker integration.
             </p>

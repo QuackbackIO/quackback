@@ -300,20 +300,25 @@ describe('handleRequestWithContext', () => {
     expect(aborted.level).toBe('info')
   })
 
-  it('treats an AbortError as a disconnect even before the signal reports it', async () => {
+  it('logs an AbortError at error when the client is still connected', async () => {
+    // Our own aborted work (a cancelled outbound fetch) escaping a route is a
+    // failure, even though it carries the same name as a disconnect.
     const cap = capture()
     const request = new Request('http://localhost/admin/feedback')
+    const ours = new DOMException('This operation was aborted', 'AbortError')
     await expect(
       handleRequestWithContext({
         request,
         log: cap.log,
         next: async () => {
-          throw new DOMException('The connection was closed.', 'AbortError')
+          throw ours
         },
       })
-    ).rejects.toThrow('The connection was closed.')
+    ).rejects.toBe(ours)
 
-    expect(cap.records().some((r) => r.level === 'error')).toBe(false)
+    const failed = cap.records().find((r) => r.msg === 'request failed')
+    expect(failed?.level).toBe('error')
+    expect(cap.records().some((r) => r.msg === 'request aborted by client')).toBe(false)
   })
 
   it('still logs other failures at error after the client has gone', async () => {
@@ -325,6 +330,7 @@ describe('handleRequestWithContext', () => {
         request,
         log: cap.log,
         next: async () => {
+          controller.abort(new DOMException('The connection was closed.', 'AbortError'))
           throw new TypeError('cannot read properties of undefined')
         },
       })

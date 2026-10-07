@@ -110,28 +110,4 @@ describe('GitHubChannelPage', () => {
     expect(screen.getByText('Last received')).toBeInTheDocument()
     expect(screen.getByText(/1 hour ago/)).toBeInTheDocument()
   })
-
-  describe('before GitHub is connected', () => {
-    const DISCONNECTED = {
-      ...CONNECTED,
-      connected: false,
-      status: null,
-      inboxEnabled: false,
-      hasToken: false,
-      repo: null,
-      username: null,
-    }
-
-    it('offers Connect once the platform credentials are configured', () => {
-      renderPage({ ...DISCONNECTED, credentialsConfigured: true })
-      expect(screen.getByRole('button', { name: 'Connect GitHub' })).toBeInTheDocument()
-    })
-
-    it('points to the integration setup instead of a Connect that cannot work', () => {
-      renderPage({ ...DISCONNECTED, credentialsConfigured: false })
-      expect(screen.queryByRole('button', { name: 'Connect GitHub' })).toBeNull()
-      const setup = screen.getByRole('link', { name: 'GitHub integration' })
-      expect(setup.getAttribute('href')).toBe('/admin/settings/integrations/$type')
-    })
-  })
 })

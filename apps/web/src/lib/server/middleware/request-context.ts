@@ -22,7 +22,11 @@ import { logger } from '@/lib/server/logger'
 import { runWithLogContext } from '@/lib/server/log-context'
 import { formatServerTiming, openRequestMetrics } from '@/lib/server/request-metrics'
 import { onResponseBodyEnd } from '@/lib/server/response-hooks'
-import { isAbortError, noteLoggedAtBoundary } from '@/lib/server/runtime-error-log'
+import {
+  isClientDisconnect,
+  noteClientDisconnectOf,
+  noteLoggedAtBoundary,
+} from '@/lib/server/runtime-error-log'
 
 /**
  * Health probe path. Hit every few seconds by the platform's healthcheck,
@@ -71,6 +75,10 @@ export async function handleRequestWithContext<T extends NextResult>({
   const pathname = new URL(request.url).pathname
   const route = `${request.method} ${pathname}`
   const start = performance.now()
+
+  // The framework may rethrow a disconnect after this boundary has returned;
+  // mark it so the runtime's own print of it is dropped (runtime-error-log.ts).
+  noteClientDisconnectOf(request)
 
   return runWithLogContext({ request_id: requestId, route }, async () => {
     const metrics = openRequestMetrics()!
@@ -131,8 +139,9 @@ export async function handleRequestWithContext<T extends NextResult>({
       const fields = { err, duration_ms: durationMs, db_queries: metrics.dbQueries }
       // A client that closes the connection mid-request surfaces as the
       // request signal's AbortError. Nothing failed on our side, so it is an
-      // access-log line rather than an error.
-      if (isAbortError(err)) log.info(fields, 'request aborted by client')
+      // access-log line rather than an error. Any other AbortError (our own
+      // cancelled work) is a failure like any other.
+      if (isClientDisconnect(err, request)) log.info(fields, 'request aborted by client')
       else log.error(fields, 'request failed')
       // Log once here at the boundary, then rethrow unchanged so the
       // framework's error handling still runs. The runtime's own print of the
