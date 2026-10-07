@@ -49,6 +49,7 @@ const hoisted = vi.hoisted(() => ({
   deleteVerificationByIdentifier: vi.fn().mockResolvedValue(undefined),
   checkRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
   enqueueMembershipSync: vi.fn(async (..._args: unknown[]) => {}),
+  providers: [] as unknown[],
 }))
 
 vi.mock('@/lib/server/functions/auth-helpers', () => ({
@@ -89,6 +90,12 @@ vi.mock('@/lib/server/domains/principals/contact-email', async () => {
 })
 
 vi.mock('@/lib/server/domains/api/rate-limit', () => ({ getClientIp: () => '203.0.113.7' }))
+vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
+  listIdentityProviders: async () => hoisted.providers,
+}))
+vi.mock('@/lib/server/auth/registered-providers', () => ({
+  getRegisteredOidcProviderIds: async () => new Set(['oidc_acme']),
+}))
 vi.mock('@/lib/server/auth/signin-rate-limit', () => ({
   checkContactEmailSendRateLimit: hoisted.checkRateLimit,
 }))
@@ -100,6 +107,7 @@ vi.mock('@/lib/server/domains/principals/membership-sync', () => ({
 }))
 
 import {
+  getEmailChangeStateFn,
   sendCurrentAddressCodeFn,
   requestEmailChangeFn,
   confirmEmailChangeFn,
@@ -127,6 +135,7 @@ beforeEach(() => {
   })
   hoisted.checkRateLimit.mockResolvedValue({ allowed: true })
   hoisted.checkVerificationOTP.mockResolvedValue({ success: true })
+  hoisted.providers = []
 })
 
 describe('requestEmailChangeFn', () => {
@@ -334,5 +343,85 @@ describe('headers forwarded to Better Auth', () => {
     ]) {
       expect(forwardedIps(fn)).toEqual(['203.0.113.7'])
     }
+  })
+})
+
+// A verified domain that requires SSO owns its addresses. Moving off one would
+// let the person sign in with an email link instead of the provider; moving
+// onto one would put the account behind a provider it may not use.
+describe('a domain that requires SSO', () => {
+  const SSO = 'sam@acme.com'
+
+  beforeEach(() => {
+    hoisted.providers = [
+      {
+        id: 'idp_acme',
+        registrationId: 'oidc_acme',
+        showButton: true,
+        domains: [{ name: 'acme.com', enforced: true, verifiedAt: '2026-01-01T00:00:00Z' }],
+      },
+    ]
+  })
+
+  it('reports the address as managed, so the field offers no change', async () => {
+    accountIs(SSO)
+
+    const state = await call<{ ssoManaged: boolean }>(getEmailChangeStateFn)
+
+    expect(state.ssoManaged).toBe(true)
+  })
+
+  it('does not report an address at another domain as managed', async () => {
+    accountIs(REAL)
+
+    const state = await call<{ ssoManaged: boolean }>(getEmailChangeStateFn)
+
+    expect(state.ssoManaged).toBe(false)
+  })
+
+  it('sends no current-address code for a managed address', async () => {
+    accountIs(SSO)
+
+    await expect(call(sendCurrentAddressCodeFn)).rejects.toThrow(/single sign-on/i)
+    expect(hoisted.sendVerificationOTP).not.toHaveBeenCalled()
+  })
+
+  it('refuses to move off a managed address, even with a good current code', async () => {
+    accountIs(SSO)
+
+    await expect(
+      call(requestEmailChangeFn, { email: 'sam@gmail.com', currentCode: '123456' })
+    ).rejects.toThrow(/single sign-on/i)
+    expect(hoisted.requestEmailChangeEmailOTP).not.toHaveBeenCalled()
+  })
+
+  it('refuses to move onto a managed domain', async () => {
+    accountIs(PLACEHOLDER)
+
+    await expect(call(requestEmailChangeFn, { email: 'new@acme.com' })).rejects.toThrow(
+      /single sign-on/i
+    )
+    expect(hoisted.requestEmailChangeEmailOTP).not.toHaveBeenCalled()
+  })
+
+  it('refuses to write a managed address at confirm time', async () => {
+    hoisted.findFirst.mockReset()
+    hoisted.findFirst.mockResolvedValue(undefined)
+
+    const res = await call<{ ok: boolean }>(confirmEmailChangeFn, {
+      email: 'new@acme.com',
+      code: '123456',
+    })
+
+    expect(res.ok).toBe(false)
+    expect(hoisted.changeEmailEmailOTP).not.toHaveBeenCalled()
+  })
+
+  it('still moves between addresses at other domains', async () => {
+    accountIs(REAL)
+
+    await call(requestEmailChangeFn, { email: 'pat@example.org', currentCode: '123456' })
+
+    expect(hoisted.requestEmailChangeEmailOTP).toHaveBeenCalled()
   })
 })

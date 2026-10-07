@@ -63,7 +63,7 @@ export function EmailField() {
     )
   }
 
-  const { currentEmail, requiresCurrentCode } = data
+  const { currentEmail, requiresCurrentCode, ssoManaged } = data
 
   // Starting the flow: for an account with a real address, the first code goes
   // to it. For a placeholder account there is nothing to send to, so the new
@@ -105,7 +105,11 @@ export function EmailField() {
     run(async () => {
       const res = await confirmEmailChangeFn({ data: { email: newEmail, code: newCode } })
       if (!res.ok) {
-        toast.error('That code is not right, or the address is no longer available.')
+        toast.error(
+          res.reason === 'sso_managed'
+            ? 'Addresses at this domain are managed by single sign-on.'
+            : 'That code is not right, or the address is no longer available.'
+        )
         return
       }
       toast.success('Email updated.')
@@ -127,9 +131,11 @@ export function EmailField() {
               disabled
               placeholder="No email address"
             />
-            <Button type="button" variant="outline" size="sm" onClick={begin} disabled={busy}>
-              {currentEmail ? 'Change' : 'Add email'}
-            </Button>
+            {!ssoManaged && (
+              <Button type="button" variant="outline" size="sm" onClick={begin} disabled={busy}>
+                {currentEmail ? 'Change' : 'Add email'}
+              </Button>
+            )}
           </div>
           {!currentEmail && (
             <p className="text-xs text-muted-foreground">
