@@ -68,13 +68,24 @@ export async function subscribeAdmin(principalId: PrincipalId): Promise<void> {
   await upsertSubscription(principalId, 'admin')
 }
 
-/** Soft opt-out — keeps the row (and its `source` provenance) for audit. */
+/**
+ * Soft opt-out — keeps the row (and its `source` provenance) for audit.
+ *
+ * Creates the row when there is none: someone who hears about releases only
+ * through a linked post they follow has no subscription row, and the opt-out
+ * row is what excludes them from that source too. A row created here records
+ * the person's own action, so its source is `self_serve`.
+ */
 export async function unsubscribeChangelog(principalId: PrincipalId): Promise<void> {
   log.debug({ principal_id: principalId }, 'changelog unsubscribe')
+  const unsubscribedAt = new Date()
   await db
-    .update(changelogSubscriptions)
-    .set({ unsubscribedAt: new Date() })
-    .where(eq(changelogSubscriptions.principalId, principalId))
+    .insert(changelogSubscriptions)
+    .values({ principalId, source: 'self_serve', unsubscribedAt })
+    .onConflictDoUpdate({
+      target: changelogSubscriptions.principalId,
+      set: { unsubscribedAt },
+    })
 }
 
 export async function getChangelogSubscriptionStatus(
