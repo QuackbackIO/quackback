@@ -1134,6 +1134,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/status.ts`::getStatusPageFn | server-fn |
 | `lib/server/functions/status.ts`::getStatusUptimeFn | server-fn |
 | `lib/server/functions/status.ts`::listStatusHistoryFn | server-fn |
+| `lib/server/functions/subscriptions.ts`::previewUnsubscribeTokenFn | server-fn |
 | `lib/server/functions/subscriptions.ts`::processUnsubscribeTokenFn | server-fn |
 | `lib/server/functions/uploads.ts`::checkS3ConfiguredFn | server-fn |
 | `lib/server/functions/uploads.ts`::getWidgetImageUploadUrlFn | server-fn |
@@ -1262,6 +1263,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/robots[.]txt.ts`::GET | route |
 | `routes/sitemap[.]xml.ts`::GET | route |
 | `routes/status/feed.ts`::GET | route |
+| `routes/unsubscribe.tsx`::POST | route |
 | `routes/widget.tsx`::getPortalSessionToken | server-fn |
 | `routes/widget.tsx`::getWidgetLocale | server-fn |
 | `routes/widget.tsx`::setIframeHeaders | server-fn |

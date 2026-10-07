@@ -166,11 +166,40 @@ export function isViewerMessage(key: string): boolean {
   return VIEWER_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
 }
 
-/** A catalog without the viewer's strings, for seeding a page. */
-export function withoutViewerMessages(all: Record<string, string>): Record<string, string> {
+/**
+ * Key prefix for the standalone /unsubscribe page. That page seeds only these
+ * (see {@link loadUnsubscribeMessages}), and no other surface renders them, so
+ * the portal slice leaves them out by prefix and the admin catalog drops them
+ * with {@link withoutPageScopedMessages}.
+ */
+export const UNSUBSCRIBE_MESSAGE_PREFIX = 'unsubscribe.'
+
+export function isUnsubscribeMessage(key: string): boolean {
+  return key.startsWith(UNSUBSCRIBE_MESSAGE_PREFIX)
+}
+
+/** Strings no shared page seeds: each belongs to one lazy chunk or one page. */
+function isPageScopedMessage(key: string): boolean {
+  return isViewerMessage(key) || isUnsubscribeMessage(key)
+}
+
+/** A catalog without the viewer's or the unsubscribe page's strings, for seeding a page. */
+export function withoutPageScopedMessages(all: Record<string, string>): Record<string, string> {
   const subset: Record<string, string> = {}
   for (const [key, value] of Object.entries(all)) {
-    if (!isViewerMessage(key)) subset[key] = value
+    if (!isPageScopedMessage(key)) subset[key] = value
+  }
+  return subset
+}
+
+/** The /unsubscribe page's strings in a locale, which is all that page renders. */
+export async function loadUnsubscribeMessages(
+  locale: SupportedLocale
+): Promise<Record<string, string>> {
+  const all = await loadMessages(locale)
+  const subset: Record<string, string> = {}
+  for (const [key, value] of Object.entries(all)) {
+    if (isUnsubscribeMessage(key)) subset[key] = value
   }
   return subset
 }

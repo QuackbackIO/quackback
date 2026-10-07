@@ -19,7 +19,7 @@ import {
   type UnsubscribePreview,
   type UnsubscribeResult,
 } from '@/lib/server/functions/subscriptions'
-import { loadPortalIntl } from '@/lib/server/functions/locale'
+import { loadUnsubscribeIntl } from '@/lib/server/functions/locale'
 import { isUnsubscribeToken } from '@/lib/shared/unsubscribe-token'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
 import { Button } from '@/components/ui/button'
@@ -35,7 +35,7 @@ export const Route = createFileRoute('/unsubscribe')({
   validateSearch: searchSchema,
   loaderDeps: ({ search }) => ({ token: search.token }),
   loader: async ({ deps }) => {
-    const [intl, view] = await Promise.all([loadPortalIntl(), lookUp(deps.token)])
+    const [intl, view] = await Promise.all([loadUnsubscribeIntl(), lookUp(deps.token)])
     return { ...intl, ...view }
   },
   server: {
@@ -114,12 +114,9 @@ function ConfirmFlow({
     >
       <Button onClick={confirm} disabled={submitting}>
         {submitting ? (
-          <FormattedMessage
-            id="portal.unsubscribe.confirm.pending"
-            defaultMessage="Unsubscribing…"
-          />
+          <FormattedMessage id="unsubscribe.confirm.pending" defaultMessage="Unsubscribing…" />
         ) : (
-          <FormattedMessage id="portal.unsubscribe.confirm.button" defaultMessage="Unsubscribe" />
+          <FormattedMessage id="unsubscribe.confirm.button" defaultMessage="Unsubscribe" />
         )}
       </Button>
     </Shell>
@@ -147,7 +144,7 @@ function SuccessView({ result }: { result: UnsubscribeResult }) {
           params={{ slug: result.boardSlug, postId: result.postId }}
           className={LINK_BUTTON}
         >
-          <FormattedMessage id="portal.unsubscribe.viewPost" defaultMessage="View Post" />
+          <FormattedMessage id="unsubscribe.viewPost" defaultMessage="View Post" />
         </Link>
       ) : (
         <HomeLink />
@@ -181,7 +178,7 @@ const LINK_BUTTON =
 function HomeLink() {
   return (
     <Link to="/" className={LINK_BUTTON}>
-      <FormattedMessage id="portal.unsubscribe.goHome" defaultMessage="Go to Home" />
+      <FormattedMessage id="unsubscribe.goHome" defaultMessage="Go to Home" />
     </Link>
   )
 }
@@ -210,7 +207,7 @@ function Shell({
           {postTitle && (
             <p className="text-sm text-muted-foreground mt-2">
               <FormattedMessage
-                id="portal.unsubscribe.postLabel"
+                id="unsubscribe.postLabel"
                 defaultMessage="Post: {title}"
                 values={{ title: <span className="font-medium">{postTitle}</span> }}
               />
@@ -231,22 +228,22 @@ function confirmText(intl: IntlShape, action: string): Copy {
     case 'unsubscribe_post':
       return {
         title: intl.formatMessage({
-          id: 'portal.unsubscribe.confirm.post.title',
+          id: 'unsubscribe.confirm.post.title',
           defaultMessage: 'Unsubscribe from this post?',
         }),
         message: intl.formatMessage({
-          id: 'portal.unsubscribe.confirm.post.message',
+          id: 'unsubscribe.confirm.post.message',
           defaultMessage: "You'll stop getting email updates about this post.",
         }),
       }
     case 'unsubscribe_all':
       return {
         title: intl.formatMessage({
-          id: 'portal.unsubscribe.confirm.all.title',
+          id: 'unsubscribe.confirm.all.title',
           defaultMessage: 'Turn off all emails?',
         }),
         message: intl.formatMessage({
-          id: 'portal.unsubscribe.confirm.all.message',
+          id: 'unsubscribe.confirm.all.message',
           defaultMessage:
             "You'll stop getting all email notifications. You can turn them back on in your settings.",
         }),
@@ -254,33 +251,33 @@ function confirmText(intl: IntlShape, action: string): Copy {
     case 'unsubscribe_changelog':
       return {
         title: intl.formatMessage({
-          id: 'portal.unsubscribe.confirm.changelog.title',
+          id: 'unsubscribe.confirm.changelog.title',
           defaultMessage: 'Unsubscribe from changelog emails?',
         }),
         message: intl.formatMessage({
-          id: 'portal.unsubscribe.confirm.changelog.message',
+          id: 'unsubscribe.confirm.changelog.message',
           defaultMessage: "You'll stop getting changelog emails. You can resubscribe any time.",
         }),
       }
     case 'unsubscribe_status':
       return {
         title: intl.formatMessage({
-          id: 'portal.unsubscribe.confirm.status.title',
+          id: 'unsubscribe.confirm.status.title',
           defaultMessage: 'Unsubscribe from status page emails?',
         }),
         message: intl.formatMessage({
-          id: 'portal.unsubscribe.confirm.status.message',
+          id: 'unsubscribe.confirm.status.message',
           defaultMessage: "You'll stop getting status page emails. You can resubscribe any time.",
         }),
       }
     default:
       return {
         title: intl.formatMessage({
-          id: 'portal.unsubscribe.confirm.default.title',
+          id: 'unsubscribe.confirm.default.title',
           defaultMessage: 'Unsubscribe from these emails?',
         }),
         message: intl.formatMessage({
-          id: 'portal.unsubscribe.confirm.default.message',
+          id: 'unsubscribe.confirm.default.message',
           defaultMessage: "You'll stop getting these emails.",
         }),
       }
@@ -289,13 +286,13 @@ function confirmText(intl: IntlShape, action: string): Copy {
 
 function successText(intl: IntlShape, action?: string): Copy {
   const unsubscribed = () =>
-    intl.formatMessage({ id: 'portal.unsubscribe.success.title', defaultMessage: 'Unsubscribed' })
+    intl.formatMessage({ id: 'unsubscribe.success.title', defaultMessage: 'Unsubscribed' })
   switch (action) {
     case 'unsubscribe_post':
       return {
         title: unsubscribed(),
         message: intl.formatMessage({
-          id: 'portal.unsubscribe.success.post.message',
+          id: 'unsubscribe.success.post.message',
           defaultMessage:
             "You've been unsubscribed from this post. You won't receive any more email updates about it.",
         }),
@@ -303,11 +300,11 @@ function successText(intl: IntlShape, action?: string): Copy {
     case 'mute_post':
       return {
         title: intl.formatMessage({
-          id: 'portal.unsubscribe.success.mute.title',
+          id: 'unsubscribe.success.mute.title',
           defaultMessage: 'Notifications Muted',
         }),
         message: intl.formatMessage({
-          id: 'portal.unsubscribe.success.mute.message',
+          id: 'unsubscribe.success.mute.message',
           defaultMessage:
             "You've muted notifications for this post. You can unmute anytime from the post page.",
         }),
@@ -315,11 +312,11 @@ function successText(intl: IntlShape, action?: string): Copy {
     case 'unsubscribe_all':
       return {
         title: intl.formatMessage({
-          id: 'portal.unsubscribe.success.all.title',
+          id: 'unsubscribe.success.all.title',
           defaultMessage: 'All Emails Disabled',
         }),
         message: intl.formatMessage({
-          id: 'portal.unsubscribe.success.all.message',
+          id: 'unsubscribe.success.all.message',
           defaultMessage:
             "You've disabled all email notifications. You can re-enable them from your settings.",
         }),
@@ -328,7 +325,7 @@ function successText(intl: IntlShape, action?: string): Copy {
       return {
         title: unsubscribed(),
         message: intl.formatMessage({
-          id: 'portal.unsubscribe.success.changelog.message',
+          id: 'unsubscribe.success.changelog.message',
           defaultMessage:
             "You won't receive any more changelog emails. You can resubscribe any time.",
         }),
@@ -337,7 +334,7 @@ function successText(intl: IntlShape, action?: string): Copy {
       return {
         title: unsubscribed(),
         message: intl.formatMessage({
-          id: 'portal.unsubscribe.success.status.message',
+          id: 'unsubscribe.success.status.message',
           defaultMessage:
             "You won't receive any more status page emails. You can resubscribe any time.",
         }),
@@ -345,11 +342,11 @@ function successText(intl: IntlShape, action?: string): Copy {
     default:
       return {
         title: intl.formatMessage({
-          id: 'portal.unsubscribe.success.default.title',
+          id: 'unsubscribe.success.default.title',
           defaultMessage: 'Success',
         }),
         message: intl.formatMessage({
-          id: 'portal.unsubscribe.success.default.message',
+          id: 'unsubscribe.success.default.message',
           defaultMessage: 'Your preferences have been updated.',
         }),
       }
@@ -361,22 +358,22 @@ function errorText(intl: IntlShape, error: ErrorKind): Copy {
     case 'missing':
       return {
         title: intl.formatMessage({
-          id: 'portal.unsubscribe.error.missing.title',
+          id: 'unsubscribe.error.missing.title',
           defaultMessage: 'Missing Token',
         }),
         message: intl.formatMessage({
-          id: 'portal.unsubscribe.error.missing.message',
+          id: 'unsubscribe.error.missing.message',
           defaultMessage: 'No unsubscribe token was provided. Please use the link from your email.',
         }),
       }
     case 'failed':
       return {
         title: intl.formatMessage({
-          id: 'portal.unsubscribe.error.failed.title',
+          id: 'unsubscribe.error.failed.title',
           defaultMessage: 'Something Went Wrong',
         }),
         message: intl.formatMessage({
-          id: 'portal.unsubscribe.error.failed.message',
+          id: 'unsubscribe.error.failed.message',
           defaultMessage: "We couldn't process your request. Please try again later.",
         }),
       }
@@ -385,11 +382,11 @@ function errorText(intl: IntlShape, error: ErrorKind): Copy {
     case 'used':
       return {
         title: intl.formatMessage({
-          id: 'portal.unsubscribe.error.expired.title',
+          id: 'unsubscribe.error.expired.title',
           defaultMessage: 'Link Expired',
         }),
         message: intl.formatMessage({
-          id: 'portal.unsubscribe.error.expired.message',
+          id: 'unsubscribe.error.expired.message',
           defaultMessage: 'This unsubscribe link has already been used or has expired.',
         }),
       }

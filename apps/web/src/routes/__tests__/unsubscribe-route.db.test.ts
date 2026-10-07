@@ -47,7 +47,7 @@ vi.mock('@tanstack/react-start', async (importOriginal) => ({
 // The page loads its catalog by reading Accept-Language off the live request,
 // which a test has none of.
 vi.mock('@/lib/server/functions/locale', () => ({
-  loadPortalIntl: async () => ({ locale: 'en', messages: {} }),
+  loadUnsubscribeIntl: async () => ({ locale: 'en', messages: {} }),
 }))
 
 import { Route } from '../unsubscribe'

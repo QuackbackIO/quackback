@@ -10,7 +10,9 @@ import {
   loadPortalMessages,
   loadViewerMessages,
   loadWidgetMessages,
-  withoutViewerMessages,
+  isUnsubscribeMessage,
+  loadUnsubscribeMessages,
+  withoutPageScopedMessages,
 } from '../i18n'
 
 describe('normalizeLocale', () => {
@@ -176,15 +178,41 @@ describe('viewer strings', () => {
       loadPortalMessages('de'),
       loadViewerMessages('de'),
     ])
-    for (const seeded of [widget, portal, withoutViewerMessages(all)]) {
+    for (const seeded of [widget, portal, withoutPageScopedMessages(all)]) {
       expect(Object.keys(seeded).filter(isViewerMessage)).toEqual([])
       expect(seeded['files.download']).toBe(all['files.download'])
     }
     expect(viewer['files.viewer.close']).toBe('Schließen')
     expect(Object.keys(viewer).length).toBeGreaterThan(0)
     expect(Object.keys(viewer).every(isViewerMessage)).toBe(true)
-    expect(Object.keys(viewer).length + Object.keys(withoutViewerMessages(all)).length).toBe(
-      Object.keys(all).length
-    )
+  })
+})
+
+describe('unsubscribe page strings', () => {
+  it('are seeded by that page alone, translated, and by no shared surface', async () => {
+    const [all, widget, portal, unsubscribe] = await Promise.all([
+      loadMessages('de'),
+      loadWidgetMessages('de'),
+      loadPortalMessages('de'),
+      loadUnsubscribeMessages('de'),
+    ])
+    for (const seeded of [widget, portal, withoutPageScopedMessages(all)]) {
+      expect(Object.keys(seeded).filter(isUnsubscribeMessage)).toEqual([])
+    }
+    expect(unsubscribe['unsubscribe.confirm.button']).toBe('Abmelden')
+    expect(Object.keys(unsubscribe).every(isUnsubscribeMessage)).toBe(true)
+  })
+
+  it('leaves nothing out of the admin catalog but the page-scoped strings', async () => {
+    const [all, viewer, unsubscribe] = await Promise.all([
+      loadMessages('de'),
+      loadViewerMessages('de'),
+      loadUnsubscribeMessages('de'),
+    ])
+    expect(
+      Object.keys(viewer).length +
+        Object.keys(unsubscribe).length +
+        Object.keys(withoutPageScopedMessages(all)).length
+    ).toBe(Object.keys(all).length)
   })
 })

@@ -37,7 +37,7 @@ vi.mock('@tanstack/react-start', async (importOriginal) => ({
 }))
 
 vi.mock('@/lib/server/functions/locale', () => ({
-  loadPortalIntl: async () => ({ locale: 'en', messages: {} }),
+  loadUnsubscribeIntl: async () => ({ locale: 'en', messages: {} }),
 }))
 
 import { Route } from '../unsubscribe'
