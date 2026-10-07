@@ -102,12 +102,19 @@ export const sendCurrentAddressCodeFn = createServerFn({ method: 'POST' }).handl
     throw new ValidationError('RATE_LIMITED', 'Too many attempts. Try again a little later.')
   }
 
+  // Minted through the path-less endpoint and mailed here, not through the
+  // routed `sendVerificationOTP`: that one runs the SIGN-IN hook chain, whose
+  // email-sign-in toggle and "Require SSO" rule answer a different question
+  // than "does this person hold their current address". This flow's own rules
+  // are the ones above. `auth/__tests__/otp-endpoint-hooks.test.ts` pins that
+  // the path-less endpoint skips the chain.
   const { getAuth } = await import('@/lib/server/auth')
   const auth = await getAuth()
-  await auth.api.sendVerificationOTP({
+  const code = await auth.api.createVerificationOTP({
     body: { email: current, type: 'email-verification' },
-    headers,
   })
+  const { sendVerifyAddressCode } = await import('@/lib/server/auth/verify-address-email')
+  await sendVerifyAddressCode(current, code)
   return { ok: true as const }
 })
 

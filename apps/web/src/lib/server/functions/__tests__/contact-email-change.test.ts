@@ -43,6 +43,8 @@ const hoisted = vi.hoisted(() => ({
   requireAuth: vi.fn(),
   findFirst: vi.fn(),
   sendVerificationOTP: vi.fn().mockResolvedValue({ success: true }),
+  createVerificationOTP: vi.fn().mockResolvedValue('654321'),
+  sendVerifyAddressCode: vi.fn(async (..._args: unknown[]) => {}),
   requestEmailChangeEmailOTP: vi.fn().mockResolvedValue({ success: true }),
   changeEmailEmailOTP: vi.fn().mockResolvedValue({ success: true }),
   checkVerificationOTP: vi.fn().mockResolvedValue({ success: true }),
@@ -75,6 +77,7 @@ vi.mock('@/lib/server/auth', () => ({
   getAuth: async () => ({
     api: {
       sendVerificationOTP: hoisted.sendVerificationOTP,
+      createVerificationOTP: hoisted.createVerificationOTP,
       requestEmailChangeEmailOTP: hoisted.requestEmailChangeEmailOTP,
       changeEmailEmailOTP: hoisted.changeEmailEmailOTP,
       checkVerificationOTP: hoisted.checkVerificationOTP,
@@ -98,6 +101,9 @@ vi.mock('@/lib/server/domains/principals/contact-email', async () => {
 })
 
 vi.mock('@/lib/server/domains/api/rate-limit', () => ({ getClientIp: () => '203.0.113.7' }))
+vi.mock('@/lib/server/auth/verify-address-email', () => ({
+  sendVerifyAddressCode: (...a: unknown[]) => hoisted.sendVerifyAddressCode(...a),
+}))
 vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
   listIdentityProviders: async () => hoisted.providers,
 }))
@@ -231,14 +237,31 @@ describe('sendCurrentAddressCodeFn', () => {
     hoisted.checkRateLimit.mockResolvedValueOnce({ allowed: false })
 
     await expect(call(sendCurrentAddressCodeFn)).rejects.toThrow(/too many/i)
+    expect(hoisted.createVerificationOTP).not.toHaveBeenCalled()
+    expect(hoisted.sendVerifyAddressCode).not.toHaveBeenCalled()
+  })
+
+  // The routed endpoint runs the sign-in hook chain, whose email-sign-in toggle
+  // and Require SSO rule would refuse this code for reasons that are not this
+  // flow's. The path-less mint skips that chain (otp-endpoint-hooks.test.ts).
+  it('mints the code without the sign-in hooks and mails it', async () => {
+    accountIs(REAL)
+
+    await call(sendCurrentAddressCodeFn)
+
+    expect(hoisted.createVerificationOTP).toHaveBeenCalledWith({
+      body: { email: REAL, type: 'email-verification' },
+    })
     expect(hoisted.sendVerificationOTP).not.toHaveBeenCalled()
+    expect(hoisted.sendVerifyAddressCode).toHaveBeenCalledWith(REAL, '654321')
   })
 
   it('refuses when there is no reachable address to prove', async () => {
     accountIs(PLACEHOLDER)
 
     await expect(call(sendCurrentAddressCodeFn)).rejects.toThrow(/no confirmed address/i)
-    expect(hoisted.sendVerificationOTP).not.toHaveBeenCalled()
+    expect(hoisted.createVerificationOTP).not.toHaveBeenCalled()
+    expect(hoisted.sendVerifyAddressCode).not.toHaveBeenCalled()
   })
 })
 
@@ -344,7 +367,6 @@ describe('headers forwarded to Better Auth', () => {
     await call(confirmEmailChangeFn, { email: REAL, code: '123456' })
 
     for (const fn of [
-      hoisted.sendVerificationOTP,
       hoisted.checkVerificationOTP,
       hoisted.requestEmailChangeEmailOTP,
       hoisted.changeEmailEmailOTP,
@@ -375,7 +397,8 @@ describe('a domain that requires SSO', () => {
     accountIs(SSO)
 
     await expect(call(sendCurrentAddressCodeFn)).rejects.toThrow(/single sign-on/i)
-    expect(hoisted.sendVerificationOTP).not.toHaveBeenCalled()
+    expect(hoisted.createVerificationOTP).not.toHaveBeenCalled()
+    expect(hoisted.sendVerifyAddressCode).not.toHaveBeenCalled()
   })
 
   it('refuses to move off a managed address, even with a good current code', async () => {
@@ -462,7 +485,7 @@ describe('a domain that requires SSO', () => {
 
     await call(sendCurrentAddressCodeFn)
 
-    expect(hoisted.sendVerificationOTP).toHaveBeenCalled()
+    expect(hoisted.sendVerifyAddressCode).toHaveBeenCalledWith(SSO, '654321')
   })
 
   it('still moves between addresses at other domains', async () => {

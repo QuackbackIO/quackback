@@ -299,6 +299,16 @@ async function createAuth() {
       log.warn({ registrationId, reason }, 'identity profile resolution failed')
     },
     placeholderEmailFor: resolvePlaceholderEmail,
+    // A failure here must never block the sign-in: Better Auth then answers as
+    // it would have without the vouch.
+    onProviderEmail: async (registrationId, email) => {
+      try {
+        const { vouchForEnforcedAddress } = await import('./enforcing-provider-email')
+        await vouchForEnforcedAddress({ registrationId, email, providers: providerRows })
+      } catch (error) {
+        log.error({ err: error, registrationId }, 'enforcing provider vouch failed')
+      }
+    },
     mapProfileToUser: mapProfileClaims,
   })
   genericOAuthConfigs.push(...oidcConfigs)
@@ -675,17 +685,8 @@ async function createAuth() {
           // `email-verification` (adding a first address) and `change-email`
           // (moving to a new one) both mean the same thing to the recipient:
           // prove you hold this address.
-          const { sendVerifyAddressEmail } = await import('@quackback/email')
-          const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
-          const settings = await db.query.settings.findFirst({
-            columns: { name: true, logoKey: true },
-          })
-          await sendVerifyAddressEmail({
-            to: email,
-            code: otp,
-            workspaceName: settings?.name ?? undefined,
-            logoUrl: getEmailSafeUrl(settings?.logoKey) ?? undefined,
-          })
+          const { sendVerifyAddressCode } = await import('./verify-address-email')
+          await sendVerifyAddressCode(email, otp)
         },
         otpLength: 6,
         expiresIn: 600,

@@ -180,6 +180,13 @@ export interface BuildGenericOAuthConfigsArgs {
    * this module keeps needing no DB import.
    */
   placeholderEmailFor?: (registrationId: string, accountId: string) => Promise<string>
+  /**
+   * Called with the address the provider itself released, before Better Auth
+   * looks for an account to sign in or link. Lets a domain's enforcing provider
+   * vouch for an existing account at that domain. Must not throw; injected so
+   * this module keeps needing no DB import.
+   */
+  onProviderEmail?: (registrationId: string, email: string) => Promise<void>
   /** Attached to every config so `user.locale` populates from sign-in. */
   mapProfileToUser?: (profile: unknown) => Record<string, unknown>
 }
@@ -201,6 +208,7 @@ export async function buildGenericOAuthConfigs({
   onResolved,
   onIdentityFailure,
   placeholderEmailFor,
+  onProviderEmail,
   mapProfileToUser,
 }: BuildGenericOAuthConfigsArgs): Promise<GenericOAuthConfig[]> {
   // Defense-in-depth: a workspace downgraded off the OIDC tier keeps its
@@ -328,6 +336,12 @@ export async function buildGenericOAuthConfigs({
       if (outcome.kind === 'placeholder_required' && placeholderEmailFor) {
         resolvedEmail = await placeholderEmailFor(provider.registrationId, id)
         resolvedEmailVerified = false
+      }
+
+      // Only an address the provider released, never a placeholder or a
+      // stored address standing in for one.
+      if (email && outcome.kind !== 'placeholder_required') {
+        await onProviderEmail?.(provider.registrationId, email)
       }
 
       // Better-Auth logs the entire userInfo on email_is_missing. Returning
