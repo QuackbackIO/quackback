@@ -33,7 +33,7 @@
  * `message-id.ts` for why that split is deliberate.
  */
 import { SendEmailCommand, SESv2Client } from '@aws-sdk/client-sesv2'
-import type { SendEmailCommandOutput } from '@aws-sdk/client-sesv2'
+import type { SendEmailCommandOutput, SESv2ClientConfig } from '@aws-sdk/client-sesv2'
 import { createLogger } from '@quackback/logger'
 import { sesWireMessageId } from './message-id'
 import { createSendRateLimiter, SendRateQueueFullError } from './send-rate'
@@ -551,6 +551,61 @@ function configFailure(message: string): SesEmailError {
   return new SesEmailError(message, null, null, false)
 }
 
+type SesRetryStrategy = Extract<
+  NonNullable<SESv2ClientConfig['retryStrategy']>,
+  { acquireInitialRetryToken: unknown }
+>
+type SesRetryToken = Awaited<ReturnType<SesRetryStrategy['acquireInitialRetryToken']>>
+
+/** Tries per send for a transient failure, the SDK's own default. */
+const SDK_MAX_ATTEMPTS = 3
+const SDK_RETRY_BASE_DELAY_MS = 100
+
+/**
+ * The SDK's retry policy with throttling taken out.
+ *
+ * Left to its defaults the SDK resends a throttled request itself, up to three
+ * tries about half a second apart. That turns one send-rate slot into as many
+ * as three SES calls, made while SES is already saying the account is over its
+ * rate, which is the burst the limiter exists to prevent. A throttle is instead
+ * thrown straight back, classed retryable (see {@link sendFailure}), and the
+ * caller retries it on its own schedule, through the limiter again.
+ *
+ * Not `maxAttempts: 1`. Some sends happen on a request path with no job queue
+ * behind them (a sign-in link), and for those the SDK's quick resend of a
+ * dropped connection or a 5xx is the only retry there is; removing it would
+ * fail a sign-in on a network blip. A transient failure has mostly not counted
+ * against the rate (a reset connection, a 503), so resending it inside the slot
+ * does not feed the throttle.
+ */
+function sesRetryStrategy(): SesRetryStrategy {
+  const token = (count: number, delay: number): SesRetryToken => ({
+    getRetryCount: () => count,
+    getRetryDelay: () => delay,
+  })
+  return {
+    acquireInitialRetryToken: async () => token(0, 0),
+    refreshRetryTokenForRetry: async (previous, errorInfo) => {
+      const retries = previous.getRetryCount() + 1
+      // Throwing is how a strategy declines: the SDK then rethrows the error.
+      if (errorInfo.errorType !== 'TRANSIENT' || retries >= SDK_MAX_ATTEMPTS) {
+        throw new Error('no retry')
+      }
+      // Full jitter on an exponential base, as the SDK's own backoff does.
+      return token(retries, Math.random() * SDK_RETRY_BASE_DELAY_MS * 2 ** retries)
+    },
+    recordSuccess: () => {},
+  }
+}
+
+/** The SDK client options this transport sends with. Exported for its test. */
+export function sesClientConfig(
+  region: string,
+  credentials: { accessKeyId: string; secretAccessKey: string }
+): SESv2ClientConfig {
+  return { region, credentials, retryStrategy: sesRetryStrategy() }
+}
+
 /**
  * The client and the region it was built for, so the two cannot drift apart on
  * the way to the send.
@@ -576,7 +631,7 @@ function depsFromEnv(): SesEmailDeps {
   const key = `${region}:${credentials.accessKeyId}`
   if (!cachedClient || cachedClientKey !== key) {
     log.info({ region }, 'initializing ses client')
-    cachedClient = new SESv2Client({ region, credentials })
+    cachedClient = new SESv2Client(sesClientConfig(region, credentials))
     cachedClientKey = key
   }
   return { client: cachedClient, region, configurationSet: sesConfigurationSet() }

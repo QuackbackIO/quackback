@@ -220,9 +220,13 @@ const configSchema = z
      * (`sesMaxSendRate` in @quackback/email); validated here so a malformed value
      * stops boot instead of being quietly replaced by the default.
      */
-    emailSesMaxSendRate: z
-      .preprocess(emptyToUndefined, z.coerce.number().positive().finite())
-      .optional(),
+    // Blank or whitespace-only is unset, as the transport reads it: coercing
+    // `'  '` would give 0 and refuse a boot the transport would have run at
+    // its default.
+    emailSesMaxSendRate: z.preprocess(
+      (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+      z.coerce.number().positive().finite().optional()
+    ),
     /**
      * SES credentials for VERIFYING a customer-owned sending domain. A
      * different principal from the sending pair above with a different grant:
@@ -623,6 +627,9 @@ export const config = {
   },
   get emailSesConfigurationSet() {
     return loadConfig().emailSesConfigurationSet
+  },
+  get emailSesMaxSendRate() {
+    return loadConfig().emailSesMaxSendRate
   },
   get emailSesIdentityAccessKeyId() {
     return loadConfig().emailSesIdentityAccessKeyId
