@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { SUPPORTED_LOCALES } from '@/lib/shared/i18n'
+import { WIDGET_LOCALE_LABELS } from '@/lib/shared/widget/translations'
 
 // The widget SDK is a standalone published package, so it can't import the app's
 // SUPPORTED_LOCALES and keeps its own WIDGET_LOCALES list. This test is the one
@@ -26,6 +27,12 @@ function readWidgetLocales(): string[] {
 }
 
 describe('widget locale list', () => {
+  it('provides a readable Messenger label for every supported locale', () => {
+    for (const locale of SUPPORTED_LOCALES) {
+      expect(WIDGET_LOCALE_LABELS[locale]?.trim(), locale).toBeTruthy()
+    }
+  })
+
   it('covers exactly the app SUPPORTED_LOCALES (BCP-47 casing aside)', () => {
     const widget = readWidgetLocales()
     // Guard against the parse silently returning nothing.
