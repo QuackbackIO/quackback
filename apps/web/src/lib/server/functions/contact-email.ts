@@ -26,7 +26,6 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { requireAuth } from './auth-helpers'
-import type { UserId } from '@quackback/ids'
 
 import { ValidationError } from '@/lib/shared/errors'
 import { realEmail } from '@/lib/shared/anonymous-email'
@@ -60,12 +59,9 @@ async function userRow(ctx: Awaited<ReturnType<typeof requireAuth>>) {
 }
 
 /** "Require SSO" for this flow: see `auth/sso-managed-email.ts`. */
-async function ssoBlocked(userId: UserId, from: string | null, to: string | null) {
-  const { isEmailMoveSsoBlocked } = await import('@/lib/server/auth/sso-managed-email')
-  return isEmailMoveSsoBlocked({ userId, from, to })
+async function ssoRules() {
+  return import('@/lib/server/auth/sso-managed-email')
 }
-
-const SSO_MANAGED_MESSAGE = 'Addresses at this domain are managed by single sign-on.'
 
 /**
  * Whether this account already has a reachable address, which decides whether
@@ -88,9 +84,10 @@ export const sendCurrentAddressCodeFn = createServerFn({ method: 'POST' }).handl
   if (!current) {
     throw new ValidationError('NO_CURRENT_EMAIL', 'This account has no confirmed address yet.')
   }
-  if (await ssoBlocked(row.id, current, null)) {
-    throw new ValidationError('SSO_MANAGED', SSO_MANAGED_MESSAGE)
-  }
+  // The new address is not known yet, so refuse only what no destination
+  // could allow: an address managed by a provider this account does not sign
+  // in through. Step 1 judges the actual move.
+  await (await ssoRules()).assertEmailMoveAllowed({ userId: row.id, from: current, to: current })
 
   // Rate limited like its sibling. Better Auth's own OTP limits are declared as
   // path matchers on the HTTP router, so calling `auth.api.*` in process goes
@@ -135,9 +132,7 @@ export const requestEmailChangeFn = createServerFn({ method: 'POST' })
     if (current && current.toLowerCase() === email) {
       throw new ValidationError('SAME_EMAIL', 'That is already your email address.')
     }
-    if (await ssoBlocked(row.id, current, email)) {
-      throw new ValidationError('SSO_MANAGED', SSO_MANAGED_MESSAGE)
-    }
+    await (await ssoRules()).assertEmailMoveAllowed({ userId: row.id, from: current, to: email })
 
     const { getClientIp } = await import('@/lib/server/domains/api/rate-limit')
     const { checkContactEmailSendRateLimit } = await import('@/lib/server/auth/signin-rate-limit')
@@ -204,6 +199,16 @@ export const confirmEmailChangeFn = createServerFn({ method: 'POST' })
     const email = acceptableContactEmail(data.email)
     if (!email) throw new ValidationError('VALIDATION_ERROR', 'Enter a valid email address.')
 
+    // Checked again here, not only at step 1: a domain can start requiring SSO
+    // between the two steps, and the address can change under the session.
+    // Before the holder lookup below, so the answer for an address at such a
+    // domain never depends on whether an account holds it.
+    const row = await userRow(ctx)
+    const { isEmailMoveSsoBlocked } = await ssoRules()
+    if (await isEmailMoveSsoBlocked({ userId: row.id, from: realEmail(row.email), to: email })) {
+      return { ok: false as const, reason: 'sso_managed' as const }
+    }
+
     // Better Auth's own uniqueness gate lowercases the address it searches FOR
     // but compares it against stored values as-is, and `user_email_idx` is
     // case-sensitive too, so a stored `Foo@x.com` is invisible to both and one
@@ -215,13 +220,6 @@ export const confirmEmailChangeFn = createServerFn({ method: 'POST' })
       columns: { id: true },
     })
     if (holder) return { ok: false as const, reason: 'invalid_or_taken' as const }
-
-    // Checked again here, not only at step 1: a domain can start requiring SSO
-    // between the two steps, and the address can change under the session.
-    const row = await userRow(ctx)
-    if (await ssoBlocked(row.id, realEmail(row.email), email)) {
-      return { ok: false as const, reason: 'sso_managed' as const }
-    }
 
     const { getAuth } = await import('@/lib/server/auth')
     const { withTrustedClientIp } = await import('@/lib/server/auth/client-ip')

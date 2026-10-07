@@ -133,10 +133,10 @@ const accountIs = (email: string) => {
   hoisted.findFirst.mockResolvedValueOnce({ id: 'usr_1', email })
 }
 
-/** Confirm reads the address holder first, then re-reads the account. */
+/** Confirm re-reads the account first, then looks for another holder of the address. */
 const confirmingFrom = (email: string, holder?: { id: string }) => {
   hoisted.findFirst.mockReset()
-  hoisted.findFirst.mockResolvedValueOnce(holder).mockResolvedValueOnce({ id: 'usr_1', email })
+  hoisted.findFirst.mockResolvedValueOnce({ id: 'usr_1', email }).mockResolvedValueOnce(holder)
 }
 
 beforeEach(() => {
@@ -247,8 +247,7 @@ describe('confirmEmailChangeFn', () => {
     // Better Auth lowercases the address it searches for but compares it
     // against stored values as-is, and the unique index is case-sensitive, so
     // without this check one address ends up with two identities.
-    hoisted.findFirst.mockReset()
-    hoisted.findFirst.mockResolvedValueOnce({ id: 'usr_other' })
+    confirmingFrom('old@example.com', { id: 'usr_other' })
 
     const res = await call<{ ok: boolean; reason?: string }>(confirmEmailChangeFn, {
       email: 'Pat@Example.com',
@@ -419,6 +418,51 @@ describe('a domain that requires SSO', () => {
     await call(requestEmailChangeFn, { email: 'new@acme.com' })
 
     expect(hoisted.requestEmailChangeEmailOTP).toHaveBeenCalled()
+  })
+
+  // The SSO answer is checked before the holder lookup, so it cannot tell a
+  // caller which addresses at the domain hold accounts.
+  it('answers the same at confirm whether or not the managed address is taken', async () => {
+    confirmingFrom(PLACEHOLDER, { id: 'usr_other' })
+    const taken = await call<{ ok: boolean; reason?: string }>(confirmEmailChangeFn, {
+      email: 'ceo@acme.com',
+      code: '000000',
+    })
+    confirmingFrom(PLACEHOLDER, undefined)
+    const free = await call<{ ok: boolean; reason?: string }>(confirmEmailChangeFn, {
+      email: 'nobody@acme.com',
+      code: '000000',
+    })
+
+    expect(taken).toEqual({ ok: false, reason: 'sso_managed' })
+    expect(free).toEqual(taken)
+  })
+
+  it('lets an account on the owning provider correct its address within the domain', async () => {
+    accountIs(SSO)
+    hoisted.accountFindFirst.mockResolvedValue({ id: 'acc_1' })
+
+    await call(requestEmailChangeFn, { email: 'sam.lee@acme.com', currentCode: '123456' })
+
+    expect(hoisted.requestEmailChangeEmailOTP).toHaveBeenCalled()
+  })
+
+  it('still keeps that account from moving off the domain', async () => {
+    accountIs(SSO)
+    hoisted.accountFindFirst.mockResolvedValue({ id: 'acc_1' })
+
+    await expect(
+      call(requestEmailChangeFn, { email: 'sam@gmail.com', currentCode: '123456' })
+    ).rejects.toThrow(/single sign-on/i)
+  })
+
+  it('sends a current-address code to a managed address on the owning provider', async () => {
+    accountIs(SSO)
+    hoisted.accountFindFirst.mockResolvedValue({ id: 'acc_1' })
+
+    await call(sendCurrentAddressCodeFn)
+
+    expect(hoisted.sendVerificationOTP).toHaveBeenCalled()
   })
 
   it('still moves between addresses at other domains', async () => {

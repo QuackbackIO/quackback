@@ -231,7 +231,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
                   disabled={isSubmitting}
                 />
               </div>
-              <EmailField ssoManaged={ssoEnforced} />
+              <EmailField ssoManaged={ssoEnforced} onChanged={() => router.invalidate()} />
             </div>
             <div className="flex justify-end">
               <Button type="submit" disabled={isSubmitting}>

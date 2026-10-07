@@ -10,6 +10,7 @@ import {
   requestEmailChangeFn,
   confirmEmailChangeFn,
 } from '@/lib/server/functions/contact-email'
+import { SSO_MANAGED_EMAIL_MESSAGE } from '@/lib/shared/sso-managed-email'
 
 /**
  * `address` is where the new address is named, with a proof of the current one
@@ -37,9 +38,12 @@ const message = (err: unknown, fallback: string) =>
  */
 export function EmailField({
   ssoManaged = false,
+  onChanged,
 }: {
   /** The address belongs to a domain that requires SSO; the server refuses changes too. */
   ssoManaged?: boolean
+  /** After the address changes, so the page can re-read what depends on it. */
+  onChanged?: () => void | Promise<void>
 }) {
   const { data, refetch } = useQuery({
     queryKey: ['email-change-state'],
@@ -112,7 +116,7 @@ export function EmailField({
       if (!res.ok) {
         toast.error(
           res.reason === 'sso_managed'
-            ? 'Addresses at this domain are managed by single sign-on.'
+            ? SSO_MANAGED_EMAIL_MESSAGE
             : 'That code is not right, or the address is no longer available.'
         )
         return
@@ -120,6 +124,7 @@ export function EmailField({
       toast.success('Email updated.')
       reset()
       await refetch()
+      await onChanged?.()
     }, 'Could not confirm that code.')
 
   return (

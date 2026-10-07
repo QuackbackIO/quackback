@@ -331,6 +331,26 @@ describe.skipIf(!fixture.available)('updatePortalUserProfile', () => {
       expect(row.email).toBe(address)
     })
 
+    it('lets an admin correct an address within the domain for someone on its provider', async () => {
+      const person = await seedUser({ name: 'Jon', email: `jhon-${runSuffix()}@acme.com` })
+      await testDb.insert(account).values({
+        accountId: `sub-${runSuffix()}`,
+        providerId: 'oidc_acme',
+        userId: person.userId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      const corrected = `john-${runSuffix()}@acme.com`
+
+      await updatePortalUserProfile({ principalId: person.principalId, email: corrected })
+
+      const [row] = await testDb
+        .select({ email: user.email })
+        .from(user)
+        .where(eq(user.id, person.userId))
+      expect(row.email).toBe(corrected)
+    })
+
     it('still renames someone at a managed address', async () => {
       const address = `kim-${runSuffix()}@acme.com`
       const person = await seedUser({ name: 'Kim', email: address })
