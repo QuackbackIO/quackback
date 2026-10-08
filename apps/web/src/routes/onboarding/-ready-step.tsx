@@ -198,17 +198,33 @@ export function ReadyStep({
 
 function InstallSection({ checks, offset }: { checks: InstallChecks | 'loading'; offset: number }) {
   if (checks === 'loading') {
+    // One placeholder per check, in the loaded rows' shape, so the section
+    // keeps its height and the button below does not move when they resolve.
     return (
-      <section className="mt-8 max-w-[440px]" aria-busy="true">
+      <section className="mt-7 max-w-[440px]" aria-busy="true">
         <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
           <FormattedMessage id="onboarding.ready.installTitle" defaultMessage="Your install" />
         </h2>
-        <p role="status" className="mt-3 text-sm text-muted-foreground">
+        <p role="status" className="sr-only">
           <FormattedMessage
             id="onboarding.ready.checking"
             defaultMessage="Checking your install…"
           />
         </p>
+        <ul aria-hidden="true" className="mt-3 flex flex-col gap-3">
+          {[60, 52, 70].map((width) => (
+            <li key={width} data-skeleton-row className={ROW}>
+              <span className="mt-0.5 size-5 shrink-0 rounded-full bg-muted motion-safe:animate-pulse" />
+              <span className="flex h-[1lh] grow items-center">
+                <span
+                  className="h-3 rounded-full bg-muted motion-safe:animate-pulse"
+                  style={{ width: `${width}%` }}
+                />
+              </span>
+            </li>
+          ))}
+        </ul>
+        <p aria-hidden="true" className="mt-3 h-[1lh] text-sm" />
       </section>
     )
   }

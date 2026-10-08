@@ -239,6 +239,23 @@ describe('self-hosted ready step', () => {
     expect(open.querySelector('.truncate')).toBeNull()
   })
 
+  // The checks resolve after the step appears; holding their place keeps
+  // the button still while the admin reaches for it.
+  it('holds the install rows’ place while the checks load', async () => {
+    let resolveChecks: (value: typeof ALL_SET) => void = () => {}
+    hoisted.checks.mockReturnValue(new Promise((resolve) => (resolveChecks = resolve)))
+    await finishSetup(['product_feedback'])
+
+    const loading = screen.getByText('Checking your install…').closest('section')!
+    expect(loading).toHaveAttribute('aria-busy', 'true')
+    const placeholders = loading.querySelectorAll('[data-skeleton-row]')
+    expect(placeholders).toHaveLength(3)
+
+    resolveChecks(ALL_SET)
+    const loaded = (await screen.findByText('Email is set up')).closest('section')!
+    expect(loaded.querySelectorAll('li')).toHaveLength(placeholders.length)
+  })
+
   it('lists what was set up for each goal picked', async () => {
     await finishSetup(['product_feedback', 'help_center'], 'Sam Rivera')
 
