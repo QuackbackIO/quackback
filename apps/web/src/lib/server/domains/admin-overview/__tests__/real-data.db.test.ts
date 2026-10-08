@@ -113,7 +113,7 @@ describe('whether Home has real data', () => {
 
   it('does not take the service setup seeded for real data, but a subscriber is', async () => {
     const status = { ...flags, statusPage: true }
-    const owner = withPermissions(PERMISSIONS.STATUS_PAGE_PUBLISH)
+    const owner = withPermissions(PERMISSIONS.STATUS_PAGE_PUBLISH, PERMISSIONS.STATUS_PAGE_MANAGE)
     await testDb.insert(statusComponents).values({ name: 'Acme API' })
     expect(
       (await getAdminOverview({ actor: owner, flags: status, probeRealData: true })).hasRealData
@@ -129,7 +129,7 @@ describe('whether Home has real data', () => {
 
   it('counts a status page’s subscribers and open incidents, and names the module', async () => {
     const status = { ...flags, statusPage: true }
-    const owner = withPermissions(PERMISSIONS.STATUS_PAGE_PUBLISH)
+    const owner = withPermissions(PERMISSIONS.STATUS_PAGE_PUBLISH, PERMISSIONS.STATUS_PAGE_MANAGE)
     await testDb.insert(statusSubscriptions).values([
       { principalId: await customer(), source: 'self_serve' },
       { principalId: await customer(), source: 'self_serve', unsubscribedAt: new Date() },
@@ -150,6 +150,31 @@ describe('whether Home has real data', () => {
     ])
     expect(overview.sections.status).toEqual({ enabled: true, error: null })
     expect((await getAdminOverview({ actor, flags })).sections.status.enabled).toBe(false)
+  })
+
+  it('shows status subscribers only to whoever can open their list', async () => {
+    const status = { ...flags, statusPage: true }
+    await testDb
+      .insert(statusSubscriptions)
+      .values({ principalId: await customer(), source: 'self_serve' })
+    await testDb
+      .insert(statusIncidents)
+      .values({ kind: 'incident', title: 'Acme API slow', status: 'investigating' })
+    const statusKeys = (overview: Awaited<ReturnType<typeof getAdminOverview>>) =>
+      overview.metrics.filter((metric) => metric.filter === 'status').map((metric) => metric.key)
+
+    // Publishing incidents does not open the subscriber list, so no count, query or empty line.
+    const publisher = withPermissions(PERMISSIONS.STATUS_PAGE_PUBLISH)
+    statements.length = 0
+    const published = await getAdminOverview({ actor: publisher, flags: status })
+    expect(statusKeys(published)).toEqual(['incidents'])
+    expect(published.sections.status.enabled).toBe(false)
+    expect(statements.some((sql) => /from "status_subscriptions"/i.test(sql))).toBe(false)
+
+    const manager = withPermissions(PERMISSIONS.STATUS_PAGE_PUBLISH, PERMISSIONS.STATUS_PAGE_MANAGE)
+    const managed = await getAdminOverview({ actor: manager, flags: status })
+    expect(statusKeys(managed)).toEqual(['subscribers', 'incidents'])
+    expect(managed.sections.status.enabled).toBe(true)
   })
 
   it('never counts shipped ideas waiting for an announcement while Changelog is off', async () => {

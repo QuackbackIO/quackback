@@ -66,7 +66,8 @@ type OverviewMetricsInput = {
   }
   help?: { draftCount: number; draftLink: OverviewLink }
   status?: {
-    subscriberCount: number
+    /** Null where the viewer cannot see the subscriber list. */
+    subscriberCount: number | null
     openIncidentCount: number
     subscribersLink: OverviewLink
     incidentsLink: OverviewLink
@@ -125,24 +126,24 @@ export function buildOverviewMetrics(input: OverviewMetricsInput): OverviewMetri
   if (input.status) {
     const subscribers = input.status.subscriberCount
     const incidents = input.status.openIncidentCount
-    metrics.push(
-      {
+    if (subscribers !== null) {
+      metrics.push({
         key: 'subscribers',
         label: subscribers === 1 ? 'subscriber' : 'subscribers',
         detail: 'to your status page',
         count: subscribers,
         link: input.status.subscribersLink,
         filter: 'status',
-      },
-      {
-        key: 'incidents',
-        label: incidents === 1 ? 'incident' : 'incidents',
-        detail: 'still open',
-        count: incidents,
-        link: input.status.incidentsLink,
-        filter: 'status',
-      }
-    )
+      })
+    }
+    metrics.push({
+      key: 'incidents',
+      label: incidents === 1 ? 'incident' : 'incidents',
+      detail: 'still open',
+      count: incidents,
+      link: input.status.incidentsLink,
+      filter: 'status',
+    })
   }
   return metrics
 }

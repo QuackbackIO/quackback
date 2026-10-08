@@ -93,6 +93,8 @@ export async function getAdminOverview(input: {
     isProductEnabled(flags, 'changelog') && can(actor, PERMISSIONS.CHANGELOG_VIEW_DRAFT)
   const helpOn = isProductEnabled(flags, 'helpCenter') && can(actor, PERMISSIONS.HELP_CENTER_MANAGE)
   const statusOn = isProductEnabled(flags, 'status') && can(actor, PERMISSIONS.STATUS_PAGE_PUBLISH)
+  // Subscribers are counted only for whoever can open their list.
+  const subscribersOn = statusOn && can(actor, PERMISSIONS.STATUS_PAGE_MANAGE)
 
   const [support, feedback, changelog, help, momentum, status] = await Promise.all([
     supportOn
@@ -126,7 +128,7 @@ export async function getAdminOverview(input: {
         })
       : Promise.resolve([] as OverviewMomentumItem[]),
     statusOn
-      ? loadStatus().catch((err) => {
+      ? loadStatus(subscribersOn).catch((err) => {
           log.error({ err }, 'overview status failed')
           return failedStatus()
         })
@@ -194,7 +196,7 @@ export async function getAdminOverview(input: {
             : undefined,
           // Setup seeds the first service, so a status page's real data is a
           // subscriber or an incident, not its services.
-          statusOn
+          subscribersOn
             ? db.query.statusSubscriptions.findFirst({
                 columns: { id: true },
                 where: and(
@@ -232,7 +234,8 @@ export async function getAdminOverview(input: {
       feedback: feedback.section,
       changelog: changelog.section,
       helpCenter: help.section,
-      status: status.section,
+      // The status page's empty line is about subscribers.
+      status: subscribersOn ? status.section : disabledSection(),
     },
   }
 }
@@ -303,7 +306,7 @@ function disabledStatus() {
   return {
     section: disabledSection(),
     counts: {
-      subscriberCount: 0,
+      subscriberCount: null as number | null,
       openIncidentCount: 0,
       subscribersLink: { to: '/admin/status', search: { view: 'subscribers' } } as OverviewLink,
       incidentsLink: { to: '/admin/status', search: { view: 'open' } } as OverviewLink,
@@ -314,18 +317,23 @@ function failedStatus() {
   return { ...disabledStatus(), section: errorSection() }
 }
 
-/** The status page's audience and what is wrong now: active subscribers and open incidents. */
-async function loadStatus() {
+/**
+ * The status page's audience and what is wrong now: active subscribers, when
+ * the viewer can see them, and open incidents.
+ */
+async function loadStatus(withSubscribers: boolean) {
   const [[subscribers], [incidents]] = await Promise.all([
-    db
-      .select({ value: count() })
-      .from(statusSubscriptions)
-      .where(
-        and(
-          isNull(statusSubscriptions.unsubscribedAt),
-          notTestPrincipal(statusSubscriptions.principalId)
-        )
-      ),
+    withSubscribers
+      ? db
+          .select({ value: count() })
+          .from(statusSubscriptions)
+          .where(
+            and(
+              isNull(statusSubscriptions.unsubscribedAt),
+              notTestPrincipal(statusSubscriptions.principalId)
+            )
+          )
+      : [],
     db
       .select({ value: count() })
       .from(statusIncidents)
@@ -342,7 +350,7 @@ async function loadStatus() {
     section: enabledSection(),
     counts: {
       ...empty.counts,
-      subscriberCount: Number(subscribers?.value ?? 0),
+      subscriberCount: subscribers ? Number(subscribers.value) : null,
       openIncidentCount: Number(incidents?.value ?? 0),
     },
   }
