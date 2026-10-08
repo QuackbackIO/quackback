@@ -1232,5 +1232,8 @@
   "unsubscribe.error.failed.title": "Algo deu errado",
   "unsubscribe.error.failed.message": "Não foi possível processar sua solicitação. Tente novamente mais tarde.",
   "unsubscribe.error.expired.title": "Link expirado",
-  "unsubscribe.error.expired.message": "Este link de cancelamento já foi usado ou expirou."
+  "unsubscribe.error.expired.message": "Este link de cancelamento já foi usado ou expirou.",
+  "onboarding.workspace.alreadyFinished": "A configuração já foi concluída.",
+  "onboarding.workspace.signIn": "Entrar",
+  "onboarding.workspace.signedOut": "Sua sessão foi encerrada. Entre para concluir a configuração."
 }

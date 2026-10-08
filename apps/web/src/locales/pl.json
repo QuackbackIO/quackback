@@ -1232,5 +1232,8 @@
   "unsubscribe.error.failed.title": "Coś poszło nie tak",
   "unsubscribe.error.failed.message": "Nie udało się przetworzyć żądania. Spróbuj ponownie później.",
   "unsubscribe.error.expired.title": "Link wygasł",
-  "unsubscribe.error.expired.message": "Ten link do wypisania został już użyty lub wygasł."
+  "unsubscribe.error.expired.message": "Ten link do wypisania został już użyty lub wygasł.",
+  "onboarding.workspace.alreadyFinished": "Konfiguracja jest już zakończona.",
+  "onboarding.workspace.signIn": "Zaloguj się",
+  "onboarding.workspace.signedOut": "Wylogowano cię. Zaloguj się, aby dokończyć konfigurację."
 }

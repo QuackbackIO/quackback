@@ -1232,5 +1232,8 @@
   "unsubscribe.error.failed.title": "Что-то пошло не так",
   "unsubscribe.error.failed.message": "Не удалось обработать запрос. Попробуйте позже.",
   "unsubscribe.error.expired.title": "Ссылка устарела",
-  "unsubscribe.error.expired.message": "Эта ссылка для отписки уже использована или срок её действия истёк."
+  "unsubscribe.error.expired.message": "Эта ссылка для отписки уже использована или срок её действия истёк.",
+  "onboarding.workspace.alreadyFinished": "Настройка уже завершена.",
+  "onboarding.workspace.signIn": "Войти",
+  "onboarding.workspace.signedOut": "Вы вышли из аккаунта. Войдите, чтобы завершить настройку."
 }

@@ -1232,5 +1232,8 @@
   "unsubscribe.error.failed.title": "حدث خطأ ما",
   "unsubscribe.error.failed.message": "تعذّرت معالجة طلبك. يرجى المحاولة لاحقًا.",
   "unsubscribe.error.expired.title": "انتهت صلاحية الرابط",
-  "unsubscribe.error.expired.message": "تم استخدام رابط إلغاء الاشتراك هذا بالفعل أو انتهت صلاحيته."
+  "unsubscribe.error.expired.message": "تم استخدام رابط إلغاء الاشتراك هذا بالفعل أو انتهت صلاحيته.",
+  "onboarding.workspace.alreadyFinished": "اكتمل الإعداد بالفعل.",
+  "onboarding.workspace.signIn": "تسجيل الدخول",
+  "onboarding.workspace.signedOut": "تم تسجيل خروجك. سجّل الدخول لإكمال الإعداد."
 }

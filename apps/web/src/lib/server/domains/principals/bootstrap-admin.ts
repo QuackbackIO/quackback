@@ -42,6 +42,7 @@ import {
   getSetupState,
   isOnboardingComplete,
   needsCloudOnboardingWizard,
+  type SetupState,
 } from '@/lib/shared/db-types'
 
 /** The live db or an open transaction. */
@@ -129,6 +130,14 @@ export async function isSetupOpenToClaim(exec: Executor): Promise<boolean> {
   if (rows.length === 0) return true
   // Not a singleton: no honest answer, so refuse rather than open.
   if (rows.length > 1) return false
-  const state = getSetupState(rows[0]!.setup_state ?? null)
+  return isSetupStateOpen(getSetupState(rows[0]!.setup_state ?? null))
+}
+
+/**
+ * {@link isSetupOpenToClaim} for a setup state already in hand, such as one
+ * read under the settings row lock. Kept as one function so a write that
+ * re-checks under its own lock asks exactly the question the early check did.
+ */
+export function isSetupStateOpen(state: SetupState | null): boolean {
   return !isOnboardingComplete(state) || needsCloudOnboardingWizard(state)
 }

@@ -1232,5 +1232,8 @@
   "unsubscribe.error.failed.title": "Une erreur s'est produite",
   "unsubscribe.error.failed.message": "Nous n'avons pas pu traiter votre demande. Réessayez plus tard.",
   "unsubscribe.error.expired.title": "Lien expiré",
-  "unsubscribe.error.expired.message": "Ce lien de désabonnement a déjà été utilisé ou a expiré."
+  "unsubscribe.error.expired.message": "Ce lien de désabonnement a déjà été utilisé ou a expiré.",
+  "onboarding.workspace.alreadyFinished": "La configuration est déjà terminée.",
+  "onboarding.workspace.signIn": "Se connecter",
+  "onboarding.workspace.signedOut": "Vous avez été déconnecté. Connectez-vous pour terminer la configuration."
 }

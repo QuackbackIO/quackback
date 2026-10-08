@@ -1232,5 +1232,8 @@
   "unsubscribe.error.failed.title": "Algo salió mal",
   "unsubscribe.error.failed.message": "No pudimos procesar tu solicitud. Inténtalo de nuevo más tarde.",
   "unsubscribe.error.expired.title": "Enlace caducado",
-  "unsubscribe.error.expired.message": "Este enlace para cancelar la suscripción ya se usó o ha caducado."
+  "unsubscribe.error.expired.message": "Este enlace para cancelar la suscripción ya se usó o ha caducado.",
+  "onboarding.workspace.alreadyFinished": "La configuración ya está terminada.",
+  "onboarding.workspace.signIn": "Iniciar sesión",
+  "onboarding.workspace.signedOut": "Se cerró tu sesión. Inicia sesión para terminar la configuración."
 }

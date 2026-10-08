@@ -21,6 +21,7 @@ import {
   findHumanAdmin,
   isOpenToBootstrapClaim,
   isSetupOpenToClaim,
+  isSetupStateOpen,
 } from '@/lib/server/domains/principals/bootstrap-admin'
 import { db, settings, principal, user, postStatuses, eq, DEFAULT_STATUSES } from '@/lib/server/db'
 import { isOnboardingComplete } from '@/lib/shared/db-types'
@@ -47,13 +48,33 @@ import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/ide
 
 const log = logger.child({ component: 'onboarding' })
 
-/** Refusal for a workspace whose owner is decided somewhere other than here. */
-export const NOT_OPEN_TO_CLAIM_MESSAGE =
-  'This workspace is not open to be set up here. Sign in with the account it was created for.'
+/**
+ * Why the workspace step refused a save. Each one has its own next step in the
+ * browser, so they are returned rather than thrown: an error thrown from a
+ * server function does not reliably reach the client with anything it can
+ * branch on.
+ *
+ * - `signed_out`: no session that can set a workspace up. Sign in and finish.
+ * - `not_owner`: setup is somebody else's, or not decided by arriving here.
+ * - `setup_complete`: setup is finished. The name and goal live in Settings.
+ */
+export type SaveWorkspaceRefusal = 'signed_out' | 'not_owner' | 'setup_complete'
 
-/** Refusal for a claim on a workspace whose setup is already finished. */
-export const SETUP_ALREADY_COMPLETE_MESSAGE =
-  'This workspace is already set up. Sign in with an admin account.'
+function refuse(refusal: SaveWorkspaceRefusal): { ok: false; refusal: SaveWorkspaceRefusal } {
+  return { ok: false, refusal }
+}
+
+/** Thrown inside a settings write to roll it back when setup finished first. */
+class SetupFinishedMeanwhile extends Error {}
+
+/** Turns {@link SetupFinishedMeanwhile} into "nothing written"; rethrows the rest. */
+function finishedMeanwhile(err: unknown): null {
+  if (err instanceof SetupFinishedMeanwhile) {
+    log.info('workspace save refused: setup finished while it was in flight')
+    return null
+  }
+  throw err
+}
 
 /**
  * The one place a workspace's first admin is created, and the one place the
@@ -66,9 +87,11 @@ export const SETUP_ALREADY_COMPLETE_MESSAGE =
  * to set this workspace up. Nothing that merely reports state may promote:
  * a loader runs on every page load, so a promoting reporter hands admin to
  * whoever loads the page first.
+ *
+ * Resolves to null once the caller holds admin, or to the refusal.
  */
-async function ensureBootstrapAdmin(userId: UserId): Promise<void> {
-  await db.transaction(async (tx) => {
+async function ensureBootstrapAdmin(userId: UserId): Promise<SaveWorkspaceRefusal | null> {
+  return db.transaction(async (tx) => {
     // Serialize the one-time bootstrap decision so two first users cannot both
     // observe an empty admin set and promote themselves concurrently.
     await tx.execute(bootstrapAdminLock())
@@ -76,12 +99,13 @@ async function ensureBootstrapAdmin(userId: UserId): Promise<void> {
     const caller = await tx.query.principal.findFirst({
       where: eq(principal.userId, userId),
     })
-    if (caller && isAdmin(caller.role)) return
+    if (caller && isAdmin(caller.role)) return null
 
     // Bootstrap promotion is only valid until the first human admin exists.
     const existingAdmin = await findHumanAdmin(tx)
     if (existingAdmin) {
-      throw new Error('Workspace setup is already claimed by an admin')
+      log.warn({ user_id: userId }, 'bootstrap admin promotion refused: setup is already claimed')
+      return 'not_owner'
     }
 
     // Nobody owns it — which on a provisioned workspace is a statement about
@@ -90,7 +114,7 @@ async function ensureBootstrapAdmin(userId: UserId): Promise<void> {
     // questions above rather than alongside them.
     if (!(await isOpenToBootstrapClaim(tx))) {
       log.warn({ user_id: userId }, 'bootstrap admin promotion refused: workspace is provisioned')
-      throw new Error(NOT_OPEN_TO_CLAIM_MESSAGE)
+      return 'not_owner'
     }
 
     // A finished workspace with no human admin left is not unclaimed setup.
@@ -98,7 +122,7 @@ async function ensureBootstrapAdmin(userId: UserId): Promise<void> {
     // claims it by arriving, however its admins came to be gone.
     if (!(await isSetupOpenToClaim(tx))) {
       log.warn({ user_id: userId }, 'bootstrap admin promotion refused: setup is complete')
-      throw new Error(SETUP_ALREADY_COMPLETE_MESSAGE)
+      return 'setup_complete'
     }
 
     const { created, principal: p } = await ensurePrincipalForUser({ userId, role: 'admin' }, tx)
@@ -108,6 +132,7 @@ async function ensureBootstrapAdmin(userId: UserId): Promise<void> {
     // Both branches hand out the same authority, so both are worth the same
     // line in the log: this is the only record that a workspace was claimed.
     log.info({ user_id: userId, created }, 'bootstrap admin promotion')
+    return null
   })
 }
 
@@ -220,6 +245,9 @@ export interface SaveWorkspaceAndGoalResult {
   enabledModules: string[]
 }
 
+export type SaveWorkspaceAndGoalResponse =
+  ({ ok: true } & SaveWorkspaceAndGoalResult) | { ok: false; refusal: SaveWorkspaceRefusal }
+
 // ============================================
 // Server Functions
 // ============================================
@@ -235,19 +263,30 @@ export interface SaveWorkspaceAndGoalResult {
 export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
   .validator(saveWorkspaceAndGoalSchema)
   .handler(
-    async ({ data }: { data: SaveWorkspaceAndGoalInput }): Promise<SaveWorkspaceAndGoalResult> => {
+    async ({
+      data,
+    }: {
+      data: SaveWorkspaceAndGoalInput
+    }): Promise<SaveWorkspaceAndGoalResponse> => {
       log.debug(
         { workspace_name: data.workspaceName, use_case: data.useCase ?? 'product_feedback' },
         'save workspace and goal'
       )
       const session = await getSession()
-      if (!session?.user) throw new Error('Authentication required')
-      if (session.session.scope !== 'dashboard') throw new Error('Only admin can change setup')
+      if (!session?.user || session.session.scope !== 'dashboard') return refuse('signed_out')
 
       const workspaceName = data.workspaceName.trim()
       const slug = slugify(workspaceName)
       if (slug.length < 2) throw new Error('Invalid workspace name - cannot generate valid slug')
       const useCase = data.useCase ?? 'product_feedback'
+
+      // Setup is final. Once it is finished, the name and goal belong to
+      // Settings, and a form left open in another tab must not run setup
+      // again. The same question the claim asks, so a workspace the config
+      // file stamped complete before its owner arrived is still open here.
+      // Asked again under the settings lock below, where it decides.
+      if (!(await isSetupOpenToClaim(db))) return refuse('setup_complete')
+
       const existingSettings = await getSettings()
 
       // Who owns setup decides this, not what the setup state says. An earlier
@@ -264,20 +303,10 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
         const principalRecord = await db.query.principal.findFirst({
           where: eq(principal.userId, session.user.id as UserId),
         })
-        if (!principalRecord || !isAdmin(principalRecord.role))
-          throw new Error('Only admin can change setup')
+        if (!principalRecord || !isAdmin(principalRecord.role)) return refuse('not_owner')
       } else {
-        await ensureBootstrapAdmin(session.user.id as UserId)
-      }
-
-      if (data.userName) {
-        await db
-          .update(user)
-          .set({ name: data.userName.trim(), updatedAt: new Date() })
-          .where(eq(user.id, session.user.id as UserId))
-        await syncPrincipalProfile(session.user.id as UserId, {
-          displayName: data.userName.trim(),
-        })
+        const refusal = await ensureBootstrapAdmin(session.user.id as UserId)
+        if (refusal) return refuse(refusal)
       }
 
       let result: SaveWorkspaceAndGoalResult
@@ -287,25 +316,34 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
           useCase
         )
         const { flags, enabledModules } = flagsForGoal(DEFAULT_FEATURE_FLAGS, useCase)
-        const created = await db.transaction(async (tx) => {
-          const [row] = await tx
-            .insert(settings)
-            .values({
-              id: generateId('workspace'),
-              name: workspaceName,
-              slug,
-              createdAt: new Date(),
-              portalConfig: JSON.stringify(DEFAULT_PORTAL_CONFIG),
-              widgetConfig: JSON.stringify(DEFAULT_WIDGET_CONFIG),
-              assistantConfig: DEFAULT_ASSISTANT_CONFIG,
-              authConfig: JSON.stringify({ ...DEFAULT_AUTH_CONFIG, openSignup: true }),
-              setupState: JSON.stringify(initialState),
-              featureFlags: JSON.stringify(flags),
-            })
-            .returning()
-          if (!row) throw new Error('Failed to create workspace settings')
-          return row
-        })
+        const created = await db
+          .transaction(async (tx) => {
+            // Two saves can both read "no settings yet". The first to take the
+            // lock creates the workspace and finishes setup; the second finds
+            // that row and stops, rather than writing a second one.
+            await tx.execute(bootstrapAdminLock())
+            const [already] = await tx.select({ id: settings.id }).from(settings).limit(1)
+            if (already) throw new SetupFinishedMeanwhile()
+            const [row] = await tx
+              .insert(settings)
+              .values({
+                id: generateId('workspace'),
+                name: workspaceName,
+                slug,
+                createdAt: new Date(),
+                portalConfig: JSON.stringify(DEFAULT_PORTAL_CONFIG),
+                widgetConfig: JSON.stringify(DEFAULT_WIDGET_CONFIG),
+                assistantConfig: DEFAULT_ASSISTANT_CONFIG,
+                authConfig: JSON.stringify({ ...DEFAULT_AUTH_CONFIG, openSignup: true }),
+                setupState: JSON.stringify(initialState),
+                featureFlags: JSON.stringify(flags),
+              })
+              .returning()
+            if (!row) throw new Error('Failed to create workspace settings')
+            return row
+          })
+          .catch(finishedMeanwhile)
+        if (!created) return refuse('setup_complete')
         await invalidateSettingsCache()
         result = {
           id: created.id,
@@ -316,7 +354,10 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
           enabledModules,
         }
       } else {
-        const { value } = await mutateSetupStateAtomic(async (current, row, tx) => {
+        const mutation = await mutateSetupStateAtomic(async (current, row, tx) => {
+          // The decision, under the settings row lock: the early check above
+          // can pass while another tab is still finishing setup.
+          if (!isSetupStateOpen(current)) throw new SetupFinishedMeanwhile()
           const nameManaged = isPathManaged('workspace.name', row.managedFieldPaths)
           const slugManaged = isPathManaged('workspace.slug', row.managedFieldPaths)
           const useCaseManaged = isPathManaged('workspace.useCase', row.managedFieldPaths)
@@ -353,7 +394,9 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
               enabledModules,
             },
           }
-        })
+        }).catch(finishedMeanwhile)
+        if (!mutation) return refuse('setup_complete')
+        const { value } = mutation
         result = {
           id: value.updated.id,
           name: value.updated.name,
@@ -362,6 +405,16 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
           managed: value.managed,
           enabledModules: value.enabledModules,
         }
+      }
+
+      if (data.userName) {
+        await db
+          .update(user)
+          .set({ name: data.userName.trim(), updatedAt: new Date() })
+          .where(eq(user.id, session.user.id as UserId))
+        await syncPrincipalProfile(session.user.id as UserId, {
+          displayName: data.userName.trim(),
+        })
       }
 
       const existingStatuses = await db.query.postStatuses.findFirst()
@@ -376,7 +429,7 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
       }
 
       log.info({ workspace_id: result.id, slug: result.slug }, 'save workspace and goal complete')
-      return result
+      return { ok: true, ...result }
     }
   )
 

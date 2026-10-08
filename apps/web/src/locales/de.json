@@ -1232,5 +1232,8 @@
   "unsubscribe.error.failed.title": "Etwas ist schiefgelaufen",
   "unsubscribe.error.failed.message": "Wir konnten deine Anfrage nicht verarbeiten. Bitte versuche es später erneut.",
   "unsubscribe.error.expired.title": "Link abgelaufen",
-  "unsubscribe.error.expired.message": "Dieser Abmeldelink wurde bereits verwendet oder ist abgelaufen."
+  "unsubscribe.error.expired.message": "Dieser Abmeldelink wurde bereits verwendet oder ist abgelaufen.",
+  "onboarding.workspace.alreadyFinished": "Die Einrichtung ist bereits abgeschlossen.",
+  "onboarding.workspace.signIn": "Anmelden",
+  "onboarding.workspace.signedOut": "Du wurdest abgemeldet. Melde dich an, um die Einrichtung abzuschließen."
 }

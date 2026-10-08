@@ -1232,5 +1232,8 @@
   "unsubscribe.error.failed.title": "Something Went Wrong",
   "unsubscribe.error.failed.message": "We couldn't process your request. Please try again later.",
   "unsubscribe.error.expired.title": "Link Expired",
-  "unsubscribe.error.expired.message": "This unsubscribe link has already been used or has expired."
+  "unsubscribe.error.expired.message": "This unsubscribe link has already been used or has expired.",
+  "onboarding.workspace.alreadyFinished": "Setup is already finished.",
+  "onboarding.workspace.signIn": "Sign in",
+  "onboarding.workspace.signedOut": "You were signed out. Sign in to finish setting up."
 }
