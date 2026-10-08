@@ -1195,6 +1195,7 @@
   "onboarding.feedback.empty": "Идей пока нет",
   "onboarding.home.greeting": "Добро пожаловать, {name}",
   "onboarding.home.greetingLater": "Привет, {name}",
+  "onboarding.home.title": "Главная",
   "onboarding.home.dismiss": "Закрыть",
   "onboarding.task.create-board": "Создать доску обратной связи",
   "onboarding.task.distribute-feedback": "Поделиться ссылкой на доску",

@@ -1195,6 +1195,7 @@
   "onboarding.feedback.empty": "Pas encore d’idées",
   "onboarding.home.greeting": "Bienvenue, {name}",
   "onboarding.home.greetingLater": "Bonjour, {name}",
+  "onboarding.home.title": "Accueil",
   "onboarding.home.dismiss": "Fermer",
   "onboarding.task.create-board": "Créer un tableau de retours",
   "onboarding.task.distribute-feedback": "Partager le lien de votre tableau",

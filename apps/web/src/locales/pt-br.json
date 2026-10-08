@@ -1195,6 +1195,7 @@
   "onboarding.feedback.empty": "Ainda não há ideias",
   "onboarding.home.greeting": "Boas-vindas, {name}",
   "onboarding.home.greetingLater": "Olá, {name}",
+  "onboarding.home.title": "Início",
   "onboarding.home.dismiss": "Fechar",
   "onboarding.task.create-board": "Criar um quadro de feedback",
   "onboarding.task.distribute-feedback": "Compartilhar o link do seu quadro",

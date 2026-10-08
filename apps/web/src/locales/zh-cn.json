@@ -1195,6 +1195,7 @@
   "onboarding.feedback.empty": "还没有想法",
   "onboarding.home.greeting": "欢迎，{name}",
   "onboarding.home.greetingLater": "你好，{name}",
+  "onboarding.home.title": "主页",
   "onboarding.home.dismiss": "关闭",
   "onboarding.task.create-board": "创建反馈看板",
   "onboarding.task.distribute-feedback": "分享看板链接",

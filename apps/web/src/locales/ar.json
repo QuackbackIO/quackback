@@ -1195,6 +1195,7 @@
   "onboarding.feedback.empty": "لا توجد أفكار بعد",
   "onboarding.home.greeting": "مرحبًا، {name}",
   "onboarding.home.greetingLater": "مرحبًا، {name}",
+  "onboarding.home.title": "الرئيسية",
   "onboarding.home.dismiss": "إغلاق",
   "onboarding.task.create-board": "إنشاء لوحة ملاحظات",
   "onboarding.task.distribute-feedback": "مشاركة رابط لوحتك",

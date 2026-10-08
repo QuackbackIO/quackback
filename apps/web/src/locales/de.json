@@ -1195,6 +1195,7 @@
   "onboarding.feedback.empty": "Noch keine Ideen",
   "onboarding.home.greeting": "Willkommen, {name}",
   "onboarding.home.greetingLater": "Hallo, {name}",
+  "onboarding.home.title": "Start",
   "onboarding.home.dismiss": "Schließen",
   "onboarding.task.create-board": "Feedback-Board erstellen",
   "onboarding.task.distribute-feedback": "Board-Link teilen",

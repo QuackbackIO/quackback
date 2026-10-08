@@ -41,7 +41,7 @@ export function HomeGreeting({
           values={{ name: first }}
         />
       ) : (
-        (workspace ?? <FormattedMessage id="admin.nav.home" defaultMessage="Home" />)
+        (workspace ?? <FormattedMessage id="onboarding.home.title" defaultMessage="Home" />)
       )}
     </h1>
   )
