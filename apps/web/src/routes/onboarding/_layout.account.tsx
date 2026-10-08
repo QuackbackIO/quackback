@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { DEFAULT_AUTH_CONFIG } from '@/lib/shared/types/settings'
 import { checkOnboardingState, getPublicAuthConfig } from '@/lib/server/functions/admin'
 import { getWorkspaceClaimFn } from '@/lib/server/functions/onboarding'
+import { accountAuthConfig } from './-account-auth-config'
 import { pickOnboardingStep } from './-onboarding-step'
 import { AccountStep } from './-account-step'
 
@@ -30,14 +30,7 @@ export const Route = createFileRoute('/onboarding/_layout/account')({
       ssoEnabled,
       claim,
       workspaceName: settings?.name ?? undefined,
-      authConfig: {
-        found: !!settings?.publicAuthConfig,
-        oauth: settings?.publicAuthConfig?.oauth ?? DEFAULT_AUTH_CONFIG.oauth,
-        openSignup: settings?.publicAuthConfig?.openSignup,
-        oidcProviders: settings?.publicPortalConfig?.oidcProviders,
-        registeredAuthProviders: context.registeredAuthProviders,
-        twoFactorRequired: settings?.publicAuthConfig?.twoFactor?.required ?? false,
-      },
+      authConfig: accountAuthConfig(settings, context.registeredAuthProviders),
     }
   },
   component: AccountStepRoute,

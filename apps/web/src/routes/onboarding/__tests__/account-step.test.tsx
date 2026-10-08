@@ -345,6 +345,17 @@ describe('account step — a self-hosted first user', () => {
     expect(screen.queryByText(/already has an owner/i)).toBeNull()
   })
 
+  // The fixture carries the shipped default, which lists Google and GitHub as
+  // on. Before setup nothing has credentials for them, so a tile here is a
+  // button that fails, and the first admin is always created with an email.
+  it('offers no social sign-up, even when the config turns providers on', () => {
+    renderStep(selfHosted())
+
+    expect(screen.queryByRole('button', { name: /google/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /github/i })).toBeNull()
+    expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument()
+  })
+
   it('drops the password form when an unclaimed workspace has password off', () => {
     const props = selfHosted()
     props.authConfig.oauth = { ...DEFAULT_AUTH_CONFIG.oauth, password: false, magicLink: true }
@@ -356,9 +367,7 @@ describe('account step — a self-hosted first user', () => {
     expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument()
   })
 
-  // Nobody has an account on a workspace nobody has claimed, so offering to
-  // sign in to one is a lie about what the button does.
-  it('offers to sign UP, not in, on a workspace nobody has claimed', () => {
+  it('offers no social or OIDC sign-up when an unclaimed workspace has password off', () => {
     const props = selfHosted()
     props.authConfig.oauth = {
       ...DEFAULT_AUTH_CONFIG.oauth,
@@ -366,10 +375,13 @@ describe('account step — a self-hosted first user', () => {
       magicLink: true,
       google: true,
     }
+    props.authConfig.oidcProviders = [{ id: 'okta', name: 'Okta', logoUrl: null }]
     renderStep(props)
 
-    expect(screen.getByRole('button', { name: /sign up with google/i })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /sign in with google/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /google/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /github/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /okta/i })).toBeNull()
+    expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument()
   })
 
   // `openSignup` governs who may open a PORTAL account. Applied to the first
