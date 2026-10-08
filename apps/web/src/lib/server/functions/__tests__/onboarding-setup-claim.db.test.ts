@@ -22,12 +22,22 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
 
+// Runs the function's own validator, as the server does, so a direct call
+// with input the form would never send is checked by the same schema.
 vi.mock('@tanstack/react-start', () => ({
   createServerFn: () => {
+    let schema: { parse: (value: unknown) => unknown } | null = null
     const chain: Record<string, unknown> = {}
-    chain.validator = () => chain
+    chain.validator = (next: { parse: (value: unknown) => unknown }) => {
+      schema = next
+      return chain
+    }
     chain.handler = (handler: (args: { data?: unknown }) => Promise<unknown>) =>
-      Object.assign((args?: { data?: unknown }) => handler(args ?? {}), chain)
+      Object.assign(
+        async (args?: { data?: unknown }) =>
+          handler({ data: schema ? schema.parse(args?.data) : args?.data }),
+        chain
+      )
     return chain
   },
 }))
@@ -331,6 +341,46 @@ describe.skipIf(!fixture.available)('the workspace step', () => {
     const result = await saveWorkspaceAndGoalFn({ data: { workspaceName: '🦆🦆' } })
 
     expect(result).toMatchObject({ ok: true, name: '🦆🦆', slug: 'workspace' })
+  })
+
+  // The form trims before it checks, but a direct call does not go through
+  // the form. A name of spaces would leave the workspace with no name at all.
+  describe('a name that is blank once trimmed', () => {
+    it.each(['  ', ' a '])('refuses workspace name %j, and nothing is written', async (name) => {
+      const ownerId = await seedAccount('owner@acme.example')
+      signIn(ownerId)
+
+      await expect(saveWorkspaceAndGoalFn({ data: { workspaceName: name } })).rejects.toThrow(
+        /at least 2 characters/
+      )
+
+      expect(await workspace()).toBeUndefined()
+      expect(await roleOf(ownerId)).toBe('user')
+    })
+
+    it('refuses a user name of spaces', async () => {
+      const ownerId = await seedAccount('owner@acme.example')
+      signIn(ownerId)
+
+      await expect(
+        saveWorkspaceAndGoalFn({ data: { workspaceName: 'Fernhill', userName: '   ' } })
+      ).rejects.toThrow(/at least 2 characters/)
+
+      expect(await workspace()).toBeUndefined()
+    })
+
+    it('saves a padded name without its padding', async () => {
+      const ownerId = await seedAccount('owner@acme.example')
+      signIn(ownerId)
+
+      const result = await saveWorkspaceAndGoalFn({
+        data: { workspaceName: '  Fernhill  ', userName: '  Sam Rivers ' },
+      })
+
+      expect(result).toMatchObject({ ok: true, name: 'Fernhill', slug: 'fernhill' })
+      const [row] = await testDb.select({ name: user.name }).from(user).where(eq(user.id, ownerId))
+      expect(row?.name).toBe('Sam Rivers')
+    })
   })
 
   describe('a lost session', () => {

@@ -251,13 +251,17 @@ export const getWorkspaceClaimFn = createServerFn({ method: 'GET' }).handler(
 // Schemas
 // ============================================
 
+// Trimmed before the length checks, so a name of spaces is refused rather
+// than saved empty.
 const saveWorkspaceAndGoalSchema = z.object({
   workspaceName: z
     .string()
+    .trim()
     .min(2, 'Workspace name must be at least 2 characters')
     .max(100, 'Workspace name must be 100 characters or less'),
   userName: z
     .string()
+    .trim()
     .min(2, 'Name must be at least 2 characters')
     .max(100, 'Name must be 100 characters or less')
     .optional(),
@@ -309,7 +313,7 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
       const session = await getSession()
       if (!session?.user || session.session.scope !== 'dashboard') return refuse('signed_out')
 
-      const workspaceName = data.workspaceName.trim()
+      const workspaceName = data.workspaceName
       const slug = workspaceSlugFor(workspaceName)
       const useCase = data.useCase ?? 'product_feedback'
 
@@ -443,11 +447,9 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
       if (data.userName) {
         await db
           .update(user)
-          .set({ name: data.userName.trim(), updatedAt: new Date() })
+          .set({ name: data.userName, updatedAt: new Date() })
           .where(eq(user.id, session.user.id as UserId))
-        await syncPrincipalProfile(session.user.id as UserId, {
-          displayName: data.userName.trim(),
-        })
+        await syncPrincipalProfile(session.user.id as UserId, { displayName: data.userName })
       }
 
       const existingStatuses = await db.query.postStatuses.findFirst()
