@@ -673,3 +673,11 @@ export function launchPlanProgress(status: LaunchStatus): {
 export function isLaunchPlanActive(status: LaunchStatus): boolean {
   return !launchPath(status).complete
 }
+
+/**
+ * Whether the launch plan leads the owner's Home: in the launch window,
+ * until the first win. Then Home has room for the workspace's counts.
+ */
+export function launchPlanLeadsHome(status: LaunchStatus | undefined): boolean {
+  return status?.inLaunchWindow === true && isLaunchPlanActive(status)
+}

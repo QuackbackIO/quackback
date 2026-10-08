@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildLaunchTasks, normalizeOutcome } from '../launch-checklist'
+import { buildLaunchTasks, launchPlanLeadsHome, normalizeOutcome } from '../launch-checklist'
 import type { LaunchStatus } from '../launch-checklist'
 
 const base: LaunchStatus = {
@@ -290,5 +290,16 @@ describe('buildLaunchTasks', () => {
       ...signal,
     }).find((candidate) => candidate.id === 'distribute-feedback')
     expect(task?.isCompleted).toBe(true)
+  })
+})
+
+describe('launchPlanLeadsHome', () => {
+  it('leads Home only in the launch window and only until the first win', () => {
+    const open = { ...base, hasBoards: true, inLaunchWindow: true }
+    expect(launchPlanLeadsHome(open)).toBe(true)
+    // After the win, Home has room for the workspace's counts again.
+    expect(launchPlanLeadsHome({ ...open, hasFirstWin: true })).toBe(false)
+    expect(launchPlanLeadsHome({ ...open, inLaunchWindow: false })).toBe(false)
+    expect(launchPlanLeadsHome(undefined)).toBe(false)
   })
 })

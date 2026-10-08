@@ -1,4 +1,4 @@
-/* oxlint-disable max-lines -- one aggregation over support, feedback, changelog, and help center */
+/* oxlint-disable max-lines -- one aggregation over support, feedback, changelog, help center and status */
 /**
  * Admin Overview aggregation. Each section is gated on the real product flag
  * and permission, then reads the same columns the product lists already use.
@@ -31,7 +31,8 @@ import {
   changelogEntries,
   changelogEntryPosts,
   helpCenterArticles,
-  statusComponents,
+  statusIncidents,
+  statusSubscriptions,
 } from '@/lib/server/db'
 import { can } from '@/lib/server/policy/authorize'
 import { conversationFilter } from '@/lib/server/policy/conversations'
@@ -91,8 +92,9 @@ export async function getAdminOverview(input: {
   const changelogOn =
     isProductEnabled(flags, 'changelog') && can(actor, PERMISSIONS.CHANGELOG_VIEW_DRAFT)
   const helpOn = isProductEnabled(flags, 'helpCenter') && can(actor, PERMISSIONS.HELP_CENTER_MANAGE)
+  const statusOn = isProductEnabled(flags, 'status') && can(actor, PERMISSIONS.STATUS_PAGE_PUBLISH)
 
-  const [support, feedback, changelog, help, momentum] = await Promise.all([
+  const [support, feedback, changelog, help, momentum, status] = await Promise.all([
     supportOn
       ? loadSupport(actor, viewerId, now).catch((err) => {
           log.error({ err }, 'overview support failed')
@@ -123,6 +125,12 @@ export async function getAdminOverview(input: {
           return [] as OverviewMomentumItem[]
         })
       : Promise.resolve([] as OverviewMomentumItem[]),
+    statusOn
+      ? loadStatus().catch((err) => {
+          log.error({ err }, 'overview status failed')
+          return failedStatus()
+        })
+      : Promise.resolve(disabledStatus()),
   ])
 
   const metrics = buildOverviewMetrics({
@@ -138,65 +146,82 @@ export async function getAdminOverview(input: {
         }
       : undefined,
     help: helpOn ? { draftCount: help.draftCount, draftLink: help.draftLink } : undefined,
+    status: statusOn && !status.section.error ? status.counts : undefined,
+    changelog: changelogOn,
   })
 
-  const [realConversation, realPost, realArticle, realUpdate, realService] = probeRealData
-    ? await Promise.all([
-        supportOn
-          ? db.query.conversations.findFirst({
-              columns: { id: true },
-              where: and(
-                conversationFilter(actor),
-                notTestPrincipal(conversations.visitorPrincipalId)
-              ),
-            })
-          : undefined,
-        feedbackOn
-          ? db.query.posts.findFirst({
-              columns: { id: true },
-              where: and(
-                isNull(posts.deletedAt),
-                eq(posts.moderationState, 'published'),
-                notTestPrincipal(posts.principalId)
-              ),
-            })
-          : undefined,
-        helpOn
-          ? db.query.helpCenterArticles.findFirst({
-              columns: { id: true },
-              where: and(
-                isNull(helpCenterArticles.deletedAt),
-                isNotNull(helpCenterArticles.publishedAt),
-                lte(helpCenterArticles.publishedAt, now)
-              ),
-            })
-          : undefined,
-        changelogOn
-          ? db.query.changelogEntries.findFirst({
-              columns: { id: true },
-              where: and(
-                isNull(changelogEntries.deletedAt),
-                isNotNull(changelogEntries.publishedAt),
-                lte(changelogEntries.publishedAt, now)
-              ),
-            })
-          : undefined,
-        isProductEnabled(flags, 'status') && can(actor, PERMISSIONS.SETTINGS_MANAGE)
-          ? db.query.statusComponents.findFirst({
-              columns: { id: true },
-              where: isNull(statusComponents.deletedAt),
-            })
-          : undefined,
-      ])
-    : []
+  const [realConversation, realPost, realArticle, realUpdate, realSubscriber, realIncident] =
+    probeRealData
+      ? await Promise.all([
+          supportOn
+            ? db.query.conversations.findFirst({
+                columns: { id: true },
+                where: and(
+                  conversationFilter(actor),
+                  notTestPrincipal(conversations.visitorPrincipalId)
+                ),
+              })
+            : undefined,
+          feedbackOn
+            ? db.query.posts.findFirst({
+                columns: { id: true },
+                where: and(
+                  isNull(posts.deletedAt),
+                  eq(posts.moderationState, 'published'),
+                  notTestPrincipal(posts.principalId)
+                ),
+              })
+            : undefined,
+          helpOn
+            ? db.query.helpCenterArticles.findFirst({
+                columns: { id: true },
+                where: and(
+                  isNull(helpCenterArticles.deletedAt),
+                  isNotNull(helpCenterArticles.publishedAt),
+                  lte(helpCenterArticles.publishedAt, now)
+                ),
+              })
+            : undefined,
+          changelogOn
+            ? db.query.changelogEntries.findFirst({
+                columns: { id: true },
+                where: and(
+                  isNull(changelogEntries.deletedAt),
+                  isNotNull(changelogEntries.publishedAt),
+                  lte(changelogEntries.publishedAt, now)
+                ),
+              })
+            : undefined,
+          // Setup seeds the first service, so a status page's real data is a
+          // subscriber or an incident, not its services.
+          statusOn
+            ? db.query.statusSubscriptions.findFirst({
+                columns: { id: true },
+                where: and(
+                  isNull(statusSubscriptions.unsubscribedAt),
+                  notTestPrincipal(statusSubscriptions.principalId)
+                ),
+              })
+            : undefined,
+          statusOn
+            ? db.query.statusIncidents.findFirst({
+                columns: { id: true },
+                where: isNull(statusIncidents.deletedAt),
+              })
+            : undefined,
+        ])
+      : []
 
   return {
     hasRealData:
       !probeRealData ||
-      Boolean(realConversation || realPost || realArticle || realUpdate || realService),
+      Boolean(
+        realConversation || realPost || realArticle || realUpdate || realSubscriber || realIncident
+      ),
     metrics,
+    // Shipped ideas wait for an announcement only where there is a changelog.
     attention: mixAttention(
-      [support.attention, feedback.attention, feedback.announce],
+      [support.attention, feedback.attention, changelogOn ? feedback.announce : []],
       ATTENTION_LIMIT
     ),
     momentum,
@@ -207,6 +232,7 @@ export async function getAdminOverview(input: {
       feedback: feedback.section,
       changelog: changelog.section,
       helpCenter: help.section,
+      status: status.section,
     },
   }
 }
@@ -271,6 +297,55 @@ function disabledHelp() {
 }
 function failedHelp() {
   return { ...disabledHelp(), section: errorSection() }
+}
+
+function disabledStatus() {
+  return {
+    section: disabledSection(),
+    counts: {
+      subscriberCount: 0,
+      openIncidentCount: 0,
+      subscribersLink: { to: '/admin/status', search: { view: 'subscribers' } } as OverviewLink,
+      incidentsLink: { to: '/admin/status', search: { view: 'open' } } as OverviewLink,
+    },
+  }
+}
+function failedStatus() {
+  return { ...disabledStatus(), section: errorSection() }
+}
+
+/** The status page's audience and what is wrong now: active subscribers and open incidents. */
+async function loadStatus() {
+  const [[subscribers], [incidents]] = await Promise.all([
+    db
+      .select({ value: count() })
+      .from(statusSubscriptions)
+      .where(
+        and(
+          isNull(statusSubscriptions.unsubscribedAt),
+          notTestPrincipal(statusSubscriptions.principalId)
+        )
+      ),
+    db
+      .select({ value: count() })
+      .from(statusIncidents)
+      .where(
+        and(
+          eq(statusIncidents.kind, 'incident'),
+          isNull(statusIncidents.resolvedAt),
+          isNull(statusIncidents.deletedAt)
+        )
+      ),
+  ])
+  const empty = disabledStatus()
+  return {
+    section: enabledSection(),
+    counts: {
+      ...empty.counts,
+      subscriberCount: Number(subscribers?.value ?? 0),
+      openIncidentCount: Number(incidents?.value ?? 0),
+    },
+  }
 }
 
 async function loadSupport(actor: Actor, viewerId: PrincipalId | null, now: Date) {

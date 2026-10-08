@@ -131,12 +131,13 @@ describe('buildOverviewMetrics', () => {
         completeLink: feedback,
       },
       help: { draftCount: 0, draftLink: help },
+      changelog: true,
     })
 
     expect(metrics.map((metric) => [metric.count, metric.label, metric.detail])).toEqual([
       [3, 'conversations', 'waiting for reply'],
       [30, 'ideas', 'to review'],
-      [6, 'ideas', 'with no changelog'],
+      [6, 'ideas', 'shipped, not announced'],
       [0, 'help center articles', 'in draft'],
     ])
     for (const metric of metrics) {
@@ -156,6 +157,38 @@ describe('buildOverviewMetrics', () => {
 
   it('omits sections that are off', () => {
     expect(buildOverviewMetrics({})).toEqual([])
+  })
+
+  it('counts shipped ideas waiting for an announcement only while Changelog is on', () => {
+    const shipped = {
+      reviewCount: 2,
+      completeCount: 1,
+      reviewLink: feedback,
+      completeLink: feedback,
+    }
+    expect(
+      buildOverviewMetrics({ feedback: shipped, changelog: false }).map((metric) => metric.key)
+    ).toEqual(['feedback'])
+    expect(
+      buildOverviewMetrics({ feedback: shipped, changelog: true }).map((metric) => metric.key)
+    ).toEqual(['feedback', 'complete'])
+  })
+
+  it('gives a status page its subscribers and open incidents', () => {
+    const metrics = buildOverviewMetrics({
+      status: {
+        subscriberCount: 4,
+        openIncidentCount: 1,
+        subscribersLink: { to: '/admin/status', search: { view: 'subscribers' } },
+        incidentsLink: { to: '/admin/status', search: { view: 'open' } },
+      },
+    })
+    expect(
+      metrics.map((metric) => [metric.key, metric.count, metric.label, metric.detail])
+    ).toEqual([
+      ['subscribers', 4, 'subscribers', 'to your status page'],
+      ['incidents', 1, 'incident', 'still open'],
+    ])
   })
 })
 

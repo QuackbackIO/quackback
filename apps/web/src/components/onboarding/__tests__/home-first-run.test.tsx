@@ -354,6 +354,19 @@ describe('Home changing in place', () => {
     expect(politeText()).toBe('Launch plan done. 4 optional steps')
   })
 
+  it('refreshes Home’s counts when the first win arrives, so they need no reload', async () => {
+    hoisted.status = feedback()
+    const { client } = mount({ tour: false })
+    await screen.findByRole('button', { name: 'Copy board link' })
+    client.setQueryData(['admin', 'overview'], { metrics: [] })
+    expect(client.getQueryState(['admin', 'overview'])?.isInvalidated).toBe(false)
+    hoisted.card.mockResolvedValue({ summary: null })
+    hoisted.status = feedback({ hasFirstWin: true })
+    await client.invalidateQueries({ queryKey: ['admin', 'onboarding'] })
+    await screen.findByRole('heading', { name: 'Your first customer is here' })
+    expect(client.getQueryState(['admin', 'overview'])?.isInvalidated).toBe(true)
+  })
+
   it('leaves focus alone when it was somewhere else on Home', async () => {
     hoisted.status = feedback({ publicBoardLinkCopiedAt: new Date().toISOString() })
     hoisted.card.mockResolvedValue({ summary: null })

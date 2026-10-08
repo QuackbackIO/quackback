@@ -9,6 +9,8 @@ import {
   posts,
   principal,
   statusComponents,
+  statusIncidents,
+  statusSubscriptions,
   user,
 } from '@/lib/server/db'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -36,6 +38,27 @@ const flags = { feedback: false, supportInbox: false, helpCenter: true, changelo
 let actor: Actor
 let principalId: PrincipalId
 
+/** The test admin with these permissions too. */
+function withPermissions(...extra: string[]): Actor {
+  return {
+    ...actor,
+    permissions: new Set([...(actor.permissions as Set<string>), ...extra]),
+  } as unknown as Actor
+}
+
+/** A portal user outside the team. */
+async function customer(): Promise<PrincipalId> {
+  const userId = createId('user') as UserId
+  const id = createId('principal') as PrincipalId
+  await testDb
+    .insert(user)
+    .values({ id: userId, name: 'Ana', email: `${userId}@northwind.example` })
+  await testDb
+    .insert(principal)
+    .values({ id, userId, role: 'user', type: 'user', createdAt: new Date() })
+  return id
+}
+
 describe('whether Home has real data', () => {
   beforeEach(async () => {
     expect(fixture.available).toBe(true)
@@ -45,6 +68,8 @@ describe('whether Home has real data', () => {
     await testDb.delete(helpCenterArticles)
     await testDb.delete(changelogEntries)
     await testDb.delete(statusComponents)
+    await testDb.delete(statusSubscriptions)
+    await testDb.delete(statusIncidents)
     const userId = createId('user') as UserId
     principalId = createId('principal') as PrincipalId
     await testDb.insert(user).values({ id: userId, name: 'Acme', email: `${userId}@example.com` })
@@ -84,6 +109,60 @@ describe('whether Home has real data', () => {
       publishedAt: new Date(Date.now() - 60_000),
     })
     expect((await getAdminOverview({ actor, flags, probeRealData: true })).hasRealData).toBe(true)
+  })
+
+  it('does not take the service setup seeded for real data, but a subscriber is', async () => {
+    const status = { ...flags, statusPage: true }
+    const owner = withPermissions(PERMISSIONS.STATUS_PAGE_PUBLISH)
+    await testDb.insert(statusComponents).values({ name: 'Acme API' })
+    expect(
+      (await getAdminOverview({ actor: owner, flags: status, probeRealData: true })).hasRealData
+    ).toBe(false)
+
+    await testDb
+      .insert(statusSubscriptions)
+      .values({ principalId: await customer(), source: 'self_serve' })
+    expect(
+      (await getAdminOverview({ actor: owner, flags: status, probeRealData: true })).hasRealData
+    ).toBe(true)
+  })
+
+  it('counts a status page’s subscribers and open incidents, and names the module', async () => {
+    const status = { ...flags, statusPage: true }
+    const owner = withPermissions(PERMISSIONS.STATUS_PAGE_PUBLISH)
+    await testDb.insert(statusSubscriptions).values([
+      { principalId: await customer(), source: 'self_serve' },
+      { principalId: await customer(), source: 'self_serve', unsubscribedAt: new Date() },
+    ])
+    await testDb.insert(statusIncidents).values([
+      { kind: 'incident', title: 'Acme API slow', status: 'investigating' },
+      { kind: 'incident', title: 'Acme API down', status: 'resolved', resolvedAt: new Date() },
+      { kind: 'maintenance', title: 'Acme upgrade', status: 'scheduled' },
+    ])
+    const overview = await getAdminOverview({ actor: owner, flags: status })
+    expect(
+      overview.metrics
+        .filter((metric) => metric.filter === 'status')
+        .map((metric) => [metric.key, metric.count])
+    ).toEqual([
+      ['subscribers', 1],
+      ['incidents', 1],
+    ])
+    expect(overview.sections.status).toEqual({ enabled: true, error: null })
+    expect((await getAdminOverview({ actor, flags })).sections.status.enabled).toBe(false)
+  })
+
+  it('never counts shipped ideas waiting for an announcement while Changelog is off', async () => {
+    const feedback = withPermissions(PERMISSIONS.POST_VIEW_PRIVATE)
+    const keys = async (changelog: boolean) =>
+      (
+        await getAdminOverview({
+          actor: feedback,
+          flags: { ...flags, feedback: true, changelog },
+        })
+      ).metrics.map((metric) => metric.key)
+    expect(await keys(false)).not.toContain('complete')
+    expect(await keys(true)).toContain('complete')
   })
 
   it('reports real data without probing once the workspace is past its launch window', async () => {

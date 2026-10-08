@@ -23,12 +23,13 @@ import { CreateBoardDialog } from '@/components/admin/settings/boards/create-boa
 import { AutomaticBrandingNotice } from '@/components/admin/branding/automatic-branding-notice'
 import { useAutomaticWebsiteBranding } from '@/components/admin/branding/use-automatic-website-branding'
 import {
-  isLaunchPlanActive,
   launchPath,
+  launchPlanLeadsHome,
   openLaterSteps,
   type LaunchTask,
 } from '@/lib/shared/launch-checklist'
 import { adminQueries } from '@/lib/client/queries/admin'
+import { adminOverviewQueries } from '@/lib/client/queries/admin-overview'
 import {
   launchStatusQuery,
   onboardingProgressQuery,
@@ -114,7 +115,16 @@ export function HomeGettingStarted({
       }))
     },
   })
-  const planShown = !member && inWindow && isLaunchPlanActive(statusQuery.data)
+  const planShown = !member && launchPlanLeadsHome(statusQuery.data)
+  // The first win is real data: Home's counts catch up without a reload.
+  const hasFirstWin = statusQuery.data.hasFirstWin === true
+  const hadFirstWin = useRef(hasFirstWin)
+  useEffect(() => {
+    if (hasFirstWin && !hadFirstWin.current) {
+      void queryClient.invalidateQueries({ queryKey: adminOverviewQueries.get().queryKey })
+    }
+    hadFirstWin.current = hasFirstWin
+  }, [hasFirstWin, queryClient])
   // Once the plan is done, a quiet line keeps the optional steps in reach
   // until each is done or skipped. Only a workspace that had a launch plan.
   const path = launchPath(statusQuery.data)

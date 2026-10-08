@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
+import { useQuery } from '@tanstack/react-query'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { HomeActions } from '@/components/admin/home-actions'
 import { HomeLoadingFrame } from '@/components/admin/home-frame'
@@ -16,6 +17,7 @@ import { ensureOnboardingHomeReadyFn } from '@/lib/server/functions/onboarding'
 import { DEFAULT_LOCALE, loadLaunchMessages } from '@/lib/shared/i18n'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { isAdmin } from '@/lib/shared/roles'
+import { launchPlanLeadsHome } from '@/lib/shared/launch-checklist'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import {
   useUserRole,
@@ -89,6 +91,10 @@ function AdminHome() {
   const canSeeTeam = useHasPermission(PERMISSIONS.MEMBER_VIEW)
   const admin = isAdmin(userRole)
   const flags = settings?.featureFlags as FeatureFlags | undefined
+  // The owner's launch plan leads Home until the first win; then the
+  // workspace's counts take its place, as they do for a teammate.
+  const launchStatus = useQuery({ ...adminQueries.onboardingStatus(), enabled: admin })
+  const planLeads = admin && launchPlanLeadsHome(launchStatus.data)
 
   // The portal's address shows once, in the launch plan's picture of it.
   const header = (
@@ -119,7 +125,7 @@ function AdminHome() {
           below={
             <>
               {plan}
-              {admin ? null : <OverviewCounts />}
+              {planLeads ? null : <OverviewCounts />}
               {tourOffer}
             </>
           }

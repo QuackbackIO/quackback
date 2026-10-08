@@ -6,7 +6,7 @@
  *   changelog_entries.publishedAt, kb_articles.publishedAt.
  * Do not invent status names such as "Unreviewed" or "Ready to announce".
  *
- * Labels match the admin modules (Support, Feedback, Changelog, Help Center).
+ * Labels match the admin modules (Support, Feedback, Changelog, Help Center, Status).
  * The page is workspace-wide. Personal relevance is expressed by ordering
  * (`mine` first within a kind) and the owner avatar, not by a scope filter.
  */
@@ -46,14 +46,14 @@ export type OverviewLink = {
 }
 
 export type OverviewMetric = {
-  key: 'waiting' | 'feedback' | 'complete' | 'helpCenter'
+  key: 'waiting' | 'feedback' | 'complete' | 'helpCenter' | 'subscribers' | 'incidents'
   /** The items, e.g. "feedback posts". */
   label: string
   /** The state of those items, e.g. "with no changelog". */
   detail: string
   count: number
   link: OverviewLink
-  filter: OverviewAttentionKind | 'helpCenter'
+  filter: OverviewAttentionKind | 'helpCenter' | 'status'
 }
 
 type OverviewMetricsInput = {
@@ -65,6 +65,14 @@ type OverviewMetricsInput = {
     completeLink: OverviewLink | null
   }
   help?: { draftCount: number; draftLink: OverviewLink }
+  status?: {
+    subscriberCount: number
+    openIncidentCount: number
+    subscribersLink: OverviewLink
+    incidentsLink: OverviewLink
+  }
+  /** Changelog is on: shipped ideas can wait for an announcement. */
+  changelog?: boolean
 }
 
 /** Count on the left, item + state on the right. No units or invented status names. */
@@ -92,12 +100,12 @@ export function buildOverviewMetrics(input: OverviewMetricsInput): OverviewMetri
       filter: 'feedback',
     })
   }
-  if (input.feedback?.completeLink) {
+  if (input.changelog && input.feedback?.completeLink) {
     const n = input.feedback.completeCount
     metrics.push({
       key: 'complete',
       label: n === 1 ? 'idea' : 'ideas',
-      detail: 'with no changelog',
+      detail: 'shipped, not announced',
       count: n,
       link: input.feedback.completeLink,
       filter: 'feedback',
@@ -113,6 +121,28 @@ export function buildOverviewMetrics(input: OverviewMetricsInput): OverviewMetri
       link: input.help.draftLink,
       filter: 'helpCenter',
     })
+  }
+  if (input.status) {
+    const subscribers = input.status.subscriberCount
+    const incidents = input.status.openIncidentCount
+    metrics.push(
+      {
+        key: 'subscribers',
+        label: subscribers === 1 ? 'subscriber' : 'subscribers',
+        detail: 'to your status page',
+        count: subscribers,
+        link: input.status.subscribersLink,
+        filter: 'status',
+      },
+      {
+        key: 'incidents',
+        label: incidents === 1 ? 'incident' : 'incidents',
+        detail: 'still open',
+        count: incidents,
+        link: input.status.incidentsLink,
+        filter: 'status',
+      }
+    )
   }
   return metrics
 }
@@ -163,6 +193,7 @@ export type AdminOverviewData = {
     feedback: OverviewSectionState
     changelog: OverviewSectionState
     helpCenter: OverviewSectionState
+    status: OverviewSectionState
   }
 }
 

@@ -1,7 +1,17 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render as rtlRender, screen, within } from '@testing-library/react'
+import type { ReactElement } from 'react'
+import { IntlProvider } from 'react-intl'
+import en from '@/locales/en.json'
 import type { AdminOverviewData } from '@/lib/shared/admin-overview'
+
+const render = (ui: ReactElement) =>
+  rtlRender(
+    <IntlProvider locale="en" messages={en}>
+      {ui}
+    </IntlProvider>
+  )
 
 const { state } = vi.hoisted(() => {
   const data: AdminOverviewData = {
@@ -25,7 +35,7 @@ const { state } = vi.hoisted(() => {
       {
         key: 'complete',
         label: 'ideas',
-        detail: 'with no changelog',
+        detail: 'shipped, not announced',
         count: 6,
         link: { to: '/admin/feedback' },
         filter: 'feedback',
@@ -62,6 +72,7 @@ const { state } = vi.hoisted(() => {
       feedback: { enabled: true, error: null },
       changelog: { enabled: true, error: null },
       helpCenter: { enabled: true, error: null },
+      status: { enabled: false, error: null },
     },
   }
   return { state: { data } }
@@ -112,7 +123,7 @@ vi.mock('@tanstack/react-router', () => ({
   },
 }))
 
-import { OverviewDashboard } from '../admin-overview'
+import { OverviewCounts, OverviewDashboard } from '../admin-overview'
 
 describe('OverviewDashboard', () => {
   it('keeps a fresh workspace quiet until real data exists', () => {
@@ -129,6 +140,48 @@ describe('OverviewDashboard', () => {
       expect(screen.queryByText('Nothing to review')).toBeNull()
       expect(screen.queryByText('0')).toBeNull()
       unmount()
+    } finally {
+      state.data = previous
+    }
+  })
+
+  it('says where each module’s first item will land while there is no real data', () => {
+    const previous = state.data
+    state.data = {
+      ...state.data,
+      hasRealData: false,
+      attention: [],
+      sections: {
+        support: { enabled: true, error: null },
+        feedback: { enabled: true, error: null },
+        changelog: { enabled: false, error: null },
+        helpCenter: { enabled: false, error: null },
+        status: { enabled: true, error: null },
+      },
+    }
+    try {
+      for (const view of [<OverviewDashboard />, <OverviewCounts />]) {
+        const { unmount } = render(view)
+        const empty = screen.getByRole('list', { name: 'Nothing here yet' })
+        expect(
+          within(empty)
+            .getAllByRole('listitem')
+            .map((item) => item.textContent)
+        ).toEqual([
+          'No ideas yet. They land in Feedback.',
+          'No conversations yet. They land in Support.',
+          'No subscribers yet. They sign up on your status page.',
+        ])
+        expect(within(empty).getByRole('link', { name: 'Feedback' })).toHaveAttribute(
+          'href',
+          '/admin/feedback'
+        )
+        expect(within(empty).getByRole('link', { name: 'status page' })).toHaveAttribute(
+          'href',
+          '/admin/status'
+        )
+        unmount()
+      }
     } finally {
       state.data = previous
     }
@@ -152,7 +205,7 @@ describe('OverviewDashboard', () => {
     expect(screen.getByText('3')).toBeInTheDocument()
     expect(screen.getByText('Conversations waiting for reply')).toBeInTheDocument()
     expect(screen.getByText('Ideas to review')).toBeInTheDocument()
-    expect(screen.getByText('Ideas with no changelog')).toBeInTheDocument()
+    expect(screen.getByText('Ideas shipped, not announced')).toBeInTheDocument()
     expect(screen.getByText('Help center articles in draft')).toBeInTheDocument()
     expect(screen.getByText('Support')).toBeInTheDocument()
     expect(screen.getByText('Feedback')).toBeInTheDocument()
@@ -321,6 +374,7 @@ describe('OverviewDashboard', () => {
         feedback: { enabled: true, error: 'Couldn’t load this section.' },
         changelog: { enabled: true, error: null },
         helpCenter: { enabled: true, error: null },
+        status: { enabled: false, error: null },
       },
     }
     render(<OverviewDashboard />)
@@ -354,6 +408,7 @@ describe('OverviewDashboard', () => {
         feedback: { enabled: true, error: null },
         changelog: { enabled: true, error: null },
         helpCenter: { enabled: true, error: null },
+        status: { enabled: false, error: null },
       },
     }
     render(<OverviewDashboard />)
