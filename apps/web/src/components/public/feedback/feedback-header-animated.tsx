@@ -211,12 +211,14 @@ export function FeedbackHeaderAnimated({
         }
       }
 
+      // No details written (or the editor not mounted yet) means no document:
+      // the post carries its title alone.
       const details = detailsRef.current
       const result = await createPost.mutateAsync({
         boardId: selectedBoardId as BoardId,
         title: typedTitle.trim(),
         content: details?.markdown() ?? '',
-        contentJson: details?.json() ?? null,
+        ...(details ? { contentJson: details.json() } : {}),
         ...(boardCustomFields.length > 0 ? { customFields: customFieldValues } : {}),
       })
 
@@ -239,14 +241,14 @@ export function FeedbackHeaderAnimated({
           },
         }
       )
-    } catch (err) {
+    } catch {
+      // The server logs why it refused the post; its message is not written
+      // for the visitor.
       setError(
-        err instanceof Error
-          ? err.message
-          : intl.formatMessage({
-              id: 'portal.feedback.header.errorSubmit',
-              defaultMessage: 'Failed to submit feedback',
-            })
+        intl.formatMessage({
+          id: 'portal.feedback.header.errorSubmit',
+          defaultMessage: 'Could not submit your feedback. Please try again.',
+        })
       )
     }
   }

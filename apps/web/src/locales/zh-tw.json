@@ -238,7 +238,7 @@
   "portal.feedback.header.errorAddTitle": "請新增標題",
   "portal.feedback.header.errorSignIn": "請登入以提交意見回饋",
   "portal.feedback.header.errorSession": "無法建立工作階段",
-  "portal.feedback.header.errorSubmit": "無法提交意見回饋",
+  "portal.feedback.header.errorSubmit": "無法提交你的意見回饋。請再試一次。",
   "portal.feedback.header.submitTooltipSignIn": "請登入以提交意見回饋",
   "portal.feedback.header.toastSubmitted": "意見回饋已提交",
   "portal.feedback.header.toastView": "查看",

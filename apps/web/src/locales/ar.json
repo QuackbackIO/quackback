@@ -238,7 +238,7 @@
   "portal.feedback.header.errorAddTitle": "يرجى إضافة عنوان",
   "portal.feedback.header.errorSignIn": "يرجى تسجيل الدخول لإرسال الملاحظات",
   "portal.feedback.header.errorSession": "فشل إنشاء الجلسة",
-  "portal.feedback.header.errorSubmit": "فشل إرسال الملاحظات",
+  "portal.feedback.header.errorSubmit": "تعذّر إرسال ملاحظاتك. يرجى المحاولة مرة أخرى.",
   "portal.feedback.header.submitTooltipSignIn": "يرجى تسجيل الدخول لإرسال الملاحظات",
   "portal.feedback.header.toastSubmitted": "تم إرسال الملاحظات",
   "portal.feedback.header.toastView": "عرض",

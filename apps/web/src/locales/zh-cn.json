@@ -238,7 +238,7 @@
   "portal.feedback.header.errorAddTitle": "请添加标题",
   "portal.feedback.header.errorSignIn": "请登录后提交反馈",
   "portal.feedback.header.errorSession": "创建会话失败",
-  "portal.feedback.header.errorSubmit": "提交反馈失败",
+  "portal.feedback.header.errorSubmit": "无法提交你的反馈。请重试。",
   "portal.feedback.header.submitTooltipSignIn": "请登录后提交反馈",
   "portal.feedback.header.toastSubmitted": "反馈已提交",
   "portal.feedback.header.toastView": "查看",

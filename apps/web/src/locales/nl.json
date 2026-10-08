@@ -238,7 +238,7 @@
   "portal.feedback.header.errorAddTitle": "Voeg een titel toe",
   "portal.feedback.header.errorSignIn": "Log in om feedback te versturen",
   "portal.feedback.header.errorSession": "Sessie aanmaken mislukt",
-  "portal.feedback.header.errorSubmit": "Feedback versturen mislukt",
+  "portal.feedback.header.errorSubmit": "Kon je feedback niet versturen. Probeer het opnieuw.",
   "portal.feedback.header.submitTooltipSignIn": "Log in om feedback te versturen",
   "portal.feedback.header.toastSubmitted": "Feedback verstuurd",
   "portal.feedback.header.toastView": "Bekijken",

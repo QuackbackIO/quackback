@@ -238,7 +238,7 @@
   "portal.feedback.header.errorAddTitle": "Добавьте заголовок",
   "portal.feedback.header.errorSignIn": "Войдите, чтобы оставить предложение",
   "portal.feedback.header.errorSession": "Не удалось создать сессию",
-  "portal.feedback.header.errorSubmit": "Не удалось отправить предложение",
+  "portal.feedback.header.errorSubmit": "Не удалось отправить предложение. Попробуйте еще раз.",
   "portal.feedback.header.submitTooltipSignIn": "Войдите, чтобы оставить предложение",
   "portal.feedback.header.toastSubmitted": "Предложение отправлено",
   "portal.feedback.header.toastView": "Открыть",

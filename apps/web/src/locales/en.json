@@ -238,7 +238,7 @@
   "portal.feedback.header.errorAddTitle": "Please add a title",
   "portal.feedback.header.errorSignIn": "Please sign in to submit feedback",
   "portal.feedback.header.errorSession": "Failed to create session",
-  "portal.feedback.header.errorSubmit": "Failed to submit feedback",
+  "portal.feedback.header.errorSubmit": "Could not submit your feedback. Please try again.",
   "portal.feedback.header.submitTooltipSignIn": "Please sign in to submit feedback",
   "portal.feedback.header.toastSubmitted": "Feedback submitted",
   "portal.feedback.header.toastView": "View",

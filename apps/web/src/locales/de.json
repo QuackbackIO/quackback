@@ -238,7 +238,7 @@
   "portal.feedback.header.errorAddTitle": "Bitte gib einen Titel ein",
   "portal.feedback.header.errorSignIn": "Bitte melde dich an, um Feedback zu geben",
   "portal.feedback.header.errorSession": "Die Sitzung konnte nicht gestartet werden",
-  "portal.feedback.header.errorSubmit": "Dein Feedback konnte nicht gesendet werden",
+  "portal.feedback.header.errorSubmit": "Dein Feedback konnte nicht gesendet werden. Bitte versuch es noch einmal.",
   "portal.feedback.header.submitTooltipSignIn": "Bitte melde dich an, um Feedback zu geben",
   "portal.feedback.header.toastSubmitted": "Danke! Dein Feedback ist angekommen",
   "portal.feedback.header.toastView": "Ansehen",
