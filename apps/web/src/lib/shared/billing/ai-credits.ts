@@ -9,14 +9,20 @@ export function aiCreditsState(capTokens: number | null, usedTokens: number): Ai
 }
 
 /**
- * The AI allowance as Home shows it: whether AI can run, and, once this
- * period's allowance is used, when it comes back (the window's end).
+ * The AI allowance as Home shows it: whether AI can run, and, once a month's
+ * allowance is used, when it comes back (the month's end). A trial's end is
+ * no reset: what follows it depends on the plan after the trial.
  */
 export function aiAllowance(
   capTokens: number | null,
   usedTokens: number,
-  windowEnd: Date
-): { credits: AiCreditsState; resetsAt: string | null } {
+  window: { kind: 'month' | 'trial'; end: Date }
+): { credits: AiCreditsState; resetsAt: string | null; trial: boolean } {
   const credits = aiCreditsState(capTokens, usedTokens)
-  return { credits, resetsAt: credits === 'used' ? windowEnd.toISOString() : null }
+  const trial = window.kind === 'trial'
+  return {
+    credits,
+    resetsAt: credits === 'used' && !trial ? window.end.toISOString() : null,
+    trial,
+  }
 }

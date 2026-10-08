@@ -1575,6 +1575,7 @@
   "onboarding.tour.take": "Rozpocznij przewodnik",
   "ask.paused.until": "Copilot jest wstrzymany do {date}.",
   "ask.paused.now": "Copilot jest wstrzymany.",
+  "ask.paused.trial": "Copilot jest wstrzymany do końca okresu próbnego.",
   "ask.paused.reason": "Limit AI na ten okres został wykorzystany.",
   "ask.paused.usage": "Zobacz użycie",
   "admin.help.contact": "Skontaktuj się z nami",

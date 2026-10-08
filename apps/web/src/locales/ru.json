@@ -1575,6 +1575,7 @@
   "onboarding.tour.take": "Пройти тур",
   "ask.paused.until": "Copilot приостановлен до {date}.",
   "ask.paused.now": "Copilot приостановлен.",
+  "ask.paused.trial": "Copilot приостановлен до конца пробного периода.",
   "ask.paused.reason": "Лимит ИИ на этот период исчерпан.",
   "ask.paused.usage": "Посмотреть использование",
   "admin.help.contact": "Связаться с нами",

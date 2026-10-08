@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router'
-import { FormattedMessage, useIntl } from 'react-intl'
+import { FormattedMessage } from 'react-intl'
 import { PauseCircleIcon } from '@heroicons/react/24/outline'
+import { useLocalDateFormatter } from '@/components/ui/local-date'
 import { useBillingEnabled } from '@/lib/client/hooks/use-root-context'
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -9,16 +10,21 @@ import { cn } from '@/lib/shared/utils'
 /**
  * Copilot in the composer's place once this period's AI allowance is used:
  * that it is paused and until when, in plain sight, and the way to the usage
- * for whoever manages billing.
+ * for whoever manages billing. A trial's allowance runs to the trial's end,
+ * which is no reset, so no day is named then.
  */
-export function CopilotPaused({ resetsAt }: { resetsAt: string | null }) {
-  const intl = useIntl()
+export function CopilotPaused({
+  resetsAt,
+  trial = false,
+}: {
+  resetsAt: string | null
+  trial?: boolean
+}) {
+  const formatDate = useLocalDateFormatter()
   const billingEnabled = useBillingEnabled()
   const canBill = usePermission(PERMISSIONS.BILLING_MANAGE)
-  // The window ends at midnight UTC, so the day is read in UTC.
-  const date = resetsAt
-    ? intl.formatDate(resetsAt, { month: 'short', day: 'numeric', timeZone: 'UTC' })
-    : null
+  // The day it comes back where the viewer is.
+  const date = resetsAt && !trial ? formatDate(resetsAt, { month: 'short', day: 'numeric' }) : null
   const usage = billingEnabled && canBill
   return (
     <div
@@ -32,7 +38,12 @@ export function CopilotPaused({ resetsAt }: { resetsAt: string | null }) {
         <PauseCircleIcon className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden />
         <div className="space-y-1">
           <p className="font-medium">
-            {date ? (
+            {trial ? (
+              <FormattedMessage
+                id="ask.paused.trial"
+                defaultMessage="Copilot is paused for the rest of your trial."
+              />
+            ) : date ? (
               <FormattedMessage
                 id="ask.paused.until"
                 defaultMessage="Copilot is paused until {date}."

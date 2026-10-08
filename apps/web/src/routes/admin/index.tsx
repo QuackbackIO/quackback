@@ -145,7 +145,9 @@ function AdminHome() {
           threadKey={copilotThread}
           canAsk={copilotOnHome && !paused}
           header={header}
-          paused={paused ? <CopilotPaused resetsAt={paused.resetsAt} /> : undefined}
+          paused={
+            paused ? <CopilotPaused resetsAt={paused.resetsAt} trial={paused.trial} /> : undefined
+          }
           below={
             <>
               {plan}

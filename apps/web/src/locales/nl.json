@@ -1575,6 +1575,7 @@
   "onboarding.tour.take": "Rondleiding starten",
   "ask.paused.until": "Copilot is gepauzeerd tot {date}.",
   "ask.paused.now": "Copilot is gepauzeerd.",
+  "ask.paused.trial": "Copilot is gepauzeerd voor de rest van je proefperiode.",
   "ask.paused.reason": "Het AI-tegoed voor deze periode is op.",
   "ask.paused.usage": "Gebruik bekijken",
   "admin.help.contact": "Contact opnemen",

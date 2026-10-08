@@ -1575,6 +1575,7 @@
   "onboarding.tour.take": "ابدأ الجولة",
   "ask.paused.until": "Copilot متوقف حتى {date}.",
   "ask.paused.now": "Copilot متوقف.",
+  "ask.paused.trial": "Copilot متوقف حتى نهاية فترة التجربة.",
   "ask.paused.reason": "استُهلك رصيد الذكاء الاصطناعي لهذه الفترة.",
   "ask.paused.usage": "عرض الاستخدام",
   "admin.help.contact": "تواصل معنا",

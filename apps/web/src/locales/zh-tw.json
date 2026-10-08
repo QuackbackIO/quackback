@@ -1575,6 +1575,7 @@
   "onboarding.tour.take": "開始導覽",
   "ask.paused.until": "Copilot 已暫停，{date} 恢復。",
   "ask.paused.now": "Copilot 已暫停。",
+  "ask.paused.trial": "Copilot 在剩餘的試用期內已暫停。",
   "ask.paused.reason": "本週期的 AI 額度已用完。",
   "ask.paused.usage": "查看用量",
   "admin.help.contact": "聯絡我們",

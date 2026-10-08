@@ -21,19 +21,25 @@ vi.mock('@/lib/client/hooks/use-permission', () => ({ usePermission: () => hoist
 
 import { CopilotPaused } from '../copilot-paused'
 
-function show(resetsAt: string | null) {
+function show(resetsAt: string | null, trial = false) {
   return render(
     <IntlProvider locale="en" messages={en}>
-      <CopilotPaused resetsAt={resetsAt} />
+      <CopilotPaused resetsAt={resetsAt} trial={trial} />
     </IntlProvider>
   )
 }
 
+const zone = process.env.TZ
+
 beforeEach(() => {
   hoisted.billing = true
   hoisted.canBill = true
+  process.env.TZ = 'UTC'
 })
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  process.env.TZ = zone
+})
 
 describe('Copilot paused for the period', () => {
   it('says so in the box, with the day it comes back, not on hover', () => {
@@ -64,6 +70,20 @@ describe('Copilot paused for the period', () => {
     hoisted.billing = false
     show('2026-11-01T00:00:00.000Z')
     expect(screen.queryByRole('link')).toBeNull()
+  })
+
+  it("names the day it comes back in the viewer's time zone", () => {
+    // The month's allowance resets at midnight UTC: still Oct 31 on the US west coast.
+    process.env.TZ = 'America/Los_Angeles'
+    show('2026-11-01T00:00:00.000Z')
+    expect(screen.getByRole('status')).toHaveTextContent('Copilot is paused until Oct 31.')
+  })
+
+  it('names no day in a trial, whose end is not a reset', () => {
+    show(null, true)
+    const box = screen.getByRole('status')
+    expect(box).toHaveTextContent('Copilot is paused for the rest of your trial.')
+    expect(box).not.toHaveTextContent(/until/)
   })
 
   it('still says it is paused when the reset day is not known', () => {

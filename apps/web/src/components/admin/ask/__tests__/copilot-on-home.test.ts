@@ -13,10 +13,22 @@ describe('Copilot on Home', () => {
   it('is paused, saying until when, once the allowance for the period is used', () => {
     expect(
       homeCopilotState(
-        { enabled: true, credits: 'used', resetsAt: '2026-11-01T00:00:00.000Z' },
+        { enabled: true, credits: 'used', resetsAt: '2026-11-01T00:00:00.000Z', trial: false },
         true
       )
-    ).toEqual({ kind: 'paused', resetsAt: '2026-11-01T00:00:00.000Z' })
+    ).toEqual({ kind: 'paused', resetsAt: '2026-11-01T00:00:00.000Z', trial: false })
+  })
+
+  it('is paused for the rest of a trial whose allowance is used, with no reset to name', () => {
+    expect(
+      homeCopilotState({ enabled: true, credits: 'used', resetsAt: null, trial: true }, true)
+    ).toEqual({ kind: 'paused', resetsAt: null, trial: true })
+    // An older server says nothing of a trial.
+    expect(homeCopilotState({ enabled: true, credits: 'used' }, true)).toEqual({
+      kind: 'paused',
+      resetsAt: null,
+      trial: false,
+    })
   })
 
   it('is not on Home where AI is not set up, or a plan has no AI allowance at all', () => {

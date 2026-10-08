@@ -33,6 +33,8 @@ export interface WorkspaceCopilotAvailability {
   enabled: boolean
   /** Whether this period's AI allowance lets Copilot answer; absent means available. */
   credits?: import('@/lib/shared/billing/ai-credits').AiCreditsState
-  /** When a used-up allowance comes back. */
+  /** When a month's used-up allowance comes back. */
   resetsAt?: string | null
+  /** Whether the allowance is a trial's, which runs to the trial's end and names no reset. */
+  trial?: boolean
 }

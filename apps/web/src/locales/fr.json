@@ -1575,6 +1575,7 @@
   "onboarding.tour.take": "Faire la visite",
   "ask.paused.until": "Copilot est en pause jusqu’au {date}.",
   "ask.paused.now": "Copilot est en pause.",
+  "ask.paused.trial": "Copilot est en pause pour le reste de votre essai.",
   "ask.paused.reason": "L’allocation d’IA de cette période est épuisée.",
   "ask.paused.usage": "Voir l’utilisation",
   "admin.help.contact": "Nous contacter",

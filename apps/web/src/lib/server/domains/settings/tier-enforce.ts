@@ -157,14 +157,15 @@ export async function enforceAiTokenBudget(): Promise<void> {
 /**
  * Whether AI can run in the current allowance window (the calendar month, or
  * the whole trial while one runs): no cap, under the cap, none on the plan, or
- * used up, and when a used-up allowance comes back.
+ * used up, and when a month's used-up allowance comes back.
  */
 export async function aiAllowanceNow(): Promise<{
   credits: AiCreditsState
   resetsAt: string | null
+  trial: boolean
 }> {
   const status = await getAiBudgetStatus()
-  return aiAllowance(status.cap, status.used, status.window.end)
+  return aiAllowance(status.cap, status.used, status.window)
 }
 
 /** True when {@link enforceAiTokenBudget} would not throw. */

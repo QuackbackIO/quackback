@@ -12,14 +12,32 @@ describe('AI credits', () => {
     expect(aiCreditsState(1_000, 1_000)).toBe('used')
   })
 
-  it('say when a used-up allowance comes back: the end of its window', () => {
-    const end = new Date('2026-11-01T00:00:00.000Z')
-    expect(aiAllowance(1_000, 1_000, end)).toEqual({
+  it('say when a used-up allowance comes back: the end of its month', () => {
+    const month = { kind: 'month' as const, end: new Date('2026-11-01T00:00:00.000Z') }
+    expect(aiAllowance(1_000, 1_000, month)).toEqual({
       credits: 'used',
       resetsAt: '2026-11-01T00:00:00.000Z',
+      trial: false,
     })
-    expect(aiAllowance(1_000, 10, end)).toEqual({ credits: 'available', resetsAt: null })
-    expect(aiAllowance(null, 10, end)).toEqual({ credits: 'available', resetsAt: null })
-    expect(aiAllowance(0, 0, end)).toEqual({ credits: 'none', resetsAt: null })
+    expect(aiAllowance(1_000, 10, month)).toEqual({
+      credits: 'available',
+      resetsAt: null,
+      trial: false,
+    })
+    expect(aiAllowance(null, 10, month)).toEqual({
+      credits: 'available',
+      resetsAt: null,
+      trial: false,
+    })
+    expect(aiAllowance(0, 0, month)).toEqual({ credits: 'none', resetsAt: null, trial: false })
+  })
+
+  it('name no reset in a trial, whose end is not a reset: what follows depends on the plan', () => {
+    const trial = { kind: 'trial' as const, end: new Date('2026-10-22T15:00:00.000Z') }
+    expect(aiAllowance(1_000, 1_000, trial)).toEqual({
+      credits: 'used',
+      resetsAt: null,
+      trial: true,
+    })
   })
 })

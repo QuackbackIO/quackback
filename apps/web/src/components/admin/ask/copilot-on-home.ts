@@ -20,12 +20,13 @@ export function copilotAvailabilityQuery(principalId: string | null | undefined)
 
 /**
  * How Copilot sits on Home: live while the workspace has AI allowance left,
- * paused until the allowance resets once this period's is used, or not there
+ * paused once this period's is used (until the month resets, or for the rest
+ * of a trial), or not there
  * at all (no AI set up, or a plan with no AI allowance), when Home is the
  * overview.
  */
 export type HomeCopilotState =
-  { kind: 'live' } | { kind: 'paused'; resetsAt: string | null } | { kind: 'off' }
+  { kind: 'live' } | { kind: 'paused'; resetsAt: string | null; trial: boolean } | { kind: 'off' }
 
 /** Home's Copilot from the server's answer and whether the flag and permission allow it. */
 export function homeCopilotState(
@@ -35,7 +36,11 @@ export function homeCopilotState(
   if (!allowed || availability?.enabled !== true) return { kind: 'off' }
   if (availability.credits === 'none') return { kind: 'off' }
   if (availability.credits === 'used') {
-    return { kind: 'paused', resetsAt: availability.resetsAt ?? null }
+    return {
+      kind: 'paused',
+      resetsAt: availability.resetsAt ?? null,
+      trial: availability.trial === true,
+    }
   }
   return { kind: 'live' }
 }

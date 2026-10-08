@@ -1575,6 +1575,7 @@
   "onboarding.tour.take": "Tour starten",
   "ask.paused.until": "Copilot ist bis {date} pausiert.",
   "ask.paused.now": "Copilot ist pausiert.",
+  "ask.paused.trial": "Copilot ist für den Rest deiner Testphase pausiert.",
   "ask.paused.reason": "Das KI-Kontingent für diesen Zeitraum ist aufgebraucht.",
   "ask.paused.usage": "Nutzung ansehen",
   "admin.help.contact": "Kontakt",
