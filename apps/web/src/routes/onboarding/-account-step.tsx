@@ -213,7 +213,9 @@ function SignInOnlyStep({
  * link where passwords are off. Social and OIDC tiles are left out. Before
  * setup no provider has credentials this workspace can vouch for, so a tile
  * here is a button that fails; providers configured later appear on the
- * sign-in page as usual.
+ * sign-in page as usual. A workspace with neither email method keeps its
+ * providers: they are the only way in, and a workspace that has settings only
+ * lists providers whose credentials are configured.
  */
 function MethodsStep({
   authConfig,
@@ -243,12 +245,19 @@ function MethodsStep({
         // a workspace still open to be claimed would leave one nobody can ever
         // set up. This screen is only reached when it IS still open.
         mode="signup"
-        authConfig={{
-          ...authConfig,
-          oauth: { password: authConfig.oauth.password, magicLink: authConfig.oauth.magicLink },
-          oidcProviders: undefined,
-          openSignup: true,
-        }}
+        authConfig={
+          authConfig.oauth.password !== false || authConfig.oauth.magicLink
+            ? {
+                ...authConfig,
+                oauth: {
+                  password: authConfig.oauth.password,
+                  magicLink: authConfig.oauth.magicLink,
+                },
+                oidcProviders: undefined,
+                openSignup: true,
+              }
+            : { ...authConfig, openSignup: true }
+        }
         workspaceName={workspaceName}
         callbackUrl={ONBOARDING_CALLBACK}
       />

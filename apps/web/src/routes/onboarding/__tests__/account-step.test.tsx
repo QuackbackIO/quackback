@@ -384,6 +384,18 @@ describe('account step — a self-hosted first user', () => {
     expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument()
   })
 
+  // With neither email method the configured providers are the only way to
+  // claim the workspace, so they stay.
+  it('keeps the providers when the workspace has no email method at all', () => {
+    const props = selfHosted()
+    props.authConfig.found = true
+    props.authConfig.oauth = { password: false, magicLink: false, google: true }
+    props.authConfig.registeredAuthProviders = ['google']
+    renderStep(props)
+
+    expect(screen.getByRole('button', { name: /sign up with google/i })).toBeInTheDocument()
+  })
+
   // `openSignup` governs who may open a PORTAL account. Applied to the first
   // arrival on an unclaimed workspace it refuses the only person who could
   // ever set the workspace up, which is a workspace nobody can rescue.
