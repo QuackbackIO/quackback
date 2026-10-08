@@ -1,4 +1,4 @@
-import { LaunchPlanDock, useLaunchPlanInHelp } from '@/components/onboarding/launch-plan-dock'
+import { LaunchPlanDock, LaunchPlanInHelp } from '@/components/onboarding/launch-plan-dock'
 import { openHelpLauncher } from '@/components/shared/cloud-quackback-widget'
 import { PlanNoticeQuiet } from '@/components/admin/plan-notice-banner'
 import type { PlanNotice } from '@/lib/server/domains/settings/tier-limits.types'
@@ -292,7 +292,6 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
   // Each part is selected: the route context is a new object after every
   // navigation, while these stay the same until the viewer or workspace changes.
   const tour = useProductTour()
-  const launchPlanInHelp = useLaunchPlanInHelp()
   const session = useSessionContext()
   const settings = useWorkspaceSettings()
   const billingEnabled = useBillingEnabled()
@@ -479,7 +478,7 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
                       defaultMessage="Replay the tour"
                     />
                   </DropdownMenuItem>
-                  {launchPlanInHelp && (
+                  <LaunchPlanInHelp>
                     <DropdownMenuItem asChild>
                       <Link to="/admin/getting-started">
                         <FormattedMessage
@@ -488,7 +487,7 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
                         />
                       </Link>
                     </DropdownMenuItem>
-                  )}
+                  </LaunchPlanInHelp>
                   {cloudEnabled && (
                     <DropdownMenuItem onClick={openHelpLauncher}>
                       <ChatBubbleLeftRightIcon className="mr-2 h-4 w-4" />
@@ -687,7 +686,7 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
                 <QuestionMarkCircleIcon className="h-5 w-5" />
                 <FormattedMessage id="onboarding.tour.replay" defaultMessage="Replay the tour" />
               </button>
-              {launchPlanInHelp && (
+              <LaunchPlanInHelp>
                 <Link
                   to="/admin/getting-started"
                   onClick={() => setMobileMenuOpen(false)}
@@ -696,7 +695,7 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
                   <FlagIcon className="h-5 w-5" />
                   <FormattedMessage id="onboarding.launch.name" defaultMessage="Launch plan" />
                 </Link>
-              )}
+              </LaunchPlanInHelp>
               <div className="h-px bg-border/40 my-4" />
               <a
                 href="https://www.quackback.io/docs/"

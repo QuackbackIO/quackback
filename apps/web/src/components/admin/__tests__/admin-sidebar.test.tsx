@@ -51,7 +51,9 @@ vi.mock('@tanstack/react-query', () => ({
       return { data: mockBillingEnabled.current ? mockSiblings.current : undefined }
     }
     if (Array.isArray(queryKey) && queryKey[0] === 'admin' && queryKey[1] === 'onboarding') {
-      return { data: enabled === false ? undefined : mockLaunchStatus.current }
+      // What a page that loads the launch status left in the cache.
+      if (enabled !== false) launchQueryEnabled.current = true
+      return { data: mockLaunchStatus.current }
     }
     if (Array.isArray(queryKey) && queryKey.includes('moderationStatus')) {
       moderationQueryEnabled.current = enabled !== false
@@ -70,16 +72,23 @@ vi.mock('@/components/notifications', () => ({ NotificationBell: () => null }))
 
 vi.mock('@/lib/server/functions/conversation', () => ({ setAgentAvailabilityFn: vi.fn() }))
 
-const { mockSiblings, mockBillingEnabled, mockPending, moderationQueryEnabled, mockLaunchStatus } =
-  vi.hoisted(() => ({
-    mockLaunchStatus: { current: undefined as unknown },
-    mockPending: { current: 0 },
-    moderationQueryEnabled: { current: null as boolean | null },
-    mockSiblings: {
-      current: [] as Array<{ instanceId: string; displayName: string; url: string | null }>,
-    },
-    mockBillingEnabled: { current: false },
-  }))
+const {
+  mockSiblings,
+  mockBillingEnabled,
+  mockPending,
+  moderationQueryEnabled,
+  mockLaunchStatus,
+  launchQueryEnabled,
+} = vi.hoisted(() => ({
+  mockLaunchStatus: { current: undefined as unknown },
+  launchQueryEnabled: { current: false },
+  mockPending: { current: 0 },
+  moderationQueryEnabled: { current: null as boolean | null },
+  mockSiblings: {
+    current: [] as Array<{ instanceId: string; displayName: string; url: string | null }>,
+  },
+  mockBillingEnabled: { current: false },
+}))
 
 vi.mock('@/lib/server/functions/owner-workspaces', () => ({
   listOwnerWorkspacesFn: vi.fn(async () => mockSiblings.current),
@@ -442,6 +451,7 @@ describe('AdminSidebar: help and the phone menu', () => {
       },
       inLaunchWindow: true,
     }
+    launchQueryEnabled.current = false
     renderSidebar('admin')
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Help' }))
@@ -449,6 +459,8 @@ describe('AdminSidebar: help and the phone menu', () => {
     expect(plan).toHaveAttribute('href', '/admin/getting-started')
     const items = screen.getAllByRole('menuitem').map((item) => item.textContent)
     expect(items.indexOf('Launch plan')).toBe(items.indexOf('Replay the tour') + 1)
+    // The sidebar is on every admin page: it reads the status, never loads it.
+    expect(launchQueryEnabled.current).toBe(false)
     cleanup()
 
     mockLaunchStatus.current = { ...(mockLaunchStatus.current as object), launchWindow: null }
@@ -474,7 +486,11 @@ describe('AdminSidebar: help and the phone menu', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }))
     const menu = screen.getByRole('dialog')
-    expect(within(menu).getByRole('link', { name: /Launch plan/ })).toHaveAttribute(
+    expect(within(menu).getByRole('link', { name: /Step 2 of 3/ })).toHaveAttribute(
+      'href',
+      '/admin/getting-started'
+    )
+    expect(within(menu).getByRole('link', { name: 'Launch plan' })).toHaveAttribute(
       'href',
       '/admin/getting-started'
     )

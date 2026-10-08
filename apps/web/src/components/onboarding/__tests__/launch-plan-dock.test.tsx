@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
-import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { focusManager, QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '@/locales/en.json'
@@ -9,11 +9,10 @@ import type { LaunchStatus } from '@/lib/shared/launch-checklist'
 
 const hoisted = vi.hoisted(() => ({
   fetches: 0,
-  fail: false,
+  progressFetches: 0,
   canView: true,
   role: 'admin',
   status: null as unknown,
-  progress: {} as Record<string, string>,
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -29,7 +28,6 @@ vi.mock('@/lib/client/queries/admin', () => ({
       queryKey: ['admin', 'onboarding'],
       queryFn: async () => {
         hoisted.fetches++
-        if (hoisted.fail) throw new Error('offline')
         return hoisted.status
       },
       staleTime: 0,
@@ -38,7 +36,10 @@ vi.mock('@/lib/client/queries/admin', () => ({
   },
 }))
 vi.mock('@/lib/server/functions/onboarding-progress', () => ({
-  getOnboardingProgressFn: async () => ({ ...hoisted.progress }),
+  getOnboardingProgressFn: async () => {
+    hoisted.progressFetches++
+    return {}
+  },
 }))
 vi.mock('@/lib/server/functions/admin', () => ({ setLaunchTaskResolutionFn: vi.fn() }))
 vi.mock('@/lib/client/hooks/use-permission', () => ({
@@ -49,7 +50,8 @@ vi.mock('@/lib/client/hooks/use-root-context', () => ({
   useUserRole: () => hoisted.role,
 }))
 
-import { LaunchPlanDock, useLaunchPlanInHelp } from '../launch-plan-dock'
+import { LaunchPlanDock, LaunchPlanInHelp } from '../launch-plan-dock'
+import { launchStatusQuery, onboardingProgressQuery } from '../use-launch-plan'
 
 const NOW = Date.now()
 const window_ = {
@@ -85,10 +87,23 @@ const choresDone: LaunchStatus = {
   memberCount: 2,
 }
 const resolved: LaunchStatus = { ...choresDone, hasFirstWin: true }
+const PROGRESS_KEY = ['onboarding', 'progress']
 
-function mount(cached?: LaunchStatus, children: ReactNode = <LaunchPlanDock />) {
+/** Home's own reads of the launch status and this person's markers. */
+function HomeReads() {
+  useQuery(launchStatusQuery())
+  useQuery(launchStatusQuery({ poll: false }))
+  useQuery(onboardingProgressQuery())
+  return null
+}
+
+function mount(
+  cached?: { status?: LaunchStatus; progress?: Record<string, string> },
+  children: ReactNode = <LaunchPlanDock />
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  if (cached) client.setQueryData(['admin', 'onboarding'], cached)
+  if (cached?.status) client.setQueryData(['admin', 'onboarding'], cached.status)
+  if (cached?.progress) client.setQueryData(PROGRESS_KEY, cached.progress)
   const view = render(
     <IntlProvider locale="en" messages={en}>
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -99,77 +114,118 @@ function mount(cached?: LaunchStatus, children: ReactNode = <LaunchPlanDock />) 
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 20))
 
+function refocus() {
+  act(() => {
+    focusManager.setFocused(false)
+    focusManager.setFocused(true)
+  })
+}
+
 beforeEach(() => {
   localStorage.clear()
   hoisted.fetches = 0
-  hoisted.fail = false
+  hoisted.progressFetches = 0
   hoisted.canView = true
   hoisted.role = 'admin'
   hoisted.status = open
-  hoisted.progress = {}
 })
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  focusManager.setFocused(undefined)
+})
 
 describe('launch plan dock', () => {
   it("is a plain link to the Launch plan page with the plan's one count", async () => {
-    mount(open)
+    mount({ status: open })
     const link = await screen.findByRole('link', { name: /Launch plan/ })
     expect(link).toHaveAttribute('href', '/admin/getting-started')
     expect(link).toHaveTextContent('Step 2 of 3')
     expect(screen.queryByRole('button')).toBeNull()
   })
 
-  it('loads the launch status itself on a page that has not, and remembers it for a reload', async () => {
-    mount()
-    expect(await screen.findByRole('link', { name: /Launch plan/ })).toHaveTextContent(
-      'Step 2 of 3'
-    )
-    expect(hoisted.fetches).toBe(1)
+  it('never loads the launch status itself: away from Home it shows the last count it saw', async () => {
+    mount({ status: open })
+    await screen.findByRole('link', { name: /Launch plan/ })
     cleanup()
 
-    // A failing fetch after a reload still shows the last count it saw.
-    hoisted.fail = true
+    // Another page after a reload: nothing is loaded, and nothing is asked for.
+    hoisted.status = choresDone
     mount()
     expect(await screen.findByRole('link', { name: /Launch plan/ })).toHaveTextContent(
       'Step 2 of 3'
     )
+    refocus()
+    await settle()
+    expect(screen.getByRole('link', { name: /Launch plan/ })).toHaveTextContent('Step 2 of 3')
+    expect(hoisted.fetches).toBe(0)
+    expect(hoisted.progressFetches).toBe(0)
   })
 
-  it('catches up when the window regains focus, so another tab never goes stale', async () => {
+  it('shows nothing on a page that has not loaded the plan and never saw it', async () => {
     mount()
+    await settle()
+    expect(screen.queryByRole('link', { name: /Launch plan/ })).toBeNull()
+    expect(hoisted.fetches).toBe(0)
+  })
+
+  it('catches up as Home refetches on focus in the launch window', async () => {
+    mount(
+      { status: open, progress: {} },
+      <>
+        <HomeReads />
+        <LaunchPlanDock />
+      </>
+    )
     expect(await screen.findByRole('link', { name: /Launch plan/ })).toHaveTextContent(
       'Step 2 of 3'
     )
     hoisted.status = choresDone
-    act(() => {
-      focusManager.setFocused(false)
-      focusManager.setFocused(true)
-    })
+    refocus()
     await waitFor(() =>
       expect(screen.getByRole('link', { name: /Launch plan/ })).toHaveTextContent('Step 3 of 3')
     )
-    focusManager.setFocused(undefined)
+  })
+
+  it('leaves Home alone on focus once the launch window has closed', async () => {
+    const closed = { ...open, inLaunchWindow: false }
+    hoisted.status = closed
+    mount({ status: closed, progress: {} }, <HomeReads />)
+    await settle()
+    hoisted.fetches = 0
+    refocus()
+    await settle()
+    expect(hoisted.fetches).toBe(0)
   })
 
   it('stays after the first win, marked done, until the win is dismissed', async () => {
-    hoisted.status = resolved
-    const { client } = mount()
+    const { client } = mount({ status: resolved, progress: {} })
     const link = await screen.findByRole('link', { name: /Launch plan/ })
     expect(link).toHaveTextContent('Done')
 
-    hoisted.progress = { firstWinShownAt: new Date().toISOString() }
-    await act(() => client.invalidateQueries({ queryKey: ['onboarding', 'progress'] }))
+    // Dismissing the win on Home writes the marker into the cache.
+    act(() => client.setQueryData(PROGRESS_KEY, { firstWinShownAt: new Date().toISOString() }))
     await waitFor(() => expect(screen.queryByRole('link', { name: /Launch plan/ })).toBeNull())
     cleanup()
 
-    // And stays gone after a reload.
-    mount()
+    // And stays gone after a reload, on a page that loaded the status but not the marker.
+    mount({ status: resolved })
     await settle()
     expect(screen.queryByRole('link', { name: /Launch plan/ })).toBeNull()
+    expect(hoisted.progressFetches).toBe(0)
+  })
+
+  it('says Done for a win it has not seen, on a page that has not loaded the marker', async () => {
+    mount({ status: open })
+    await screen.findByRole('link', { name: /Launch plan/ })
+    cleanup()
+
+    mount({ status: resolved })
+    expect(await screen.findByRole('link', { name: /Launch plan/ })).toHaveTextContent('Done')
+    expect(hoisted.progressFetches).toBe(0)
   })
 
   it('draws its track so it shows in a light theme', async () => {
-    mount(open)
+    mount({ status: open })
     const link = await screen.findByRole('link', { name: /Launch plan/ })
     const track = link.querySelector('[aria-hidden="true"]')
     expect(track?.className).toContain('bg-foreground/10')
@@ -177,61 +233,68 @@ describe('launch plan dock', () => {
 
   it('is absent for a teammate who is not an admin', async () => {
     hoisted.role = 'member'
-    mount(open)
+    mount({ status: open })
     await settle()
     expect(screen.queryByRole('link', { name: /Launch plan/ })).toBeNull()
   })
 
   it('is absent once the launch window has closed', async () => {
-    hoisted.status = { ...open, inLaunchWindow: false }
-    mount()
+    mount({ status: { ...open, inLaunchWindow: false } })
     await settle()
     expect(screen.queryByRole('link', { name: /Launch plan/ })).toBeNull()
   })
 
   it('is absent for someone who cannot see the team', async () => {
     hoisted.canView = false
-    mount(open)
+    mount({ status: open })
     await settle()
     expect(screen.queryByRole('link', { name: /Launch plan/ })).toBeNull()
-    expect(hoisted.fetches).toBe(0)
   })
 })
 
-function HelpProbe() {
-  return <p>{useLaunchPlanInHelp() ? 'offered' : 'not offered'}</p>
-}
+const helpProbe = (
+  <LaunchPlanInHelp>
+    <p>offered</p>
+  </LaunchPlanInHelp>
+)
+const offered = () => screen.queryByText('offered') !== null
 
 describe('the Launch plan in Help', () => {
   it('is offered while any step of the plan is open, the win included', async () => {
-    mount(undefined, <HelpProbe />)
+    mount({ status: open }, helpProbe)
     expect(await screen.findByText('offered')).toBeTruthy()
     cleanup()
 
     // After the win, the optional steps still open keep it there.
-    hoisted.status = { ...resolved, hasIntegration: false }
-    mount(undefined, <HelpProbe />)
+    mount({ status: { ...resolved, hasIntegration: false } }, helpProbe)
     expect(await screen.findByText('offered')).toBeTruthy()
   })
 
+  it('never loads the launch status itself, and remembers the last answer for other pages', async () => {
+    mount({ status: open }, helpProbe)
+    await screen.findByText('offered')
+    cleanup()
+
+    mount(undefined, helpProbe)
+    expect(await screen.findByText('offered')).toBeTruthy()
+    expect(hoisted.fetches).toBe(0)
+  })
+
   it('goes once every step is done or skipped, and never comes for a teammate', async () => {
-    hoisted.status = resolved
-    mount(undefined, <HelpProbe />)
+    mount({ status: resolved }, helpProbe)
     await settle()
-    expect(screen.getByText('not offered')).toBeTruthy()
+    expect(offered()).toBe(false)
     cleanup()
 
     hoisted.role = 'member'
-    hoisted.status = open
-    mount(undefined, <HelpProbe />)
+    mount({ status: open }, helpProbe)
     await settle()
-    expect(screen.getByText('not offered')).toBeTruthy()
+    expect(offered()).toBe(false)
   })
 
   it('is not offered to a workspace that never had a launch plan', async () => {
-    hoisted.status = { ...open, launchWindow: null, inLaunchWindow: false }
-    mount(undefined, <HelpProbe />)
+    mount({ status: { ...open, launchWindow: null, inLaunchWindow: false } }, helpProbe)
     await settle()
-    expect(screen.getByText('not offered')).toBeTruthy()
+    expect(offered()).toBe(false)
   })
 })

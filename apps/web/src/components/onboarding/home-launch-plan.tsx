@@ -28,7 +28,6 @@ import {
   openLaterSteps,
   type LaunchTask,
 } from '@/lib/shared/launch-checklist'
-import { adminQueries } from '@/lib/client/queries/admin'
 import { adminOverviewQueries } from '@/lib/client/queries/admin-overview'
 import {
   launchStatusQuery,
@@ -86,10 +85,8 @@ export function HomeGettingStarted({
   const queryClient = useQueryClient()
   const area = useRef<HTMLDivElement>(null)
   const [createBoardOpen, setCreateBoardOpen] = useState(false)
-  const statusQuery = useSuspenseQuery(
-    // A teammate only needs the launch window, so nothing polls for them.
-    member ? adminQueries.onboardingStatus() : launchStatusQuery()
-  )
+  // A teammate only needs the launch window, so nothing polls for them.
+  const statusQuery = useSuspenseQuery(launchStatusQuery({ poll: !member }))
   const resolutionMutation = useLaunchTaskResolution()
 
   // First-run behaviour belongs to the launch window: an established
@@ -221,7 +218,7 @@ export function HomeTourOffer({ member = false }: { member?: boolean }) {
   const tour = useProductTour()
   const queryClient = useQueryClient()
   const progress = useQuery(onboardingProgressQuery())
-  const status = useQuery(member ? adminQueries.onboardingStatus() : launchStatusQuery())
+  const status = useQuery(launchStatusQuery({ poll: !member }))
   const dismissTour = useMutation({
     mutationFn: () => dismissTourOfferFn(),
     onMutate: () => {

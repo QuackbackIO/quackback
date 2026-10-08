@@ -14,6 +14,7 @@ import { OverviewCounts, OverviewDashboard } from '@/components/admin/admin-over
 import { HomeLaunchArea, HomeTourArea } from '@/components/onboarding/home-try-it'
 import { HomeGreeting } from '@/components/onboarding/home-greeting'
 import { LaunchMessages } from '@/components/onboarding/launch-messages'
+import { launchStatusQuery } from '@/components/onboarding/use-launch-plan'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { adminOverviewQueries } from '@/lib/client/queries/admin-overview'
 import { useHasPermission } from '@/lib/client/use-permissions'
@@ -104,7 +105,7 @@ function AdminHome() {
   // The owner's launch plan leads Home until the first win; then the
   // workspace's counts take its place, as they do for a teammate.
   const launchStatus = useQuery({
-    ...adminQueries.onboardingStatus(),
+    ...launchStatusQuery({ poll: false }),
     enabled: admin || canSeeTeam,
   })
   const firstSessions = launchPlanLeadsHome(launchStatus.data)

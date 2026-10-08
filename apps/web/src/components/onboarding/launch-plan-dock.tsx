@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import { FormattedMessage } from 'react-intl'
 import { useQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { useSessionContext, useUserRole } from '@/lib/client/hooks/use-root-context'
+import type { OnboardingProgress } from '@/lib/server/onboarding-progress'
 import {
   launchPlanHasOpenSteps,
   launchPlanProgress,
@@ -12,18 +13,21 @@ import {
 } from '@/lib/shared/launch-checklist'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { isAdmin } from '@/lib/shared/roles'
-import { onboardingProgressQuery } from './use-launch-plan'
 
-type DockProgress = ReturnType<typeof launchPlanProgress> & {
+type SidebarLaunch = ReturnType<typeof launchPlanProgress> & {
   /** Whether the dock shows: the plan is open, or its first win is not dismissed yet. */
   shown: boolean
+  /** Whether Help offers the Launch plan page: a step of the plan is still open. */
+  inHelp: boolean
 }
 
 const STORAGE_PREFIX = 'quackback:launch-plan-dock:'
+/** This person's first-run markers, which Home loads for its tour offer and first win. */
+const PROGRESS_KEY = ['onboarding', 'progress'] as const
 
-function readStored(key: string): DockProgress | null {
+function readStored(key: string): SidebarLaunch | null {
   try {
-    const value = JSON.parse(localStorage.getItem(key) ?? 'null') as Partial<DockProgress> | null
+    const value = JSON.parse(localStorage.getItem(key) ?? 'null') as Partial<SidebarLaunch> | null
     if (!value || typeof value.step !== 'number' || typeof value.total !== 'number') return null
     const resolved = value.resolved === true
     return {
@@ -31,72 +35,78 @@ function readStored(key: string): DockProgress | null {
       total: value.total,
       resolved,
       shown: typeof value.shown === 'boolean' ? value.shown : !resolved,
+      inHelp: typeof value.inHelp === 'boolean' ? value.inHelp : !resolved,
     }
   } catch {
     return null
   }
 }
 
-function writeStored(key: string, value: DockProgress) {
+function writeStored(key: string, value: SidebarLaunch) {
   try {
     localStorage.setItem(key, JSON.stringify(value))
   } catch {
-    // Storage can be unavailable; the dock then waits for the launch status.
+    // Storage can be unavailable; the sidebar then shows only where the plan is loaded.
   }
 }
 
-/** The plan is the owner's: a teammate who joins later has their own first run. */
-function useCanSeePlan(): boolean {
-  const role = useUserRole()
-  return usePermission(PERMISSIONS.MEMBER_VIEW) && isAdmin(role)
+/** The sidebar's view of the plan from a loaded launch status. */
+function sidebarLaunch(
+  status: LaunchStatus,
+  progress: OnboardingProgress | undefined,
+  stored: SidebarLaunch | null
+): SidebarLaunch {
+  const count = launchPlanProgress(status)
+  const inHelp = Boolean(status.launchWindow) && launchPlanHasOpenSteps(status)
+  // Outside the launch window the plan is over, whatever its state.
+  if (status.inLaunchWindow === false) return { ...count, resolved: true, shown: false, inHelp }
+  if (!count.resolved) return { ...count, shown: true, inHelp }
+  // After the win the dock stays until the win is dismissed. Where that marker
+  // is not loaded, keep what the dock knew if it already saw the win.
+  const shown = progress ? !progress.firstWinShownAt : stored?.resolved ? stored.shown : true
+  return { ...count, shown, inHelp }
 }
 
 /**
- * The launch status for the sidebar: read once as an admin page loads and
- * again whenever the window regains focus, so a tab left open elsewhere
- * catches up with a step done or a first win in another tab.
+ * The launch plan as the sidebar shows it. The sidebar is on every admin
+ * page, so it never fetches: it reads what Home and the Launch plan page
+ * loaded, and remembers the last state it saw for every other page.
  */
-function useSidebarLaunchStatus(enabled: boolean): LaunchStatus | undefined {
-  return useQuery({ ...adminQueries.onboardingStatus(), enabled, refetchOnWindowFocus: true }).data
+function useSidebarLaunch(): SidebarLaunch | null {
+  // The plan is the owner's: a teammate who joins later has their own first run.
+  const role = useUserRole()
+  const canView = usePermission(PERMISSIONS.MEMBER_VIEW) && isAdmin(role)
+  const userId = useSessionContext()?.user?.id
+  const storageKey = canView && userId ? `${STORAGE_PREFIX}${userId}` : null
+  const { data } = useQuery({ ...adminQueries.onboardingStatus(), enabled: false })
+  const { data: progress } = useQuery<OnboardingProgress>({
+    queryKey: PROGRESS_KEY,
+    enabled: false,
+  })
+  const [state, setState] = useState<SidebarLaunch | null>(null)
+
+  useEffect(() => {
+    if (!storageKey) return
+    const stored = readStored(storageKey)
+    if (!data) {
+      setState(stored)
+      return
+    }
+    const next = sidebarLaunch(data, progress, stored)
+    writeStored(storageKey, next)
+    setState(next)
+  }, [data, progress, storageKey])
+
+  return storageKey ? state : null
 }
 
 /**
  * The sidebar's way back to the Launch plan page while the plan is open, and
- * after the first win until it is dismissed. It remembers the last progress
- * it saw, so a reload shows it straight away while the status loads.
+ * after the first win until it is dismissed.
  */
 export function LaunchPlanDock() {
-  const canView = useCanSeePlan()
-  const userId = useSessionContext()?.user?.id
-  const data = useSidebarLaunchStatus(canView)
-  const winOpen = data?.hasFirstWin === true && data.inLaunchWindow === true
-  // Whether this person dismissed the first win, asked only once there is one.
-  const { data: progress } = useQuery({ ...onboardingProgressQuery(), enabled: canView && winOpen })
-  const [dock, setDock] = useState<DockProgress | null>(null)
-  const storageKey = userId ? `${STORAGE_PREFIX}${userId}` : null
-
-  useEffect(() => {
-    if (!canView || !storageKey) return
-    if (!data) {
-      setDock(readStored(storageKey))
-      return
-    }
-    const count = launchPlanProgress(data)
-    // Outside the launch window the plan is over, whatever its state.
-    if (data.inLaunchWindow === false) {
-      const over = { ...count, resolved: true, shown: false }
-      writeStored(storageKey, over)
-      setDock(over)
-      return
-    }
-    // After the win, wait to hear whether it was dismissed before deciding.
-    if (count.resolved && !progress) return
-    const next = { ...count, shown: !count.resolved || !progress?.firstWinShownAt }
-    writeStored(storageKey, next)
-    setDock(next)
-  }, [canView, data, progress, storageKey])
-
-  if (!canView || !dock?.shown) return null
+  const dock = useSidebarLaunch()
+  if (!dock?.shown) return null
   // The live page is step 1 and starts done; the bar shows the steps behind you.
   const percent = dock.resolved
     ? 100
@@ -135,13 +145,10 @@ export function LaunchPlanDock() {
 }
 
 /**
- * Whether Help offers the Launch plan page: to an admin of a workspace that
- * had a launch plan, while any of its steps is still open, the optional ones
- * after the first win included.
+ * Help's Launch plan item: shown to an admin of a workspace that had a launch
+ * plan, while any of its steps is still open, the optional ones after the
+ * first win included. It mounts with the menu, so the sidebar never waits on it.
  */
-export function useLaunchPlanInHelp(): boolean {
-  const canView = useCanSeePlan()
-  const data = useSidebarLaunchStatus(canView)
-  if (!canView || !data?.launchWindow) return false
-  return launchPlanHasOpenSteps(data)
+export function LaunchPlanInHelp({ children }: { children: ReactNode }) {
+  return useSidebarLaunch()?.inHelp ? children : null
 }

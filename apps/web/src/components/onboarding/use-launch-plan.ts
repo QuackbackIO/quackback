@@ -12,12 +12,26 @@ export function launchStatusRefetchInterval(data: LaunchStatus | undefined): num
   return isLaunchPlanActive(data) ? 15_000 : false
 }
 
-/** The launch status for Home and the Launch plan page, kept fresh while the plan is open. */
-export function launchStatusQuery() {
+/**
+ * Catch up when the window regains focus only in the launch window, when a
+ * step done in another tab or a first win can change what Home shows.
+ */
+export function refetchInLaunchWindow(query: { state: { data?: LaunchStatus } }): boolean {
+  return query.state.data?.inLaunchWindow === true
+}
+
+/**
+ * The launch status for Home and the Launch plan page, kept fresh while the
+ * plan is open. A read that needs only the launch window (Home's greeting, a
+ * teammate's first run) passes `poll: false`.
+ */
+export function launchStatusQuery({ poll = true }: { poll?: boolean } = {}) {
   return {
     ...adminQueries.onboardingStatus(),
-    refetchInterval: (query: { state: { data?: LaunchStatus } }) =>
-      launchStatusRefetchInterval(query.state.data),
+    refetchOnWindowFocus: refetchInLaunchWindow,
+    refetchInterval: poll
+      ? (query: { state: { data?: LaunchStatus } }) => launchStatusRefetchInterval(query.state.data)
+      : undefined,
   }
 }
 
