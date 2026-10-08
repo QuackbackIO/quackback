@@ -25,6 +25,7 @@ import {
   winOutcome,
   winRules,
 } from '@/lib/server/activation-wins'
+import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 import { principalShownName } from '@/lib/shared/greeting-name'
 
 export interface FirstWinSummary {
@@ -57,12 +58,16 @@ interface Who {
   displayName: string | null
   userName: string | null
   email: string | null
+  userImage: string | null
+  userImageKey: string | null
   avatarUrl: string | null
+  avatarKey: string | null
 }
 
 /**
- * Who acted, by the shown-name rule. A signed-out visitor is marked as one,
- * so a generated name is never read as theirs.
+ * Who acted, by the shown-name rule, with their picture as every other
+ * surface resolves it, an upload first. A signed-out visitor is marked as
+ * one, so a generated name is never read as theirs, and shows no picture.
  */
 function nameOf(row: Who): { name: string | null; avatarUrl: string | null; visitor?: true } {
   const name = principalShownName({
@@ -71,9 +76,14 @@ function nameOf(row: Who): { name: string | null; avatarUrl: string | null; visi
     name: row.userName,
     email: row.email,
   })
-  return row.principalType === 'anonymous'
-    ? { name, avatarUrl: null, visitor: true }
-    : { name, avatarUrl: row.avatarUrl }
+  if (row.principalType === 'anonymous') return { name, avatarUrl: null, visitor: true }
+  const avatarUrl = resolveUserAvatarUrl({
+    userImage: row.userImage,
+    userImageKey: row.userImageKey,
+    principalAvatarUrl: row.avatarUrl,
+    principalAvatarKey: row.avatarKey,
+  })
+  return { name, avatarUrl }
 }
 
 function snippet(text: string | null): string | null {
@@ -90,7 +100,10 @@ export async function firstWinSummary(state: SetupState | null): Promise<FirstWi
     displayName: principal.displayName,
     userName: user.name,
     email: user.email,
+    userImage: user.image,
+    userImageKey: user.imageKey,
     avatarUrl: principal.avatarUrl,
+    avatarKey: principal.avatarKey,
   }
 
   if (outcome === 'customer_support') {

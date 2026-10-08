@@ -25,6 +25,12 @@ vi.mock('@/lib/server/db', async (original) => ({
   ...(await original<typeof import('@/lib/server/db')>()),
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
+// Uploaded pictures are stored by key; this stands in for the storage's public address.
+vi.mock('@/lib/server/storage/s3', async (original) => ({
+  ...(await original<typeof import('@/lib/server/storage/s3')>()),
+  getPublicUrlOrNull: (key: string | null | undefined) =>
+    key ? `https://files.example/${key}` : null,
+}))
 
 import { firstWinSummary } from '../first-win-summary'
 import { detectFirstWin } from '@/lib/server/activation-wins'
@@ -97,6 +103,40 @@ it('names the customer and the idea, never a teammate', async () => {
   })
   expect(summary?.visitor).toBeUndefined()
   expect(summary?.href).toMatch(/^\/admin\/feedback\?post=post_/)
+})
+
+it('shows the picture a customer uploaded, over their provider picture and the stale copy', async () => {
+  const [board] = await testDb
+    .insert(boards)
+    .values({ name: 'Ideas', slug: createId('board') })
+    .returning()
+  const ana = await person('user', 'Ana Silva', `ana-${createId('user')}@northwind.example`)
+  const [row] = await testDb
+    .update(principal)
+    .set({ avatarUrl: 'https://stale.example/ana.png' })
+    .where(eq(principal.id, ana))
+    .returning({ userId: principal.userId })
+  await testDb
+    .update(user)
+    .set({ image: 'https://provider.example/ana.png', imageKey: 'avatars/ana.png' })
+    .where(eq(user.id, row!.userId!))
+  await testDb.insert(posts).values({
+    boardId: board!.id,
+    principalId: ana,
+    title: 'Export to CSV',
+    content: '',
+    createdAt: new Date('2026-10-01T10:00:00Z'),
+  })
+  expect(await firstWinSummary(state(['product_feedback']))).toMatchObject({
+    name: 'Ana Silva',
+    avatarUrl: 'https://files.example/avatars/ana.png',
+  })
+
+  // Without an upload, the provider picture comes before the copy on the principal.
+  await testDb.update(user).set({ imageKey: null }).where(eq(user.id, row!.userId!))
+  expect((await firstWinSummary(state(['product_feedback'])))?.avatarUrl).toBe(
+    'https://provider.example/ana.png'
+  )
 })
 
 it('names a customer vote that came first, and the idea they voted for', async () => {
