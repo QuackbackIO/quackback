@@ -205,6 +205,23 @@ describe('self-hosted ready step', () => {
     expect(hoisted.navigate).not.toHaveBeenCalled()
   })
 
+  // The step swaps in place, so it has to announce itself: back to the top,
+  // focus on its heading, and a title of its own.
+  it('opens at the top with focus on its heading and a title of its own', async () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    renderStep({ managedFieldPaths: [], goals: ['product_feedback'] })
+    expect(document.title).toBe('Name your workspace · Quackback')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Acme is ready' })
+
+    await waitFor(() => expect(heading).toHaveFocus())
+    expect(heading).toHaveAttribute('tabindex', '-1')
+    expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ top: 0 }))
+    expect(document.title).toBe('Acme is ready · Quackback')
+    scrollTo.mockRestore()
+  })
+
   it('lists what was set up for each goal picked', async () => {
     await finishSetup(['product_feedback', 'help_center'], 'Sam Rivera')
 

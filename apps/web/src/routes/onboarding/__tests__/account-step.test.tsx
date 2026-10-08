@@ -351,6 +351,15 @@ describe('account step — a self-hosted first user', () => {
     return screen.getByRole('button', { name: /^create account$/i })
   }
 
+  it('names the browser tab for the step', () => {
+    renderStep(selfHosted())
+    expect(document.title).toBe('Create your account · Quackback')
+    cleanup()
+
+    renderStep(provisioned())
+    expect(document.title).toBe('Sign in · Quackback')
+  })
+
   it('asks for name, email and password in one form', () => {
     const { container } = renderStep(selfHosted())
 

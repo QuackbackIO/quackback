@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { FormattedMessage } from 'react-intl'
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
@@ -61,6 +61,15 @@ export function ReadyStep({
   const navigate = useNavigate()
   const [checks, setChecks] = useState<InstallChecks | null | 'loading'>('loading')
   const [opening, setOpening] = useState(false)
+  const heading = useRef<HTMLHeadingElement>(null)
+
+  // This step replaces the workspace form in place, wherever that form was
+  // scrolled to. Start it at the top, with focus on its heading, so it is
+  // seen and announced as the new screen it is.
+  useEffect(() => {
+    window.scrollTo({ top: 0 })
+    heading.current?.focus({ preventScroll: true })
+  }, [])
 
   useEffect(() => {
     let live = true
@@ -107,7 +116,7 @@ export function ReadyStep({
         aria-hidden="true"
       />
       <div className="mt-5">
-        <OnboardingHeading className="break-words">
+        <OnboardingHeading ref={heading} tabIndex={-1} className="break-words">
           <FormattedMessage
             id="onboarding.ready.title"
             defaultMessage="{name} is {br}ready"

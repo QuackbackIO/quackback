@@ -13,6 +13,7 @@ import {
   OnboardingSplit,
   SETUP_FIELD_CLASS,
   useBrowserHost,
+  useSetupTitle,
 } from '@/components/onboarding/onboarding-split'
 import { PortalPreview } from '@/components/onboarding/portal-preview'
 import { SetupSteps } from '@/components/onboarding/setup-steps'
@@ -73,12 +74,22 @@ function useAdvanceOnAuthSuccess(
 function AccountFrame({
   children,
   workspaceName,
+  purpose = 'signIn',
 }: {
   children: React.ReactNode
   workspaceName?: string
+  /** What the screen is for, which names the browser tab. */
+  purpose?: 'create' | 'signIn'
 }) {
   const intl = useIntl()
   const host = useBrowserHost()
+  useSetupTitle(
+    intl.formatMessage(
+      purpose === 'create'
+        ? { id: 'onboarding.title.account', defaultMessage: 'Create your account · Quackback' }
+        : { id: 'onboarding.title.signIn', defaultMessage: 'Sign in · Quackback' }
+    )
+  )
   return (
     <OnboardingSplit
       panel={
@@ -395,7 +406,7 @@ function FirstAdminStep({ onSignIn }: { onSignIn: () => void }) {
   }
 
   return (
-    <AccountFrame>
+    <AccountFrame purpose="create">
       <SetupSteps current="account" />
       <div className="mt-8">
         <OnboardingHeading>
@@ -649,7 +660,7 @@ function MethodsStep({
   onSignIn: () => void
 }) {
   return (
-    <AccountFrame workspaceName={workspaceName}>
+    <AccountFrame workspaceName={workspaceName} purpose="create">
       <SetupSteps current="account" />
       <div className="mt-8 mb-8">
         <OnboardingHeading>

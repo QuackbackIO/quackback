@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode, type Ref } from 'react'
 import { cn } from '@/lib/shared/utils'
 
 /**
@@ -36,18 +36,25 @@ export function OnboardingSplit({
   )
 }
 
-/** The big two-line setup heading. */
+/** The big setup heading. */
 export function OnboardingHeading({
   children,
   className,
+  ref,
+  tabIndex,
 }: {
   children: ReactNode
   className?: string
+  ref?: Ref<HTMLHeadingElement>
+  /** -1 lets a step move focus here when it appears in place. */
+  tabIndex?: number
 }) {
   return (
     <h1
+      ref={ref}
+      tabIndex={tabIndex}
       className={cn(
-        'm-0 text-[40px] leading-[1.05] font-extrabold tracking-[-0.03em] sm:text-[44px]',
+        'm-0 text-[40px] leading-[1.05] font-extrabold tracking-[-0.03em] outline-none sm:text-[44px]',
         className
       )}
     >
@@ -123,4 +130,19 @@ export function useBrowserHost(): string {
   const [host, setHost] = useState('')
   useEffect(() => setHost(window.location.host), [])
   return host
+}
+
+/**
+ * Names the browser tab for a setup screen, and gives the previous title back
+ * when the screen goes. The steps change in place, so the title is the one
+ * thing that tells a screen reader or a row of tabs which step this is.
+ */
+export function useSetupTitle(title: string): void {
+  useEffect(() => {
+    const previous = document.title
+    document.title = title
+    return () => {
+      document.title = previous
+    }
+  }, [title])
 }

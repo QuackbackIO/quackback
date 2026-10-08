@@ -11,6 +11,7 @@ import {
   SETUP_FIELD_CLASS,
   SetupActions,
   useBrowserHost,
+  useSetupTitle,
 } from '@/components/onboarding/onboarding-split'
 import { PortalPreview } from '@/components/onboarding/portal-preview'
 import { SetupSteps } from '@/components/onboarding/setup-steps'
@@ -297,6 +298,17 @@ function WorkspaceNameStep({
   const [goalsRequired, setGoalsRequired] = useState(false)
   const [ready, setReady] = useState<{ name: string; goals: OnboardingOutcome[] } | null>(null)
   const nameValid = workspaceName.trim().length >= 2
+  useSetupTitle(
+    ready
+      ? intl.formatMessage(
+          { id: 'onboarding.title.ready', defaultMessage: '{name} is ready · Quackback' },
+          { name: ready.name }
+        )
+      : intl.formatMessage({
+          id: 'onboarding.title.workspace',
+          defaultMessage: 'Name your workspace · Quackback',
+        })
+  )
 
   useEffect(() => {
     try {
