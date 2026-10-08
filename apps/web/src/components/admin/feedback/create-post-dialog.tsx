@@ -116,7 +116,8 @@ export function CreatePostDialog({
         boardId: data.boardId,
         statusId: data.statusId,
         tagIds: data.tagIds,
-        contentJson,
+        // No details written means no document: the post carries its title alone.
+        ...(contentJson ? { contentJson } : {}),
         authorPrincipalId,
       } as CreatePostInput & { authorPrincipalId?: string },
       {
