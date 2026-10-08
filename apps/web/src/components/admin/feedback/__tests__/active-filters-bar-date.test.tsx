@@ -5,7 +5,7 @@
  * day as written, for every viewer.
  */
 import { render, screen, cleanup } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { restoreRuntimeLocale, setRuntimeLocale } from '@/test/runtime-locale'
 import { ActiveFiltersBar } from '../active-filters-bar'
 import type { InboxFilters } from '../use-inbox-filters'
@@ -13,10 +13,14 @@ import type { InboxFilters } from '../use-inbox-filters'
 afterEach(() => {
   cleanup()
   restoreRuntimeLocale()
+  vi.useRealTimers()
 })
 
 describe('ActiveFiltersBar date chip', () => {
   it('shows a date filter as the day it names, west of UTC', () => {
+    // Keep Oct 1 from coinciding with a relative preset as the calendar advances.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-15T12:00:00Z'))
     setRuntimeLocale('en-US', 'America/Los_Angeles')
     render(
       <ActiveFiltersBar
