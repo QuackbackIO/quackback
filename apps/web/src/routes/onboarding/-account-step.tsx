@@ -224,6 +224,10 @@ function MethodsStep({
   authConfig: AccountAuthConfig
   workspaceName?: string
 }) {
+  const [signingIn, setSigningIn] = useState(false)
+  if (signingIn) {
+    return <ReturningSignIn authConfig={authConfig} onBack={() => setSigningIn(false)} />
+  }
   return (
     <StepCard>
       <div className="mb-6 text-center">
@@ -261,6 +265,67 @@ function MethodsStep({
         workspaceName={workspaceName}
         callbackUrl={ONBOARDING_CALLBACK}
       />
+      <p className="mt-6 text-center text-sm text-muted-foreground">
+        <FormattedMessage
+          id="onboarding.account.startedSetup"
+          defaultMessage="Already started setting up?"
+        />{' '}
+        <button
+          type="button"
+          onClick={() => setSigningIn(true)}
+          className="font-medium text-foreground underline-offset-4 hover:underline"
+        >
+          <FormattedMessage id="onboarding.account.signIn" defaultMessage="Sign in" />
+        </button>
+      </p>
+    </StepCard>
+  )
+}
+
+/**
+ * Someone created their account here, then was signed out before setup
+ * finished. Nobody is admin yet, so the wizard still offers a new account, and
+ * that form would only refuse their address. They sign in with every method
+ * this install can take, including a provider their account may be linked to,
+ * and the wizard carries on from the workspace step.
+ */
+function ReturningSignIn({
+  authConfig,
+  onBack,
+}: {
+  authConfig: AccountAuthConfig
+  onBack: () => void
+}) {
+  return (
+    <StepCard>
+      <div className="mb-6 text-center">
+        <h1 className="text-2xl font-bold">
+          <FormattedMessage id="onboarding.account.returning.title" defaultMessage="Welcome back" />
+        </h1>
+        <p className="mt-2 text-muted-foreground">
+          <FormattedMessage
+            id="onboarding.account.returning.lead"
+            defaultMessage="Sign in with the account you created here to finish setting up."
+          />
+        </p>
+      </div>
+      <PortalAuthFormInline
+        mode="login"
+        authConfig={{ ...authConfig, oauth: authConfig.signInOAuth ?? authConfig.oauth }}
+        callbackUrl={ONBOARDING_CALLBACK}
+      />
+      <p className="mt-6 text-center">
+        <button
+          type="button"
+          onClick={onBack}
+          className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        >
+          <FormattedMessage
+            id="onboarding.account.returning.back"
+            defaultMessage="Create a new account instead"
+          />
+        </button>
+      </p>
     </StepCard>
   )
 }

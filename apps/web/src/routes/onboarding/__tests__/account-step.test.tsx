@@ -356,6 +356,23 @@ describe('account step — a self-hosted first user', () => {
     expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument()
   })
 
+  // Created here, then signed out before setup finished: signing up again
+  // would only refuse the address, so there is a way to sign back in with the
+  // methods the install takes, providers included.
+  it('lets someone who already started setup sign back in', () => {
+    const props = selfHosted()
+    props.authConfig.signInOAuth = { password: true, github: true }
+    renderStep(props)
+
+    fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }))
+
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Welcome back')
+    expect(screen.getByRole('button', { name: /sign in with github/i })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /create a new account instead/i }))
+    expect(screen.queryByRole('button', { name: /sign in with github/i })).toBeNull()
+  })
+
   it('drops the password form when an unclaimed workspace has password off', () => {
     const props = selfHosted()
     props.authConfig.oauth = { ...DEFAULT_AUTH_CONFIG.oauth, password: false, magicLink: true }
