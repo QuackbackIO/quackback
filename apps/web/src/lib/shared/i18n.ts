@@ -178,12 +178,26 @@ export function isUnsubscribeMessage(key: string): boolean {
   return key.startsWith(UNSUBSCRIBE_MESSAGE_PREFIX)
 }
 
-/** Strings no shared page seeds: each belongs to one lazy chunk or one page. */
-function isPageScopedMessage(key: string): boolean {
-  return isViewerMessage(key) || isUnsubscribeMessage(key)
+/**
+ * Key prefixes only the setup wizard renders. The wizard seeds its own slice
+ * ({@link loadOnboardingMessages}), so the admin catalog leaves these out
+ * rather than carrying them in every admin page.
+ */
+export const SETUP_WIZARD_MESSAGE_PREFIXES = [
+  'onboarding.account.',
+  'onboarding.workspace.',
+] as const
+
+export function isSetupWizardMessage(key: string): boolean {
+  return SETUP_WIZARD_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
 }
 
-/** A catalog without the viewer's or the unsubscribe page's strings, for seeding a page. */
+/** Strings no shared page seeds: each belongs to one lazy chunk or one page. */
+function isPageScopedMessage(key: string): boolean {
+  return isViewerMessage(key) || isUnsubscribeMessage(key) || isSetupWizardMessage(key)
+}
+
+/** A catalog without the strings one page or lazy chunk seeds for itself, for seeding a page. */
 export function withoutPageScopedMessages(all: Record<string, string>): Record<string, string> {
   const subset: Record<string, string> = {}
   for (const [key, value] of Object.entries(all)) {
