@@ -11,6 +11,7 @@ import {
   OnboardingLead,
   OnboardingPreviewPanel,
   OnboardingSplit,
+  SETUP_AUTH_FORM_CLASS,
   SETUP_CTA_CLASS,
   SETUP_FIELD_CLASS,
   useBrowserHost,
@@ -122,7 +123,7 @@ function AccountFrame({
 }
 
 /** The lighter heading the sign-in screens use: their titles are sentences. */
-const SENTENCE_HEADING = 'text-[30px] leading-[1.12] tracking-[-0.02em] sm:text-[34px]'
+const SENTENCE_HEADING = 'text-[30px] leading-[1.12] tracking-[-0.02em]! sm:text-[34px]'
 
 /**
  * Which first screen this workspace has earned.
@@ -262,12 +263,14 @@ function SignInOnlyStep({
       {/* The one component that already renders exactly the methods a
           workspace allows. Login mode: the owner has an account here
           already, and nobody else is meant to create one on this screen. */}
-      <PortalAuthFormInline
-        mode="login"
-        authConfig={authConfig}
-        workspaceName={workspaceName}
-        callbackUrl={ONBOARDING_CALLBACK}
-      />
+      <div className={cn('max-w-[440px]', SETUP_AUTH_FORM_CLASS)}>
+        <PortalAuthFormInline
+          mode="login"
+          authConfig={authConfig}
+          workspaceName={workspaceName}
+          callbackUrl={ONBOARDING_CALLBACK}
+        />
+      </div>
 
       <p className="mt-6 text-sm text-muted-foreground">
         <FormattedMessage
@@ -626,7 +629,7 @@ function ReturningSignIn({
           />
         </OnboardingLead>
       </div>
-      <div className="max-w-[440px]">
+      <div className={cn('max-w-[440px]', SETUP_AUTH_FORM_CLASS)}>
         <PortalAuthFormInline
           mode="login"
           authConfig={{ ...authConfig, oauth: authConfig.signInOAuth ?? authConfig.oauth }}
@@ -683,7 +686,7 @@ function MethodsStep({
           />
         </OnboardingLead>
       </div>
-      <div className="max-w-[440px]">
+      <div className={cn('max-w-[440px]', SETUP_AUTH_FORM_CLASS)}>
         <PortalAuthFormInline
           // Nobody has an account on this workspace yet, so the form says "Sign
           // up", not "Sign in". `openSignup` is forced on because the server

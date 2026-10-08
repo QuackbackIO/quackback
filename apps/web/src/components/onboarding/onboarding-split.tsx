@@ -54,7 +54,9 @@ export function OnboardingHeading({
       ref={ref}
       tabIndex={tabIndex}
       className={cn(
-        'm-0 text-[40px] leading-[1.05] font-extrabold tracking-[-0.03em] outline-none sm:text-[44px]',
+        // The weight and tracking are marked important: an unlayered global
+        // h1-h3 rule sets both, and unlayered styles beat every utility.
+        'm-0 text-[40px] leading-[1.05] font-extrabold! tracking-[-0.03em]! outline-none sm:text-[44px]',
         className
       )}
     >
@@ -68,7 +70,7 @@ export function OnboardingHeading({
  * focus ring beside its red border, so focus never vanishes into the error.
  */
 export const SETUP_FIELD_CLASS =
-  'h-12 rounded-xl px-4 text-base aria-invalid:focus-visible:ring-2 aria-invalid:focus-visible:ring-ring aria-invalid:focus-visible:ring-offset-2 aria-invalid:focus-visible:ring-offset-background'
+  'h-12 rounded-xl px-4 text-base md:text-base aria-invalid:focus-visible:ring-2 aria-invalid:focus-visible:ring-ring aria-invalid:focus-visible:ring-offset-2 aria-invalid:focus-visible:ring-offset-background'
 
 /**
  * A setup step's main button: a 48px pill with 16px text. A button that is
@@ -77,6 +79,18 @@ export const SETUP_FIELD_CLASS =
  */
 export const SETUP_CTA_CLASS =
   'h-12 w-full rounded-full text-base disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 aria-busy:disabled:bg-primary aria-busy:disabled:text-primary-foreground'
+
+/**
+ * Sizes the shared sign-in form like the setup form beside it: 48px fields
+ * and full-width buttons, 16px text. A submit button that is working (it shows
+ * a spinner) keeps its colour; one that cannot be pressed yet turns muted.
+ */
+export const SETUP_AUTH_FORM_CLASS = cn(
+  '[&_[data-slot=input]]:h-12 [&_[data-slot=input]]:rounded-xl [&_[data-slot=input]]:px-4 [&_[data-slot=input]]:text-base',
+  '[&_[data-slot=button].w-full]:h-12 [&_[data-slot=button].w-full]:rounded-full [&_[data-slot=button].w-full]:text-base',
+  '[&_[data-slot=button][type=submit]:disabled]:bg-muted [&_[data-slot=button][type=submit]:disabled]:text-muted-foreground [&_[data-slot=button][type=submit]:disabled]:opacity-100',
+  '[&_[data-slot=button][type=submit]:disabled:has(.animate-spin)]:bg-primary [&_[data-slot=button][type=submit]:disabled:has(.animate-spin)]:text-primary-foreground'
+)
 
 /** The lead paragraph under a setup heading. */
 export function OnboardingLead({

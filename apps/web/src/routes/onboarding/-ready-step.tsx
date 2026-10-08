@@ -39,6 +39,10 @@ const GOAL_RESULTS: Partial<Record<OnboardingOutcome, { id: string; defaultMessa
 /** A list row: the loaded rows and their loading placeholders share it. */
 const ROW = 'flex items-start gap-3 text-[15px] leading-normal'
 
+/** A section's small uppercase title. Weight and tracking are marked
+ *  important because an unlayered global h1-h3 rule sets both. */
+const EYEBROW = 'text-xs font-medium! tracking-wide! text-muted-foreground uppercase'
+
 /** Past this many characters the headline steps down a size. */
 const LONG_NAME = 20
 
@@ -152,7 +156,7 @@ export function ReadyStep({
       </div>
 
       <section className="mt-7 max-w-[440px]">
-        <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+        <h2 className={EYEBROW}>
           <FormattedMessage id="onboarding.ready.madeTitle" defaultMessage="Set up for you" />
         </h2>
         <ul className="mt-3 flex flex-col gap-2.5">
@@ -209,7 +213,7 @@ function InstallSection({ checks, offset }: { checks: InstallChecks | 'loading';
     // keeps its height and the button below does not move when they resolve.
     return (
       <section className="mt-7 max-w-[440px]" aria-busy="true">
-        <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+        <h2 className={EYEBROW}>
           <FormattedMessage id="onboarding.ready.installTitle" defaultMessage="Your install" />
         </h2>
         <p role="status" className="sr-only">
@@ -316,7 +320,7 @@ function InstallSection({ checks, offset }: { checks: InstallChecks | 'loading';
 
   return (
     <section className="mt-7 max-w-[440px]">
-      <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+      <h2 className={EYEBROW}>
         <FormattedMessage id="onboarding.ready.installTitle" defaultMessage="Your install" />
       </h2>
       <ul className="mt-3 flex flex-col gap-3">

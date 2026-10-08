@@ -55,7 +55,7 @@ function NoAccessStep() {
   return (
     <OnboardingSplit panel={<NoAccessPanel />}>
       <div className="max-w-[440px]">
-        <OnboardingHeading className="text-[30px] leading-[1.12] tracking-[-0.02em] sm:text-[34px]">
+        <OnboardingHeading className="text-[30px] leading-[1.12] tracking-[-0.02em]! sm:text-[34px]">
           {claimedByOther ? (
             <FormattedMessage
               id="onboarding.noAccess.title"

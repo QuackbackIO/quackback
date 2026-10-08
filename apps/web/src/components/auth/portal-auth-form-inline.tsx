@@ -870,7 +870,8 @@ export function PortalAuthFormInline({
                   <ArrowPathIcon className="h-4 w-4 animate-spin" />
                 ) : (
                   <>
-                    <FormattedMessage id="portal.auth.continue" defaultMessage="Continue" /> &rarr;
+                    <FormattedMessage id="portal.auth.continue" defaultMessage="Continue" />{' '}
+                    <span aria-hidden="true">&rarr;</span>
                   </>
                 )}
               </Button>

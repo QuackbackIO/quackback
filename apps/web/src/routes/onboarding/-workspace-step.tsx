@@ -79,7 +79,7 @@ function CloudIdentityUnavailable() {
       panel={<CloudPreviewPanel name="" hostname="" />}
       footer={<SignOutButton size="sm" className="-ms-3" />}
     >
-      <OnboardingHeading className="text-[30px] leading-[1.12] tracking-[-0.02em] sm:text-[34px]">
+      <OnboardingHeading className="text-[30px] leading-[1.12] tracking-[-0.02em]! sm:text-[34px]">
         Workspace details are temporarily unavailable
       </OnboardingHeading>
       <OnboardingLead>

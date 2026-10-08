@@ -213,6 +213,14 @@ describe('account step — a workspace that does not accept passwords', () => {
     expect(screen.getByRole('button', { name: /sign in with github/i })).toBeInTheDocument()
   })
 
+  // The arrow is decoration: a screen reader should hear "Continue", not
+  // "Continue right arrow".
+  it('names the continue button without its arrow', () => {
+    renderStep(provisioned())
+
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument()
+  })
+
   it('drops a social button the config turns off', () => {
     const props = provisioned()
     props.authConfig.oauth = { ...PROVISIONED_OAUTH, github: false }
