@@ -1448,6 +1448,8 @@
   "onboarding.home.later": "لاحقًا: {items}",
   "onboarding.home.laterMore": "{count} أخرى",
   "onboarding.home.allSteps": "كل الخطوات",
+  "onboarding.home.announce.stepDone": "تم: {done}. التالي: {next}",
+  "onboarding.home.announce.next": "التالي: {next}",
   "onboarding.task.create-board.outcome": "حيث يشارك العملاء أفكارهم",
   "onboarding.task.create-board.private.outcome": "حيث يشارك فريقك أفكاره",
   "onboarding.task.distribute-feedback.outcome": "يجد العملاء لوحتك",

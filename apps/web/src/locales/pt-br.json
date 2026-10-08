@@ -1448,6 +1448,8 @@
   "onboarding.home.later": "Depois: {items}",
   "onboarding.home.laterMore": "mais {count}",
   "onboarding.home.allSteps": "Todas as etapas",
+  "onboarding.home.announce.stepDone": "{done}: concluído. Próximo: {next}",
+  "onboarding.home.announce.next": "Próximo: {next}",
   "onboarding.task.create-board.outcome": "Onde os clientes compartilham ideias",
   "onboarding.task.create-board.private.outcome": "Onde sua equipe compartilha ideias",
   "onboarding.task.distribute-feedback.outcome": "Os clientes encontram seu quadro",

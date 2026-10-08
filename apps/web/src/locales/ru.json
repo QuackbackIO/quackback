@@ -1448,6 +1448,8 @@
   "onboarding.home.later": "Позже: {items}",
   "onboarding.home.laterMore": "ещё {count}",
   "onboarding.home.allSteps": "Все шаги",
+  "onboarding.home.announce.stepDone": "{done}: готово. Далее: {next}",
+  "onboarding.home.announce.next": "Далее: {next}",
   "onboarding.task.create-board.outcome": "Здесь клиенты делятся идеями",
   "onboarding.task.create-board.private.outcome": "Здесь команда делится идеями",
   "onboarding.task.distribute-feedback.outcome": "Клиенты находят вашу доску",

@@ -65,6 +65,7 @@ vi.mock('@/lib/server/functions/admin', () => ({ setLaunchTaskResolutionFn: vi.f
 vi.mock('../product-tour', () => ({ useProductTour: () => ({ start: hoisted.start }) }))
 
 import { HomeGettingStarted, HomeTourOffer } from '../home-launch-plan'
+import { markPublicBoardLinkCopiedFn } from '@/lib/server/functions/activation'
 
 const NOW = Date.now()
 const OPEN = {
@@ -283,5 +284,88 @@ describe('Home first-run cards', () => {
     await waitFor(() => expect(client.getQueryData(['onboarding', 'progress'])).toBeDefined())
     await screen.findByText('Launch plan · Step 2 of 3')
     expect(screen.queryByText('New here? Take the 60-second tour')).toBeNull()
+  })
+})
+
+describe('Home changing in place', () => {
+  const feedback = (overrides: Partial<LaunchStatus> = {}) =>
+    status({
+      goals: ['product_feedback'],
+      publicBoardId: 'board_1',
+      publicBoardPath: '/?board=feedback',
+      ...overrides,
+    })
+  const politeText = () => document.querySelector('[aria-live="polite"]')?.textContent
+
+  beforeEach(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+      configurable: true,
+    })
+    vi.mocked(markPublicBoardLinkCopiedFn).mockImplementation(async () => {
+      hoisted.status = feedback({ publicBoardLinkCopiedAt: new Date().toISOString() })
+      return { ok: true } as never
+    })
+  })
+
+  it('moves focus to the next step and says so when Copy board link completes a step', async () => {
+    hoisted.status = feedback()
+    mount({ tour: false })
+    const copy = await screen.findByRole('button', { name: 'Copy board link' })
+    copy.focus()
+    fireEvent.click(copy)
+    const next = await screen.findByRole('heading', { name: 'A customer posts an idea' })
+    await waitFor(() => expect(document.activeElement).toBe(next))
+    expect(politeText()).toBe('Share your board link done. Next: A customer posts an idea')
+  })
+
+  it('moves focus to the first win when it arrives while focus is in the plan', async () => {
+    hoisted.status = feedback({ publicBoardLinkCopiedAt: new Date().toISOString() })
+    hoisted.card.mockResolvedValue({
+      summary: {
+        kind: 'idea',
+        name: 'Snowy Lark',
+        visitor: true,
+        domain: null,
+        subject: 'Export to CSV',
+        avatarUrl: null,
+        at: new Date(NOW).toISOString(),
+        href: '/admin/feedback?post=post_1',
+      },
+    })
+    const { client } = mount({ tour: false })
+    ;(await screen.findByRole('button', { name: 'Copy board link' })).focus()
+    hoisted.status = feedback({ hasFirstWin: true })
+    await client.invalidateQueries({ queryKey: ['admin', 'onboarding'] })
+    const win = await screen.findByRole('heading', { name: 'Your first customer idea is in' })
+    await waitFor(() => expect(document.activeElement).toBe(win))
+    expect(politeText()).toBe('Your first customer idea is in')
+  })
+
+  it('moves focus to the plan row after Dismiss, and says what is left', async () => {
+    hoisted.status = feedback({ hasFirstWin: true })
+    hoisted.card.mockResolvedValue({ summary: null })
+    mount({ tour: false })
+    const dismiss = await screen.findByRole('button', { name: 'Dismiss' })
+    dismiss.focus()
+    fireEvent.click(dismiss)
+    const done = await screen.findByRole('heading', { name: 'Launch plan done.' })
+    await waitFor(() => expect(document.activeElement).toBe(done))
+    expect(politeText()).toBe('Launch plan done. 4 optional steps')
+  })
+
+  it('leaves focus alone when it was somewhere else on Home', async () => {
+    hoisted.status = feedback({ publicBoardLinkCopiedAt: new Date().toISOString() })
+    hoisted.card.mockResolvedValue({ summary: null })
+    const { client } = mount({ tour: false })
+    await screen.findByRole('button', { name: 'Copy board link' })
+    const composer = document.createElement('textarea')
+    document.body.appendChild(composer)
+    composer.focus()
+    hoisted.status = feedback({ hasFirstWin: true })
+    await client.invalidateQueries({ queryKey: ['admin', 'onboarding'] })
+    await screen.findByRole('heading', { name: 'Your first customer is here' })
+    expect(document.activeElement).toBe(composer)
+    composer.remove()
   })
 })

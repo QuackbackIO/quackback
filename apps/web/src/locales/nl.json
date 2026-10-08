@@ -1448,6 +1448,8 @@
   "onboarding.home.later": "Later: {items}",
   "onboarding.home.laterMore": "{count} meer",
   "onboarding.home.allSteps": "Alle stappen",
+  "onboarding.home.announce.stepDone": "{done} klaar. Volgende: {next}",
+  "onboarding.home.announce.next": "Volgende: {next}",
   "onboarding.task.create-board.outcome": "Waar klanten ideeën delen",
   "onboarding.task.create-board.private.outcome": "Waar je team ideeën deelt",
   "onboarding.task.distribute-feedback.outcome": "Klanten vinden je bord",

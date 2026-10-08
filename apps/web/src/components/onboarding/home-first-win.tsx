@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import { FormattedMessage, useIntl } from 'react-intl'
+import { FormattedMessage, useIntl, type IntlShape } from 'react-intl'
 import { CheckCircleIcon, UserIcon } from '@heroicons/react/24/outline'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -25,6 +25,13 @@ const TITLE = {
   },
   subscriber: { id: 'onboarding.win.title.subscriber', defaultMessage: 'Your first subscriber' },
 } as const
+
+/** The first win's title, as its card says it. */
+export function winTitleMessage(summary: FirstWinSummary | null) {
+  return summary
+    ? TITLE[summary.kind]
+    : { id: 'onboarding.win.generic', defaultMessage: 'Your first customer is here' }
+}
 
 const VIEW = {
   idea: { id: 'onboarding.win.view.idea', defaultMessage: 'View idea' },
@@ -138,14 +145,7 @@ export function HomeFirstWin({
               tabIndex={-1}
               className="text-lg font-semibold text-pretty outline-none"
             >
-              {summary ? (
-                <FormattedMessage {...TITLE[summary.kind]} />
-              ) : (
-                <FormattedMessage
-                  id="onboarding.win.generic"
-                  defaultMessage="Your first customer is here"
-                />
-              )}
+              <FormattedMessage {...winTitleMessage(summary)} />
             </h2>
             {summary ? <WhoLine summary={summary} /> : null}
           </div>
@@ -172,6 +172,17 @@ export function HomeFirstWin({
   )
 }
 
+const PLAN_DONE = { id: 'onboarding.home.planDone', defaultMessage: 'Launch plan done.' } as const
+const PLAN_DONE_STEPS = {
+  id: 'onboarding.home.planDoneSteps',
+  defaultMessage: '{count, plural, one {# optional step} other {# optional steps}}',
+} as const
+
+/** The finished plan's row as one sentence, for saying it aloud. */
+export function planDoneText(intl: IntlShape, optional: number): string {
+  return `${intl.formatMessage(PLAN_DONE)} ${intl.formatMessage(PLAN_DONE_STEPS, { count: optional })}`
+}
+
 /**
  * Home's quiet line once the launch plan is done, while optional steps are
  * still open: it leads to the Launch plan page, where they are.
@@ -188,17 +199,13 @@ export function HomePlanDone({ optional }: { optional: number }) {
         tabIndex={-1}
         className="font-medium text-foreground outline-none"
       >
-        <FormattedMessage id="onboarding.home.planDone" defaultMessage="Launch plan done." />
+        <FormattedMessage {...PLAN_DONE} />
       </h2>{' '}
       <Link
         to="/admin/getting-started"
         className="underline underline-offset-2 hover:text-foreground"
       >
-        <FormattedMessage
-          id="onboarding.home.planDoneSteps"
-          defaultMessage="{count, plural, one {# optional step} other {# optional steps}}"
-          values={{ count: optional }}
-        />
+        <FormattedMessage {...PLAN_DONE_STEPS} values={{ count: optional }} />
       </Link>
     </section>
   )

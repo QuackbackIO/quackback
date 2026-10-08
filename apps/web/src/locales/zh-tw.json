@@ -1448,6 +1448,8 @@
   "onboarding.home.later": "稍後：{items}",
   "onboarding.home.laterMore": "另外 {count} 項",
   "onboarding.home.allSteps": "全部步驟",
+  "onboarding.home.announce.stepDone": "{done}已完成。下一步：{next}",
+  "onboarding.home.announce.next": "下一步：{next}",
   "onboarding.task.create-board.outcome": "客戶分享想法的地方",
   "onboarding.task.create-board.private.outcome": "團隊分享想法的地方",
   "onboarding.task.distribute-feedback.outcome": "客戶能找到你的看板",

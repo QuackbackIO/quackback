@@ -102,6 +102,27 @@ function LaterItems({ intl, tasks }: { intl: IntlShape; tasks: LaunchTask[] }) {
   )
 }
 
+/** What to say when the plan moves to its next step: the one just done, then the next. */
+export function stepAnnouncement(
+  intl: IntlShape,
+  previous: LaunchTask | null,
+  next: LaunchTask,
+  steps: readonly LaunchTask[]
+): string {
+  const nextLabel = intl.formatMessage(launchTaskMessage(next))
+  const before = previous ? steps.find((task) => task.id === previous.id) : undefined
+  if (before && before.id !== next.id && (before.isCompleted || before.isReady)) {
+    return intl.formatMessage(
+      { id: 'onboarding.home.announce.stepDone', defaultMessage: '{done} done. Next: {next}' },
+      { done: intl.formatMessage(launchTaskMessage(before)), next: nextLabel }
+    )
+  }
+  return intl.formatMessage(
+    { id: 'onboarding.home.announce.next', defaultMessage: 'Next: {next}' },
+    { next: nextLabel }
+  )
+}
+
 /**
  * Home's launch plan, in one card: the three-step path to a first win with
  * the current step open (why it matters, its one action and a live picture
