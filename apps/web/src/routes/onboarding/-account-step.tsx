@@ -6,19 +6,8 @@ import { PortalAuthFormInline } from '@/components/auth/portal-auth-form-inline'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { startOidcSignIn } from '@/lib/client/start-oidc-sign-in'
 import type { WorkspaceClaim } from '@/lib/server/functions/onboarding'
-import type { OidcSignInButton } from '@/lib/shared/oidc-sign-in-button'
+import type { AccountAuthConfig } from './-account-auth-config'
 import { track } from '@/lib/client/analytics'
-
-/** Sign-in methods the workspace actually allows, in the shape
- *  `PortalAuthFormInline` already consumes on the portal. */
-interface AccountAuthConfig {
-  found: boolean
-  oauth: Record<string, boolean | undefined>
-  openSignup?: boolean
-  oidcProviders?: OidcSignInButton[]
-  registeredAuthProviders?: string[]
-  twoFactorRequired?: boolean
-}
 
 export interface AccountStepProps {
   ssoEnabled: boolean
@@ -218,10 +207,13 @@ function SignInOnlyStep({
 }
 
 /**
- * Nobody owns setup yet, but the workspace does not accept passwords, so
- * the first user arrives through whichever method it does accept. Magic
- * link and social sign-in both create the account on first use, and the
- * wizard promotes that first user to admin exactly as before.
+ * Nobody owns setup yet, so the first account created here becomes the admin.
+ *
+ * Only the workspace's email methods are offered: a password, or an emailed
+ * link where passwords are off. Social and OIDC tiles are left out. Before
+ * setup no provider has credentials this workspace can vouch for, so a tile
+ * here is a button that fails; providers configured later appear on the
+ * sign-in page as usual.
  */
 function MethodsStep({
   authConfig,
@@ -239,7 +231,7 @@ function MethodsStep({
         <p className="mt-2 text-muted-foreground">
           <FormattedMessage
             id="onboarding.account.methodsDescription"
-            defaultMessage="Continue with one of your workspace's sign-in methods to set it up."
+            defaultMessage="Create your admin account to set up this workspace."
           />
         </p>
       </div>
@@ -251,7 +243,12 @@ function MethodsStep({
         // a workspace still open to be claimed would leave one nobody can ever
         // set up. This screen is only reached when it IS still open.
         mode="signup"
-        authConfig={{ ...authConfig, openSignup: true }}
+        authConfig={{
+          ...authConfig,
+          oauth: { password: authConfig.oauth.password, magicLink: authConfig.oauth.magicLink },
+          oidcProviders: undefined,
+          openSignup: true,
+        }}
         workspaceName={workspaceName}
         callbackUrl={ONBOARDING_CALLBACK}
       />
