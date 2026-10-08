@@ -6,15 +6,13 @@ import { adminQueries } from '@/lib/client/queries/admin'
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { useSessionContext, useUserRole } from '@/lib/client/hooks/use-root-context'
 import type { OnboardingProgress } from '@/lib/server/onboarding-progress'
-import {
-  launchPlanHasOpenSteps,
-  launchPlanProgress,
-  type LaunchStatus,
-} from '@/lib/shared/launch-checklist'
+import type { LaunchStatus } from '@/lib/shared/launch-checklist'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { isAdmin } from '@/lib/shared/roles'
 
-type SidebarLaunch = ReturnType<typeof launchPlanProgress> & {
+type Checklist = typeof import('@/lib/shared/launch-checklist')
+
+type SidebarLaunch = ReturnType<Checklist['launchPlanProgress']> & {
   /** Whether the dock shows: the plan is open, or its first win is not dismissed yet. */
   shown: boolean
   /** Whether Help offers the Launch plan page: a step of the plan is still open. */
@@ -52,12 +50,13 @@ function writeStored(key: string, value: SidebarLaunch) {
 
 /** The sidebar's view of the plan from a loaded launch status. */
 function sidebarLaunch(
+  checklist: Checklist,
   status: LaunchStatus,
   progress: OnboardingProgress | undefined,
   stored: SidebarLaunch | null
 ): SidebarLaunch {
-  const count = launchPlanProgress(status)
-  const inHelp = Boolean(status.launchWindow) && launchPlanHasOpenSteps(status)
+  const count = checklist.launchPlanProgress(status)
+  const inHelp = Boolean(status.launchWindow) && checklist.launchPlanHasOpenSteps(status)
   // Outside the launch window the plan is over, whatever its state.
   if (status.inLaunchWindow === false) return { ...count, resolved: true, shown: false, inHelp }
   if (!count.resolved) return { ...count, shown: true, inHelp }
@@ -92,9 +91,18 @@ function useSidebarLaunch(): SidebarLaunch | null {
       setState(stored)
       return
     }
-    const next = sidebarLaunch(data, progress, stored)
-    writeStored(storageKey, next)
-    setState(next)
+    // The checklist is the whole task catalogue: it loads only once a page has
+    // loaded the status, so the rail never carries it.
+    let active = true
+    void import('@/lib/shared/launch-checklist').then((checklist) => {
+      if (!active) return
+      const next = sidebarLaunch(checklist, data, progress, stored)
+      writeStored(storageKey, next)
+      setState(next)
+    })
+    return () => {
+      active = false
+    }
   }, [data, progress, storageKey])
 
   return storageKey ? state : null
