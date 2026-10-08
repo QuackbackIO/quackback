@@ -164,6 +164,7 @@ function AdminHome() {
             actions={<HomeActions flags={flags} />}
             header={header}
             banner={plan}
+            emptyStates={!planLeads}
           />
           {tourOffer}
         </div>

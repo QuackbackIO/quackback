@@ -43,10 +43,16 @@ export function OverviewDashboard({
   actions,
   banner,
   header,
+  emptyStates = true,
 }: {
   actions?: ReactNode
   banner?: ReactNode
   header?: ReactNode
+  /**
+   * Say where each module's first item lands while there is no real data.
+   * Off while the owner's launch plan leads Home: the plan is the one guide.
+   */
+  emptyStates?: boolean
 }) {
   const overview = useQuery(adminOverviewQueries.get())
   const [filter, setFilter] = useState<Filter>('all')
@@ -99,7 +105,9 @@ export function OverviewDashboard({
           </Quiet>
         </SettingsCard>
       ) : data?.hasRealData === false ? (
-        <ModuleEmptyStates sections={data.sections} />
+        emptyStates ? (
+          <ModuleEmptyStates sections={data.sections} />
+        ) : null
       ) : (
         <>
           <CountsCard

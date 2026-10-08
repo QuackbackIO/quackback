@@ -182,6 +182,9 @@ describe('OverviewDashboard', () => {
         )
         unmount()
       }
+      // While the owner's launch plan leads Home, the plan is the one guide.
+      render(<OverviewDashboard emptyStates={false} />)
+      expect(screen.queryByRole('list', { name: 'Nothing here yet' })).toBeNull()
     } finally {
       state.data = previous
     }
