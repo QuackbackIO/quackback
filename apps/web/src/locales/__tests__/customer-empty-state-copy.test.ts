@@ -10,10 +10,17 @@ const catalogs = Object.entries(modules).map(
 const KEYS = ['portal.commentThread.empty', 'widget.commentList.empty']
 
 describe('customer empty-state copy', () => {
-  it.each(catalogs)('%s has no exclamation marks in the comment empty states', (_locale, catalog) => {
-    for (const key of KEYS) {
-      expect(catalog[key], key).toBeTruthy()
-      expect(catalog[key], key).not.toMatch(/[!！¡]/)
+  it.each(catalogs)(
+    '%s has no exclamation marks in the comment empty states',
+    (_locale, catalog) => {
+      for (const key of KEYS) {
+        expect(catalog[key], key).toBeTruthy()
+        expect(catalog[key], key).not.toMatch(/[!！¡]/)
+      }
     }
+  )
+
+  it.each(catalogs)('%s ends the comment empty states with a full stop', (_locale, catalog) => {
+    for (const key of KEYS) expect(catalog[key], key).toMatch(/[.。]$/)
   })
 })
