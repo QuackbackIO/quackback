@@ -5,8 +5,10 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { WidgetInstallPage } from '@/components/admin/settings/widget/widget-install-page'
 import { readBatch } from '@/lib/client/queries/read-batch'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 export const Route = createFileRoute('/admin/settings/widget/install')({
+  head: adminPageHead('Install the widget'),
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
     const ensure = readBatch(context.queryClient)

@@ -28,6 +28,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
@@ -47,6 +48,7 @@ const officeHoursQuery = queryOptions({
 })
 
 export const Route = createFileRoute('/admin/settings/office-hours')({
+  head: adminPageHead('Office hours settings'),
   beforeLoad: ({ context }) => {
     if (!isProductEnabled(context.settings?.featureFlags, 'support')) {
       throw redirect({ to: '/admin/settings/general' })

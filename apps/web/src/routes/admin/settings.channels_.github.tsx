@@ -4,8 +4,10 @@ import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { GitHubChannelPage } from '@/components/admin/settings/github-channel-page'
 import { warmQuery } from '@/lib/client/queries/warm-query'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 export const Route = createFileRoute('/admin/settings/channels_/github')({
+  head: adminPageHead('GitHub channel settings'),
   beforeLoad: ({ context }) => {
     if (!isProductEnabled(context.settings?.featureFlags, 'support')) {
       throw redirect({ to: '/admin/settings/general' })

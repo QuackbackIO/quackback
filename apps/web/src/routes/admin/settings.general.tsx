@@ -29,6 +29,7 @@ import { WorkspaceDangerCard } from '@/components/admin/settings/workspace-dange
 import { WorkspaceIdentityCard } from '@/components/admin/settings/workspace-identity-card'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { useManagedFieldPaths, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 const searchSchema = z.object({
   /** `logo` scrolls to the workspace logo and highlights it. */
@@ -36,6 +37,7 @@ const searchSchema = z.object({
 })
 
 export const Route = createFileRoute('/admin/settings/general')({
+  head: adminPageHead('General settings'),
   validateSearch: searchSchema,
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)

@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { errorMessage } from '@/components/shared/error-page'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 const searchSchema = z.object({
   search: z.string().optional(),
@@ -48,6 +49,7 @@ const searchSchema = z.object({
 })
 
 export const Route = createFileRoute('/admin/users')({
+  head: adminPageHead('Users'),
   validateSearch: searchSchema,
   // Note: No loaderDeps for the filter fields - the loader only runs on
   // initial route load for SSR (prefetching the default/unfiltered dataset).

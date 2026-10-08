@@ -1,6 +1,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { isValidTypeId } from '@quackback/ids'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 /**
  * Retired route (UNIFIED-INBOX-SPEC.md §2.2/§4): tickets are now rows in the
@@ -25,6 +26,7 @@ interface TicketsRedirectSearch {
 }
 
 export const Route = createFileRoute('/admin/tickets')({
+  head: adminPageHead('Tickets'),
   validateSearch: (search: Record<string, unknown>): TicketsRedirectSearch => ({
     t: typeof search.t === 'string' && isValidTypeId(search.t, 'ticket') ? search.t : undefined,
   }),

@@ -1,8 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { NotificationMatrixForm } from '@/components/settings/notification-matrix-form'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 export const Route = createFileRoute('/admin/settings/notifications')({
+  head: adminPageHead('Notifications settings'),
   // Per-member page (each team member manages their own notification
   // preferences) with no extra permission gate — the parent `/admin` guard's
   // admin/member wall is the only requirement, so no per-route RPC guard.

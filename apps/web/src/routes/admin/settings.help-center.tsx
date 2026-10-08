@@ -15,6 +15,7 @@ import { settingsQueries } from '@/lib/client/queries/settings'
 import { useUpdateHelpCenterConfig } from '@/lib/client/mutations/settings'
 import { useDebouncedSave } from '@/lib/client/hooks/use-debounced-save'
 import { isProductEnabled, type HelpCenterConfig } from '@/lib/shared/types/settings'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 /**
  * Split by concern, matching the Access & Security page's `?tab=` pattern:
@@ -27,6 +28,7 @@ const searchSchema = z.object({
 })
 
 export const Route = createFileRoute('/admin/settings/help-center')({
+  head: adminPageHead('Help center settings'),
   validateSearch: searchSchema,
   beforeLoad: ({ context }) => {
     if (!isProductEnabled(context.settings?.featureFlags, 'helpCenter')) {

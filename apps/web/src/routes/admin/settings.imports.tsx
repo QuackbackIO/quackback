@@ -7,6 +7,7 @@ import { adminQueries } from '@/lib/client/queries/admin'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { warmQuery } from '@/lib/client/queries/warm-query'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 /**
  * Data > Imports & exports (§I1). Admin-only, no feature flag — importing
@@ -14,6 +15,7 @@ import { warmQuery } from '@/lib/client/queries/warm-query'
  * experimental surface.
  */
 export const Route = createFileRoute('/admin/settings/imports')({
+  head: adminPageHead('Imports settings'),
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
     const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')

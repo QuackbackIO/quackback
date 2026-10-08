@@ -66,8 +66,10 @@ import type {
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 export const Route = createFileRoute('/admin/settings/portal')({
+  head: adminPageHead('Portal settings'),
   loader: async ({ context }) => {
     // Portal config reads/writes require settings.branding, which non-admin
     // team roles lack. Gate the page instead of letting managers land on a
