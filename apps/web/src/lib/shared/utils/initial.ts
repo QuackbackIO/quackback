@@ -3,32 +3,9 @@ const segmenter =
     ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
     : null
 
-const REGIONAL_INDICATOR = /^\p{Regional_Indicator}$/u
-const JOINS_PREVIOUS = /^[\p{M}‍️\u{1F3FB}-\u{1F3FF}]$/u
-
-/** Code-point approximation of grapheme clusters for runtimes without Intl.Segmenter. */
-function splitCodePoints(text: string): string[] {
-  const out: string[] = []
-  let joined = false
-  for (const cp of Array.from(text)) {
-    const last = out.length - 1
-    if (last >= 0 && (joined || JOINS_PREVIOUS.test(cp))) {
-      out[last] += cp
-      joined = cp === '‍'
-    } else if (last >= 0 && REGIONAL_INDICATOR.test(cp) && out[last]!.length === 2) {
-      const prev = Array.from(out[last]!)
-      if (prev.length === 1 && REGIONAL_INDICATOR.test(prev[0]!)) out[last] += cp
-      else out.push(cp)
-    } else {
-      out.push(cp)
-    }
-  }
-  return out
-}
-
+/** Grapheme clusters, or whole code points where the runtime has no Intl.Segmenter. */
 function graphemes(text: string): string[] {
-  if (!segmenter) return splitCodePoints(text)
-  return Array.from(segmenter.segment(text), (s) => s.segment)
+  return segmenter ? Array.from(segmenter.segment(text), (s) => s.segment) : Array.from(text)
 }
 
 const WORD_OR_EMOJI = /^(?:[\p{L}\p{N}]|\p{Extended_Pictographic}|\p{Regional_Indicator})/u

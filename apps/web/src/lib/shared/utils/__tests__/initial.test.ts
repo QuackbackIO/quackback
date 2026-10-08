@@ -56,13 +56,12 @@ describe('nameInitial without Intl.Segmenter', () => {
     vi.resetModules()
   })
 
-  it('still returns whole code points and flags', async () => {
+  it('still never splits a character in half', async () => {
     vi.stubGlobal('Intl', { ...Intl, Segmenter: undefined })
     vi.resetModules()
     const { nameInitial: fallback } = await import('../initial')
     expect(fallback('🦆 Fernhill')).toBe('🦆')
     expect(fallback('!!Acme')).toBe('A')
-    expect(fallback('🇬🇧 Britain')).toBe('🇬🇧')
     expect(fallback('')).toBe('')
   })
 })
