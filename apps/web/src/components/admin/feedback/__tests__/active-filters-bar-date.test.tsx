@@ -1,8 +1,11 @@
 // @vitest-environment happy-dom
 /**
- * A date filter is a calendar date ("2026-10-01"). Read as a moment it is UTC
- * midnight, which is still Sep 30 in Los Angeles, so the chip must show the
+ * A date filter is a calendar date ("2024-03-01"). Read as a moment it is UTC
+ * midnight, which is still Feb 29 in Los Angeles, so the chip must show the
  * day as written, for every viewer.
+ *
+ * The date is long past on purpose: a date some number of days before today
+ * matches a preset and renders as its label ("Last 7 days") instead.
  */
 import { render, screen, cleanup } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -20,7 +23,7 @@ describe('ActiveFiltersBar date chip', () => {
     setRuntimeLocale('en-US', 'America/Los_Angeles')
     render(
       <ActiveFiltersBar
-        filters={{ dateFrom: '2026-10-01' } as InboxFilters}
+        filters={{ dateFrom: '2024-03-01' } as InboxFilters}
         onFiltersChange={() => {}}
         onClearAll={() => {}}
         boards={[]}
@@ -29,7 +32,7 @@ describe('ActiveFiltersBar date chip', () => {
         members={[]}
       />
     )
-    expect(screen.getByText(/Oct 1, 2026/)).toBeInTheDocument()
-    expect(screen.queryByText(/Sep 30, 2026/)).not.toBeInTheDocument()
+    expect(screen.getByText(/Mar 1, 2024/)).toBeInTheDocument()
+    expect(screen.queryByText(/Feb 29, 2024/)).not.toBeInTheDocument()
   })
 })
