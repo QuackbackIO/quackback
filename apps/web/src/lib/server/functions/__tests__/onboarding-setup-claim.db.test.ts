@@ -322,6 +322,17 @@ describe.skipIf(!fixture.available)('the workspace step', () => {
     })
   })
 
+  // A name that romanizes to nothing ("🦆🦆", "!!") is still a name of two
+  // characters. It used to fail with a developer error about slugs.
+  it('accepts a name with nothing in it to put in a URL', async () => {
+    const ownerId = await seedAccount('owner@acme.example')
+    signIn(ownerId)
+
+    const result = await saveWorkspaceAndGoalFn({ data: { workspaceName: '🦆🦆' } })
+
+    expect(result).toMatchObject({ ok: true, name: '🦆🦆', slug: 'workspace' })
+  })
+
   describe('a lost session', () => {
     it('is refused as signed out, and nothing is written', async () => {
       await seedAccount('owner@acme.example')

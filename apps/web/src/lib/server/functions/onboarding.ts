@@ -37,7 +37,7 @@ import {
   resolveFeatureFlags,
 } from '@/lib/server/domains/settings/settings.types'
 import { isPathManaged } from '@/lib/server/config-file/managed-paths'
-import { slugify } from '@/lib/shared/utils/slugify'
+import { workspaceSlugFor } from '@/lib/server/domains/settings/workspace-slug'
 import { getSetupState } from '@/lib/shared/db-types'
 import { logger } from '@/lib/server/logger'
 import {
@@ -310,8 +310,7 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
       if (!session?.user || session.session.scope !== 'dashboard') return refuse('signed_out')
 
       const workspaceName = data.workspaceName.trim()
-      const slug = slugify(workspaceName)
-      if (slug.length < 2) throw new Error('Invalid workspace name - cannot generate valid slug')
+      const slug = workspaceSlugFor(workspaceName)
       const useCase = data.useCase ?? 'product_feedback'
 
       // Setup is final. Once it is finished, the name and goal belong to
