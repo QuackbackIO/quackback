@@ -139,8 +139,8 @@ function CopyPortalLinkButton({
   return (
     <Button
       type="button"
-      size="sm"
       variant={variant}
+      className="h-8"
       disabled={copying}
       onClick={async () => {
         setCopying(true)
