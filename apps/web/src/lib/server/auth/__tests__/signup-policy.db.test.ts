@@ -464,6 +464,47 @@ describe.skipIf(!fixture.available)('isAccountCreationAllowed', () => {
       expect(await isAccountCreationAllowed('another@elsewhere.example', 'portal')).toBe(true)
     })
 
+    // The operator's way out of a stranded install: SETUP_OWNER_EMAIL names
+    // whose setup it is, and only that address may create an account until
+    // setup is finished.
+    describe('with a named setup owner', () => {
+      beforeEach(() => {
+        process.env.SETUP_OWNER_EMAIL = 'Owner@Acme.Example'
+        hoisted.getWorkspaceSettings.mockResolvedValue(null)
+      })
+      afterEach(() => {
+        delete process.env.SETUP_OWNER_EMAIL
+      })
+
+      it('lets the named address create its account after another claimed setup', async () => {
+        await seedAccount('smoke-test@elsewhere.example')
+
+        expect(await isAccountCreationAllowed('owner@acme.example', 'portal')).toBe(true)
+      })
+
+      it('takes no account from anyone else, first or not', async () => {
+        expect(await isAccountCreationAllowed('first@elsewhere.example', 'portal')).toBe(false)
+
+        await seedAccount('smoke-test@elsewhere.example')
+        expect(await isAccountCreationAllowed('second@elsewhere.example', 'portal')).toBe(false)
+      })
+
+      it('still lets an existing account sign in', async () => {
+        await seedAccount('smoke-test@elsewhere.example')
+
+        expect(await isAccountCreationAllowed('smoke-test@elsewhere.example', 'portal')).toBe(true)
+      })
+
+      // Read on every workspace a process serves, so it must not open one a
+      // control plane created.
+      it('opens no provisioned workspace to the named address', async () => {
+        await seedSettings({ stamp: 'ws_acme' })
+        hoisted.getWorkspaceSettings.mockResolvedValue(CLOSED)
+
+        expect(await isAccountCreationAllowed('owner@acme.example', 'portal')).toBe(false)
+      })
+    })
+
     // Every portal email sign-in asks this gate, and a finished install is the
     // steady state. Its cached settings already say setup is done, which is
     // the one state in which nobody can hold a setup claim.

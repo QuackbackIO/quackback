@@ -279,6 +279,79 @@ describe.skipIf(!fixture.available)('the workspace step', () => {
     })
   })
 
+  // The way out of a stranded install: the first account belongs to a test,
+  // a stray visitor or a script, or its password is lost with no mail to reset
+  // it. Only someone who controls the server's environment can name an owner.
+  describe('when the operator names the setup owner', () => {
+    beforeEach(() => {
+      process.env.SETUP_OWNER_EMAIL = ' Owner@Acme.Example '
+    })
+    afterEach(() => {
+      delete process.env.SETUP_OWNER_EMAIL
+    })
+
+    it('belongs to the named account, not the first one created', async () => {
+      const strayId = await seedAccount('smoke-test@elsewhere.example')
+      const ownerId = await seedAccount('owner@acme.example')
+
+      signIn(strayId)
+      const stray = await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Smoke Test' } })
+      signIn(ownerId)
+      const owned = await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Fernhill' } })
+
+      expect(stray).toEqual(NOT_OWNER)
+      expect(owned).toMatchObject({ ok: true, name: 'Fernhill' })
+      expect(await roleOf(strayId)).toBe('user')
+      expect(await roleOf(ownerId)).toBe('admin')
+    })
+
+    // Until the named owner has an account, nobody else holds setup, and the
+    // first screen offers account creation again so the owner can make one.
+    it('is held for the named address before it has an account', async () => {
+      const strayId = await seedAccount('smoke-test@elsewhere.example')
+
+      signIn(strayId)
+      const stray = await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Smoke Test' } })
+
+      expect(stray).toEqual(NOT_OWNER)
+      expect(await roleOf(strayId)).toBe('user')
+      expect(await workspace()).toBeUndefined()
+      await expect(getWorkspaceClaimFn()).resolves.toEqual({
+        claimed: false,
+        setupComplete: false,
+        openToClaim: true,
+        closedReason: null,
+      })
+    })
+
+    it('reads as claimed once the named address has an account, without saying whose', async () => {
+      await seedAccount('smoke-test@elsewhere.example')
+      await seedAccount('owner@acme.example')
+
+      const claim = await getWorkspaceClaimFn()
+
+      expect(claim).toMatchObject({ claimed: true, openToClaim: true })
+      expect(JSON.stringify(claim)).not.toMatch(/owner|acme/)
+    })
+
+    // The variable is read on every workspace a process serves. It must not
+    // open one a control plane created for a customer.
+    it('opens no provisioned workspace', async () => {
+      await seedProvisionedWorkspace()
+      const arrivalId = await seedAccount('owner@acme.example')
+
+      signIn(arrivalId)
+      const result = await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Taken' } })
+
+      expect(result).toEqual(NOT_OWNER)
+      expect(await roleOf(arrivalId)).toBe('user')
+      await expect(getWorkspaceClaimFn()).resolves.toMatchObject({
+        claimed: false,
+        openToClaim: false,
+      })
+    })
+  })
+
   describe('where the first account does not claim setup', () => {
     // The config file can stamp setup complete before its owner arrives. Its
     // portal is live, so its first sign-up is a customer, not the owner: the

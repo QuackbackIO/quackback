@@ -1235,6 +1235,7 @@
   "unsubscribe.error.expired.message": "此退订链接已被使用或已过期。",
   "onboarding.account.inProgress.lead": "此处的设置已经开始。请使用你创建的账户登录，从上次中断的地方继续。",
   "onboarding.account.inProgress.notOwner": "是别人在设置？请对方在设置完成后邀请你。",
+  "onboarding.account.inProgress.restart": "设置是误启动的，或者无法登录？服务器的运维人员可以重新开始设置。",
   "onboarding.account.inProgress.title": "登录以完成设置",
   "onboarding.account.methodsDescription": "创建你的管理员账户以设置此工作区。",
   "onboarding.account.returning.back": "改为创建新账户",

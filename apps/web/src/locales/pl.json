@@ -1235,6 +1235,7 @@
   "unsubscribe.error.expired.message": "Ten link do wypisania został już użyty lub wygasł.",
   "onboarding.account.inProgress.lead": "Konfiguracja została już tu rozpoczęta. Zaloguj się na utworzone przez siebie konto, aby kontynuować od miejsca, w którym przerwano.",
   "onboarding.account.inProgress.notOwner": "Ktoś inny to konfiguruje? Poproś tę osobę o zaproszenie po zakończeniu konfiguracji.",
+  "onboarding.account.inProgress.restart": "Konfiguracja rozpoczęta przez pomyłkę albo nie możesz się zalogować? Operator serwera może rozpocząć konfigurację od nowa.",
   "onboarding.account.inProgress.title": "Zaloguj się, aby dokończyć konfigurację",
   "onboarding.account.methodsDescription": "Utwórz konto administratora, aby skonfigurować ten obszar roboczy.",
   "onboarding.account.returning.back": "Zamiast tego utwórz nowe konto",

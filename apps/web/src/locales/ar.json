@@ -1235,6 +1235,7 @@
   "unsubscribe.error.expired.message": "تم استخدام رابط إلغاء الاشتراك هذا بالفعل أو انتهت صلاحيته.",
   "onboarding.account.inProgress.lead": "بدأ الإعداد هنا. سجّل الدخول بالحساب الذي أنشأته لتكمل من حيث توقفت.",
   "onboarding.account.inProgress.notOwner": "هل يتولى شخص آخر الإعداد؟ اطلب منه دعوتك بعد اكتمال الإعداد.",
+  "onboarding.account.inProgress.restart": "هل بدأ الإعداد عن طريق الخطأ، أو لا يمكنك تسجيل الدخول؟ يمكن لمشغّل الخادم إعادة بدء الإعداد.",
   "onboarding.account.inProgress.title": "سجّل الدخول لإكمال الإعداد",
   "onboarding.account.methodsDescription": "أنشئ حساب المسؤول لإعداد مساحة العمل هذه.",
   "onboarding.account.returning.back": "إنشاء حساب جديد بدلًا من ذلك",

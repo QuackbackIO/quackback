@@ -524,6 +524,21 @@ describe('account step — an install whose first account has claimed setup', ()
     expect(container.textContent).not.toMatch(/\*{2,}\s*@/)
   })
 
+  // A first account nobody here can sign in with (a test, a stray visitor, a
+  // lost password) leaves the install stuck, and the way out is the server's.
+  it('says the server operator can restart setup, without naming anyone', () => {
+    const { container } = renderStep(selfHostedClaimed())
+
+    expect(screen.getByText(/the server's operator can restart setup/i)).toBeInTheDocument()
+    expect(container.innerHTML).not.toContain('acme.example')
+  })
+
+  it('says nothing about restarting setup before anyone has started it', () => {
+    renderStep(selfHosted())
+
+    expect(screen.queryByText(/restart setup/i)).toBeNull()
+  })
+
   it('records the owner coming back as a sign-in', async () => {
     track.mockClear()
     renderStep(selfHostedClaimed())

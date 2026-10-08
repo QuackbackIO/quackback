@@ -26,7 +26,9 @@
  * thing more: who claimed it. That is the first human account created there
  * ({@link findSetupClaimant}), not whoever reaches the workspace step first,
  * because the gap between creating an account and finishing that step is a
- * window in which a second visitor could otherwise take the install.
+ * window in which a second visitor could otherwise take the install. The
+ * server's operator can name a different owner instead, with
+ * `SETUP_OWNER_EMAIL` ({@link namedSetupOwnerEmail}).
  *
  * Two promoters, and both consult all three: `functions/onboarding.ts`'s
  * `ensureBootstrapAdmin` and `auth/hooks.ts`'s `handleSsoCallbackAfter`. The
@@ -42,7 +44,7 @@
  * counts them, so the screen must too.
  */
 import type { UserId } from '@quackback/ids'
-import { and, asc, eq, isNotNull, principal, sql } from '@/lib/server/db'
+import { and, asc, eq, isNotNull, principal, sql, user } from '@/lib/server/db'
 import type { Database, Transaction } from '@/lib/server/db'
 import { isProvisionedWorkspace } from '@/lib/server/workspaces/provenance'
 import {
@@ -156,14 +158,41 @@ export function isSetupStateOpen(state: SetupState | null): boolean {
 }
 
 /**
- * Does the first account created on this workspace own its setup?
+ * The setup owner the server's operator named with `SETUP_OWNER_EMAIL`,
+ * normalised, or null when it is unset.
+ *
+ * The way out of a stranded install. The first account created owns setup, and
+ * that account can belong to the wrong person: a smoke test, a stray visitor, a
+ * script that hit sign-up, or the operator's own account with its password lost
+ * and no mail to reset it. Every later sign-up is then refused until setup
+ * finishes, which only that account can do. Naming an owner hands the claim to
+ * the account at that address instead, and lets that address create its
+ * account if it has none. Removing the variable restores the first-account
+ * rule.
+ *
+ * It is the environment's word, so only someone who controls the server's
+ * configuration can say it, and it is read where the first-account rule
+ * applies and nowhere else: never on a provisioned workspace, and never once
+ * setup is finished.
+ *
+ * Read directly from `process.env`, not the zod config, so it works in any
+ * context without a full config load.
+ */
+export function namedSetupOwnerEmail(): string | null {
+  // A value no account can hold still names nobody else: setup stays held for
+  // it rather than falling back to whoever signed up first.
+  return process.env.SETUP_OWNER_EMAIL?.trim().toLowerCase() || null
+}
+
+/**
+ * Does an account created on this workspace own its setup?
  *
  * Yes on an install nobody provisioned whose setup is not finished. Nothing but
  * the wizard is reachable there (the root gate returns every other page to
  * onboarding), so every account on it was made to set it up, and the first one
- * belongs to whoever is doing that. Deciding at the workspace step instead left
- * the time between creating an account and finishing that step open to anyone
- * else who created one.
+ * belongs to whoever is doing that, unless the operator named the owner.
+ * Deciding at the workspace step instead left the time between creating an
+ * account and finishing that step open to anyone else who created one.
  *
  * No on a provisioned workspace, whose owner is recorded where it was created.
  * No once setup reads complete, including on a workspace the config file
@@ -175,7 +204,7 @@ export function isSetupStateOpen(state: SetupState | null): boolean {
  * Take the transaction, not the pool, for the same reason as
  * {@link isOpenToBootstrapClaim}.
  */
-async function isSetupClaimedByFirstAccount(exec: Executor): Promise<boolean> {
+async function isSetupClaimedByAccount(exec: Executor): Promise<boolean> {
   if (!(await isOpenToBootstrapClaim(exec))) return false
   const rows = await readSetupStates(exec)
   if (rows.length === 0) return true
@@ -183,25 +212,47 @@ async function isSetupClaimedByFirstAccount(exec: Executor): Promise<boolean> {
   return !isOnboardingComplete(getSetupState(rows[0]!))
 }
 
+/** Who holds an install's setup while an account decides it. */
+export interface SetupClaimant {
+  /**
+   * The account that owns setup. Null only while the owner the operator named
+   * has no account yet: setup is held for that address, and nobody holds it.
+   */
+  userId: UserId | null
+  /** The address the operator named, or null where the first account owns setup. */
+  ownerEmail: string | null
+}
+
 /**
- * The account that has claimed setup, where the first account does (see
- * {@link isSetupClaimedByFirstAccount}). Undefined anywhere else, and before
- * anyone has an account.
+ * The account that has claimed setup, where an account does (see
+ * {@link isSetupClaimedByAccount}). Undefined anywhere else, and before anyone
+ * has an account unless the operator named the owner.
  *
- * The first human account, never an anonymous visitor: the widget mints
- * anonymous principals for people who have not signed up, and one that arrives
- * first must not own the install. Ties on creation time break on id, so every
- * reader names the same account.
+ * Where the operator named an owner ({@link namedSetupOwnerEmail}), the account
+ * at that address, or a claim held for it until it has one. Otherwise the first
+ * human account, never an anonymous visitor: the widget mints anonymous
+ * principals for people who have not signed up, and one that arrives first
+ * must not own the install. Ties on creation time break on id, so every reader
+ * names the same account.
  *
  * Says nothing about whether that account holds admin yet: the workspace step
  * is where the claimant is promoted.
  */
-export async function findSetupClaimant(exec: Executor): Promise<{ userId: UserId } | undefined> {
-  if (!(await isSetupClaimedByFirstAccount(exec))) return undefined
+export async function findSetupClaimant(exec: Executor): Promise<SetupClaimant | undefined> {
+  if (!(await isSetupClaimedByAccount(exec))) return undefined
+  const ownerEmail = namedSetupOwnerEmail()
+  if (ownerEmail) {
+    // Better-Auth stores addresses lowercased, as the sign-up gate assumes.
+    const named = await exec.query.user.findFirst({
+      where: eq(user.email, ownerEmail),
+      columns: { id: true },
+    })
+    return { userId: (named?.id as UserId | undefined) ?? null, ownerEmail }
+  }
   const first = await exec.query.principal.findFirst({
     where: and(eq(principal.type, 'user'), isNotNull(principal.userId)),
     columns: { userId: true },
     orderBy: [asc(principal.createdAt), asc(principal.id)],
   })
-  return first?.userId ? { userId: first.userId } : undefined
+  return first?.userId ? { userId: first.userId, ownerEmail: null } : undefined
 }

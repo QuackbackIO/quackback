@@ -133,6 +133,10 @@ export function AccountStep({ ssoEnabled, claim, authConfig, workspaceName }: Ac
  * workspace step; anyone else is told to wait for an invitation. Who started it
  * stays unsaid, for the same reason {@link SignInOnlyStep} gives.
  *
+ * The account may be one nobody here can sign in with: a test, a stray
+ * visitor, or a lost password with no mail to reset it. Only the server can
+ * hand setup to someone else, so the last line says who to ask.
+ *
  * Signs in with every method this install can take, providers its runtime
  * registered included, since the account may be linked to one.
  */
@@ -169,6 +173,12 @@ function SetupInProgressStep({
         <FormattedMessage
           id="onboarding.account.inProgress.notOwner"
           defaultMessage="Someone else setting this up? Ask them to invite you once setup is done."
+        />
+      </p>
+      <p className="mt-2 text-center text-sm text-muted-foreground">
+        <FormattedMessage
+          id="onboarding.account.inProgress.restart"
+          defaultMessage="Setup started by mistake, or can't sign in? The server's operator can restart setup."
         />
       </p>
     </StepCard>

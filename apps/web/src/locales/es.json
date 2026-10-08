@@ -1235,6 +1235,7 @@
   "unsubscribe.error.expired.message": "Este enlace para cancelar la suscripción ya se usó o ha caducado.",
   "onboarding.account.inProgress.lead": "La configuración ya empezó aquí. Inicia sesión con la cuenta que creaste para continuar donde lo dejaste.",
   "onboarding.account.inProgress.notOwner": "¿Lo está configurando otra persona? Pídele que te invite cuando termine la configuración.",
+  "onboarding.account.inProgress.restart": "¿La configuración se empezó por error o no puedes iniciar sesión? Quien administra el servidor puede reiniciar la configuración.",
   "onboarding.account.inProgress.title": "Inicia sesión para terminar la configuración",
   "onboarding.account.methodsDescription": "Crea tu cuenta de administrador para configurar este espacio de trabajo.",
   "onboarding.account.returning.back": "Crear una cuenta nueva en su lugar",

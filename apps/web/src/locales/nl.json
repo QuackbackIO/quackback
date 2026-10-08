@@ -1235,6 +1235,7 @@
   "unsubscribe.error.expired.message": "Deze afmeldlink is al gebruikt of verlopen.",
   "onboarding.account.inProgress.lead": "De installatie is hier al begonnen. Log in met het account dat je hebt aangemaakt om verder te gaan waar je gebleven was.",
   "onboarding.account.inProgress.notOwner": "Richt iemand anders dit in? Vraag diegene je uit te nodigen zodra de installatie klaar is.",
+  "onboarding.account.inProgress.restart": "Installatie per ongeluk begonnen, of kun je niet inloggen? De beheerder van de server kan de installatie opnieuw starten.",
   "onboarding.account.inProgress.title": "Log in om de installatie af te ronden",
   "onboarding.account.methodsDescription": "Maak je beheerdersaccount aan om deze werkruimte in te richten.",
   "onboarding.account.returning.back": "Maak in plaats daarvan een nieuw account aan",

@@ -1235,6 +1235,7 @@
   "unsubscribe.error.expired.message": "此取消訂閱連結已被使用或已過期。",
   "onboarding.account.inProgress.lead": "此處的設定已經開始。請使用你建立的帳戶登入，從上次中斷的地方繼續。",
   "onboarding.account.inProgress.notOwner": "是別人在設定？請對方在設定完成後邀請你。",
+  "onboarding.account.inProgress.restart": "設定是誤啟動的，或是無法登入？伺服器的維運人員可以重新開始設定。",
   "onboarding.account.inProgress.title": "登入以完成設定",
   "onboarding.account.methodsDescription": "建立你的管理員帳戶以設定此工作區。",
   "onboarding.account.returning.back": "改為建立新帳戶",

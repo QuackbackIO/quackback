@@ -16,7 +16,7 @@
  *
  * | Fact | Answer | Why |
  * | --- | --- | --- |
- * | setup is still open and an account has claimed it | refused, unless a `user` row holds this address | Only the wizard is reachable, so nobody else needs an account yet, and one made now could only contest the claim. See below |
+ * | setup is still open and an account has claimed it, or the operator named its owner | refused, unless a `user` row holds this address or it is the named owner's | Only the wizard is reachable, so nobody else needs an account yet, and one made now could only contest the claim. See below |
  * | no `settings` row | allowed | A workspace nobody has set up yet. The self-hosted first run creates its account before it creates its settings, so refusing here would brick the product's normal install |
  * | the door's own `openSignup` is true | allowed | The workspace says so, about that door — see {@link SignupAudience} |
  * | the address is at a domain the portal grants access to | allowed | An admin listed that domain. Same authority as an invitation, written as configuration instead of a row |
@@ -98,6 +98,8 @@
  * is done. Without this a second account could still be made in that window,
  * and an anonymous visitor's principal that upgrades to an account keeps the
  * time it was minted, so a late upgrade would read as earlier than the claim.
+ * The one way past it is `SETUP_OWNER_EMAIL`, set by whoever runs the server:
+ * setup is then held for that address, which may create its account.
  *
  * So the exemption is exactly the case where somebody still has to become the
  * admin AND arriving is still how that happens: `findHumanAdmin` and
@@ -216,22 +218,28 @@ export async function isAccountCreationAllowed(
   // is finished, whatever the signup setting says: only the wizard is
   // reachable yet, so nobody needs one, and a second account made now could
   // only contest the claim. Signing in to an account that exists is still a
-  // sign-in, which is how the claimant comes back after signing out.
+  // sign-in, which is how the claimant comes back after signing out. Where the
+  // operator named the owner, setup is held for that address, which may create
+  // its account while nobody else can.
   //
   // Nobody holds a setup claim once setup reads complete, so a finished
   // workspace, which is every sign-in after the first day, answers from the
   // settings already in hand without asking.
   const setupComplete =
     !!workspace && isOnboardingComplete(getSetupState(workspace.settings?.setupState ?? null))
-  if (!setupComplete && (await findSetupClaimant(db))) {
+  const claimant = setupComplete ? undefined : await findSetupClaimant(db)
+  if (claimant) {
+    if (claimant.ownerEmail === normalised) return true
     const existing = await db.query.user.findFirst({
       where: eq(user.email, normalised),
       columns: { id: true },
     })
     if (existing) return true
+    // The operator reads this when setup is stuck on an account they cannot
+    // sign in with, so it names the way out.
     log.info(
       { email_domain: normalised.split('@')[1] ?? null },
-      'account creation refused: setup is claimed'
+      'account creation refused: setup is claimed. To hand setup to another address, set SETUP_OWNER_EMAIL and restart'
     )
     return false
   }

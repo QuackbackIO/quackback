@@ -131,13 +131,14 @@ async function ensureBootstrapAdmin(userId: UserId): Promise<SaveWorkspaceRefusa
     }
 
     // On an install still being set up, the first account created there owns
-    // setup. Anyone else who reaches this step, however they came to have an
-    // account, is refused, so the claimant can sign out and come back without
-    // losing the install to whoever arrived in between.
+    // setup, or the account at the address the operator named. Anyone else who
+    // reaches this step, however they came to have an account, is refused, so
+    // the claimant can sign out and come back without losing the install to
+    // whoever arrived in between.
     const claimant = await findSetupClaimant(tx)
     if (claimant && claimant.userId !== userId) {
       log.warn(
-        { user_id: userId },
+        { user_id: userId, owner_named: claimant.ownerEmail !== null },
         'bootstrap admin promotion refused: another account claimed setup'
       )
       return 'not_owner'
@@ -163,7 +164,9 @@ export interface WorkspaceClaim {
   /**
    * A human admin owns setup, or, on an install still being set up, an
    * account has been created and so has claimed it. Either way this screen
-   * offers sign-in rather than a new account.
+   * offers sign-in rather than a new account. Where the operator named the
+   * owner, only that address's account claims it, so until it exists this
+   * reads false and the owner can create it.
    */
   claimed: boolean
   /**
@@ -239,7 +242,7 @@ export const getWorkspaceClaimFn = createServerFn({ method: 'GET' }).handler(
     // Same order the promoter refuses in: provenance first, then setup state.
     const closedReason = !unprovisioned ? 'provisioned' : !setupOpen ? 'setupComplete' : null
     return {
-      claimed: !!owner || !!claimant,
+      claimed: !!owner || !!claimant?.userId,
       setupComplete,
       openToClaim: closedReason === null,
       closedReason,

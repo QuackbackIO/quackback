@@ -1235,6 +1235,7 @@
   "unsubscribe.error.expired.message": "Este link de cancelamento já foi usado ou expirou.",
   "onboarding.account.inProgress.lead": "A configuração já começou aqui. Entre com a conta que você criou para continuar de onde parou.",
   "onboarding.account.inProgress.notOwner": "Outra pessoa está configurando? Peça para ela convidar você quando a configuração terminar.",
+  "onboarding.account.inProgress.restart": "A configuração foi iniciada por engano ou você não consegue entrar? Quem opera o servidor pode reiniciar a configuração.",
   "onboarding.account.inProgress.title": "Entre para concluir a configuração",
   "onboarding.account.methodsDescription": "Crie sua conta de administrador para configurar este workspace.",
   "onboarding.account.returning.back": "Criar uma nova conta em vez disso",

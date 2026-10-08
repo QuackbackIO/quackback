@@ -1235,6 +1235,7 @@
   "unsubscribe.error.expired.message": "This unsubscribe link has already been used or has expired.",
   "onboarding.account.inProgress.lead": "Setup has started here. Sign in with the account you created to pick up where you left off.",
   "onboarding.account.inProgress.notOwner": "Someone else setting this up? Ask them to invite you once setup is done.",
+  "onboarding.account.inProgress.restart": "Setup started by mistake, or can't sign in? The server's operator can restart setup.",
   "onboarding.account.inProgress.title": "Sign in to finish setting up",
   "onboarding.account.methodsDescription": "Create your admin account to set up this workspace.",
   "onboarding.account.returning.back": "Create a new account instead",
