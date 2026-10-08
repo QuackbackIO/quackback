@@ -9,6 +9,7 @@ import {
   OnboardingPreviewPanel,
   OnboardingSplit,
   SETUP_FIELD_CLASS,
+  SetupActions,
   useBrowserHost,
 } from '@/components/onboarding/onboarding-split'
 import { PortalPreview } from '@/components/onboarding/portal-preview'
@@ -405,19 +406,20 @@ function WorkspaceNameStep({
   return (
     <OnboardingSplit panel={panel} footer={<SignOutButton size="sm" className="-ms-3" />}>
       <SetupSteps current="workspace" />
-      <form onSubmit={handleSubmit} className="mt-8 flex max-w-[480px] flex-col gap-8">
+      {/* Budgeted to show Create workspace without scrolling on a 1280x800
+          screen: a one-line heading and lead, and one-line goal tiles. */}
+      <form onSubmit={handleSubmit} className="mt-6 flex max-w-[480px] flex-1 flex-col gap-6">
         <header>
-          <OnboardingHeading>
+          <OnboardingHeading className="text-[34px] leading-[1.05] sm:text-[36px]">
             <FormattedMessage
               id="onboarding.workspace.heading"
-              defaultMessage="Name your {br}workspace"
-              values={{ br: <br /> }}
+              defaultMessage="Name your workspace"
             />
           </OnboardingHeading>
-          <OnboardingLead>
+          <OnboardingLead className="mt-3">
             <FormattedMessage
               id="onboarding.workspace.lead"
-              defaultMessage="Your workspace is where your team works and what customers see on your portal. Most people use their company or product name."
+              defaultMessage="Most teams use their company or product name."
             />
           </OnboardingLead>
         </header>
@@ -482,16 +484,21 @@ function WorkspaceNameStep({
           )}
         </div>
 
-        <Button type="submit" disabled={isLoading} className="h-12 w-full rounded-full text-base">
-          {isLoading ? (
-            <>
-              <ArrowPathIcon className="size-4 animate-spin motion-reduce:animate-none" />
-              <FormattedMessage id="onboarding.workspace.creating" defaultMessage="Setting up…" />
-            </>
-          ) : (
-            <FormattedMessage id="onboarding.workspace.create" defaultMessage="Create workspace" />
-          )}
-        </Button>
+        <SetupActions>
+          <Button type="submit" disabled={isLoading} className="h-12 w-full rounded-full text-base">
+            {isLoading ? (
+              <>
+                <ArrowPathIcon className="size-4 animate-spin motion-reduce:animate-none" />
+                <FormattedMessage id="onboarding.workspace.creating" defaultMessage="Setting up…" />
+              </>
+            ) : (
+              <FormattedMessage
+                id="onboarding.workspace.create"
+                defaultMessage="Create workspace"
+              />
+            )}
+          </Button>
+        </SetupActions>
       </form>
     </OnboardingSplit>
   )

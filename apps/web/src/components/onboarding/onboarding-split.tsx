@@ -64,11 +64,35 @@ export const SETUP_FIELD_CLASS =
   'h-12 rounded-xl px-4 text-base aria-invalid:focus-visible:ring-2 aria-invalid:focus-visible:ring-ring aria-invalid:focus-visible:ring-offset-2 aria-invalid:focus-visible:ring-offset-background'
 
 /** The lead paragraph under a setup heading. */
-export function OnboardingLead({ children }: { children: ReactNode }) {
+export function OnboardingLead({
+  children,
+  className,
+}: {
+  children: ReactNode
+  className?: string
+}) {
   return (
-    <p className="mt-4 max-w-[440px] text-[15px] leading-relaxed text-muted-foreground">
+    <p
+      className={cn(
+        'mt-4 max-w-[440px] text-[15px] leading-relaxed text-muted-foreground',
+        className
+      )}
+    >
       {children}
     </p>
+  )
+}
+
+/**
+ * A step's main action. On a screen too short for the step it stays pinned to
+ * the bottom of the window, so the next move never has to be hunted for; where
+ * the step fits, it sits in place under the form.
+ */
+export function SetupActions({ children }: { children: ReactNode }) {
+  return (
+    <div className="sticky bottom-0 z-10 bg-background pt-2 pb-4 before:pointer-events-none before:absolute before:inset-x-0 before:-top-6 before:h-6 before:bg-linear-to-t before:from-background before:to-transparent">
+      {children}
+    </div>
   )
 }
 
