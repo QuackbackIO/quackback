@@ -4,6 +4,7 @@ import { PauseCircleIcon } from '@heroicons/react/24/outline'
 import { useBillingEnabled } from '@/lib/client/hooks/use-root-context'
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { cn } from '@/lib/shared/utils'
 
 /**
  * Copilot in the composer's place once this period's AI allowance is used:
@@ -18,10 +19,14 @@ export function CopilotPaused({ resetsAt }: { resetsAt: string | null }) {
   const date = resetsAt
     ? intl.formatDate(resetsAt, { month: 'short', day: 'numeric', timeZone: 'UTC' })
     : null
+  const usage = billingEnabled && canBill
   return (
     <div
       role="status"
-      className="flex min-h-[138px] flex-col justify-between gap-3 rounded-2xl border border-border bg-card p-5 [--ring:var(--muted-foreground)]"
+      className={cn(
+        'flex min-h-[138px] flex-col gap-3 rounded-2xl border border-border bg-card p-5 [--ring:var(--muted-foreground)]',
+        usage ? 'justify-between' : 'justify-center'
+      )}
     >
       <div className="flex gap-3">
         <PauseCircleIcon className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden />
@@ -45,7 +50,7 @@ export function CopilotPaused({ resetsAt }: { resetsAt: string | null }) {
           </p>
         </div>
       </div>
-      {billingEnabled && canBill ? (
+      {usage ? (
         <Link
           to="/admin/settings/billing"
           search={{ checkout: undefined, billing_error: undefined }}
