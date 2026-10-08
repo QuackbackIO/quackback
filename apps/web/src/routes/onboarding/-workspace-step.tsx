@@ -8,7 +8,11 @@ import {
   OnboardingLead,
   OnboardingPreviewPanel,
   OnboardingSplit,
+  SETUP_CTA_CLASS,
+  SETUP_FIELD_CLASS,
+  SetupActions,
   useBrowserHost,
+  useSetupTitle,
 } from '@/components/onboarding/onboarding-split'
 import { PortalPreview } from '@/components/onboarding/portal-preview'
 import { SetupSteps } from '@/components/onboarding/setup-steps'
@@ -24,6 +28,7 @@ import {
 import { friendlyPlatformLabel, platformUrlSuffix } from '@/lib/shared/platform-label'
 import { isPathManagedFromBootstrap, MANAGED_PATHS } from '@/lib/client/config-file'
 import { track } from '@/lib/client/analytics'
+import { cn } from '@/lib/shared/utils'
 import { ReadyStep } from './-ready-step'
 import { SignOutButton } from './-sign-out-button'
 
@@ -74,7 +79,7 @@ function CloudIdentityUnavailable() {
       panel={<CloudPreviewPanel name="" hostname="" />}
       footer={<SignOutButton size="sm" className="-ms-3" />}
     >
-      <OnboardingHeading className="text-[30px] leading-[1.12] tracking-[-0.02em] sm:text-[34px]">
+      <OnboardingHeading className="text-[30px] leading-[1.12] tracking-[-0.02em]! sm:text-[34px]">
         Workspace details are temporarily unavailable
       </OnboardingHeading>
       <OnboardingLead>
@@ -83,7 +88,7 @@ function CloudIdentityUnavailable() {
       <Button
         type="button"
         onClick={() => window.location.reload()}
-        className="mt-8 h-12 w-full max-w-[440px] rounded-full text-base"
+        className={cn(SETUP_CTA_CLASS, 'mt-8 max-w-[440px]')}
       >
         Retry
       </Button>
@@ -93,7 +98,6 @@ function CloudIdentityUnavailable() {
 
 /** The cloud form's panel: the portal at the name and address being typed. */
 function CloudPreviewPanel({ name, hostname }: { name: string; hostname: string }) {
-  const intl = useIntl()
   return (
     <OnboardingPreviewPanel
       caption={
@@ -103,16 +107,7 @@ function CloudPreviewPanel({ name, hostname }: { name: string; hostname: string 
         />
       }
     >
-      <PortalPreview
-        name={
-          name ||
-          intl.formatMessage({
-            id: 'onboarding.preview.placeholderName',
-            defaultMessage: 'Your workspace',
-          })
-        }
-        hostname={hostname}
-      />
+      <PortalPreview name={name} hostname={hostname} />
     </OnboardingPreviewPanel>
   )
 }
@@ -255,7 +250,8 @@ export function CloudWorkspaceDetailsForm(props: {
         <Button
           type="submit"
           disabled={isSaving || !displayName.trim() || !platformLabel.trim()}
-          className="h-12 w-full rounded-full text-base"
+          aria-busy={isSaving || undefined}
+          className={SETUP_CTA_CLASS}
         >
           {isSaving && (
             <ArrowPathIcon className="h-4 w-4 animate-spin motion-reduce:animate-none" />
@@ -281,16 +277,31 @@ function WorkspaceNameStep({
   const intl = useIntl()
   const host = useBrowserHost()
   const goalsManaged = isPathManagedFromBootstrap('workspace.useCase', managedFieldPaths)
-  const [goals, setGoals] = useState<OnboardingOutcome[]>(
-    setupGoals?.goals?.length || goalsManaged ? (setupGoals?.goals ?? []) : ['product_feedback']
-  )
+  // Nothing is picked for the admin: the first goal they choose is the one the
+  // launch plan starts with, so a preselected goal would choose it for them.
+  const [goals, setGoals] = useState<OnboardingOutcome[]>(setupGoals?.goals ?? [])
   const nameManaged = isPathManagedFromBootstrap(MANAGED_PATHS.WORKSPACE_NAME, managedFieldPaths)
 
   const [workspaceName, setWorkspaceName] = useState(existingWorkspaceName)
   const [isLoading, setIsLoading] = useState(false)
+  /** What the server said, which is about the form rather than one field. */
   const [error, setError] = useState('')
+  const [nameError, setNameError] = useState('')
+  /** Set once the admin tries to continue, so an empty pick is then said. */
+  const [goalsRequired, setGoalsRequired] = useState(false)
   const [ready, setReady] = useState<{ name: string; goals: OnboardingOutcome[] } | null>(null)
   const nameValid = workspaceName.trim().length >= 2
+  useSetupTitle(
+    ready
+      ? intl.formatMessage(
+          { id: 'onboarding.title.ready', defaultMessage: '{name} is ready · Quackback' },
+          { name: ready.name }
+        )
+      : intl.formatMessage({
+          id: 'onboarding.title.workspace',
+          defaultMessage: 'Name your workspace · Quackback',
+        })
+  )
 
   useEffect(() => {
     try {
@@ -317,13 +328,23 @@ function WorkspaceNameStep({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
+    const goalsMissing = !goalsManaged && goals.length === 0
+    setGoalsRequired(goalsMissing)
+    setNameError(
+      nameValid
+        ? ''
+        : intl.formatMessage({
+            id: 'onboarding.workspace.error.name',
+            defaultMessage: 'Enter a workspace name with at least 2 characters.',
+          })
+    )
     if (!nameValid) {
-      setError(
-        intl.formatMessage({
-          id: 'onboarding.workspace.error.name',
-          defaultMessage: 'Enter a workspace name with at least 2 characters.',
-        })
-      )
+      setError('')
+      document.getElementById('workspaceName')?.focus()
+      return
+    }
+    if (goalsMissing) {
+      setError('')
       return
     }
     setIsLoading(true)
@@ -352,12 +373,6 @@ function WorkspaceNameStep({
     }
   }
 
-  const previewName =
-    (ready?.name ?? workspaceName.trim()) ||
-    intl.formatMessage({
-      id: 'onboarding.preview.placeholderName',
-      defaultMessage: 'Your workspace',
-    })
   const panel = (
     <OnboardingPreviewPanel
       caption={
@@ -375,66 +390,82 @@ function WorkspaceNameStep({
         )
       }
     >
-      <PortalPreview name={previewName} goals={ready?.goals ?? goals} hostname={host} />
+      {ready ? (
+        <PortalPreview variant="live" name={ready.name} goals={ready.goals} hostname={host} />
+      ) : (
+        <PortalPreview name={workspaceName.trim()} goals={goals} hostname={host} />
+      )}
     </OnboardingPreviewPanel>
   )
 
   if (ready) {
     return (
-      <OnboardingSplit wide panel={panel}>
+      <OnboardingSplit panel={panel}>
         <ReadyStep workspaceName={ready.name} goals={ready.goals} adminName={adminName} />
       </OnboardingSplit>
     )
   }
 
   return (
-    <OnboardingSplit wide panel={panel} footer={<SignOutButton size="sm" className="-ms-3" />}>
+    <OnboardingSplit panel={panel} footer={<SignOutButton size="sm" className="-ms-3" />}>
       <SetupSteps current="workspace" />
-      <form onSubmit={handleSubmit} className="mt-8 flex max-w-[480px] flex-col gap-8">
+      {/* Budgeted to show Create workspace without scrolling on a 1280x800
+          screen: a one-line heading and lead, and one-line goal tiles. */}
+      <form onSubmit={handleSubmit} className="mt-6 flex max-w-[480px] flex-1 flex-col gap-6">
         <header>
-          <OnboardingHeading>
+          <OnboardingHeading className="text-[34px] leading-[1.05] sm:text-[36px]">
             <FormattedMessage
               id="onboarding.workspace.heading"
-              defaultMessage="Name your {br}workspace"
-              values={{ br: <br /> }}
+              defaultMessage="Name your workspace"
             />
           </OnboardingHeading>
-          <OnboardingLead>
+          <OnboardingLead className="mt-3">
             <FormattedMessage
               id="onboarding.workspace.lead"
-              defaultMessage="Your workspace is where your team works and what customers see on your portal. Most people use their company or product name."
+              defaultMessage="Most teams use their company or product name."
             />
           </OnboardingLead>
         </header>
 
-        <div className="flex flex-col gap-2">
+        <div data-field className="flex flex-col gap-2">
           <label htmlFor="workspaceName" className="text-sm font-medium">
             <FormattedMessage id="onboarding.workspace.name" defaultMessage="Workspace name" />
           </label>
           <Input
             id="workspaceName"
             value={workspaceName}
-            onChange={(event) => setWorkspaceName(event.target.value)}
+            onChange={(event) => {
+              setWorkspaceName(event.target.value)
+              setNameError('')
+            }}
             placeholder="Acme"
             autoFocus
             autoComplete="organization"
             disabled={isLoading || nameManaged}
-            className="h-12 rounded-xl px-4 text-base"
-            aria-describedby="workspace-name-hint"
+            className={SETUP_FIELD_CLASS}
+            aria-invalid={nameError ? true : undefined}
+            aria-describedby={nameError ? 'workspace-name-error' : 'workspace-name-hint'}
           />
-          <p id="workspace-name-hint" className="text-xs text-muted-foreground">
-            {nameManaged ? (
-              <FormattedMessage
-                id="onboarding.workspace.nameManaged"
-                defaultMessage="Your workspace admin manages this name."
-              />
-            ) : (
-              <FormattedMessage
-                id="onboarding.workspace.nameHint"
-                defaultMessage="You can change it any time in Settings."
-              />
-            )}
-          </p>
+          {/* The problem takes the hint's place, so the field says one thing. */}
+          {nameError ? (
+            <p id="workspace-name-error" role="alert" className="text-xs text-destructive">
+              {nameError}
+            </p>
+          ) : (
+            <p id="workspace-name-hint" className="text-xs text-muted-foreground">
+              {nameManaged ? (
+                <FormattedMessage
+                  id="onboarding.workspace.nameManaged"
+                  defaultMessage="Your workspace admin manages this name."
+                />
+              ) : (
+                <FormattedMessage
+                  id="onboarding.workspace.nameHint"
+                  defaultMessage="You can change it any time in Settings."
+                />
+              )}
+            </p>
+          )}
         </div>
 
         <GoalSelector
@@ -442,6 +473,7 @@ function WorkspaceNameStep({
           onGoalsChange={setGoals}
           disabled={isLoading}
           managed={goalsManaged}
+          required={goalsRequired}
         />
 
         <div aria-live="polite" aria-atomic="true" className="empty:hidden">
@@ -455,20 +487,26 @@ function WorkspaceNameStep({
           )}
         </div>
 
-        <Button
-          type="submit"
-          disabled={isLoading || !nameValid || (!goalsManaged && goals.length === 0)}
-          className="h-12 w-full rounded-full text-base"
-        >
-          {isLoading ? (
-            <>
-              <ArrowPathIcon className="size-4 animate-spin motion-reduce:animate-none" />
-              <FormattedMessage id="onboarding.workspace.creating" defaultMessage="Setting up…" />
-            </>
-          ) : (
-            <FormattedMessage id="onboarding.workspace.create" defaultMessage="Create workspace" />
-          )}
-        </Button>
+        <SetupActions>
+          <Button
+            type="submit"
+            disabled={isLoading}
+            aria-busy={isLoading || undefined}
+            className={SETUP_CTA_CLASS}
+          >
+            {isLoading ? (
+              <>
+                <ArrowPathIcon className="size-4 animate-spin motion-reduce:animate-none" />
+                <FormattedMessage id="onboarding.workspace.creating" defaultMessage="Setting up…" />
+              </>
+            ) : (
+              <FormattedMessage
+                id="onboarding.workspace.create"
+                defaultMessage="Create workspace"
+              />
+            )}
+          </Button>
+        </SetupActions>
       </form>
     </OnboardingSplit>
   )

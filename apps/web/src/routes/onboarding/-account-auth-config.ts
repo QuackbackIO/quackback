@@ -35,14 +35,11 @@ interface AccountSettings {
  */
 export function accountAuthConfig(
   settings: AccountSettings | null | undefined,
-  registeredAuthProviders: string[] | undefined,
-  /** The shipped default filtered by configured credentials, for an account
-   *  someone created before setup finished and is coming back to. */
-  defaultSignInOAuth?: Record<string, boolean | undefined>
+  registeredAuthProviders: string[] | undefined
 ): AccountAuthConfig {
   const auth = settings?.publicAuthConfig
   return {
-    signInOAuth: auth?.oauth ?? defaultSignInOAuth ?? { password: true },
+    signInOAuth: auth?.oauth ?? registeredSignIn(registeredAuthProviders),
     found: !!auth,
     oauth: auth?.oauth ?? { password: true },
     openSignup: auth?.openSignup,
@@ -50,4 +47,14 @@ export function accountAuthConfig(
     registeredAuthProviders,
     twoFactorRequired: auth?.twoFactor?.required ?? false,
   }
+}
+
+/**
+ * How an account that already exists can sign back in before setup finishes:
+ * a password, plus whatever the auth runtime registered. The runtime is the
+ * judge because it is what the buttons call; before setup it registers no
+ * social provider, since those are opt-in and nothing has opted in yet.
+ */
+function registeredSignIn(registered: string[] | undefined): Record<string, boolean> {
+  return { password: true, ...Object.fromEntries((registered ?? []).map((id) => [id, true])) }
 }

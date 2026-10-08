@@ -36,6 +36,9 @@ export function SetupSteps({
       {STEPS.map((step, index) => {
         const done = index < currentIndex || (finished && index === currentIndex)
         const active = index === currentIndex && !finished
+        // On a phone only the step being shown keeps its label on screen,
+        // Ready included once setup is finished.
+        const labelled = index === currentIndex
         return (
           <Fragment key={step.key}>
             {index > 0 ? (
@@ -65,7 +68,7 @@ export function SetupSteps({
                   index + 1
                 )}
               </span>
-              <span className={cn('truncate', !active && 'max-sm:sr-only')}>
+              <span className={cn('truncate', !labelled && 'max-sm:sr-only')}>
                 <FormattedMessage id={step.id} defaultMessage={step.defaultMessage} />
               </span>
               {done ? (

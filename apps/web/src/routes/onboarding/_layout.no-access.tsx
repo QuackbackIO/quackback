@@ -1,5 +1,5 @@
 import { createFileRoute, Link, redirect } from '@tanstack/react-router'
-import { FormattedMessage, useIntl } from 'react-intl'
+import { FormattedMessage } from 'react-intl'
 import {
   OnboardingHeading,
   OnboardingPreviewPanel,
@@ -55,7 +55,7 @@ function NoAccessStep() {
   return (
     <OnboardingSplit panel={<NoAccessPanel />}>
       <div className="max-w-[440px]">
-        <OnboardingHeading className="text-[30px] leading-[1.12] tracking-[-0.02em] sm:text-[34px]">
+        <OnboardingHeading className="text-[30px] leading-[1.12] tracking-[-0.02em]! sm:text-[34px]">
           {claimedByOther ? (
             <FormattedMessage
               id="onboarding.noAccess.title"
@@ -122,16 +122,9 @@ function NoAccessStep() {
 }
 
 function NoAccessPanel() {
-  const intl = useIntl()
   return (
     <OnboardingPreviewPanel>
-      <PortalPreview
-        variant="overview"
-        name={intl.formatMessage({
-          id: 'onboarding.preview.placeholderName',
-          defaultMessage: 'Your workspace',
-        })}
-      />
+      <PortalPreview variant="example" name="" />
     </OnboardingPreviewPanel>
   )
 }

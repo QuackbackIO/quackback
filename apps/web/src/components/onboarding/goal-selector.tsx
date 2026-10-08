@@ -1,5 +1,5 @@
+import { useId, type SVGProps } from 'react'
 import { FormattedMessage } from 'react-intl'
-import type { SVGProps } from 'react'
 import { LightBulbIcon, ChatBubbleLeftRightIcon, BookOpenIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import { SetupCheckCircleIcon } from './setup-icons'
@@ -37,25 +37,25 @@ const options = [
   {
     id: 'product_feedback',
     label: 'Feedback & roadmap',
-    description: 'Collect ideas and votes, and share what you plan to build.',
+    description: 'Collect ideas and votes',
     icon: LightBulbIcon,
   },
   {
     id: 'customer_support',
     label: 'Support inbox',
-    description: 'Chat with customers and answer email in one shared inbox.',
+    description: 'Live chat and email',
     icon: ChatBubbleLeftRightIcon,
   },
   {
     id: 'help_center',
     label: 'Help center',
-    description: 'Publish articles customers can search before they ask.',
+    description: 'Searchable help articles',
     icon: BookOpenIcon,
   },
   {
     id: 'status_page',
     label: 'Status page',
-    description: 'Tell customers when something is down, and when it is fixed.',
+    description: 'Updates when things break',
     icon: StatusPageIcon,
   },
 ] as const
@@ -65,41 +65,56 @@ export function GoalSelector({
   onGoalsChange,
   disabled,
   managed = false,
+  required = false,
 }: {
   goals: OnboardingOutcome[]
   onGoalsChange: (goals: OnboardingOutcome[]) => void
   disabled?: boolean
   /** A config file sets the goals: show its picks, read-only. */
   managed?: boolean
+  /** The form tried to continue: an empty pick is now a problem to say. */
+  required?: boolean
 }) {
   const locked = disabled || managed
+  const hintId = useId()
+  const startsId = useId()
+  const missing = required && !managed && goals.length === 0
+  // The launch plan starts with the first goal picked, and the order picked
+  // is the order kept, so the start moves to the next pick when it is dropped.
+  const first = options.find((option) => option.id === goals[0])
   return (
-    <fieldset disabled={locked} className="space-y-3">
-      <legend className="mb-3 text-sm font-medium">
+    <fieldset
+      disabled={locked}
+      aria-describedby={first ? `${hintId} ${startsId}` : hintId}
+      className="min-w-0"
+    >
+      {/* The legend floats so the hint can sit beside it while staying out of
+          the group's name: the hint describes the group rather than naming it. */}
+      <legend className="float-start me-2 mb-3 text-sm font-medium">
         <FormattedMessage
           id="onboarding.goals.title"
           defaultMessage="What do you want to run first?"
         />
-        {/* Polite live region: the hint turns into "Pick at least one" when
-            the last goal is removed, and the step cannot continue without one. */}
-        <span aria-live="polite" className="ms-2 text-xs font-normal text-muted-foreground">
-          {managed ? (
-            <FormattedMessage
-              id="onboarding.goals.managed"
-              defaultMessage="Set by your config file"
-            />
-          ) : goals.length === 0 ? (
-            <span className="text-foreground">
-              <FormattedMessage id="onboarding.goals.pickOne" defaultMessage="Pick at least one" />
-            </span>
-          ) : (
-            <FormattedMessage id="onboarding.goals.pickAny" defaultMessage="Pick any" />
-          )}
-        </span>
       </legend>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <p id={hintId} className="mb-3 text-xs leading-5 text-muted-foreground">
+        {managed ? (
+          <FormattedMessage
+            id="onboarding.goals.managed"
+            defaultMessage="Set by your config file"
+          />
+        ) : missing ? (
+          // Only this state is announced: it is the one that stops the step.
+          <span role="alert" className="font-medium text-destructive">
+            <FormattedMessage id="onboarding.goals.pickOne" defaultMessage="Pick at least one" />
+          </span>
+        ) : (
+          <FormattedMessage id="onboarding.goals.pickAny" defaultMessage="Pick any" />
+        )}
+      </p>
+      <div className="clear-both grid gap-3 sm:grid-cols-2">
         {options.map(({ id, label, description, icon: Icon }) => {
           const picked = goals.includes(id)
+          const starts = first?.id === id
           return (
             <Button
               key={id}
@@ -108,18 +123,29 @@ export function GoalSelector({
               disabled={locked}
               aria-pressed={picked}
               aria-labelledby={`goal-${id}-label`}
-              aria-describedby={`goal-${id}-description`}
+              aria-describedby={
+                starts ? `goal-${id}-description goal-${id}-starts` : `goal-${id}-description`
+              }
               className={cn(
-                'relative h-auto flex-col items-start justify-start gap-2 whitespace-normal rounded-[14px]! p-4 text-start focus-visible:ring-zinc-400/50',
-                picked && 'border-foreground bg-muted',
+                'relative h-auto flex-col items-start justify-start gap-1.5 whitespace-normal rounded-[14px]! p-4 text-start focus-visible:ring-ring',
+                // Picked wins over hover, so the tile just clicked never looks unpicked.
+                picked && 'border-foreground bg-muted hover:border-foreground hover:bg-muted',
                 managed && picked && 'disabled:opacity-100'
               )}
               onClick={() =>
                 onGoalsChange(picked ? goals.filter((goal) => goal !== id) : [...goals, id])
               }
             >
-              <span className="flex w-full items-center gap-2.5">
-                <Icon className="size-5 shrink-0" aria-hidden="true" />
+              {starts ? (
+                <span
+                  id={`goal-${id}-starts`}
+                  className="absolute -top-2.5 start-3 rounded-full bg-foreground px-2 text-[11px] leading-5 font-semibold text-background motion-safe:animate-in motion-safe:fade-in"
+                >
+                  <FormattedMessage id="onboarding.goals.startsHere" defaultMessage="Starts here" />
+                </span>
+              ) : null}
+              <span className="flex w-full items-start gap-2.5">
+                <Icon className="mt-px size-5 shrink-0" aria-hidden="true" />
                 <span id={`goal-${id}-label`} className="font-semibold">
                   <FormattedMessage id={`onboarding.goals.${id}`} defaultMessage={label} />
                 </span>
@@ -132,7 +158,7 @@ export function GoalSelector({
               </span>
               <span
                 id={`goal-${id}-description`}
-                className="text-[13px] leading-snug font-normal text-muted-foreground"
+                className="text-[13px] leading-snug font-normal text-pretty text-muted-foreground"
               >
                 <FormattedMessage
                   id={`onboarding.goals.${id}.description`}
@@ -143,14 +169,32 @@ export function GoalSelector({
           )
         })}
       </div>
-      {managed ? null : (
-        <p className="text-xs text-muted-foreground">
-          <FormattedMessage
-            id="onboarding.goals.later"
-            defaultMessage="You can turn any of these on or off later in Settings."
-          />
-        </p>
-      )}
+      <div className="mt-3 flex flex-col gap-1 text-xs text-muted-foreground">
+        {first ? (
+          <p id={startsId} className="text-foreground">
+            <FormattedMessage
+              id="onboarding.goals.startsWith"
+              defaultMessage="Your launch plan starts with {goal}."
+              values={{
+                goal: (
+                  <FormattedMessage
+                    id={`onboarding.goals.${first.id}`}
+                    defaultMessage={first.label}
+                  />
+                ),
+              }}
+            />
+          </p>
+        ) : null}
+        {managed ? null : (
+          <p>
+            <FormattedMessage
+              id="onboarding.goals.later"
+              defaultMessage="You can turn any of these on or off later in Settings."
+            />
+          </p>
+        )}
+      </div>
     </fieldset>
   )
 }

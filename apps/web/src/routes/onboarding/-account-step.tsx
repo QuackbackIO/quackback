@@ -11,7 +11,11 @@ import {
   OnboardingLead,
   OnboardingPreviewPanel,
   OnboardingSplit,
+  SETUP_AUTH_FORM_CLASS,
+  SETUP_CTA_CLASS,
+  SETUP_FIELD_CLASS,
   useBrowserHost,
+  useSetupTitle,
 } from '@/components/onboarding/onboarding-split'
 import { PortalPreview } from '@/components/onboarding/portal-preview'
 import { SetupSteps } from '@/components/onboarding/setup-steps'
@@ -20,6 +24,7 @@ import { postAuthSuccess, useAuthBroadcast } from '@/lib/client/hooks/use-auth-b
 import { startOidcSignIn } from '@/lib/client/start-oidc-sign-in'
 import type { WorkspaceClaim } from '@/lib/server/functions/onboarding'
 import type { AccountAuthConfig } from './-account-auth-config'
+import { cn } from '@/lib/shared/utils'
 import { track } from '@/lib/client/analytics'
 
 export interface AccountStepProps {
@@ -71,12 +76,22 @@ function useAdvanceOnAuthSuccess(
 function AccountFrame({
   children,
   workspaceName,
+  purpose = 'signIn',
 }: {
   children: React.ReactNode
   workspaceName?: string
+  /** What the screen is for, which names the browser tab. */
+  purpose?: 'create' | 'signIn'
 }) {
   const intl = useIntl()
   const host = useBrowserHost()
+  useSetupTitle(
+    intl.formatMessage(
+      purpose === 'create'
+        ? { id: 'onboarding.title.account', defaultMessage: 'Create your account · Quackback' }
+        : { id: 'onboarding.title.signIn', defaultMessage: 'Sign in · Quackback' }
+    )
+  )
   return (
     <OnboardingSplit
       panel={
@@ -84,21 +99,11 @@ function AccountFrame({
           caption={
             <FormattedMessage
               id="onboarding.account.previewCaption"
-              defaultMessage="Your portal: where customers share ideas, vote and follow what you ship."
+              defaultMessage="An example of your portal, where customers share ideas, vote and follow what you ship."
             />
           }
         >
-          <PortalPreview
-            variant="overview"
-            name={
-              workspaceName ||
-              intl.formatMessage({
-                id: 'onboarding.preview.placeholderName',
-                defaultMessage: 'Your workspace',
-              })
-            }
-            hostname={host}
-          />
+          <PortalPreview variant="example" name={workspaceName ?? ''} hostname={host} />
         </OnboardingPreviewPanel>
       }
     >
@@ -108,7 +113,7 @@ function AccountFrame({
 }
 
 /** The lighter heading the sign-in screens use: their titles are sentences. */
-const SENTENCE_HEADING = 'text-[30px] leading-[1.12] tracking-[-0.02em] sm:text-[34px]'
+const SENTENCE_HEADING = 'text-[30px] leading-[1.12] tracking-[-0.02em]! sm:text-[34px]'
 
 /**
  * Which first screen this workspace has earned.
@@ -134,7 +139,12 @@ export function AccountStep({ ssoEnabled, claim, authConfig, workspaceName }: Ac
   // Only the first-user form creates an account; the others sign an existing
   // owner in, which a conversion funnel must not count as a sign-up.
   const signInOnly = ssoEnabled || claim.claimed || !claim.openToClaim
-  useAdvanceOnAuthSuccess(signInOnly ? 'onboarding_signed_in' : 'onboarding_account_created')
+  // Someone who already started setup can sign back in from the first-user
+  // screen, which creates nothing either.
+  const [signingIn, setSigningIn] = useState(false)
+  useAdvanceOnAuthSuccess(
+    signInOnly || signingIn ? 'onboarding_signed_in' : 'onboarding_account_created'
+  )
 
   if (ssoEnabled) return <SsoStep />
   if (claim.claimed || !claim.openToClaim) {
@@ -153,8 +163,19 @@ export function AccountStep({ ssoEnabled, claim, authConfig, workspaceName }: Ac
       />
     )
   }
-  if (authConfig.oauth.password !== false) return <FirstAdminStep authConfig={authConfig} />
-  return <MethodsStep authConfig={authConfig} workspaceName={workspaceName} />
+  if (signingIn) {
+    return <ReturningSignIn authConfig={authConfig} onBack={() => setSigningIn(false)} />
+  }
+  if (authConfig.oauth.password !== false) {
+    return <FirstAdminStep onSignIn={() => setSigningIn(true)} />
+  }
+  return (
+    <MethodsStep
+      workspaceName={workspaceName}
+      authConfig={authConfig}
+      onSignIn={() => setSigningIn(true)}
+    />
+  )
 }
 
 /**
@@ -232,12 +253,14 @@ function SignInOnlyStep({
       {/* The one component that already renders exactly the methods a
           workspace allows. Login mode: the owner has an account here
           already, and nobody else is meant to create one on this screen. */}
-      <PortalAuthFormInline
-        mode="login"
-        authConfig={authConfig}
-        workspaceName={workspaceName}
-        callbackUrl={ONBOARDING_CALLBACK}
-      />
+      <div className={cn('max-w-[440px]', SETUP_AUTH_FORM_CLASS)}>
+        <PortalAuthFormInline
+          mode="login"
+          authConfig={authConfig}
+          workspaceName={workspaceName}
+          callbackUrl={ONBOARDING_CALLBACK}
+        />
+      </div>
 
       <p className="mt-6 text-sm text-muted-foreground">
         <FormattedMessage
@@ -273,67 +296,71 @@ const MIN_PASSWORD_LENGTH = 8
  * The name is required because it is what customers see on replies and
  * updates; without one, the account shows its address's local part instead.
  */
-function FirstAdminStep({ authConfig }: { authConfig: AccountAuthConfig }) {
+type AdminField = 'name' | 'email' | 'password'
+const ADMIN_FIELDS: AdminField[] = ['name', 'email', 'password']
+
+function FirstAdminStep({ onSignIn }: { onSignIn: () => void }) {
   const intl = useIntl()
-  const [signingIn, setSigningIn] = useState(false)
   const [accountExists, setAccountExists] = useState(false)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  /** What is wrong with each field, shown under that field. */
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<AdminField, string>>>({})
+  /** What the server said, which is about the form rather than one field. */
   const [error, setError] = useState('')
-  const [invalidField, setInvalidField] = useState<'name' | 'email' | 'password' | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  /** Point at the field to fix: mark it invalid and move focus to it. */
-  function refuse(field: 'name' | 'email' | 'password', message: string) {
-    setInvalidField(field)
-    setError(message)
-    document.getElementById(`admin-${field}`)?.focus()
+  /** Every problem with the form as typed, so they can all be shown at once. */
+  function problems(): Partial<Record<AdminField, string>> {
+    const found: Partial<Record<AdminField, string>> = {}
+    if (!name.trim()) {
+      found.name = intl.formatMessage({
+        id: 'onboarding.account.error.name',
+        defaultMessage: 'Enter your name. Customers see it on your replies and updates.',
+      })
+    }
+    if (!/^[^\s@]+@[^\s@]+$/.test(email.trim())) {
+      found.email = intl.formatMessage({
+        id: 'onboarding.account.error.email',
+        defaultMessage: 'Enter a valid email address.',
+      })
+    }
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      found.password = intl.formatMessage({
+        id: 'onboarding.account.error.password',
+        defaultMessage: 'Use a password of at least 8 characters.',
+      })
+    }
+    return found
+  }
+
+  /** Editing a field settles its own problem; the others stay until fixed. */
+  function edit(field: AdminField, value: string, set: (value: string) => void) {
+    set(value)
+    if (fieldErrors[field]) {
+      setFieldErrors(({ [field]: _settled, ...rest }) => rest)
+    }
   }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
-    const trimmedName = name.trim()
-    const trimmedEmail = email.trim()
-    if (!trimmedName) {
-      refuse(
-        'name',
-        intl.formatMessage({
-          id: 'onboarding.account.error.name',
-          defaultMessage: 'Enter your name. Customers see it on your replies and updates.',
-        })
-      )
-      return
-    }
-    if (!/^[^\s@]+@[^\s@]+$/.test(trimmedEmail)) {
-      refuse(
-        'email',
-        intl.formatMessage({
-          id: 'onboarding.account.error.email',
-          defaultMessage: 'Enter a valid email address.',
-        })
-      )
-      return
-    }
-    if (password.length < MIN_PASSWORD_LENGTH) {
-      refuse(
-        'password',
-        intl.formatMessage({
-          id: 'onboarding.account.error.password',
-          defaultMessage: 'Use a password of at least 8 characters.',
-        })
-      )
+    const found = problems()
+    setFieldErrors(found)
+    const first = ADMIN_FIELDS.find((field) => found[field])
+    if (first) {
+      setError('')
+      document.getElementById(`admin-${first}`)?.focus()
       return
     }
     setError('')
-    setInvalidField(null)
     setAccountExists(false)
     setSubmitting(true)
     try {
       const result = await authClient.signUp.email({
-        name: trimmedName,
-        email: trimmedEmail,
+        name: name.trim(),
+        email: email.trim(),
         password,
       })
       if (result.error) {
@@ -372,12 +399,8 @@ function FirstAdminStep({ authConfig }: { authConfig: AccountAuthConfig }) {
     }
   }
 
-  if (signingIn) {
-    return <ReturningSignIn authConfig={authConfig} onBack={() => setSigningIn(false)} />
-  }
-
   return (
-    <AccountFrame>
+    <AccountFrame purpose="create">
       <SetupSteps current="account" />
       <div className="mt-8">
         <OnboardingHeading>
@@ -396,23 +419,25 @@ function FirstAdminStep({ authConfig }: { authConfig: AccountAuthConfig }) {
       </div>
 
       <form onSubmit={submit} noValidate className="mt-8 flex max-w-[440px] flex-col gap-5">
-        <div className="flex flex-col gap-2">
+        <div data-field className="flex flex-col gap-2">
           <label htmlFor="admin-name" className="text-sm font-medium">
             <FormattedMessage id="onboarding.account.field.name" defaultMessage="Name" />
           </label>
           <Input
             id="admin-name"
             value={name}
-            onChange={(event) => setName(event.target.value)}
+            onChange={(event) => edit('name', event.target.value, setName)}
             placeholder="Jane Doe"
             autoComplete="name"
             autoFocus
-            aria-invalid={invalidField === 'name' || undefined}
+            aria-invalid={fieldErrors.name ? true : undefined}
+            aria-describedby={fieldErrors.name ? 'admin-name-error' : undefined}
             disabled={submitting}
-            className="h-12 rounded-xl px-4 text-base"
+            className={SETUP_FIELD_CLASS}
           />
+          <FieldError id="admin-name-error" message={fieldErrors.name} />
         </div>
-        <div className="flex flex-col gap-2">
+        <div data-field className="flex flex-col gap-2">
           <label htmlFor="admin-email" className="text-sm font-medium">
             <FormattedMessage id="onboarding.account.field.email" defaultMessage="Email" />
           </label>
@@ -420,15 +445,17 @@ function FirstAdminStep({ authConfig }: { authConfig: AccountAuthConfig }) {
             id="admin-email"
             type="email"
             value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            onChange={(event) => edit('email', event.target.value, setEmail)}
             placeholder="you@company.com"
             autoComplete="email"
-            aria-invalid={invalidField === 'email' || undefined}
+            aria-invalid={fieldErrors.email ? true : undefined}
+            aria-describedby={fieldErrors.email ? 'admin-email-error' : undefined}
             disabled={submitting}
-            className="h-12 rounded-xl px-4 text-base"
+            className={SETUP_FIELD_CLASS}
           />
+          <FieldError id="admin-email-error" message={fieldErrors.email} />
         </div>
-        <div className="flex flex-col gap-2">
+        <div data-field className="flex flex-col gap-2">
           <label htmlFor="admin-password" className="text-sm font-medium">
             <FormattedMessage id="onboarding.account.field.password" defaultMessage="Password" />
           </label>
@@ -437,12 +464,14 @@ function FirstAdminStep({ authConfig }: { authConfig: AccountAuthConfig }) {
               id="admin-password"
               type={showPassword ? 'text' : 'password'}
               value={password}
-              onChange={(event) => setPassword(event.target.value)}
+              onChange={(event) => edit('password', event.target.value, setPassword)}
               autoComplete="new-password"
-              aria-invalid={invalidField === 'password' || undefined}
-              aria-describedby="admin-password-hint"
+              aria-invalid={fieldErrors.password ? true : undefined}
+              aria-describedby={
+                fieldErrors.password ? 'admin-password-error' : 'admin-password-hint'
+              }
               disabled={submitting}
-              className="h-12 rounded-xl px-4 pe-12 text-base"
+              className={cn(SETUP_FIELD_CLASS, 'pe-12')}
             />
             <button
               type="button"
@@ -462,25 +491,31 @@ function FirstAdminStep({ authConfig }: { authConfig: AccountAuthConfig }) {
               )}
             </button>
           </div>
-          <p id="admin-password-hint" className="text-xs text-muted-foreground">
-            <FormattedMessage
-              id="onboarding.account.passwordHint"
-              defaultMessage="At least 8 characters."
-            />
-          </p>
+          {/* The rule is said once: as a hint until it is broken, then as the error. */}
+          {fieldErrors.password ? (
+            <FieldError id="admin-password-error" message={fieldErrors.password} />
+          ) : (
+            <p id="admin-password-hint" className="text-xs text-muted-foreground">
+              <FormattedMessage
+                id="onboarding.account.passwordHint"
+                defaultMessage="At least 8 characters."
+              />
+            </p>
+          )}
         </div>
 
-        <div aria-live="polite" aria-atomic="true">
+        <div aria-live="polite" aria-atomic="true" className="empty:hidden">
           {error ? (
             <div
               role="alert"
+              data-banner
               className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
             >
               <p>{error}</p>
               {accountExists ? (
                 <button
                   type="button"
-                  onClick={() => setSigningIn(true)}
+                  onClick={onSignIn}
                   className="mt-2 font-medium text-foreground underline underline-offset-4"
                 >
                   <FormattedMessage
@@ -493,7 +528,12 @@ function FirstAdminStep({ authConfig }: { authConfig: AccountAuthConfig }) {
           ) : null}
         </div>
 
-        <Button type="submit" disabled={submitting} className="h-12 w-full rounded-full text-base">
+        <Button
+          type="submit"
+          disabled={submitting}
+          aria-busy={submitting || undefined}
+          className={SETUP_CTA_CLASS}
+        >
           {submitting ? (
             <>
               <ArrowPathIcon className="size-4 animate-spin motion-reduce:animate-none" />
@@ -512,9 +552,19 @@ function FirstAdminStep({ authConfig }: { authConfig: AccountAuthConfig }) {
             defaultMessage="Setup takes about a minute. You can change everything later in Settings."
           />
         </p>
-        <StartedSetupLink onClick={() => setSigningIn(true)} />
+        <StartedSetupLink onClick={onSignIn} />
       </form>
     </AccountFrame>
+  )
+}
+
+/** A field's problem, directly under it and announced when it appears. */
+function FieldError({ id, message }: { id: string; message?: string }) {
+  if (!message) return null
+  return (
+    <p id={id} role="alert" className="text-xs text-destructive">
+      {message}
+    </p>
   )
 }
 
@@ -569,7 +619,7 @@ function ReturningSignIn({
           />
         </OnboardingLead>
       </div>
-      <div className="max-w-[440px]">
+      <div className={cn('max-w-[440px]', SETUP_AUTH_FORM_CLASS)}>
         <PortalAuthFormInline
           mode="login"
           authConfig={{ ...authConfig, oauth: authConfig.signInOAuth ?? authConfig.oauth }}
@@ -602,16 +652,14 @@ function ReturningSignIn({
 function MethodsStep({
   authConfig,
   workspaceName,
+  onSignIn,
 }: {
   authConfig: AccountAuthConfig
   workspaceName?: string
+  onSignIn: () => void
 }) {
-  const [signingIn, setSigningIn] = useState(false)
-  if (signingIn) {
-    return <ReturningSignIn authConfig={authConfig} onBack={() => setSigningIn(false)} />
-  }
   return (
-    <AccountFrame workspaceName={workspaceName}>
+    <AccountFrame workspaceName={workspaceName} purpose="create">
       <SetupSteps current="account" />
       <div className="mt-8 mb-8">
         <OnboardingHeading>
@@ -628,7 +676,7 @@ function MethodsStep({
           />
         </OnboardingLead>
       </div>
-      <div className="max-w-[440px]">
+      <div className={cn('max-w-[440px]', SETUP_AUTH_FORM_CLASS)}>
         <PortalAuthFormInline
           // Nobody has an account on this workspace yet, so the form says "Sign
           // up", not "Sign in". `openSignup` is forced on because the server
@@ -651,7 +699,7 @@ function MethodsStep({
           callbackUrl={ONBOARDING_CALLBACK}
         />
         <div className="mt-6">
-          <StartedSetupLink onClick={() => setSigningIn(true)} />
+          <StartedSetupLink onClick={onSignIn} />
         </div>
       </div>
     </AccountFrame>
@@ -736,13 +784,17 @@ function SsoStep() {
       <Button
         onClick={() => void startSso()}
         disabled={ssoRedirecting}
-        className="mt-8 h-12 w-full max-w-[440px] rounded-full text-base"
+        aria-busy={ssoRedirecting || undefined}
+        className={cn(SETUP_CTA_CLASS, 'mt-8 max-w-[440px]')}
       >
         {ssoRedirecting ? (
-          <FormattedMessage
-            id="onboarding.account.redirectingShort"
-            defaultMessage="Redirecting…"
-          />
+          <>
+            <ArrowPathIcon className="size-4 animate-spin motion-reduce:animate-none" />
+            <FormattedMessage
+              id="onboarding.account.redirectingShort"
+              defaultMessage="Redirecting…"
+            />
+          </>
         ) : error ? (
           <FormattedMessage id="onboarding.account.ssoRetry" defaultMessage="Try SSO again" />
         ) : (

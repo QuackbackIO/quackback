@@ -1,9 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { FormattedMessage } from 'react-intl'
-import { CheckCircleIcon } from '@heroicons/react/24/solid'
+import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
-import { OnboardingHeading, OnboardingLead } from '@/components/onboarding/onboarding-split'
+import {
+  OnboardingHeading,
+  OnboardingLead,
+  SETUP_CTA_CLASS,
+  SetupActions,
+} from '@/components/onboarding/onboarding-split'
 import { SetupSteps } from '@/components/onboarding/setup-steps'
 import { SetupCheckIcon, SetupWarningIcon } from '@/components/onboarding/setup-icons'
 import { getInstallChecksFn } from '@/lib/server/functions/onboarding'
@@ -30,6 +35,16 @@ const GOAL_RESULTS: Partial<Record<OnboardingOutcome, { id: string; defaultMessa
     defaultMessage: 'A published status page',
   },
 }
+
+/** A list row: the loaded rows and their loading placeholders share it. */
+const ROW = 'flex items-start gap-3 text-[15px] leading-normal'
+
+/** A section's small uppercase title. Weight and tracking are marked
+ *  important because an unlayered global h1-h3 rule sets both. */
+const EYEBROW = 'text-xs font-medium! tracking-wide! text-muted-foreground uppercase'
+
+/** Past this many characters the headline steps down a size. */
+const LONG_NAME = 20
 
 /** Stagger the list in, one row after another. */
 function rowAnimation(index: number) {
@@ -61,6 +76,15 @@ export function ReadyStep({
   const navigate = useNavigate()
   const [checks, setChecks] = useState<InstallChecks | null | 'loading'>('loading')
   const [opening, setOpening] = useState(false)
+  const heading = useRef<HTMLHeadingElement>(null)
+
+  // This step replaces the workspace form in place, wherever that form was
+  // scrolled to. Start it at the top, with focus on its heading, so it is
+  // seen and announced as the new screen it is.
+  useEffect(() => {
+    window.scrollTo({ top: 0 })
+    heading.current?.focus({ preventScroll: true })
+  }, [])
 
   useEffect(() => {
     let live = true
@@ -102,16 +126,25 @@ export function ReadyStep({
   return (
     <div className="flex flex-col">
       <SetupSteps current="ready" finished />
-      <CheckCircleIcon
-        className="mt-10 size-12 text-primary motion-safe:animate-in motion-safe:zoom-in-50 motion-safe:duration-500"
+      <span
         aria-hidden="true"
-      />
+        className="mt-8 grid size-12 place-items-center rounded-full bg-primary text-primary-foreground motion-safe:animate-in motion-safe:zoom-in-50 motion-safe:duration-500"
+      >
+        <SetupCheckIcon className="size-7" />
+      </span>
       <div className="mt-5">
-        <OnboardingHeading className="break-words">
+        <OnboardingHeading
+          ref={heading}
+          tabIndex={-1}
+          className={cn(
+            'break-words text-balance',
+            workspaceName.length > LONG_NAME && 'text-[30px] leading-[1.1] sm:text-[32px]'
+          )}
+        >
           <FormattedMessage
             id="onboarding.ready.title"
-            defaultMessage="{name} is {br}ready"
-            values={{ name: workspaceName, br: <br /> }}
+            defaultMessage="{name} is ready"
+            values={{ name: workspaceName }}
           />
         </OnboardingHeading>
         <OnboardingLead>
@@ -122,8 +155,8 @@ export function ReadyStep({
         </OnboardingLead>
       </div>
 
-      <section className="mt-8 max-w-[440px]">
-        <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+      <section className="mt-7 max-w-[440px]">
+        <h2 className={EYEBROW}>
           <FormattedMessage id="onboarding.ready.madeTitle" defaultMessage="Set up for you" />
         </h2>
         <ul className="mt-3 flex flex-col gap-2.5">
@@ -131,7 +164,7 @@ export function ReadyStep({
             <li
               key={row.key}
               style={rowAnimation(index).style}
-              className={cn('flex items-start gap-3 text-[15px]', rowAnimation(index).className)}
+              className={cn(ROW, rowAnimation(index).className)}
             >
               <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-foreground text-background">
                 <SetupCheckIcon className="size-3.5" aria-hidden="true" />
@@ -144,23 +177,24 @@ export function ReadyStep({
 
       {checks === null ? null : <InstallSection checks={checks} offset={made.length} />}
 
-      <div className="mt-10 max-w-[440px]">
+      <SetupActions className="mt-8 max-w-[440px]">
         <Button
           type="button"
           disabled={opening}
+          aria-busy={opening || undefined}
           onClick={() => {
             setOpening(true)
             void navigate({ to: '/admin' })
           }}
-          className="h-12 w-full rounded-full text-base"
+          className={SETUP_CTA_CLASS}
         >
-          <span className="truncate">
-            <FormattedMessage
-              id="onboarding.ready.open"
-              defaultMessage="Open {name}"
-              values={{ name: workspaceName }}
-            />
-          </span>
+          {opening ? (
+            <ArrowPathIcon className="size-4 animate-spin motion-reduce:animate-none" />
+          ) : null}
+          <FormattedMessage
+            id="onboarding.ready.openWorkspace"
+            defaultMessage="Open your workspace"
+          />
         </Button>
         <p className="mt-3 text-xs text-muted-foreground">
           <FormattedMessage
@@ -168,24 +202,40 @@ export function ReadyStep({
             defaultMessage="Opens Home with your launch plan."
           />
         </p>
-      </div>
+      </SetupActions>
     </div>
   )
 }
 
 function InstallSection({ checks, offset }: { checks: InstallChecks | 'loading'; offset: number }) {
   if (checks === 'loading') {
+    // One placeholder per check, in the loaded rows' shape, so the section
+    // keeps its height and the button below does not move when they resolve.
     return (
-      <section className="mt-8 max-w-[440px]" aria-busy="true">
-        <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+      <section className="mt-7 max-w-[440px]" aria-busy="true">
+        <h2 className={EYEBROW}>
           <FormattedMessage id="onboarding.ready.installTitle" defaultMessage="Your install" />
         </h2>
-        <p role="status" className="mt-3 text-sm text-muted-foreground">
+        <p role="status" className="sr-only">
           <FormattedMessage
             id="onboarding.ready.checking"
             defaultMessage="Checking your install…"
           />
         </p>
+        <ul aria-hidden="true" className="mt-3 flex flex-col gap-3">
+          {[60, 52, 70].map((width) => (
+            <li key={width} data-skeleton-row className={ROW}>
+              <span className="mt-0.5 size-5 shrink-0 rounded-full bg-muted motion-safe:animate-pulse" />
+              <span className="flex h-[1lh] grow items-center">
+                <span
+                  className="h-3 rounded-full bg-muted motion-safe:animate-pulse"
+                  style={{ width: `${width}%` }}
+                />
+              </span>
+            </li>
+          ))}
+        </ul>
+        <p aria-hidden="true" className="mt-3 h-[1lh] text-sm" />
       </section>
     )
   }
@@ -269,8 +319,8 @@ function InstallSection({ checks, offset }: { checks: InstallChecks | 'loading';
   const allOk = rows.every((row) => row.ok)
 
   return (
-    <section className="mt-8 max-w-[440px]">
-      <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+    <section className="mt-7 max-w-[440px]">
+      <h2 className={EYEBROW}>
         <FormattedMessage id="onboarding.ready.installTitle" defaultMessage="Your install" />
       </h2>
       <ul className="mt-3 flex flex-col gap-3">
@@ -278,10 +328,7 @@ function InstallSection({ checks, offset }: { checks: InstallChecks | 'loading';
           <li
             key={row.key}
             style={rowAnimation(offset + index).style}
-            className={cn(
-              'flex items-start gap-3 text-[15px]',
-              rowAnimation(offset + index).className
-            )}
+            className={cn(ROW, rowAnimation(offset + index).className)}
           >
             {row.ok ? (
               <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-foreground text-background">

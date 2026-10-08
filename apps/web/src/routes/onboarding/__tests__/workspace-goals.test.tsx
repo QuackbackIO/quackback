@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'react-intl'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '@/locales/en.json'
@@ -88,7 +89,7 @@ describe('self-hosted workspace step goals', () => {
     await waitFor(() => expect(hoisted.save).toHaveBeenCalledTimes(1))
     expect(hoisted.save).toHaveBeenCalledWith({ data: { workspaceName: 'Acme' } })
     // Setup ends on the ready step, and Home is one deliberate click away.
-    fireEvent.click(await screen.findByRole('button', { name: 'Open Acme' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Open your workspace' }))
     expect(hoisted.navigate).toHaveBeenCalledWith({ to: '/admin' })
   })
 
@@ -117,18 +118,97 @@ describe('self-hosted workspace step goals', () => {
     })
   })
 
-  it('defaults a fresh install to Feedback', async () => {
+  // Nothing is chosen for the admin: the first goal they pick is the one
+  // the launch plan starts with, and the server keeps the order picked.
+  it('starts a fresh install with nothing picked and sends the pick order', async () => {
     renderStep({ managedFieldPaths: [] })
-    expect(screen.getByRole('button', { name: 'Feedback & roadmap' })).toHaveAttribute(
-      'aria-pressed',
-      'true'
-    )
+    for (const name of ['Feedback & roadmap', 'Support inbox', 'Help center', 'Status page']) {
+      expect(screen.getByRole('button', { name })).toHaveAttribute('aria-pressed', 'false')
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Support inbox' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Feedback & roadmap' }))
     fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
     await waitFor(() =>
       expect(hoisted.save).toHaveBeenCalledWith({
-        data: { workspaceName: 'Acme', goals: ['product_feedback'] },
+        data: { workspaceName: 'Acme', goals: ['customer_support', 'product_feedback'] },
       })
     )
+  })
+})
+
+describe('self-hosted workspace step submit', () => {
+  // The button says what happens next; the form says what is missing, at the
+  // moment it matters, rather than sitting greyed out with no reason.
+  it('keeps Create workspace enabled and explains a short name under the field', async () => {
+    renderStep({ managedFieldPaths: [], goals: ['product_feedback'] })
+    const name = screen.getByLabelText('Workspace name')
+    fireEvent.change(name, { target: { value: 'A' } })
+    const create = screen.getByRole('button', { name: 'Create workspace' })
+    expect(create).toBeEnabled()
+
+    fireEvent.click(create)
+
+    const error = await screen.findByRole('alert')
+    expect(error).toHaveTextContent('Enter a workspace name with at least 2 characters.')
+    expect(name).toHaveAttribute('aria-invalid', 'true')
+    expect(name.getAttribute('aria-describedby')?.split(' ')).toContain(error.id)
+    expect(error.parentElement).toBe(name.closest('[data-field]'))
+    expect(name).toHaveFocus()
+    expect(hoisted.save).not.toHaveBeenCalled()
+  })
+
+  // Enter is how a keyboard user submits, so it must reach the check too.
+  it('checks the name when Enter is pressed in the field', async () => {
+    const user = userEvent.setup()
+    renderStep({ managedFieldPaths: [], goals: ['help_center'] })
+    const name = screen.getByLabelText('Workspace name')
+    await user.clear(name)
+    await user.type(name, 'A{Enter}')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/at least 2 characters/)
+    expect(hoisted.save).not.toHaveBeenCalled()
+
+    await user.type(name, 'cme{Enter}')
+    await waitFor(() =>
+      expect(hoisted.save).toHaveBeenCalledWith({
+        data: { workspaceName: 'Acme', goals: ['help_center'] },
+      })
+    )
+  })
+
+  it('asks for a goal when none is picked, and saves nothing', async () => {
+    renderStep({ managedFieldPaths: [], goals: ['product_feedback'] })
+    fireEvent.click(screen.getByRole('button', { name: 'Feedback & roadmap' }))
+    expect(screen.queryByText('Pick at least one')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Pick at least one')
+    expect(hoisted.save).not.toHaveBeenCalled()
+  })
+})
+
+describe('setup buttons while they work', () => {
+  // Working is not the same as unavailable: a button that is saving keeps its
+  // colour and says so, where a truly disabled one would turn muted.
+  it('marks Create workspace and Open your workspace busy while they work', async () => {
+    let finishSave: (value: unknown) => void = () => {}
+    hoisted.save.mockReturnValue(new Promise((resolve) => (finishSave = resolve)))
+    hoisted.navigate.mockReturnValue(new Promise(() => {}))
+    renderStep({ managedFieldPaths: [], goals: ['product_feedback'] })
+    const create = screen.getByRole('button', { name: 'Create workspace' })
+    expect(create).not.toHaveAttribute('aria-busy')
+
+    fireEvent.click(create)
+    const saving = await screen.findByRole('button', { name: /Setting up/ })
+    expect(saving).toBeDisabled()
+    expect(saving).toHaveAttribute('aria-busy', 'true')
+
+    finishSave({ enabledModules: [], name: 'Acme' })
+    const open = await screen.findByRole('button', { name: 'Open your workspace' })
+    fireEvent.click(open)
+    expect(open).toBeDisabled()
+    expect(open).toHaveAttribute('aria-busy', 'true')
   })
 })
 
@@ -139,7 +219,7 @@ describe('self-hosted ready step', () => {
   ) {
     renderStep({ managedFieldPaths: [], goals, adminName })
     fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
-    await screen.findByRole('button', { name: 'Open Acme' })
+    await screen.findByRole('button', { name: 'Open your workspace' })
   }
 
   it('does not leave the wizard until the admin opens the workspace', async () => {
@@ -147,6 +227,67 @@ describe('self-hosted ready step', () => {
 
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Acme is ready')
     expect(hoisted.navigate).not.toHaveBeenCalled()
+  })
+
+  // The step swaps in place, so it has to announce itself: back to the top,
+  // focus on its heading, and a title of its own.
+  it('opens at the top with focus on its heading and a title of its own', async () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    renderStep({ managedFieldPaths: [], goals: ['product_feedback'] })
+    expect(document.title).toBe('Name your workspace · Quackback')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Acme is ready' })
+
+    await waitFor(() => expect(heading).toHaveFocus())
+    expect(heading).toHaveAttribute('tabindex', '-1')
+    expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ top: 0 }))
+    expect(document.title).toBe('Acme is ready · Quackback')
+    scrollTo.mockRestore()
+  })
+
+  // A real company name must not break the headline or the way in.
+  it('keeps a long name readable and the button label short', async () => {
+    const long = 'Featherstonehaugh Customer Success Group'
+    hoisted.save.mockResolvedValue({ enabledModules: [], name: long })
+    await finishSetup(['product_feedback'])
+
+    const heading = screen.getByRole('heading', { level: 1 })
+    expect(heading).toHaveTextContent(`${long} is ready`)
+    expect(heading.querySelector('br')).toBeNull()
+    expect(heading.className).toMatch(/text-balance/)
+    // Scaled down so the name takes fewer lines than a short one would at full size.
+    expect(heading.className).toMatch(/text-\[3[02]px\]/)
+    const open = screen.getByRole('button', { name: 'Open your workspace' })
+    expect(open.textContent).not.toContain('Featherstonehaugh')
+    expect(open.querySelector('.truncate')).toBeNull()
+  })
+
+  // The checks resolve after the step appears; holding their place keeps
+  // the button still while the admin reaches for it.
+  it('holds the install rows’ place while the checks load', async () => {
+    let resolveChecks: (value: typeof ALL_SET) => void = () => {}
+    hoisted.checks.mockReturnValue(new Promise((resolve) => (resolveChecks = resolve)))
+    await finishSetup(['product_feedback'])
+
+    const loading = screen.getByText('Checking your install…').closest('section')!
+    expect(loading).toHaveAttribute('aria-busy', 'true')
+    const placeholders = loading.querySelectorAll('[data-skeleton-row]')
+    expect(placeholders).toHaveLength(3)
+
+    resolveChecks(ALL_SET)
+    const loaded = (await screen.findByText('Email is set up')).closest('section')!
+    expect(loaded.querySelectorAll('li')).toHaveLength(placeholders.length)
+  })
+
+  // The portal is live now, so its preview shows it as customers find it.
+  it('previews the portal as it really is: empty, with its real tabs', async () => {
+    await finishSetup(['product_feedback'])
+
+    expect(screen.getByText('Got an idea? Be the first to share it')).toBeInTheDocument()
+    expect(screen.getByText('The Acme team reads every request.')).toBeInTheDocument()
+    expect(screen.queryByText('Dark mode')).toBeNull()
+    expect(screen.getByText(/Your portal is live at/)).toBeInTheDocument()
   })
 
   it('lists what was set up for each goal picked', async () => {

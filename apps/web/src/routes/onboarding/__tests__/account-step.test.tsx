@@ -213,6 +213,14 @@ describe('account step — a workspace that does not accept passwords', () => {
     expect(screen.getByRole('button', { name: /sign in with github/i })).toBeInTheDocument()
   })
 
+  // The arrow is decoration: a screen reader should hear "Continue", not
+  // "Continue right arrow".
+  it('names the continue button without its arrow', () => {
+    renderStep(provisioned())
+
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument()
+  })
+
   it('drops a social button the config turns off', () => {
     const props = provisioned()
     props.authConfig.oauth = { ...PROVISIONED_OAUTH, github: false }
@@ -351,6 +359,15 @@ describe('account step — a self-hosted first user', () => {
     return screen.getByRole('button', { name: /^create account$/i })
   }
 
+  it('names the browser tab for the step', () => {
+    renderStep(selfHosted())
+    expect(document.title).toBe('Create your account · Quackback')
+    cleanup()
+
+    renderStep(provisioned())
+    expect(document.title).toBe('Sign in · Quackback')
+  })
+
   it('asks for name, email and password in one form', () => {
     const { container } = renderStep(selfHosted())
 
@@ -410,6 +427,61 @@ describe('account step — a self-hosted first user', () => {
     expect(authClient.signUp.email).not.toHaveBeenCalled()
   })
 
+  // Each problem sits under the field it is about, all of them at once, so a
+  // beginner never has to match a red box to a red field three rows away.
+  it('shows every problem under its own field at once', async () => {
+    const { authClient } = await import('@/lib/client/auth-client')
+    const { container } = renderStep(selfHosted())
+
+    fireEvent.click(createAccountButton())
+
+    const alerts = await screen.findAllByRole('alert')
+    expect(alerts).toHaveLength(3)
+    for (const [field, text] of [
+      ['name', /your name/i],
+      ['email', /valid email/i],
+      ['password', /at least 8 characters/i],
+    ] as const) {
+      const input = screen.getByLabelText(new RegExp(`^${field}$`, 'i'))
+      expect(input).toHaveAttribute('aria-invalid', 'true')
+      const error = alerts.find((alert) => text.test(alert.textContent ?? ''))!
+      expect(error).toBeDefined()
+      expect(input.getAttribute('aria-describedby')?.split(' ')).toContain(error.id)
+      // Directly under its own field, not in a shared slot by the button.
+      expect(error.parentElement).toBe(input.closest('[data-field]'))
+    }
+    // The first field to fix gets focus.
+    expect(screen.getByLabelText(/^name$/i)).toHaveFocus()
+    // No banner: that is for what the server says.
+    expect(container.querySelector('[data-banner]')).toBeNull()
+    expect(authClient.signUp.email).not.toHaveBeenCalled()
+  })
+
+  it('says the password rule once: the error takes the hint’s place', async () => {
+    renderStep(selfHosted())
+    const password = screen.getByLabelText(/^password$/i)
+    expect(screen.getByText('At least 8 characters.')).toBeInTheDocument()
+    expect(password.getAttribute('aria-describedby')).toBe('admin-password-hint')
+
+    fillAdminForm({ name: 'Alex', email: 'alex@acme.example', password: 'short' })
+    fireEvent.click(createAccountButton())
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/at least 8 characters/i)
+    expect(screen.queryByText('At least 8 characters.')).toBeNull()
+    expect(password.getAttribute('aria-describedby')).toBe('admin-password-error')
+  })
+
+  it('clears a field’s problem once it is edited', async () => {
+    renderStep(selfHosted())
+    fireEvent.click(createAccountButton())
+    expect(await screen.findAllByRole('alert')).toHaveLength(3)
+
+    fillAdminForm({ name: 'Alex' })
+
+    expect(screen.getAllByRole('alert')).toHaveLength(2)
+    expect(screen.getByLabelText(/^name$/i)).not.toHaveAttribute('aria-invalid')
+  })
+
   it('refuses a short password before calling the server', async () => {
     const { authClient } = await import('@/lib/client/auth-client')
     renderStep(selfHosted())
@@ -419,6 +491,19 @@ describe('account step — a self-hosted first user', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/at least 8 characters/i)
     expect(authClient.signUp.email).not.toHaveBeenCalled()
+  })
+
+  it('marks Create account busy while the account is created', async () => {
+    const { authClient } = await import('@/lib/client/auth-client')
+    vi.mocked(authClient.signUp.email).mockReturnValueOnce(new Promise(() => {}) as never)
+    renderStep(selfHosted())
+
+    fillAdminForm({ name: 'Alex', email: 'alex@acme.example', password: 'correct-horse' })
+    fireEvent.click(createAccountButton())
+
+    const busy = await screen.findByRole('button', { name: /creating account/i })
+    expect(busy).toBeDisabled()
+    expect(busy).toHaveAttribute('aria-busy', 'true')
   })
 
   it('shows the server refusal and stays on the form', async () => {
@@ -432,7 +517,10 @@ describe('account step — a self-hosted first user', () => {
     fillAdminForm({ name: 'Alex', email: 'alex@acme.example', password: 'correct-horse' })
     fireEvent.click(createAccountButton())
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/already exists/i)
+    const refusal = await screen.findByRole('alert')
+    expect(refusal).toHaveTextContent(/already exists/i)
+    // What the server says is not about one field, so it keeps the banner.
+    expect(refusal.closest('[data-banner]')).not.toBeNull()
     expect(navigate).not.toHaveBeenCalled()
     expect(createAccountButton()).not.toBeDisabled()
   })
@@ -575,6 +663,17 @@ describe('account step — after a sign-in completes', () => {
     renderStep(selfHosted())
     act(() => postAuthSuccess())
     await waitFor(() => expect(track).toHaveBeenCalledWith('onboarding_account_created'))
+  })
+
+  // Someone who already started setup signs back in from the first-user
+  // screen. No account is created, so the funnel must not count one.
+  it('records a returning sign-in from the first-user screen as a sign-in', async () => {
+    track.mockClear()
+    renderStep(selfHosted())
+    fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }))
+    act(() => postAuthSuccess())
+    await waitFor(() => expect(track).toHaveBeenCalledWith('onboarding_signed_in'))
+    expect(track).not.toHaveBeenCalledWith('onboarding_account_created')
   })
 
   it('records an owner signing in to a claimed workspace as a sign-in', async () => {
