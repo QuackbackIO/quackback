@@ -64,7 +64,7 @@ vi.mock('@/components/admin/settings/boards/create-board-dialog', () => ({
 vi.mock('@/lib/server/functions/admin', () => ({ setLaunchTaskResolutionFn: vi.fn() }))
 vi.mock('../product-tour', () => ({ useProductTour: () => ({ start: hoisted.start }) }))
 
-import { HomeGettingStarted } from '../home-launch-plan'
+import { HomeGettingStarted, HomeTourOffer } from '../home-launch-plan'
 
 const NOW = Date.now()
 const OPEN = {
@@ -93,12 +93,14 @@ function status(overrides: Partial<LaunchStatus> = {}): LaunchStatus {
   }
 }
 
-function mount() {
+/** Home's first-run blocks as Home lays them out: the plan area, then the tour offer last. */
+function mount({ tour = true }: { tour?: boolean } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const view = render(
     <IntlProvider locale="en" messages={en}>
       <QueryClientProvider client={client}>
         <HomeGettingStarted />
+        {tour ? <HomeTourOffer /> : null}
       </QueryClientProvider>
     </IntlProvider>
   )
@@ -154,6 +156,25 @@ describe('Home first-run cards', () => {
     expect(screen.getByText('Launch plan · Step 2 of 3')).toBeVisible()
 
     await client.invalidateQueries({ queryKey: ['onboarding', 'progress'] })
+    expect(screen.queryByText('New here? Take the 60-second tour')).toBeNull()
+  })
+
+  it('puts the tour offer in the page as its own quiet card, never over the plan', async () => {
+    hoisted.status = status()
+    mount()
+    const offer = await screen.findByRole('region', { name: 'New here? Take the 60-second tour' })
+    expect(offer.className).not.toMatch(/\bfixed\b/)
+    expect(offer.className).toContain('rounded-panel')
+    // The plan's action is the one filled button; Take tour is drawn in outline.
+    const take = within(offer).getByRole('button', { name: 'Take tour' })
+    expect(take.className).not.toContain('bg-primary')
+    expect(take.className).toContain('border')
+    cleanup()
+
+    // The plan area no longer carries the offer: Home places it last.
+    const { client } = mount({ tour: false })
+    await waitFor(() => expect(client.getQueryData(['admin', 'onboarding'])).toBeDefined())
+    await screen.findByText('Launch plan · Step 2 of 3')
     expect(screen.queryByText('New here? Take the 60-second tour')).toBeNull()
   })
 

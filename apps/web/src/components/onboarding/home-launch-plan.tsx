@@ -21,7 +21,7 @@ const PROGRESS_KEY = ['onboarding', 'progress'] as const
 const FIRST_WIN_KEY = ['onboarding', 'first-win'] as const
 type Progress = Awaited<ReturnType<typeof getOnboardingProgressFn>>
 
-/** Home's first-run area: the celebration, the next step and its path, and the tour prompt. */
+/** Home's first-run area: the celebration, and the launch plan card. */
 export function HomeGettingStarted({
   portalUrl,
   member = false,
@@ -30,11 +30,6 @@ export function HomeGettingStarted({
   /** A teammate's first run: the tour offer only, never the owner's plan or win. */
   member?: boolean
 }) {
-  const tour = useProductTour()
-  const progress = useQuery({
-    queryKey: PROGRESS_KEY,
-    queryFn: () => getOnboardingProgressFn(),
-  })
   const queryClient = useQueryClient()
   const [createBoardOpen, setCreateBoardOpen] = useState(false)
   const statusQuery = useSuspenseQuery(
@@ -42,17 +37,6 @@ export function HomeGettingStarted({
     member ? adminQueries.onboardingStatus() : launchStatusQuery()
   )
   const resolutionMutation = useLaunchTaskResolution()
-
-  const dismissTour = useMutation({
-    mutationFn: () => dismissTourOfferFn(),
-    onMutate: () => {
-      queryClient.setQueryData<Progress>(PROGRESS_KEY, (current) => ({
-        ...current,
-        tourDismissedAt: new Date().toISOString(),
-      }))
-    },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: PROGRESS_KEY }),
-  })
 
   // First-run behaviour belongs to the launch window: an established
   // workspace never sees it after an upgrade.
@@ -68,19 +52,6 @@ export function HomeGettingStarted({
     mutationFn: () => dismissFirstWinFn(),
     onMutate: () => queryClient.setQueryData(FIRST_WIN_KEY, null),
   })
-  // On a phone the tour's stops are behind the menu drawer, so it is not offered.
-  const [narrow, setNarrow] = useState(false)
-  useEffect(() => {
-    setNarrow(window.matchMedia?.('(max-width: 639px)').matches ?? false)
-  }, [])
-  // The owner's first win ends the first run, and the tour offer with it.
-  const showTourOffer =
-    !narrow &&
-    inWindow &&
-    (member || statusQuery.data.hasFirstWin !== true) &&
-    Boolean(progress.data) &&
-    !progress.data?.tourSeenAt &&
-    !progress.data?.tourDismissedAt
   const planShown = !member && inWindow && isLaunchPlanActive(statusQuery.data)
   const handOver =
     launchPath(statusQuery.data).later.find(
@@ -121,13 +92,6 @@ export function HomeGettingStarted({
           onCreateBoard={() => setCreateBoardOpen(true)}
         />
       ) : null}
-      {showTourOffer && (
-        <HomeTourPrompt
-          pending={dismissTour.isPending}
-          onDismiss={() => dismissTour.mutate()}
-          onStart={() => tour?.start()}
-        />
-      )}
       <CreateBoardDialog
         open={createBoardOpen}
         onOpenChange={setCreateBoardOpen}
@@ -137,5 +101,50 @@ export function HomeGettingStarted({
         }}
       />
     </>
+  )
+}
+
+/**
+ * The one-time tour offer, the last block on Home: in the launch window, until
+ * this person takes the tour or says Not now, and for the owner only until the
+ * first win ends the first run.
+ */
+export function HomeTourOffer({ member = false }: { member?: boolean }) {
+  const tour = useProductTour()
+  const queryClient = useQueryClient()
+  const progress = useQuery({
+    queryKey: PROGRESS_KEY,
+    queryFn: () => getOnboardingProgressFn(),
+  })
+  const status = useQuery(member ? adminQueries.onboardingStatus() : launchStatusQuery())
+  const dismissTour = useMutation({
+    mutationFn: () => dismissTourOfferFn(),
+    onMutate: () => {
+      queryClient.setQueryData<Progress>(PROGRESS_KEY, (current) => ({
+        ...current,
+        tourDismissedAt: new Date().toISOString(),
+      }))
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: PROGRESS_KEY }),
+  })
+  // On a phone the tour's stops are behind the menu drawer, so it is not offered.
+  const [narrow, setNarrow] = useState(false)
+  useEffect(() => {
+    setNarrow(window.matchMedia?.('(max-width: 639px)').matches ?? false)
+  }, [])
+  const shown =
+    !narrow &&
+    status.data?.inLaunchWindow === true &&
+    (member || status.data.hasFirstWin !== true) &&
+    Boolean(progress.data) &&
+    !progress.data?.tourSeenAt &&
+    !progress.data?.tourDismissedAt
+  if (!shown) return null
+  return (
+    <HomeTourPrompt
+      pending={dismissTour.isPending}
+      onDismiss={() => dismissTour.mutate()}
+      onStart={() => tour?.start()}
+    />
   )
 }

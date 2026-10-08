@@ -6,7 +6,7 @@ import { HomeLoadingFrame } from '@/components/admin/home-frame'
 import { copilotAvailabilityQuery, useCopilotHome } from '@/components/admin/ask/copilot-on-home'
 import { CopilotCreditsLock } from '@/components/admin/ask/copilot-credits-lock'
 import { OverviewCounts, OverviewDashboard } from '@/components/admin/admin-overview'
-import { HomeLaunchArea } from '@/components/onboarding/home-try-it'
+import { HomeLaunchArea, HomeTourArea } from '@/components/onboarding/home-try-it'
 import { HomeGreeting } from '@/components/onboarding/home-greeting'
 import { LaunchMessages } from '@/components/onboarding/launch-messages'
 import { adminQueries } from '@/lib/client/queries/admin'
@@ -104,6 +104,8 @@ function AdminHome() {
         <HomeLaunchArea portalUrl={baseUrl} member={!admin} />
       </Suspense>
     ) : null
+  // The tour offer is Home's last block, in the page, so it never covers the plan.
+  const tourOffer = admin || canSeeTeam ? <HomeTourArea member={!admin} /> : null
 
   // A review link opens its thread even when new chats are unavailable.
   if (canUseCopilot && (copilotOnHome || copilotThread))
@@ -115,14 +117,11 @@ function AdminHome() {
           header={header}
           locked={locked ? <CopilotCreditsLock credits={locked} /> : undefined}
           below={
-            admin ? (
-              plan
-            ) : (
-              <>
-                {plan}
-                <OverviewCounts />
-              </>
-            )
+            <>
+              {plan}
+              {admin ? null : <OverviewCounts />}
+              {tourOffer}
+            </>
           }
         />
       </Suspense>
@@ -137,6 +136,7 @@ function AdminHome() {
             header={header}
             banner={plan}
           />
+          {tourOffer}
         </div>
       </div>
     </ScrollArea>
