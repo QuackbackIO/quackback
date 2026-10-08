@@ -31,6 +31,7 @@ import { UsageMeter } from './usage-meter'
 import { TrialExpiredBilling } from './trial-expired-billing'
 import { PlanDowngradeDialog } from './free-downgrade-dialog'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
+import { NewTabHint } from '@/components/ui/new-tab-hint'
 
 /** Workspace-local presentation of the control-plane billing projection. */
 export function BillingSettings() {
@@ -655,6 +656,7 @@ function PlanCard(props: {
             className={`${INLINE_LINK} mt-1 inline-flex items-center gap-1 text-[13px]`}
           >
             View & compare features
+            <NewTabHint />
           </a>
         </div>
         <p className="shrink-0 text-right">

@@ -129,6 +129,7 @@
   "widget.voteButton.ariaVote": "Проголосовать ({count, plural, one {# голос} few {# голоса} many {# голосов} other {# голоса}})",
   "widget.voteButton.ariaRemoveVote": "Убрать голос ({count, plural, one {# голос} few {# голоса} many {# голосов} other {# голоса}})",
   "common.cancel": "Отмена",
+  "common.opensInNewTab": "(откроется в новой вкладке)",
   "files.viewer.failureUnsupported": "Предпросмотр недоступен для этого типа файла",
   "files.viewer.failureCorrupt": "Не удалось показать предпросмотр этого файла",
   "files.viewer.failureTooLarge": "Слишком большой для предпросмотра",

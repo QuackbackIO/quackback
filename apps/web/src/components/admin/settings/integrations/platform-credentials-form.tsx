@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { CopyButton } from '@/components/shared/copy-button'
 import type { PlatformCredentialField } from '@/lib/shared/integration-types'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
+import { NewTabHint } from '@/components/ui/new-tab-hint'
 
 interface PlatformCredentialsFormProps {
   integrationType: string
@@ -178,6 +179,7 @@ export function PlatformCredentialsForm({
                 className={`${INLINE_LINK} mt-1 inline-block text-xs`}
               >
                 Get credentials from provider
+                <NewTabHint />
               </a>
             )}
           </div>

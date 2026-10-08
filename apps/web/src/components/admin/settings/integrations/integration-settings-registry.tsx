@@ -22,6 +22,7 @@ import { getIntegrationIcon } from './integration-ui'
 // Catalogs (metadata: name/description/iconBg/docsUrl/platformCredentialFields/settingsPath).
 import * as catalogs from '@/lib/shared/integration-catalog'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
+import { NewTabHint } from '@/components/ui/new-tab-hint'
 
 /** The `integration` object returned by `fetchIntegrationByType`. */
 export interface IntegrationSettingsData {
@@ -320,6 +321,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
             className={INLINE_LINK}
           >
             Personal access token
+            <NewTabHint />
           </a>{' '}
           in Azure DevOps with{' '}
           <span className="font-medium text-foreground">Work Items (Read & Write)</span> scope.

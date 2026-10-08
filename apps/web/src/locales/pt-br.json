@@ -129,6 +129,7 @@
   "widget.voteButton.ariaVote": "Votar ({count, plural, one {# voto} other {# votos}})",
   "widget.voteButton.ariaRemoveVote": "Remover voto ({count, plural, one {# voto} other {# votos}})",
   "common.cancel": "Cancelar",
+  "common.opensInNewTab": "(abre em uma nova guia)",
   "files.viewer.failureUnsupported": "Sem pré-visualização para este tipo de arquivo",
   "files.viewer.failureCorrupt": "Não é possível pré-visualizar este arquivo",
   "files.viewer.failureTooLarge": "Muito grande para pré-visualizar",

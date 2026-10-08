@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { XMarkIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
 import type { LatestVersionResult } from '@/lib/server/functions/version'
 import { setUpdateBannerDismissedVersionCookie } from '@/lib/shared/update-banner-cookie'
+import { NewTabHint } from '@/components/ui/new-tab-hint'
 
 // Legacy localStorage key. Dismissal now lives in a cookie (readable during
 // SSR — see update-banner-cookie.ts) so the banner renders in its final
@@ -86,6 +87,7 @@ export function UpdateBanner({ latestVersion, dismissedVersion }: UpdateBannerPr
                 className="inline-flex items-center gap-1 text-primary hover:underline"
               >
                 See what's new
+                <NewTabHint />
                 <ArrowTopRightOnSquareIcon className="h-3 w-3" />
               </a>
               <span>·</span>
@@ -96,6 +98,7 @@ export function UpdateBanner({ latestVersion, dismissedVersion }: UpdateBannerPr
                 className="inline-flex items-center gap-1 hover:underline"
               >
                 Release notes
+                <NewTabHint />
                 <ArrowTopRightOnSquareIcon className="h-3 w-3" />
               </a>
             </div>

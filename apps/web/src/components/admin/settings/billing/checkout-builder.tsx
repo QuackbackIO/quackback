@@ -23,6 +23,7 @@ import {
 } from '@/lib/shared/billing/checkout-path'
 import { FreeDowngradeDialog, PlanDowngradeDialog } from './free-downgrade-dialog'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
+import { NewTabHint } from '@/components/ui/new-tab-hint'
 
 type CataloguePlan = BillingCatalogue['plans'][number]
 
@@ -240,6 +241,7 @@ function PlanRow(props: {
             onClick={(event) => event.stopPropagation()}
           >
             View & compare features
+            <NewTabHint />
             <ArrowTopRightOnSquareIcon className="size-3.5" />
           </a>
         </div>
@@ -275,6 +277,7 @@ function FreePlanRow(props: { plan: CataloguePlan; action: BillingPlanAction }) 
           className={`${INLINE_LINK} mt-1 inline-flex items-center gap-1 text-[13px]`}
         >
           View & compare features
+          <NewTabHint />
           <ArrowTopRightOnSquareIcon className="size-3.5" />
         </a>
         {props.action.kind === 'downgrade' ? (

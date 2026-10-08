@@ -67,6 +67,7 @@ import type { TiptapContent } from '@/lib/shared/db-types'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { adminPageHead } from '@/lib/client/admin-head'
+import { NewTabHint } from '@/components/ui/new-tab-hint'
 
 export const Route = createFileRoute('/admin/settings/portal')({
   head: adminPageHead('Portal settings'),
@@ -416,6 +417,7 @@ function PortalPage() {
               <Button variant="outline" size="sm" asChild className="whitespace-nowrap">
                 <a href="/" target="_blank" rel="noopener noreferrer">
                   Open portal
+                  <NewTabHint />
                   <ArrowTopRightOnSquareIcon className="size-3.5 ms-1.5" />
                 </a>
               </Button>

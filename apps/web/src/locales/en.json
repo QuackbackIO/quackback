@@ -129,6 +129,7 @@
   "widget.voteButton.ariaVote": "Vote ({count, plural, one {# vote} other {# votes}})",
   "widget.voteButton.ariaRemoveVote": "Remove vote ({count, plural, one {# vote} other {# votes}})",
   "common.cancel": "Cancel",
+  "common.opensInNewTab": "(opens in a new tab)",
   "files.viewer.failureUnsupported": "No preview for this file type",
   "files.viewer.failureCorrupt": "This file can't be previewed",
   "files.viewer.failureTooLarge": "Too large to preview",

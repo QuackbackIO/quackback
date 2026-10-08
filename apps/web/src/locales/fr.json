@@ -129,6 +129,7 @@
   "widget.voteButton.ariaVote": "Voter ({count, plural, one {# vote} other {# votes}})",
   "widget.voteButton.ariaRemoveVote": "Retirer le vote ({count, plural, one {# vote} other {# votes}})",
   "common.cancel": "Annuler",
+  "common.opensInNewTab": "(s'ouvre dans un nouvel onglet)",
   "files.viewer.failureUnsupported": "Aucun aperçu pour ce type de fichier",
   "files.viewer.failureCorrupt": "Ce fichier ne peut pas être prévisualisé",
   "files.viewer.failureTooLarge": "Trop volumineux pour un aperçu",

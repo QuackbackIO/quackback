@@ -129,6 +129,7 @@
   "widget.voteButton.ariaVote": "投票（{count, plural, other {# 票}}）",
   "widget.voteButton.ariaRemoveVote": "取消投票（{count, plural, other {# 票}}）",
   "common.cancel": "取消",
+  "common.opensInNewTab": "（在新分頁中開啟）",
   "files.viewer.failureUnsupported": "此檔案類型不支援預覽",
   "files.viewer.failureCorrupt": "無法預覽此檔案",
   "files.viewer.failureTooLarge": "檔案過大，無法預覽",

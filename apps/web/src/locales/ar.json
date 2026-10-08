@@ -129,6 +129,7 @@
   "widget.voteButton.ariaVote": "تصويت ({count, plural, zero {لا أصوات} one {صوت واحد} two {صوتان} few {# أصوات} many {# صوتًا} other {# صوت}})",
   "widget.voteButton.ariaRemoveVote": "إزالة التصويت ({count, plural, zero {لا أصوات} one {صوت واحد} two {صوتان} few {# أصوات} many {# صوتًا} other {# صوت}})",
   "common.cancel": "إلغاء",
+  "common.opensInNewTab": "(يفتح في علامة تبويب جديدة)",
   "files.viewer.failureUnsupported": "لا تتوفر معاينة لهذا النوع من الملفات",
   "files.viewer.failureCorrupt": "لا يمكن معاينة هذا الملف",
   "files.viewer.failureTooLarge": "كبير جدًا لعرض معاينة",

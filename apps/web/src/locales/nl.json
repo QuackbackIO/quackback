@@ -129,6 +129,7 @@
   "widget.voteButton.ariaVote": "Stem ({count, plural, one {# stem} other {# stemmen}})",
   "widget.voteButton.ariaRemoveVote": "Stem intrekken ({count, plural, one {# stem} other {# stemmen}})",
   "common.cancel": "Annuleren",
+  "common.opensInNewTab": "(opent in een nieuw tabblad)",
   "files.viewer.failureUnsupported": "Geen voorbeeld voor dit bestandstype",
   "files.viewer.failureCorrupt": "Dit bestand kan niet worden weergegeven",
   "files.viewer.failureTooLarge": "Te groot voor een voorbeeld",
