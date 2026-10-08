@@ -160,7 +160,6 @@ export function ArticlePerformanceTable() {
               icon={ChartBarIcon}
               title="No article activity yet"
               description="Views and feedback show up here once visitors start reading your articles."
-              className="h-32"
             />
           </div>
         ) : (
