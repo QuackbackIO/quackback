@@ -37,25 +37,25 @@ const options = [
   {
     id: 'product_feedback',
     label: 'Feedback & roadmap',
-    description: 'Collect ideas and votes, and share what you plan to build.',
+    description: 'Collect ideas and votes',
     icon: LightBulbIcon,
   },
   {
     id: 'customer_support',
     label: 'Support inbox',
-    description: 'Chat with customers and answer email in one shared inbox.',
+    description: 'Live chat and email',
     icon: ChatBubbleLeftRightIcon,
   },
   {
     id: 'help_center',
     label: 'Help center',
-    description: 'Publish articles customers can search before they ask.',
+    description: 'Searchable help articles',
     icon: BookOpenIcon,
   },
   {
     id: 'status_page',
     label: 'Status page',
-    description: 'Tell customers when something is down, and when it is fixed.',
+    description: 'Updates when things break',
     icon: StatusPageIcon,
   },
 ] as const
@@ -127,8 +127,9 @@ export function GoalSelector({
                 starts ? `goal-${id}-description goal-${id}-starts` : `goal-${id}-description`
               }
               className={cn(
-                'relative h-auto flex-col items-start justify-start gap-2 whitespace-normal rounded-[14px]! p-4 text-start focus-visible:ring-zinc-400/50',
-                picked && 'border-foreground bg-muted',
+                'relative h-auto flex-col items-start justify-start gap-1.5 whitespace-normal rounded-[14px]! p-4 text-start focus-visible:ring-ring',
+                // Picked wins over hover, so the tile just clicked never looks unpicked.
+                picked && 'border-foreground bg-muted hover:border-foreground hover:bg-muted',
                 managed && picked && 'disabled:opacity-100'
               )}
               onClick={() =>
@@ -143,8 +144,8 @@ export function GoalSelector({
                   <FormattedMessage id="onboarding.goals.startsHere" defaultMessage="Starts here" />
                 </span>
               ) : null}
-              <span className="flex w-full items-center gap-2.5">
-                <Icon className="size-5 shrink-0" aria-hidden="true" />
+              <span className="flex w-full items-start gap-2.5">
+                <Icon className="mt-px size-5 shrink-0" aria-hidden="true" />
                 <span id={`goal-${id}-label`} className="font-semibold">
                   <FormattedMessage id={`onboarding.goals.${id}`} defaultMessage={label} />
                 </span>
@@ -157,7 +158,7 @@ export function GoalSelector({
               </span>
               <span
                 id={`goal-${id}-description`}
-                className="text-[13px] leading-snug font-normal text-muted-foreground"
+                className="text-[13px] leading-snug font-normal text-pretty text-muted-foreground"
               >
                 <FormattedMessage
                   id={`onboarding.goals.${id}.description`}
