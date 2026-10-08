@@ -1,8 +1,8 @@
 import { FormattedMessage } from 'react-intl'
 import type { SVGProps } from 'react'
 import { LightBulbIcon, ChatBubbleLeftRightIcon, BookOpenIcon } from '@heroicons/react/24/outline'
-import { CheckCircleIcon } from '@heroicons/react/20/solid'
 import { Button } from '@/components/ui/button'
+import { SetupCheckCircleIcon } from './setup-icons'
 import type { OnboardingOutcome } from '@/lib/shared/db-types'
 import { cn } from '@/lib/shared/utils'
 
@@ -124,7 +124,7 @@ export function GoalSelector({
                   <FormattedMessage id={`onboarding.goals.${id}`} defaultMessage={label} />
                 </span>
                 {picked ? (
-                  <CheckCircleIcon
+                  <SetupCheckCircleIcon
                     className="ms-auto size-5 shrink-0 motion-safe:animate-in motion-safe:zoom-in-50"
                     aria-hidden="true"
                   />

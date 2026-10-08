@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { FormattedMessage } from 'react-intl'
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
-import { CheckIcon, ExclamationTriangleIcon } from '@heroicons/react/20/solid'
 import { Button } from '@/components/ui/button'
 import { OnboardingHeading, OnboardingLead } from '@/components/onboarding/onboarding-split'
 import { SetupSteps } from '@/components/onboarding/setup-steps'
+import { SetupCheckIcon, SetupWarningIcon } from '@/components/onboarding/setup-icons'
 import { getInstallChecksFn } from '@/lib/server/functions/onboarding'
 import type { InstallChecks } from '@/lib/server/install-checks'
 import type { OnboardingOutcome } from '@/lib/shared/db-types'
@@ -134,7 +134,7 @@ export function ReadyStep({
               className={cn('flex items-start gap-3 text-[15px]', rowAnimation(index).className)}
             >
               <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-foreground text-background">
-                <CheckIcon className="size-3.5" aria-hidden="true" />
+                <SetupCheckIcon className="size-3.5" aria-hidden="true" />
               </span>
               <span>{row.node}</span>
             </li>
@@ -285,10 +285,10 @@ function InstallSection({ checks, offset }: { checks: InstallChecks | 'loading';
           >
             {row.ok ? (
               <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-foreground text-background">
-                <CheckIcon className="size-3.5" aria-hidden="true" />
+                <SetupCheckIcon className="size-3.5" aria-hidden="true" />
               </span>
             ) : (
-              <ExclamationTriangleIcon
+              <SetupWarningIcon
                 className="mt-0.5 size-5 shrink-0 text-amber-500"
                 aria-hidden="true"
               />
