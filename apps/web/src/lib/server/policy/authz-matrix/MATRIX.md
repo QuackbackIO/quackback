@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 743 surfaces
+### Server functions (`requireAuth`) — 739 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -718,10 +718,6 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/teams.ts`::deleteTeamFn | team.manage |
 | `lib/server/functions/teams.ts`::setTeamMembersFn | team.manage |
 | `lib/server/functions/teams.ts`::assignConversationTeamFn | conversation.assign |
-| `lib/server/functions/test-customer.ts`::mintTestCustomerTokenFn | conversation.view |
-| `lib/server/functions/test-customer.ts`::mintTestCustomerPhoneLinkFn | conversation.view |
-| `lib/server/functions/test-customer.ts`::getTestCustomerPhoneLinkStatusFn | conversation.view |
-| `lib/server/functions/test-customer.ts`::getTestCustomerOverviewFn | conversation.view |
 | `lib/server/functions/test-customer.ts`::deleteTestConversationsFn | conversation.manage |
 | `lib/server/functions/ticket-types.ts`::listTicketTypesFn | ticket.manage_types |
 | `lib/server/functions/ticket-types.ts`::listTicketTypesFn | ticket.view |
@@ -1061,7 +1057,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-226 of 1081 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+225 of 1076 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1276,7 +1272,6 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/api/widget/sdk[.]js.ts`::GET | route |
 | `routes/api/widget/search.ts`::GET | route |
 | `routes/api/widget/session.ts`::GET | route |
-| `routes/api/widget/test-session.ts`::POST | route |
 | `routes/api/widget/upload.ts`::POST | route |
 | `routes/apps.tsx`::setIframeHeaders | server-fn |
 | `routes/auth.widget-handoff.tsx`::consumeWidgetHandoffFn | server-fn |
