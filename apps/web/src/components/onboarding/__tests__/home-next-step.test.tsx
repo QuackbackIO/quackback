@@ -1,14 +1,12 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { AnchorHTMLAttributes, ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '@/locales/en.json'
 import de from '@/locales/de.json'
-import type { LaunchStatus } from '@/lib/shared/launch-checklist'
-
-const hoisted = vi.hoisted(() => ({ canConverse: true }))
+import { launchPath, type LaunchStatus } from '@/lib/shared/launch-checklist'
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
@@ -20,9 +18,6 @@ vi.mock('@tanstack/react-router', () => ({
       {children}
     </a>
   ),
-}))
-vi.mock('@/lib/client/hooks/use-permission', () => ({
-  usePermission: (key: string) => key === 'conversation.view' && hoisted.canConverse,
 }))
 vi.mock('@/lib/client/hooks/use-root-context', () => ({
   useBaseUrl: () => 'https://acme.example.com',
@@ -38,8 +33,6 @@ vi.mock('@/lib/server/functions/activation', () => ({
 vi.mock('@/lib/client/plg-events', () => ({ recordPlgEvent: vi.fn() }))
 
 import { HomeNextStep } from '../home-next-step'
-import { buttonVariants } from '@/components/ui/button'
-import { cn } from '@/lib/shared/utils'
 
 const status: LaunchStatus = {
   hasBoards: true,
@@ -48,7 +41,6 @@ const status: LaunchStatus = {
   publicBoardPath: '/?board=feedback',
   memberCount: 1,
   hasBranding: false,
-  canPostTestIdea: true,
   goals: ['product_feedback', 'customer_support'],
   features: {
     supportInbox: true,
@@ -58,7 +50,7 @@ const status: LaunchStatus = {
     assistant: false,
     changelog: true,
   },
-} as LaunchStatus
+}
 
 function mount(input: LaunchStatus = status, notice?: ReactNode) {
   const client = new QueryClient()
@@ -78,27 +70,176 @@ function mount(input: LaunchStatus = status, notice?: ReactNode) {
   )
 }
 
+const writeText = vi.fn()
 beforeEach(() => {
-  hoisted.canConverse = true
+  writeText.mockReset()
+  writeText.mockResolvedValue(undefined)
+  Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
 })
 afterEach(cleanup)
 
-describe("Home's next step", () => {
-  it('leads with the goal step, counted on the one launch plan', () => {
+/** The open step's own actions: the card's one action lives there. */
+function actions(card: HTMLElement) {
+  const step = card.querySelector<HTMLElement>('[data-state="current"]')!
+  return within(step)
+    .getAllByRole('button')
+    .map((button) => button.textContent)
+}
+
+/** The path's rows as Home shows them: the step and its state. */
+function rows(card: HTMLElement) {
+  return within(card)
+    .getAllByRole('listitem')
+    .map((row) => ({
+      step: row.querySelector('[data-slot="path-step"]')?.textContent,
+      state: row.getAttribute('data-state'),
+    }))
+}
+
+describe("Home's launch plan card", () => {
+  it('is one card: the path, with the current step open and its one action', () => {
     mount()
     const card = screen.getByRole('region', { name: 'Share your board link' })
     expect(card).toHaveTextContent('Launch plan · Step 2 of 3')
+    expect(rows(card)).toEqual([
+      { step: 'Your board is live', state: 'done' },
+      { step: 'Share your board link', state: 'current' },
+      { step: 'A customer posts an idea', state: 'waiting' },
+    ])
     expect(card).toHaveTextContent('Paste it wherever they already talk to you.')
-    // The real step only: no test-as-a-customer beside it.
-    expect(
-      within(card)
-        .getAllByRole('button')
-        .map((button) => button.textContent)
-    ).toEqual(['Copy board link'])
+    expect(actions(card)).toEqual(['Copy board link'])
     expect(within(card).getByRole('link', { name: /View board/ })).toHaveAttribute(
       'href',
       'https://acme.example.com/?board=feedback'
     )
+    // The current step is the heading focus can move to.
+    expect(screen.getByRole('heading', { name: 'Share your board link' })).toHaveAttribute(
+      'tabindex',
+      '-1'
+    )
+  })
+
+  it('says each thing once: the step, the plan name and the address', () => {
+    mount()
+    expect(screen.getAllByText('Share your board link')).toHaveLength(1)
+    expect(screen.getAllByText(/Launch plan/)).toHaveLength(1)
+    expect(screen.getAllByText(/acme\.example\.com/)).toHaveLength(1)
+  })
+
+  it('names every picked goal’s open step under Later, then the polish, as the plan page does', () => {
+    const goals: LaunchStatus = {
+      ...status,
+      goals: ['product_feedback', 'customer_support', 'help_center'],
+      features: { ...status.features!, helpCenter: true },
+    }
+    mount(goals)
+    // Support and Help center come before the polish, as on the plan page.
+    const open = launchPath(goals).later.filter((task) => !task.isCompleted && !task.isSkipped)
+    expect(open.map((task) => task.title)).toEqual([
+      'Put Messenger on your site',
+      'Publish your first article',
+      'Publish your first update',
+      'Invite your team',
+      'Add your logo',
+      'Connect an integration',
+    ])
+    const later = screen.getByText(/^Later:/)
+    expect(later.textContent).toBe(
+      'Later: Put Messenger on your site, publish your first article, publish your first update, and 3 more'
+    )
+    expect(within(later).getByRole('link', { name: 'Put Messenger on your site' })).toHaveAttribute(
+      'href',
+      '/admin/settings/widget/install'
+    )
+    expect(screen.getByRole('link', { name: 'All steps' })).toHaveAttribute(
+      'href',
+      '/admin/getting-started'
+    )
+  })
+
+  it('leaves done and skipped steps out of Later', () => {
+    mount({
+      ...status,
+      hasWidgetInstalled: true,
+      hasWidgetEnabled: true,
+      hasPublishedChangelog: true,
+      taskResolutions: {
+        product_feedback: {
+          'invite-team': { resolution: 'dismissed', resolvedAt: '2026-10-04T10:00:00.000Z' },
+        },
+      },
+    })
+    expect(screen.getByText(/^Later:/).textContent).toBe(
+      'Later: Add your logo and connect an integration'
+    )
+  })
+
+  it('offers sharing the board again once only the first win is left', () => {
+    mount({ ...status, publicBoardLinkCopiedAt: '2026-10-04T10:00:00.000Z' })
+    const card = screen.getByRole('region', { name: 'A customer posts an idea' })
+    expect(card).toHaveTextContent('Launch plan · Step 3 of 3')
+    expect(card).toHaveTextContent('Your own tests never count.')
+    expect(rows(card).map((row) => row.state)).toEqual(['done', 'done', 'current'])
+    expect(actions(card)).toEqual(['Copy board link'])
+  })
+
+  it('stays on Home when every chore is done but no customer has acted', () => {
+    mount({
+      ...status,
+      publicBoardLinkCopiedAt: '2026-10-04T10:00:00.000Z',
+      hasBranding: true,
+      memberCount: 2,
+      hasPublishedChangelog: true,
+      hasWidgetInstalled: true,
+      hasWidgetEnabled: true,
+    })
+    expect(screen.getByRole('region', { name: 'A customer posts an idea' })).toBeVisible()
+  })
+
+  it('gives the help center its link to copy, again and again, while it waits for a reader', async () => {
+    mount({
+      ...status,
+      goals: ['help_center'],
+      hasHelpArticle: true,
+      features: { ...status.features!, helpCenter: true },
+    })
+    const card = screen.getByRole('region', { name: 'A customer finds it helpful' })
+    const copy = within(card).getByRole('button', { name: 'Copy help center link' })
+    fireEvent.click(copy)
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('https://acme.example.com/hc'))
+    await waitFor(() => expect(copy).not.toBeDisabled())
+    fireEvent.click(copy)
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2))
+    expect(within(card).getByRole('button', { name: 'Copy help center link' })).toBe(copy)
+  })
+
+  it('leads a status page with sharing it: one action and the live page', () => {
+    mount({
+      ...status,
+      goals: ['status_page'],
+      hasStatusComponent: true,
+      features: { ...status.features!, statusPage: true },
+    })
+    const card = screen.getByRole('region', { name: 'Share your status page' })
+    expect(actions(card)).toEqual(['Copy status link'])
+    expect(within(card).queryByRole('link', { name: 'Add a service' })).toBeNull()
+    expect(within(card).getByRole('link', { name: /View status page/ })).toHaveAttribute(
+      'href',
+      'https://acme.example.com/status'
+    )
+  })
+
+  it('keeps the status link to copy again while it waits for a subscriber', async () => {
+    mount({
+      ...status,
+      goals: ['status_page'],
+      hasStatusComponent: true,
+      statusLinkCopiedAt: '2026-10-04T10:00:00.000Z',
+      features: { ...status.features!, statusPage: true },
+    })
+    const card = screen.getByRole('region', { name: 'A customer subscribes' })
+    fireEvent.click(within(card).getByRole('button', { name: 'Copy status link' }))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('https://acme.example.com/status'))
   })
 
   it('falls back to sharing the board when the primary module is turned off', () => {
@@ -120,83 +261,12 @@ describe("Home's next step", () => {
     }
   })
 
-  it('shows the three-step path to a first idea and what comes later', () => {
+  it('is drawn like the admin cards: one flat panel', () => {
     mount()
-    const path = screen.getByRole('region', { name: 'Your path to a first idea' })
-    const rows = within(path)
-      .getAllByRole('listitem')
-      .map((row) => row.textContent)
-    expect(rows).toEqual([
-      'Your board is liveDone',
-      'Share your board linkNext',
-      'A customer posts an idea',
-    ])
-    expect(within(path).getByRole('link', { name: 'Launch plan' })).toHaveAttribute(
-      'href',
-      '/admin/getting-started'
-    )
-    const later = within(path).getByText(/^Later:/)
-    expect(within(later).getByRole('link', { name: 'add your logo' })).toHaveAttribute(
-      'href',
-      '/admin/settings/general'
-    )
-  })
-
-  it('offers sharing the board again once only the first win is left', () => {
-    mount({ ...status, publicBoardLinkCopiedAt: '2026-10-04T10:00:00.000Z' })
-    const card = screen.getByRole('region', { name: 'A customer posts an idea' })
-    expect(card).toHaveTextContent('Launch plan · Step 3 of 3')
-    expect(card).toHaveTextContent('Your own tests never count.')
-    expect(
-      within(card)
-        .getAllByRole('button')
-        .map((button) => button.textContent)
-    ).toEqual(['Copy board link'])
-  })
-
-  it('stays on Home when every chore is done but no customer has acted', () => {
-    mount({
-      ...status,
-      publicBoardLinkCopiedAt: '2026-10-04T10:00:00.000Z',
-      hasBranding: true,
-      memberCount: 2,
-      hasPublishedChangelog: true,
-      hasWidgetInstalled: true,
-      hasWidgetEnabled: true,
-    })
-    expect(screen.getByRole('region', { name: 'A customer posts an idea' })).toBeVisible()
-  })
-
-  it('leads a status page with sharing it, and offers adding a service beside it', () => {
-    mount({
-      ...status,
-      goals: ['status_page'],
-      features: { ...status.features!, statusPage: true },
-    })
-    const card = screen.getByRole('region', { name: 'Share your status page' })
-    expect(within(card).getByRole('link', { name: 'Add a service' })).toHaveAttribute(
-      'href',
-      '/admin/status'
-    )
-    expect(within(card).getByRole('link', { name: /View status page/ })).toHaveAttribute(
-      'href',
-      'https://acme.example.com/status'
-    )
-  })
-
-  it('still offers adding a service when setup already seeded one', () => {
-    mount({
-      ...status,
-      goals: ['status_page'],
-      hasStatusComponent: true,
-      features: { ...status.features!, statusPage: true },
-    })
-    const card = screen.getByRole('region', { name: 'Share your status page' })
-    expect(within(card).getByRole('button', { name: 'Copy status link' })).toBeVisible()
-    const add = within(card).getByRole('link', { name: 'Add a service' })
-    expect(add).toHaveAttribute('href', '/admin/status')
-    // Drawn like every other secondary action, not a hand-made outline.
-    expect(add.className).toBe(cn(buttonVariants({ variant: 'outline', size: 'sm' })))
+    const card = screen.getByRole('region', { name: 'Share your board link' })
+    expect(card.className).toContain('rounded-panel')
+    expect(card.className).toContain('p-5')
+    expect(card.className).not.toMatch(/shadow-/)
   })
 
   it('keeps the automatic logo notice beside the portal snapshot', () => {
@@ -208,11 +278,16 @@ describe("Home's next step", () => {
   it('joins the Later line the way each language does', () => {
     cleanup()
     const client = new QueryClient()
-    client.setQueryData(['admin', 'onboarding'], status)
+    const short: LaunchStatus = {
+      ...status,
+      goals: ['product_feedback'],
+      features: { ...status.features!, supportInbox: false, integrations: false, changelog: false },
+    }
+    client.setQueryData(['admin', 'onboarding'], short)
     render(
       <IntlProvider locale="de" messages={de}>
         <QueryClientProvider client={client}>
-          <HomeNextStep status={status} pending={false} onCreateBoard={() => {}} />
+          <HomeNextStep status={short} pending={false} onCreateBoard={() => {}} />
         </QueryClientProvider>
       </IntlProvider>
     )

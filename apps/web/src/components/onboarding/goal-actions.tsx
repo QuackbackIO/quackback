@@ -1,9 +1,15 @@
-import type { ReactNode } from 'react'
-import { FormattedMessage } from 'react-intl'
+import { useState, type ReactNode } from 'react'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { ClipboardDocumentIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
-import { ActivationActionButton } from '@/components/admin/activation-action-button'
+import {
+  ActivationActionButton,
+  copyWithFallback,
+} from '@/components/admin/activation-action-button'
+import { useBaseUrl } from '@/lib/client/hooks/use-root-context'
 import { copyBoardLinkAction } from '@/lib/shared/activation-action'
 import { buildLaunchTasks, launchOutcome, type LaunchStatus } from '@/lib/shared/launch-checklist'
 import type { OnboardingOutcome } from '@/lib/shared/db-types'
@@ -95,11 +101,75 @@ export function TourEndGoalAction({
   )
 }
 
+const PORTAL_LINKS = {
+  helpCenter: {
+    path: '/hc',
+    label: {
+      id: 'onboarding.goalAction.copyHelpCenterLink',
+      defaultMessage: 'Copy help center link',
+    },
+    copied: {
+      id: 'onboarding.goalAction.helpCenterLinkCopied',
+      defaultMessage: 'Help center link copied',
+    },
+  },
+  status: {
+    path: '/status',
+    label: { id: 'onboarding.goalAction.copyStatusLink', defaultMessage: 'Copy status link' },
+    copied: {
+      id: 'onboarding.goalAction.statusLinkCopied',
+      defaultMessage: 'Status page link copied',
+    },
+  },
+} as const
+
+/** Copies a public page's link, as often as it is wanted: sharing it is how customers arrive. */
+function CopyPortalLinkButton({
+  page,
+  variant,
+}: {
+  page: keyof typeof PORTAL_LINKS
+  variant: 'default' | 'outline'
+}) {
+  const intl = useIntl()
+  const baseUrl = useBaseUrl()
+  const [copying, setCopying] = useState(false)
+  if (!baseUrl) return null
+  const link = PORTAL_LINKS[page]
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant={variant}
+      disabled={copying}
+      onClick={async () => {
+        setCopying(true)
+        try {
+          await copyWithFallback(new URL(link.path, baseUrl).toString())
+          toast.success(intl.formatMessage(link.copied))
+        } catch {
+          toast.error(
+            intl.formatMessage({
+              id: 'onboarding.goalAction.copyFailed',
+              defaultMessage: 'Could not copy the link. Try again.',
+            })
+          )
+        } finally {
+          setCopying(false)
+        }
+      }}
+    >
+      <ClipboardDocumentIcon aria-hidden="true" />
+      <FormattedMessage {...link.label} />
+    </Button>
+  )
+}
+
 /**
  * The action beside the automatic first-win step, which ticks itself when a
  * customer acts: the way to reach one, again. Sharing the board for feedback,
- * the install page for Messenger; nothing for the goals whose step already
- * offers its own action.
+ * the install page for Messenger, and the help center or status page link to
+ * copy again.
  */
 export function FirstWinShareAction({
   status,
@@ -114,6 +184,8 @@ export function FirstWinShareAction({
     return <ShareBoardButton status={status} variant={style} />
   }
   if (variant === 'support') return <InstallMessengerLink variant={style} />
+  if (variant === 'helpCenter') return <CopyPortalLinkButton page="helpCenter" variant={style} />
+  if (variant === 'status') return <CopyPortalLinkButton page="status" variant={style} />
   return null
 }
 

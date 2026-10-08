@@ -639,6 +639,20 @@ export function launchPath(status: LaunchStatus): LaunchPath {
   }
 }
 
+/** A step still to do: not done, not skipped, and in reach of whoever looks. */
+export function isOpenLaunchStep(task: LaunchTask): boolean {
+  return !task.isCompleted && !task.isSkipped && task.availability !== 'blocked'
+}
+
+/**
+ * The plan's other steps still to do, in plan order: every picked goal's
+ * step, then the polish. Home names these; the Launch plan page lists them
+ * under Later.
+ */
+export function openLaterSteps(path: LaunchPath): LaunchTask[] {
+  return path.later.filter(isOpenLaunchStep)
+}
+
 /** The one count: the sidebar dock and the Launch plan page show this. */
 export function launchPlanProgress(status: LaunchStatus): {
   step: number

@@ -6,15 +6,14 @@ import type { SettingsBrandingData } from '@/lib/server/domains/settings/setting
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import {
   LAUNCH_LIVE_STEP,
-  buildLaunchTasks,
   launchPath,
+  openLaterSteps,
   type LaunchPathGoal,
   type LaunchStatus,
   type LaunchTask,
 } from '@/lib/shared/launch-checklist'
 import { launchTaskWhy } from '@/lib/shared/launch-outcomes'
 import { cn } from '@/lib/shared/utils'
-import { buttonVariants } from '@/components/ui/button'
 import { LaunchStepAction } from './launch-step-action'
 import { LaunchTaskLabel, launchTaskMessage } from './launch-task-label'
 import { LaunchTaskLink } from './launch-task-link'
@@ -29,19 +28,11 @@ function continueSentence(text: string, locale: string, index: number): string {
   return text.charAt(0).toLocaleLowerCase(locale) + text.slice(1)
 }
 
-const PATH_HEADING: Record<LaunchPathGoal, { id: string; defaultMessage: string }> = {
-  feedback: { id: 'onboarding.home.path.feedback', defaultMessage: 'Your path to a first idea' },
-  private: { id: 'onboarding.home.path.private', defaultMessage: 'Your path to a first team idea' },
-  support: {
-    id: 'onboarding.home.path.support',
-    defaultMessage: 'Your path to a first conversation',
-  },
-  helpCenter: {
-    id: 'onboarding.home.path.helpCenter',
-    defaultMessage: 'Your path to a first reader',
-  },
-  status: { id: 'onboarding.home.path.status', defaultMessage: 'Your path to a first subscriber' },
-}
+/** How many later steps the line names before it counts the rest. */
+const LATER_NAMED = 3
+
+/** The current step's heading: where focus goes when Home changes under it. */
+export const HOME_PLAN_HEADING_ID = 'home-plan-step'
 
 /** Where the live page is and what its link says, per goal. */
 function livePage(goal: LaunchPathGoal, status: LaunchStatus, portalUrl?: string) {
@@ -71,20 +62,32 @@ function livePage(goal: LaunchPathGoal, status: LaunchStatus, portalUrl?: string
   }
 }
 
-/** The open steps of the Later line, each a link to where it is done, joined as a sentence. */
+/**
+ * The open later steps, each a link to where it is done, joined as a
+ * sentence. Past the first few, the rest are counted.
+ */
 function LaterItems({ intl, tasks }: { intl: IntlShape; tasks: LaunchTask[] }) {
-  const parts = intl.formatListToParts(
-    tasks.map((task, index) =>
-      continueSentence(intl.formatMessage(launchTaskMessage(task)), intl.locale, index)
-    ),
-    { type: 'conjunction' }
+  const named = tasks.length > LATER_NAMED + 1 ? tasks.slice(0, LATER_NAMED) : tasks
+  const rest = tasks.length - named.length
+  const texts = named.map((task, index) =>
+    continueSentence(intl.formatMessage(launchTaskMessage(task)), intl.locale, index)
   )
+  if (rest > 0) {
+    texts.push(
+      intl.formatMessage(
+        { id: 'onboarding.home.laterMore', defaultMessage: '{count} more' },
+        { count: rest }
+      )
+    )
+  }
+  const parts = intl.formatListToParts(texts, { type: 'conjunction' })
   let item = 0
   return (
     <>
       {parts.map((part, index) => {
         if (part.type !== 'element') return <Fragment key={index}>{part.value}</Fragment>
-        const task = tasks[item++]!
+        const task = named[item++]
+        if (!task) return <Fragment key={index}>{part.value}</Fragment>
         return (
           <LaunchTaskLink
             key={index}
@@ -100,9 +103,10 @@ function LaterItems({ intl, tasks }: { intl: IntlShape; tasks: LaunchTask[] }) {
 }
 
 /**
- * Home's first-run guide: the one step to take now with a live picture of the
- * page it is about, then the three-step path to a first win and a line of
- * what comes later. The count is the launch plan's, the same everywhere.
+ * Home's launch plan, in one card: the three-step path to a first win with
+ * the current step open (why it matters, its one action and a live picture
+ * of the page it is about), then the open steps that come later. The count
+ * is the launch plan's, the same everywhere.
  */
 export function HomeNextStep({
   status,
@@ -123,156 +127,148 @@ export function HomeNextStep({
   const next = path.next
   if (path.complete || !next) return null
   const why = launchTaskWhy(next)
-  // A status page grows by services: offered beside sharing it even after
-  // setup seeded the first one, to anyone who may add one.
-  const service =
-    path.goal === 'status' && status.permissions?.settingsManage !== false
-      ? buildLaunchTasks(status).find((task) => task.id === 'add-status-service' && !task.isSkipped)
-      : undefined
-  // The Later line is the polish; other goals' steps are on the launch plan page.
-  const later = path.later
-    .filter(
-      (task) =>
-        task.classification === 'polish' &&
-        !task.isCompleted &&
-        !task.isSkipped &&
-        task.availability !== 'blocked'
-    )
-    .slice(0, 3)
+  const later = openLaterSteps(path)
   const page = livePage(path.goal, status, portalUrl)
 
   return (
-    <div lang={intl.locale} className="space-y-4 [--ring:var(--muted-foreground)]">
-      <section
-        aria-labelledby="home-next-step"
-        className="flex flex-wrap items-center gap-5 rounded-2xl border bg-card p-5 shadow-raise"
-      >
-        <div className="min-w-[min(16rem,100%)] flex-[1_1_20rem] space-y-2">
-          <p className="text-xs font-medium text-muted-foreground">
-            <FormattedMessage
-              id="onboarding.home.planStep"
-              defaultMessage="Launch plan · Step {step} of {total}"
-              values={{ step: path.step, total: path.total }}
-            />
-          </p>
-          <h2 id="home-next-step" className="text-lg font-semibold text-pretty">
-            <LaunchTaskLabel task={next} />
-          </h2>
-          {why ? (
-            <p className="text-sm text-muted-foreground">
-              <FormattedMessage {...why} />
-            </p>
-          ) : null}
-          <div className="flex flex-wrap gap-2 pt-1">
-            <LaunchStepAction
-              task={next}
-              status={status}
-              primary
-              pending={pending}
-              onCreateBoard={onCreateBoard}
-              firstWinAction={<FirstWinShareAction status={status} primary />}
-            />
-            {service ? (
-              <LaunchTaskLink
-                task={service}
-                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
-              >
-                <LaunchTaskLabel task={service} />
-              </LaunchTaskLink>
-            ) : null}
-          </div>
-        </div>
-        <PortalSnapshot portalUrl={portalUrl} pageHref={page.href}>
-          {page.href ? (
-            <a
-              href={page.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs font-medium text-muted-foreground hover:text-foreground hover:underline"
-            >
-              <FormattedMessage {...page.label} /> <span aria-hidden="true">↗</span>
-            </a>
-          ) : null}
-          {brandingNotice}
-        </PortalSnapshot>
-      </section>
-
-      <section aria-labelledby="home-path" className="rounded-2xl border bg-card px-5 py-4">
-        <div className="mb-1 flex items-center justify-between gap-3">
-          <h2 id="home-path" className="text-sm font-semibold">
-            <FormattedMessage {...PATH_HEADING[path.goal]} />
-          </h2>
-          <Link
-            to="/admin/getting-started"
-            className="text-xs text-muted-foreground hover:underline"
-          >
-            <FormattedMessage id="onboarding.launch.name" defaultMessage="Launch plan" />
-          </Link>
-        </div>
-        <ol>
-          <PathRow done>
-            <FormattedMessage {...LAUNCH_LIVE_STEP[path.goal]} />
-          </PathRow>
-          {path.steps.map((task) => (
-            <PathRow
+    <section
+      lang={intl.locale}
+      aria-labelledby={HOME_PLAN_HEADING_ID}
+      data-home-card="plan"
+      className="rounded-panel border border-border bg-card p-5 [--ring:var(--muted-foreground)]"
+    >
+      <p className="text-xs font-medium text-muted-foreground">
+        <FormattedMessage
+          id="onboarding.home.planStep"
+          defaultMessage="Launch plan · Step {step} of {total}"
+          values={{ step: path.step, total: path.total }}
+        />
+      </p>
+      <ol className="mt-2">
+        <PathRow state="done">
+          <FormattedMessage {...LAUNCH_LIVE_STEP[path.goal]} />
+        </PathRow>
+        {path.steps.map((task) =>
+          task.id === next.id ? (
+            <li
               key={task.id}
-              done={task.isCompleted || task.isReady}
-              next={task.id === next.id}
+              data-state="current"
+              className="flex gap-3 border-b border-border/60 py-4 last:border-b-0"
             >
+              <StepMark state="current" className="mt-1" />
+              <div className="flex min-w-0 flex-1 flex-wrap gap-x-5 gap-y-4">
+                <div className="min-w-[min(14rem,100%)] flex-[1_1_16rem] space-y-2">
+                  <h2
+                    id={HOME_PLAN_HEADING_ID}
+                    tabIndex={-1}
+                    data-slot="path-step"
+                    className="text-lg font-semibold text-pretty outline-none"
+                  >
+                    <LaunchTaskLabel task={task} />
+                  </h2>
+                  {why ? (
+                    <p className="text-sm text-muted-foreground">
+                      <FormattedMessage {...why} />
+                    </p>
+                  ) : null}
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <LaunchStepAction
+                      task={task}
+                      status={status}
+                      primary
+                      pending={pending}
+                      onCreateBoard={onCreateBoard}
+                      firstWinAction={<FirstWinShareAction status={status} primary />}
+                    />
+                  </div>
+                </div>
+                <PortalSnapshot portalUrl={portalUrl} pageHref={page.href}>
+                  {page.href ? (
+                    <a
+                      href={page.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-fit text-xs font-medium text-muted-foreground hover:text-foreground hover:underline"
+                    >
+                      <FormattedMessage {...page.label} /> <span aria-hidden="true">↗</span>
+                    </a>
+                  ) : null}
+                  {brandingNotice}
+                </PortalSnapshot>
+              </div>
+            </li>
+          ) : (
+            <PathRow key={task.id} state={task.isCompleted || task.isReady ? 'done' : 'waiting'}>
               <LaunchTaskLabel task={task} />
             </PathRow>
-          ))}
-        </ol>
-        {later.length > 0 && (
-          <p className="mt-2 text-xs text-muted-foreground">
+          )
+        )}
+      </ol>
+      {later.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <p className="min-w-0">
             <FormattedMessage
               id="onboarding.home.later"
               defaultMessage="Later: {items}"
               values={{ items: <LaterItems intl={intl} tasks={later} /> }}
             />
           </p>
-        )}
-      </section>
-    </div>
+          <Link
+            to="/admin/getting-started"
+            className="shrink-0 font-medium hover:text-foreground hover:underline"
+          >
+            <FormattedMessage id="onboarding.home.allSteps" defaultMessage="All steps" />
+          </Link>
+        </div>
+      )}
+    </section>
   )
 }
 
+type StepState = 'done' | 'current' | 'waiting'
+
+function StepMark({ state, className }: { state: StepState; className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        'flex size-5 shrink-0 items-center justify-center rounded-full border-[1.5px]',
+        state === 'done'
+          ? 'border-foreground bg-foreground text-background'
+          : state === 'current'
+            ? 'border-foreground'
+            : 'border-muted-foreground/40',
+        className
+      )}
+    >
+      {state === 'done' ? <CheckIcon className="size-3" /> : null}
+    </span>
+  )
+}
+
+/** A step on the path that is not the current one: done, or waiting its turn. */
 function PathRow({
-  done = false,
-  next = false,
+  state,
   children,
 }: {
-  done?: boolean
-  next?: boolean
+  state: Exclude<StepState, 'current'>
   children: ReactNode
 }) {
   return (
-    <li className="flex min-h-10 items-center gap-3 border-b border-border/60 text-sm last:border-b-0">
+    <li
+      data-state={state}
+      className="flex min-h-10 items-center gap-3 border-b border-border/60 text-sm last:border-b-0"
+    >
+      <StepMark state={state} />
       <span
-        aria-hidden="true"
-        className={cn(
-          'flex size-5 shrink-0 items-center justify-center rounded-full border-[1.5px]',
-          done
-            ? 'border-foreground bg-foreground text-background'
-            : next
-              ? 'border-foreground'
-              : 'border-border'
-        )}
-      >
-        {done ? <CheckIcon className="size-3" /> : null}
-      </span>
-      <span
-        className={cn('min-w-0 flex-1', done && 'text-muted-foreground', next && 'font-semibold')}
+        data-slot="path-step"
+        className={cn('min-w-0 flex-1', state === 'done' && 'text-muted-foreground')}
       >
         {children}
       </span>
-      {done ? (
+      {state === 'done' ? (
         <span className="text-xs text-muted-foreground">
           <FormattedMessage id="onboarding.launch.done" defaultMessage="Done" />
-        </span>
-      ) : next ? (
-        <span className="text-xs text-muted-foreground">
-          <FormattedMessage id="onboarding.home.next" defaultMessage="Next" />
         </span>
       ) : null}
     </li>
@@ -312,9 +308,9 @@ function PortalSnapshot({
         <span className="flex flex-col gap-2 p-3" aria-hidden="true">
           <span className="flex items-center gap-2 text-xs font-semibold">
             {logo ? (
-              <img src={logo} alt="" className="size-5 rounded object-contain" />
+              <img src={logo} alt="" className="size-5 shrink-0 rounded object-contain" />
             ) : (
-              <span className="size-5 rounded bg-primary" />
+              <span className="size-5 shrink-0 rounded bg-primary" />
             )}
             <span className="truncate">{name}</span>
           </span>

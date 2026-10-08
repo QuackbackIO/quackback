@@ -90,12 +90,10 @@ function AdminHome() {
   const admin = isAdmin(userRole)
   const flags = settings?.featureFlags as FeatureFlags | undefined
 
+  // The portal's address shows once, in the launch plan's picture of it.
   const header = (
-    <header className="space-y-2">
+    <header>
       <HomeGreeting name={session?.user.name} email={session?.user.email} />
-      <a href={baseUrl} className="text-sm text-muted-foreground hover:underline">
-        {baseUrl ? new URL(baseUrl).host : settings?.name}
-      </a>
     </header>
   )
   // The owner's launch plan and the tour offer, in the launch window only. A
