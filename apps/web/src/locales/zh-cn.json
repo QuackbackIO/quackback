@@ -236,6 +236,7 @@
   "portal.feedback.header.submitting": "提交中…",
   "portal.feedback.header.errorSelectBoard": "请选择看板",
   "portal.feedback.header.errorAddTitle": "请添加标题",
+  "portal.feedback.header.errorDetailsTooLong": "详细信息请控制在 {max} 个字符以内。",
   "portal.feedback.header.errorSignIn": "请登录后提交反馈",
   "portal.feedback.header.errorSession": "创建会话失败",
   "portal.feedback.header.errorSubmit": "无法提交你的反馈。请重试。",

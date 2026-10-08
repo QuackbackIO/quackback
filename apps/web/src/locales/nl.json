@@ -236,6 +236,7 @@
   "portal.feedback.header.submitting": "Bezig met plaatsen...",
   "portal.feedback.header.errorSelectBoard": "Kies een bord",
   "portal.feedback.header.errorAddTitle": "Voeg een titel toe",
+  "portal.feedback.header.errorDetailsTooLong": "Houd de details onder {max} tekens.",
   "portal.feedback.header.errorSignIn": "Log in om feedback te versturen",
   "portal.feedback.header.errorSession": "Sessie aanmaken mislukt",
   "portal.feedback.header.errorSubmit": "Kon je feedback niet versturen. Probeer het opnieuw.",

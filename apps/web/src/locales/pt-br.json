@@ -236,6 +236,7 @@
   "portal.feedback.header.submitting": "Enviando...",
   "portal.feedback.header.errorSelectBoard": "Selecione um quadro",
   "portal.feedback.header.errorAddTitle": "Adicione um título",
+  "portal.feedback.header.errorDetailsTooLong": "Mantenha os detalhes com menos de {max} caracteres.",
   "portal.feedback.header.errorSignIn": "Entre para enviar feedback",
   "portal.feedback.header.errorSession": "Falha ao criar a sessão",
   "portal.feedback.header.errorSubmit": "Não foi possível enviar seu feedback. Tente novamente.",

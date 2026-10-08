@@ -236,6 +236,7 @@
   "portal.feedback.header.submitting": "Envoi en cours...",
   "portal.feedback.header.errorSelectBoard": "Veuillez sélectionner une catégorie",
   "portal.feedback.header.errorAddTitle": "Veuillez ajouter un titre",
+  "portal.feedback.header.errorDetailsTooLong": "Limitez les détails à moins de {max} caractères.",
   "portal.feedback.header.errorSignIn": "Veuillez vous connecter pour soumettre un feedback",
   "portal.feedback.header.errorSession": "Impossible de créer la session",
   "portal.feedback.header.errorSubmit": "Impossible de soumettre votre feedback. Veuillez réessayer.",

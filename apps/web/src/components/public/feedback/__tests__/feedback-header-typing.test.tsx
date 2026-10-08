@@ -299,6 +299,35 @@ describe('feedback header post composer', () => {
     expect(createPublicPostSchema.safeParse(payload).success).toBe(true)
   })
 
+  // The server refuses a longer title, and retrying cannot fix that.
+  it('caps the title at the length the server accepts', () => {
+    renderHeader()
+    expect(screen.getByLabelText('Feedback title')).toHaveAttribute('maxLength', '200')
+    const post = { boardId: BOARD.id, title: '', content: '' }
+    expect(createPublicPostSchema.safeParse({ ...post, title: 'x'.repeat(200) }).success).toBe(true)
+    expect(createPublicPostSchema.safeParse({ ...post, title: 'x'.repeat(201) }).success).toBe(
+      false
+    )
+  })
+
+  it('says the details are too long instead of sending them', async () => {
+    renderHeader()
+    typeTitle('Dark mode')
+    await screen.findByTestId('editor')
+    const long = 'x'.repeat(10_001)
+    act(() => {
+      editor.onDocumentChange!({
+        json: () => paragraph(long),
+        html: () => long,
+        markdown: () => long,
+      })
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
+
+    expect(await screen.findByText('Keep the details under 10,000 characters.')).toBeTruthy()
+    expect(createPost).not.toHaveBeenCalled()
+  })
+
   it('shows a short message, never the server error, when the post fails', async () => {
     const serverError =
       '[{"expected":"object","code":"invalid_type","path":["contentJson"],"message":"Invalid input: expected object, received null"}]'

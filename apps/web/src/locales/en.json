@@ -236,6 +236,7 @@
   "portal.feedback.header.submitting": "Submitting...",
   "portal.feedback.header.errorSelectBoard": "Please select a board",
   "portal.feedback.header.errorAddTitle": "Please add a title",
+  "portal.feedback.header.errorDetailsTooLong": "Keep the details under {max} characters.",
   "portal.feedback.header.errorSignIn": "Please sign in to submit feedback",
   "portal.feedback.header.errorSession": "Failed to create session",
   "portal.feedback.header.errorSubmit": "Could not submit your feedback. Please try again.",

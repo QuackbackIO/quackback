@@ -236,6 +236,7 @@
   "portal.feedback.header.submitting": "Wysyłanie...",
   "portal.feedback.header.errorSelectBoard": "Wybierz tablicę",
   "portal.feedback.header.errorAddTitle": "Dodaj tytuł",
+  "portal.feedback.header.errorDetailsTooLong": "Szczegóły mogą mieć najwyżej {max} znaków.",
   "portal.feedback.header.errorSignIn": "Zaloguj się, aby dodać pomysł",
   "portal.feedback.header.errorSession": "Nie udało się utworzyć sesji",
   "portal.feedback.header.errorSubmit": "Nie udało się dodać pomysłu. Spróbuj ponownie.",

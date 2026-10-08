@@ -59,6 +59,10 @@ export interface FeedbackHeaderProps {
   boardLocked?: boolean
 }
 
+/** The server's limits for a new post's title and details (createPublicPostSchema). */
+const TITLE_MAX_LENGTH = 200
+const DETAILS_MAX_LENGTH = 10_000
+
 export function FeedbackHeaderAnimated({
   boards,
   defaultBoardId,
@@ -195,6 +199,20 @@ export function FeedbackHeaderAnimated({
         setError(parsed.errors[0].message)
         return
       }
+    }
+
+    // The server refuses longer details, and retrying would not change that.
+    if ((detailsRef.current?.markdown().length ?? 0) > DETAILS_MAX_LENGTH) {
+      setError(
+        intl.formatMessage(
+          {
+            id: 'portal.feedback.header.errorDetailsTooLong',
+            defaultMessage: 'Keep the details under {max} characters.',
+          },
+          { max: intl.formatNumber(DETAILS_MAX_LENGTH) }
+        )
+      )
+      return
     }
 
     try {
@@ -541,6 +559,7 @@ function TitleInput({
     <motion.input
       ref={inputRef}
       type="text"
+      maxLength={TITLE_MAX_LENGTH}
       placeholder={intl.formatMessage({
         id: 'portal.feedback.header.titlePlaceholder',
         defaultMessage: "What's your idea?",

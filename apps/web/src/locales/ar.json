@@ -236,6 +236,7 @@
   "portal.feedback.header.submitting": "جارٍ الإرسال...",
   "portal.feedback.header.errorSelectBoard": "يرجى اختيار فئة",
   "portal.feedback.header.errorAddTitle": "يرجى إضافة عنوان",
+  "portal.feedback.header.errorDetailsTooLong": "اجعل التفاصيل أقل من {max} حرف.",
   "portal.feedback.header.errorSignIn": "يرجى تسجيل الدخول لإرسال الملاحظات",
   "portal.feedback.header.errorSession": "فشل إنشاء الجلسة",
   "portal.feedback.header.errorSubmit": "تعذّر إرسال ملاحظاتك. يرجى المحاولة مرة أخرى.",

@@ -236,6 +236,7 @@
   "portal.feedback.header.submitting": "Отправка...",
   "portal.feedback.header.errorSelectBoard": "Выберите категорию",
   "portal.feedback.header.errorAddTitle": "Добавьте заголовок",
+  "portal.feedback.header.errorDetailsTooLong": "Описание должно быть короче {max} символов.",
   "portal.feedback.header.errorSignIn": "Войдите, чтобы оставить предложение",
   "portal.feedback.header.errorSession": "Не удалось создать сессию",
   "portal.feedback.header.errorSubmit": "Не удалось отправить предложение. Попробуйте еще раз.",
