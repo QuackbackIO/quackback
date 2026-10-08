@@ -21,7 +21,7 @@ export const Route = createFileRoute('/onboarding/_layout/account')({
     // legitimate path to admin in that mode, so the first user must land
     // through it rather than create an account that would shadow the
     // intended owner.
-    const [{ ssoEnabled, defaultSignInOAuth }, claim] = await Promise.all([
+    const [{ ssoEnabled }, claim] = await Promise.all([
       getPublicAuthConfig(),
       getWorkspaceClaimFn(),
     ])
@@ -30,7 +30,7 @@ export const Route = createFileRoute('/onboarding/_layout/account')({
       ssoEnabled,
       claim,
       workspaceName: settings?.name ?? undefined,
-      authConfig: accountAuthConfig(settings, context.registeredAuthProviders, defaultSignInOAuth),
+      authConfig: accountAuthConfig(settings, context.registeredAuthProviders),
     }
   },
   component: AccountStepRoute,

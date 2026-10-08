@@ -134,7 +134,12 @@ export function AccountStep({ ssoEnabled, claim, authConfig, workspaceName }: Ac
   // Only the first-user form creates an account; the others sign an existing
   // owner in, which a conversion funnel must not count as a sign-up.
   const signInOnly = ssoEnabled || claim.claimed || !claim.openToClaim
-  useAdvanceOnAuthSuccess(signInOnly ? 'onboarding_signed_in' : 'onboarding_account_created')
+  // Someone who already started setup can sign back in from the first-user
+  // screen, which creates nothing either.
+  const [signingIn, setSigningIn] = useState(false)
+  useAdvanceOnAuthSuccess(
+    signInOnly || signingIn ? 'onboarding_signed_in' : 'onboarding_account_created'
+  )
 
   if (ssoEnabled) return <SsoStep />
   if (claim.claimed || !claim.openToClaim) {
@@ -153,8 +158,19 @@ export function AccountStep({ ssoEnabled, claim, authConfig, workspaceName }: Ac
       />
     )
   }
-  if (authConfig.oauth.password !== false) return <FirstAdminStep authConfig={authConfig} />
-  return <MethodsStep authConfig={authConfig} workspaceName={workspaceName} />
+  if (signingIn) {
+    return <ReturningSignIn authConfig={authConfig} onBack={() => setSigningIn(false)} />
+  }
+  if (authConfig.oauth.password !== false) {
+    return <FirstAdminStep onSignIn={() => setSigningIn(true)} />
+  }
+  return (
+    <MethodsStep
+      workspaceName={workspaceName}
+      authConfig={authConfig}
+      onSignIn={() => setSigningIn(true)}
+    />
+  )
 }
 
 /**
@@ -273,9 +289,8 @@ const MIN_PASSWORD_LENGTH = 8
  * The name is required because it is what customers see on replies and
  * updates; without one, the account shows its address's local part instead.
  */
-function FirstAdminStep({ authConfig }: { authConfig: AccountAuthConfig }) {
+function FirstAdminStep({ onSignIn }: { onSignIn: () => void }) {
   const intl = useIntl()
-  const [signingIn, setSigningIn] = useState(false)
   const [accountExists, setAccountExists] = useState(false)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -370,10 +385,6 @@ function FirstAdminStep({ authConfig }: { authConfig: AccountAuthConfig }) {
       )
       setSubmitting(false)
     }
-  }
-
-  if (signingIn) {
-    return <ReturningSignIn authConfig={authConfig} onBack={() => setSigningIn(false)} />
   }
 
   return (
@@ -480,7 +491,7 @@ function FirstAdminStep({ authConfig }: { authConfig: AccountAuthConfig }) {
               {accountExists ? (
                 <button
                   type="button"
-                  onClick={() => setSigningIn(true)}
+                  onClick={onSignIn}
                   className="mt-2 font-medium text-foreground underline underline-offset-4"
                 >
                   <FormattedMessage
@@ -512,7 +523,7 @@ function FirstAdminStep({ authConfig }: { authConfig: AccountAuthConfig }) {
             defaultMessage="Setup takes about a minute. You can change everything later in Settings."
           />
         </p>
-        <StartedSetupLink onClick={() => setSigningIn(true)} />
+        <StartedSetupLink onClick={onSignIn} />
       </form>
     </AccountFrame>
   )
@@ -602,14 +613,12 @@ function ReturningSignIn({
 function MethodsStep({
   authConfig,
   workspaceName,
+  onSignIn,
 }: {
   authConfig: AccountAuthConfig
   workspaceName?: string
+  onSignIn: () => void
 }) {
-  const [signingIn, setSigningIn] = useState(false)
-  if (signingIn) {
-    return <ReturningSignIn authConfig={authConfig} onBack={() => setSigningIn(false)} />
-  }
   return (
     <AccountFrame workspaceName={workspaceName}>
       <SetupSteps current="account" />
@@ -651,7 +660,7 @@ function MethodsStep({
           callbackUrl={ONBOARDING_CALLBACK}
         />
         <div className="mt-6">
-          <StartedSetupLink onClick={() => setSigningIn(true)} />
+          <StartedSetupLink onClick={onSignIn} />
         </div>
       </div>
     </AccountFrame>

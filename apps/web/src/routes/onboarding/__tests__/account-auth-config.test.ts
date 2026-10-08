@@ -13,13 +13,16 @@ describe('accountAuthConfig', () => {
     expect(config.oauth).toEqual({ password: true })
   })
 
-  // Someone may have created their account with a configured provider before
-  // setup finished. Signing back in offers what the credentials allow.
-  it('signs a returning account in with the configured providers before setup', () => {
-    const config = accountAuthConfig(null, [], { password: true, github: true, google: false })
-
-    expect(config.oauth).toEqual({ password: true })
-    expect(config.signInOAuth).toEqual({ password: true, github: true, google: false })
+  // Signing back in before setup finishes offers what the auth runtime
+  // registered, the same list every other sign-in surface reads. Before setup
+  // that is a password only: social providers are opt-in, and nothing has
+  // opted in yet, whatever credentials the install holds.
+  it('signs a returning account in with what the runtime registered', () => {
+    expect(accountAuthConfig(null, []).signInOAuth).toEqual({ password: true })
+    expect(accountAuthConfig(null, ['github']).signInOAuth).toEqual({
+      password: true,
+      github: true,
+    })
   })
 
   it('passes a set-up workspace through unchanged', () => {
