@@ -28,7 +28,7 @@ export function ModalFooter({
 }: ModalFooterProps) {
   return (
     <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-t bg-muted/30 shrink-0">
-      <KeyboardHint keys={['Cmd', 'Enter']} action={hintAction} />
+      <KeyboardHint keys={['Mod', 'Enter']} action={hintAction} />
       <div className="flex items-center gap-2 sm:ml-0 ml-auto">
         {children}
         <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={isPending}>
