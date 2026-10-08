@@ -35,6 +35,17 @@ describe('PageHeader', () => {
     expect(screen.getByText('Where posts live').className).toContain('text-[13px]')
   })
 
+  it('wraps instead of squeezing the title or pushing the page sideways', () => {
+    render(<PageHeader title="Overview" actions={<button>Report incident</button>} />)
+    const heading = screen.getByRole('heading', { level: 1, name: 'Overview' })
+    const row = heading.closest('div[class*="justify-between"]') as HTMLElement
+    expect(row.className).toContain('flex-wrap')
+    expect(heading.parentElement?.className).toContain('shrink-0')
+    expect(screen.getByRole('button', { name: 'Report incident' }).parentElement?.className).toContain(
+      'max-w-full'
+    )
+  })
+
   it('never renders an icon tile', () => {
     const { container } = render(
       // @ts-expect-error icon is not a prop
