@@ -280,6 +280,16 @@ describe('self-hosted ready step', () => {
     expect(loaded.querySelectorAll('li')).toHaveLength(placeholders.length)
   })
 
+  // The portal is live now, so its preview shows it as customers find it.
+  it('previews the portal as it really is: empty, with its real tabs', async () => {
+    await finishSetup(['product_feedback'])
+
+    expect(screen.getByText('Got an idea? Be the first to share it')).toBeInTheDocument()
+    expect(screen.getByText('The Acme team reads every request.')).toBeInTheDocument()
+    expect(screen.queryByText('Dark mode')).toBeNull()
+    expect(screen.getByText(/Your portal is live at/)).toBeInTheDocument()
+  })
+
   it('lists what was set up for each goal picked', async () => {
     await finishSetup(['product_feedback', 'help_center'], 'Sam Rivera')
 

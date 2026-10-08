@@ -98,7 +98,6 @@ function CloudIdentityUnavailable() {
 
 /** The cloud form's panel: the portal at the name and address being typed. */
 function CloudPreviewPanel({ name, hostname }: { name: string; hostname: string }) {
-  const intl = useIntl()
   return (
     <OnboardingPreviewPanel
       caption={
@@ -108,16 +107,7 @@ function CloudPreviewPanel({ name, hostname }: { name: string; hostname: string 
         />
       }
     >
-      <PortalPreview
-        name={
-          name ||
-          intl.formatMessage({
-            id: 'onboarding.preview.placeholderName',
-            defaultMessage: 'Your workspace',
-          })
-        }
-        hostname={hostname}
-      />
+      <PortalPreview name={name} hostname={hostname} />
     </OnboardingPreviewPanel>
   )
 }
@@ -383,12 +373,6 @@ function WorkspaceNameStep({
     }
   }
 
-  const previewName =
-    (ready?.name ?? workspaceName.trim()) ||
-    intl.formatMessage({
-      id: 'onboarding.preview.placeholderName',
-      defaultMessage: 'Your workspace',
-    })
   const panel = (
     <OnboardingPreviewPanel
       caption={
@@ -406,7 +390,11 @@ function WorkspaceNameStep({
         )
       }
     >
-      <PortalPreview name={previewName} goals={ready?.goals ?? goals} hostname={host} />
+      {ready ? (
+        <PortalPreview variant="live" name={ready.name} goals={ready.goals} hostname={host} />
+      ) : (
+        <PortalPreview name={workspaceName.trim()} goals={goals} hostname={host} />
+      )}
     </OnboardingPreviewPanel>
   )
 

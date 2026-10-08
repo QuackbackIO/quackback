@@ -99,21 +99,11 @@ function AccountFrame({
           caption={
             <FormattedMessage
               id="onboarding.account.previewCaption"
-              defaultMessage="Your portal: where customers share ideas, vote and follow what you ship."
+              defaultMessage="An example of your portal, where customers share ideas, vote and follow what you ship."
             />
           }
         >
-          <PortalPreview
-            variant="overview"
-            name={
-              workspaceName ||
-              intl.formatMessage({
-                id: 'onboarding.preview.placeholderName',
-                defaultMessage: 'Your workspace',
-              })
-            }
-            hostname={host}
-          />
+          <PortalPreview variant="example" name={workspaceName ?? ''} hostname={host} />
         </OnboardingPreviewPanel>
       }
     >
