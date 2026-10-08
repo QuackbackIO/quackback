@@ -1,4 +1,4 @@
-import { Suspense } from 'react'
+import { Suspense, useDeferredValue } from 'react'
 import { createFileRoute, notFound, redirect, useRouteContext } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
@@ -175,8 +175,13 @@ function PortalFeed() {
   const currentSearch = search.search
   const currentSort = search.sort ?? 'trending'
 
+  // A visitor's first post or vote mints an anonymous session mid-action,
+  // which changes the viewer and so the feed's key. Deferring the viewer
+  // keeps the current feed, and the composer inside it, on screen while the
+  // new viewer's feed loads, instead of swapping them for the skeleton.
+  const viewerId = useDeferredValue(session?.user?.id)
   const { data: portalData } = useSuspenseQuery(
-    portalQueries.portalData(portalDataParams(search, session?.user?.id))
+    portalQueries.portalData(portalDataParams(search, viewerId))
   )
 
   // Seeds the shared statuses cache from this response so a post-detail
