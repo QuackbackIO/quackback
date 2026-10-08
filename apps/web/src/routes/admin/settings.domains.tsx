@@ -17,8 +17,10 @@ import type { CustomDomainInstruction } from '@/lib/server/control-plane/client'
 import { platformUrlSuffix } from '@/lib/shared/platform-label'
 import { DomainsCard, QuackbackUrlCard } from '@/components/admin/settings/domains-cards'
 import { useCloudEnabled } from '@/lib/client/hooks/use-root-context'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 export const Route = createFileRoute('/admin/settings/domains')({
+  head: adminPageHead('Domains settings'),
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_CUSTOM_DOMAIN)
     const { cloudEnabled } = context

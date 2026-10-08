@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import {
@@ -19,6 +19,8 @@ import {
   EllipsisHorizontalIcon,
   NoSymbolIcon,
   ArrowsRightLeftIcon,
+  UserPlusIcon,
+  ShieldCheckIcon,
 } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -58,10 +60,34 @@ import {
 import { ChangelogSubscriptionControl } from '@/components/admin/users/changelog-subscription-control'
 import { DuplicateUsersWarning } from '@/components/admin/users/duplicate-users-warning'
 import { MergeLeadControl } from '@/components/admin/users/merge-lead-control'
+import type { RoleChoice } from '@/components/admin/settings/team/add-people'
 import { useUpdatePortalUser } from '@/lib/client/mutations'
 import { listConversationsForUserFn, getConversationFn } from '@/lib/server/functions/conversation'
 import type { PrincipalId } from '@quackback/ids'
-import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { useOpenedOnce } from '@/lib/client/hooks/use-opened-once'
+
+// Team dialogs load the first time one opens, not with the profile.
+const AddPeopleDialog = lazy(() =>
+  import('@/components/admin/settings/team/add-people-dialog').then((m) => ({
+    default: m.AddPeopleDialog,
+  }))
+)
+const ChangeRoleDialog = lazy(() =>
+  import('@/components/admin/settings/team/change-role-dialog').then((m) => ({
+    default: m.ChangeRoleDialog,
+  }))
+)
+
+/** A teammate's role from the detail, as the role select and badge read it. */
+function teamRoleChoice(teamRole: PortalUserDetail['teamRole']): RoleChoice | null {
+  if (!teamRole) return null
+  return {
+    role: teamRole.role,
+    ...(teamRole.roleId ? { roleId: teamRole.roleId } : {}),
+    label: teamRole.roleName ?? (teamRole.role === 'admin' ? 'Admin' : 'Member'),
+  }
+}
 
 const EXTERNAL_ID_KEY = '_externalUserId'
 const NO_VALUE = '-'
@@ -475,11 +501,16 @@ export function UserDetail({
   const [blockConfirmOpen, setBlockConfirmOpen] = useState(false)
   const [mergeOpen, setMergeOpen] = useState(false)
   const [composeOpen, setComposeOpen] = useState(false)
+  const [addToTeamOpen, setAddToTeamOpen] = useState(false)
+  const [changeRoleOpen, setChangeRoleOpen] = useState(false)
+  const addToTeamOpened = useOpenedOnce(addToTeamOpen)
+  const changeRoleOpened = useOpenedOnce(changeRoleOpen)
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState('')
   const [editEmail, setEditEmail] = useState('')
   const updateUser = useUpdatePortalUser()
   const settings = useWorkspaceSettings()
+  const sessionUserId = useSessionContext()?.user?.id ?? null
   const supportInboxEnabled =
     (settings?.featureFlags as FeatureFlags | undefined)?.supportInbox ?? false
   // Check if current user can manage portal users
@@ -503,7 +534,14 @@ export function UserDetail({
   // Escape goes back to the list, as it deselects there. Not while one of the
   // profile's dialogs or the inline name edit is open, which Escape closes
   // instead, nor from a field (menus keep their Escape to themselves).
-  const overlayOpen = removeDialogOpen || blockConfirmOpen || mergeOpen || composeOpen || isEditing
+  const overlayOpen =
+    removeDialogOpen ||
+    blockConfirmOpen ||
+    mergeOpen ||
+    composeOpen ||
+    addToTeamOpen ||
+    changeRoleOpen ||
+    isEditing
   useEffect(() => {
     if (overlayOpen) return
     function handleKeyDown(e: KeyboardEvent) {
@@ -590,6 +628,19 @@ export function UserDetail({
   }
 
   const { attributes, externalId } = parseUserMetadata(user.metadata)
+  // The dialogs refetch the detail before they report back, so the badge and
+  // menu follow the server's answer.
+  const teamRole = teamRoleChoice(user.teamRole)
+  const personName = user.name || displayEmail || 'this person'
+  // Only someone who has signed in can join the team from here; others are
+  // invited by email from Members & Teams.
+  const canJoinTeam = !teamRole && !user.isLead && user.hasSignedIn
+  // The server refuses a change to your own role, and blocking or removing
+  // applies to portal users only, never to a teammate.
+  const isSelf = sessionUserId != null && sessionUserId === user.userId
+  const canChangeRole = !!teamRole && !isSelf
+  const portalActions = !teamRole
+  const hasMenu = canChangeRole || canJoinTeam || portalActions
   const noEmailTooltip = 'This user has no email address to deliver a message to'
 
   return (
@@ -643,9 +694,15 @@ export function UserDetail({
                   {user.emailVerified && (
                     <CheckCircleIcon className="h-4 w-4 shrink-0 text-primary" />
                   )}
-                  <Badge variant="secondary" className="shrink-0">
-                    {user.isLead ? 'Lead' : 'User'}
-                  </Badge>
+                  {teamRole ? (
+                    <Badge className="shrink-0 bg-primary/15 text-foreground">
+                      {teamRole.label}
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="shrink-0">
+                      {user.isLead ? 'Lead' : 'User'}
+                    </Badge>
+                  )}
                   {blocked && (
                     <Badge variant="destructive" className="shrink-0">
                       Blocked
@@ -698,7 +755,7 @@ export function UserDetail({
                   View public profile
                 </Link>
               </Button>
-              {canManageUsers && (
+              {canManageUsers && hasMenu && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button size="icon-sm" variant="ghost" aria-label="More actions">
@@ -706,32 +763,51 @@ export function UserDetail({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                      variant={blocked ? 'default' : 'destructive'}
-                      onClick={() => (blocked ? unblock() : setBlockConfirmOpen(true))}
-                    >
-                      <NoSymbolIcon className="h-4 w-4" />
-                      {blocked ? 'Unblock' : 'Block'}
-                    </DropdownMenuItem>
-                    {user.isLead && (
-                      <DropdownMenuItem onClick={() => setMergeOpen(true)}>
-                        <ArrowsRightLeftIcon className="h-4 w-4" />
-                        Merge
+                    {canChangeRole && (
+                      <DropdownMenuItem onClick={() => setChangeRoleOpen(true)}>
+                        <ShieldCheckIcon className="h-4 w-4" />
+                        Change role…
                       </DropdownMenuItem>
                     )}
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      variant="destructive"
-                      disabled={isRemovePending}
-                      onClick={() => setRemoveDialogOpen(true)}
-                    >
-                      {isRemovePending ? (
-                        <ArrowPathIcon className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <TrashIcon className="h-4 w-4" />
-                      )}
-                      Remove from portal
-                    </DropdownMenuItem>
+                    {canJoinTeam && (
+                      <>
+                        <DropdownMenuItem onClick={() => setAddToTeamOpen(true)}>
+                          <UserPlusIcon className="h-4 w-4" />
+                          Make teammate…
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                      </>
+                    )}
+                    {portalActions && (
+                      <>
+                        <DropdownMenuItem
+                          variant={blocked ? 'default' : 'destructive'}
+                          onClick={() => (blocked ? unblock() : setBlockConfirmOpen(true))}
+                        >
+                          <NoSymbolIcon className="h-4 w-4" />
+                          {blocked ? 'Unblock' : 'Block'}
+                        </DropdownMenuItem>
+                        {user.isLead && (
+                          <DropdownMenuItem onClick={() => setMergeOpen(true)}>
+                            <ArrowsRightLeftIcon className="h-4 w-4" />
+                            Merge
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          variant="destructive"
+                          disabled={isRemovePending}
+                          onClick={() => setRemoveDialogOpen(true)}
+                        >
+                          {isRemovePending ? (
+                            <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <TrashIcon className="h-4 w-4" />
+                          )}
+                          Remove from portal
+                        </DropdownMenuItem>
+                      </>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
@@ -753,6 +829,33 @@ export function UserDetail({
         )}
         {canManageUsers && (
           <>
+            {canJoinTeam && addToTeamOpened && (
+              <Suspense fallback={null}>
+                <AddPeopleDialog
+                  open={addToTeamOpen}
+                  onOpenChange={setAddToTeamOpen}
+                  canGrantAdmin={canManageUsers}
+                  initialPerson={{
+                    principalId: user.principalId,
+                    name: personName,
+                    avatarUrl: user.image,
+                    detail: displayEmail ?? '',
+                  }}
+                />
+              </Suspense>
+            )}
+            {teamRole && canChangeRole && changeRoleOpened && (
+              <Suspense fallback={null}>
+                <ChangeRoleDialog
+                  open={changeRoleOpen}
+                  onOpenChange={setChangeRoleOpen}
+                  principalId={user.principalId}
+                  personName={personName}
+                  current={teamRole}
+                  canGrantAdmin={canManageUsers}
+                />
+              </Suspense>
+            )}
             <BlockPersonControl
               mode="dialog"
               principalId={user.principalId as PrincipalId}

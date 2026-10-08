@@ -30,6 +30,7 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
 
 vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({
   enforceAiTokenBudget: hoisted.mockEnforceAiTokenBudget,
+  aiBudgetAvailable: async () => true,
 }))
 
 vi.mock('@/lib/server/config', () => ({

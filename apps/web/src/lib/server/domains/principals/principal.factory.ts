@@ -243,6 +243,12 @@ export interface SetRoleOpts extends MutateOpts {
    * legacy-preset reconciles (system-derived rows stay heal-eligible).
    */
   assignGrantedBy?: PrincipalId
+  /**
+   * Rewrite the workspace assignment to the preset for `role` even when the
+   * role column does not move: clears an explicit grant (a custom role) back
+   * to the plain tier. Ignored with `assignRoleId`.
+   */
+  resetAssignment?: boolean
 }
 
 /**
@@ -328,7 +334,8 @@ export async function setPrincipalRole(
   // workspace grant (a custom role) with the legacy preset. A guard-filtered
   // no-op update (no target row) reconciles nothing.
   const roleMoved = !target || target.role !== role || opts.assignRoleId != null
-  if (reconcilable && target && (opts.assignRoleId != null || target.role !== role)) {
+  const reassign = opts.assignRoleId != null || opts.resetAssignment === true
+  if (reconcilable && target && (reassign || target.role !== role)) {
     await reconcileWorkspaceAssignment(
       exec,
       target.id,

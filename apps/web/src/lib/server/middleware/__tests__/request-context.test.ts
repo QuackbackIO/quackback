@@ -274,4 +274,69 @@ describe('handleRequestWithContext', () => {
     expect(failed).toBeDefined()
     expect(failed.level).toBe('error')
   })
+
+  it('logs a client disconnect below error and still rethrows it', async () => {
+    // What the runtime raises when the client closes the connection mid-request.
+    const cap = capture()
+    const controller = new AbortController()
+    const request = new Request('http://localhost/admin/feedback', { signal: controller.signal })
+    const closed = new DOMException('The connection was closed.', 'AbortError')
+
+    await expect(
+      handleRequestWithContext({
+        request,
+        log: cap.log,
+        next: async () => {
+          controller.abort(closed)
+          throw closed
+        },
+      })
+    ).rejects.toBe(closed)
+
+    const records = cap.records()
+    expect(records.some((r) => r.level === 'error')).toBe(false)
+    const aborted = records.find((r) => r.msg === 'request aborted by client')
+    expect(aborted).toBeDefined()
+    expect(aborted.level).toBe('info')
+  })
+
+  it('logs an AbortError at error when the client is still connected', async () => {
+    // Our own aborted work (a cancelled outbound fetch) escaping a route is a
+    // failure, even though it carries the same name as a disconnect.
+    const cap = capture()
+    const request = new Request('http://localhost/admin/feedback')
+    const ours = new DOMException('This operation was aborted', 'AbortError')
+    await expect(
+      handleRequestWithContext({
+        request,
+        log: cap.log,
+        next: async () => {
+          throw ours
+        },
+      })
+    ).rejects.toBe(ours)
+
+    const failed = cap.records().find((r) => r.msg === 'request failed')
+    expect(failed?.level).toBe('error')
+    expect(cap.records().some((r) => r.msg === 'request aborted by client')).toBe(false)
+  })
+
+  it('still logs other failures at error after the client has gone', async () => {
+    const cap = capture()
+    const controller = new AbortController()
+    const request = new Request('http://localhost/boom', { signal: controller.signal })
+    await expect(
+      handleRequestWithContext({
+        request,
+        log: cap.log,
+        next: async () => {
+          controller.abort(new DOMException('The connection was closed.', 'AbortError'))
+          throw new TypeError('cannot read properties of undefined')
+        },
+      })
+    ).rejects.toThrow(TypeError)
+
+    const failed = cap.records().find((r) => r.msg === 'request failed')
+    expect(failed?.level).toBe('error')
+  })
 })

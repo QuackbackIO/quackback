@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join, relative } from 'node:path'
 import {
   normalizeLocale,
   resolveLocale,
@@ -10,10 +12,14 @@ import {
   loadPortalMessages,
   loadViewerMessages,
   loadWidgetMessages,
-  withoutViewerMessages,
   adminSeedMessages,
   isTourMessage,
   loadTourMessages,
+  isUnsubscribeMessage,
+  loadUnsubscribeMessages,
+  isSetupWizardMessage,
+  loadOnboardingMessages,
+  SETUP_WIZARD_MESSAGE_PREFIXES,
 } from '../i18n'
 
 describe('normalizeLocale', () => {
@@ -179,16 +185,81 @@ describe('viewer strings', () => {
       loadPortalMessages('de'),
       loadViewerMessages('de'),
     ])
-    for (const seeded of [widget, portal, withoutViewerMessages(all)]) {
+    for (const seeded of [widget, portal, adminSeedMessages(all)]) {
       expect(Object.keys(seeded).filter(isViewerMessage)).toEqual([])
       expect(seeded['files.download']).toBe(all['files.download'])
     }
     expect(viewer['files.viewer.close']).toBe('Schließen')
     expect(Object.keys(viewer).length).toBeGreaterThan(0)
     expect(Object.keys(viewer).every(isViewerMessage)).toBe(true)
-    expect(Object.keys(viewer).length + Object.keys(withoutViewerMessages(all)).length).toBe(
-      Object.keys(all).length
-    )
+  })
+})
+
+describe('unsubscribe page strings', () => {
+  it('are seeded by that page alone, translated, and by no shared surface', async () => {
+    const [all, widget, portal, unsubscribe] = await Promise.all([
+      loadMessages('de'),
+      loadWidgetMessages('de'),
+      loadPortalMessages('de'),
+      loadUnsubscribeMessages('de'),
+    ])
+    for (const seeded of [widget, portal, adminSeedMessages(all)]) {
+      expect(Object.keys(seeded).filter(isUnsubscribeMessage)).toEqual([])
+    }
+    expect(unsubscribe['unsubscribe.confirm.button']).toBe('Abmelden')
+    expect(Object.keys(unsubscribe).every(isUnsubscribeMessage)).toBe(true)
+  })
+
+  it('leaves nothing out of the admin catalog but the page-scoped strings', async () => {
+    const [all, viewer, unsubscribe, tour] = await Promise.all([
+      loadMessages('de'),
+      loadViewerMessages('de'),
+      loadUnsubscribeMessages('de'),
+      loadTourMessages('de'),
+    ])
+    const wizard = Object.keys(all).filter(isSetupWizardMessage)
+    expect(
+      Object.keys(viewer).length +
+        Object.keys(unsubscribe).length +
+        Object.keys(tour).length +
+        wizard.length +
+        Object.keys(adminSeedMessages(all)).length
+    ).toBe(Object.keys(all).length)
+  })
+})
+
+describe('setup wizard strings', () => {
+  it('are seeded by the wizard and left out of the admin catalog', async () => {
+    const [all, onboarding] = await Promise.all([loadMessages('de'), loadOnboardingMessages('de')])
+    expect(Object.keys(adminSeedMessages(all)).filter(isSetupWizardMessage)).toEqual([])
+    const wizard = Object.keys(all).filter(isSetupWizardMessage)
+    expect(wizard.length).toBeGreaterThan(0)
+    for (const key of wizard) expect(onboarding[key]).toBe(all[key])
+  })
+
+  // Leaving them out of the admin catalog is only safe while nothing outside
+  // the wizard renders them.
+  it('are rendered by the wizard alone', () => {
+    const src = join(__dirname, '../../..')
+    const wizardDirs = ['routes/onboarding', 'components/onboarding/goal-selector']
+    const offenders: string[] = []
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name)
+        if (entry.isDirectory()) {
+          if (entry.name !== '__tests__' && entry.name !== 'locales') walk(path)
+          continue
+        }
+        if (!/\.(tsx?|ts)$/.test(entry.name)) continue
+        const rel = relative(src, path)
+        if (wizardDirs.some((dir) => rel.startsWith(dir)) || rel === 'lib/shared/i18n.ts') continue
+        const text = readFileSync(path, 'utf8')
+        if (SETUP_WIZARD_MESSAGE_PREFIXES.some((prefix) => text.includes(`'${prefix}`)))
+          offenders.push(rel)
+      }
+    }
+    walk(src)
+    expect(offenders).toEqual([])
   })
 })
 

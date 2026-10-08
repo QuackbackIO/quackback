@@ -33,6 +33,23 @@ vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({
   emailBudgetAvailable: () => emailBudgetAvailable(),
 }))
 
+/**
+ * The `email` child logger, observed: the real logger with only this handler's
+ * warn and error spied, so the level a failed send is reported at is readable.
+ */
+const emailLog = vi.hoisted(() => ({ warn: vi.fn(), error: vi.fn() }))
+vi.mock('@/lib/server/logger', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/server/logger')>()
+  const realChild = actual.logger.child.bind(actual.logger)
+  const logger = Object.create(actual.logger)
+  logger.child = (bindings: Record<string, unknown>) => {
+    const child = realChild(bindings)
+    if (bindings.component !== 'email') return child
+    return Object.assign(Object.create(child), { warn: emailLog.warn, error: emailLog.error })
+  }
+  return { ...actual, logger }
+})
+
 // Threading helpers are pure but read env-derived domains; force a known domain
 // so the created-root Message-ID assertion is deterministic.
 vi.stubEnv('EMAIL_FROM', 'Support <support@acme.test>')
@@ -343,6 +360,69 @@ describe('emailHook', () => {
       expect(result.success).toBe(false)
       expect(result.error).toBe('Invalid template')
       expect(result.shouldRetry).toBe(false)
+    })
+  })
+
+  /**
+   * A throttled send on a bulk announcement is expected and retried by the
+   * queue. It is a warning until the attempt that ends the job, so an error
+   * line keeps meaning mail that did not go.
+   */
+  describe('log level of a failed send', () => {
+    const statusConfig = { ...baseConfig, previousStatus: 'open', newStatus: 'closed' }
+    const throttled = () =>
+      new SesEmailError(
+        'SES email send failed: Maximum sending rate exceeded.',
+        429,
+        'TooManyRequestsException',
+        true
+      )
+
+    beforeEach(() => {
+      emailLog.warn.mockClear()
+      emailLog.error.mockClear()
+    })
+
+    it('warns about a throttled send the queue will try again', async () => {
+      mockStatusChangeEmail.mockRejectedValue(throttled())
+      const result = await emailHook.run(statusChangedEvent, baseTarget, statusConfig, {
+        jobId: 'job-1',
+        finalAttempt: false,
+      })
+      expect(result.shouldRetry).toBe(true)
+      expect(emailLog.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ event_type: 'post.status_changed' }),
+        'email send failed'
+      )
+      expect(emailLog.error).not.toHaveBeenCalled()
+    })
+
+    it('reports the same failure at error on the last attempt', async () => {
+      mockStatusChangeEmail.mockRejectedValue(throttled())
+      await emailHook.run(statusChangedEvent, baseTarget, statusConfig, {
+        jobId: 'job-1',
+        finalAttempt: true,
+      })
+      expect(emailLog.error).toHaveBeenCalledWith(expect.anything(), 'email send failed')
+      expect(emailLog.warn).not.toHaveBeenCalled()
+    })
+
+    it('reports a failure no retry can fix at error, attempts left or not', async () => {
+      mockStatusChangeEmail.mockRejectedValue(
+        new SesEmailError('SES email send failed: not verified', 400, 'MessageRejected', false)
+      )
+      await emailHook.run(statusChangedEvent, baseTarget, statusConfig, {
+        jobId: 'job-1',
+        finalAttempt: false,
+      })
+      expect(emailLog.error).toHaveBeenCalledWith(expect.anything(), 'email send failed')
+      expect(emailLog.warn).not.toHaveBeenCalled()
+    })
+
+    it('reports at error when the caller cannot say whether another attempt follows', async () => {
+      mockStatusChangeEmail.mockRejectedValue(throttled())
+      await emailHook.run(statusChangedEvent, baseTarget, statusConfig)
+      expect(emailLog.error).toHaveBeenCalledWith(expect.anything(), 'email send failed')
     })
   })
 

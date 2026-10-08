@@ -17,7 +17,6 @@
 import { decodeJwt } from 'jose'
 import {
   advanceBindingState,
-  asHttpUrl,
   bindingComplete,
   createBindingState,
   finishBinding,
@@ -32,8 +31,9 @@ export interface ResolvedIdentity {
   id: string
   email?: string
   name?: string
-  /** Avatar URL, resolved only when `wantImage` is set. Always an absolute
-   *  `http(s)` URL (see {@link pickAvatarUrl}); `undefined` otherwise. */
+  /** Avatar URL from the mapped avatar claim (`picture` when unmapped),
+   *  resolved only when `wantImage` is set. Always an absolute `http(s)` URL;
+   *  a mapped claim never falls back to `picture`. */
   image?: string
   emailVerified: boolean
   /** Which source supplied each field, for the test's provenance report. */
@@ -107,19 +107,6 @@ function decodeSource(
   if (!token) return { unavailable: 'absent' }
   const payload = decodePayload(token)
   return payload ? { claims: payload } : { unavailable: 'unreadable' }
-}
-
-/**
- * The avatar URL to adopt for an OIDC account, read from the OIDC Core `picture`
- * claim (`userinfo` or the ID token — `claims` here is already the merged set).
- *
- * Better-Auth's genericOAuth only maps `userInfo.image` to `user.image`, never
- * `picture`, so without this a fully compliant provider produces no avatar.
- * Kept standalone so it is unit-testable without the resolver, and reused by the
- * after-callback avatar backfill.
- */
-export function pickAvatarUrl(claims: Record<string, unknown>): string | undefined {
-  return asHttpUrl(claims.picture)
 }
 
 function sourcesFrom(state: BindingState): ResolvedIdentity['sources'] {

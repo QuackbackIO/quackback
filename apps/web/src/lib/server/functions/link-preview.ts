@@ -15,6 +15,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { createHash } from 'node:crypto'
 import { requireAuth } from './auth-helpers'
+import { isAuthDenialError } from './auth-errors'
 import { isTeamMember } from '@/lib/shared/roles'
 import { parseEmbedUrl } from '@/lib/shared/embeds/parse-embed-url'
 import { getRequestHeaders } from '@tanstack/react-start/server'
@@ -101,7 +102,9 @@ export const unfurlLinkFn = createServerFn({ method: 'GET' })
 
       return result
     } catch (err) {
-      log.error({ err }, 'unfurl link failed')
+      // A caller without a usable session is expected traffic, not a fault.
+      if (isAuthDenialError(err)) log.warn({ err }, 'unfurl link denied')
+      else log.error({ err }, 'unfurl link failed')
       return null
     }
   })

@@ -600,6 +600,33 @@ describe('production profile mapping adapter', () => {
     expect(mapProfileClaims(info).emailVerified).toBe(false)
   })
 
+  // The enforcing-provider vouch must only ever see an address the provider
+  // itself released: a placeholder or a stored address standing in for one
+  // would let a provider vouch for an account it never named.
+  it('hands only a provider-released address to onProviderEmail', async () => {
+    const onProviderEmail = vi.fn(async () => {})
+    const build = (claimMapping: unknown) =>
+      buildGenericOAuthConfigs({
+        providers: [row({ claimMapping })] as never,
+        creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+        tierAllowsOidc: true,
+        placeholderEmailFor: async () => 'sso-oidc-abc-deadbeef@anon.quackback.io',
+        onProviderEmail,
+      })
+
+    const [withEmail] = await build({})
+    await withEmail.getUserInfo?.({
+      idToken: idToken({ sub: 's1', email: 'sam@acme.com', name: 'Sam' }),
+      accessToken: undefined,
+    })
+    expect(onProviderEmail).toHaveBeenCalledWith('oidc_abc', 's1', 'sam@acme.com')
+
+    onProviderEmail.mockClear()
+    const [placeholder] = await build({ profile: { allowMissingEmail: true } })
+    await placeholder.getUserInfo?.({ idToken: idToken({ sub: 's2' }), accessToken: undefined })
+    expect(onProviderEmail).not.toHaveBeenCalled()
+  })
+
   it('does not mint a placeholder when the mapped email is missing and opt-in is off', async () => {
     const placeholderEmailFor = vi.fn(async () => 'should-not-mint@anon.quackback.io')
     const onIdentityFailure = vi.fn()

@@ -9,6 +9,7 @@ import type { HookHandler, HookResult } from '../hook-types'
 import type { EventData } from '../types'
 import { generateAndSavePostSummary } from '@/lib/server/domains/summary/summary.service'
 import type { PostId } from '@quackback/ids'
+import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'summary' })
@@ -24,7 +25,11 @@ export const summaryHook: HookHandler = {
     try {
       await generateAndSavePostSummary(postId)
     } catch (err) {
-      log.error({ err, post_id: postId }, 'summary hook failed')
+      if (err instanceof TierLimitError) {
+        log.info({ err, post_id: postId }, 'summary skipped: ai budget unavailable')
+      } else {
+        log.error({ err, post_id: postId }, 'summary hook failed')
+      }
     }
 
     return { success: true }

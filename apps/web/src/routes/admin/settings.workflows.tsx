@@ -9,8 +9,10 @@ import { warmQuery } from '@/lib/client/queries/warm-query'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 export const Route = createFileRoute('/admin/settings/workflows')({
+  head: adminPageHead('Workflows settings'),
   beforeLoad: ({ context }) =>
     assertRoutePermission(context.permissions, PERMISSIONS.WORKFLOW_MANAGE),
   loader: async ({ context }) => {

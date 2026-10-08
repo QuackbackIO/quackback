@@ -1,14 +1,20 @@
 /**
  * Add/Edit mapping dialog. Edits a local draft; Cancel discards. The card
  * Save is the only writer.
+ *
+ * Every profile field is titled "Edit <field> mapping" and described by its
+ * helper. Avatar's body checks the claim against the last test sign-in and
+ * lists that test's claims to choose from (see `AvatarClaimPicker`); the
+ * other fields use the claim path field.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -20,35 +26,30 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { SsoTestCapture } from '@/lib/shared/sso-test-capture'
-import { ClaimPathInput } from './claim-path-input'
-import { RoleMappingRulesBody } from './claim-mapping-editor'
 import {
   OIDC_PROFILE_DEFAULTS,
+  type IdentityProviderClaimMapping,
+  type ProfileField,
+} from '@/lib/shared/oidc-claim-mapping'
+import type { SsoTestCapture } from '@/lib/shared/sso-test-capture'
+import { AvatarClaimPicker, checkAvatarClaim, testSignInClaims } from './avatar-claim-picker'
+import { ClaimPathInput } from './claim-path-input'
+import {
   PEOPLE_TYPE_LABEL,
-  PROFILE_DIALOG_HELPERS,
-  PROFILE_ROW_LABELS,
+  PROFILE_FIELD_SPECS,
+  isCustomProfilePath,
   type AddClaimTarget,
   type PeopleDefinition,
-  type RoleMapping,
 } from './provider-shared'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
 
 export type ClaimRowDialogTarget =
-  | { type: 'profile'; field: 'id' | 'email' | 'name' }
-  | { type: 'role' }
+  | { type: 'profile'; field: ProfileField }
   | { type: 'people'; attributeKey: string; baselineIndex?: number }
 
 export type ClaimRowDialogCommit =
-  | { type: 'profile'; field: 'id' | 'email' | 'name'; path: string | null }
-  | { type: 'role'; mapping: RoleMapping }
+  | { type: 'profile'; field: ProfileField; path: string | null }
   | { type: 'people'; attributeKey: string; claimPath: string; baselineIndex?: number }
-
-const PROFILE_FALLBACK_NOTE: Record<'id' | 'email' | 'name', string> = {
-  id: 'Leave blank for the standard behaviour: sub, then a userinfo id fallback for older providers. Setting sub explicitly turns that fallback off.',
-  email: '',
-  name: '',
-}
 
 export function ClaimRowDialog({
   open,
@@ -57,12 +58,11 @@ export function ClaimRowDialog({
   availableTargets,
   definitions,
   initialPath,
-  initialRole,
   registrationId,
   canTest,
   capture,
+  draft,
   providerKind,
-  autoCreateUsers,
   onOpenChange,
   onCommit,
 }: {
@@ -72,22 +72,22 @@ export function ClaimRowDialog({
   availableTargets: AddClaimTarget[]
   definitions: PeopleDefinition[]
   initialPath?: string
-  initialRole?: RoleMapping | null
   registrationId: string
   canTest: boolean
   capture?: SsoTestCapture | null
+  /** The editor's unsaved mapping. The Avatar preview replays the test under
+   *  it, so it reads the same sources sign-in will. */
+  draft?: IdentityProviderClaimMapping | null
   providerKind?: string | null
-  autoCreateUsers?: boolean
   onOpenChange: (open: boolean) => void
   onCommit: (commit: ClaimRowDialogCommit) => void
 }) {
   const [target, setTarget] = useState<ClaimRowDialogTarget | null>(lockedTarget ?? null)
   const [path, setPath] = useState(initialPath ?? '')
-  const [role, setRole] = useState<RoleMapping>(initialRole ?? { claimPath: 'groups', rules: [] })
+  const descriptionId = useId()
 
   const firstAvailable = (item: AddClaimTarget | undefined): ClaimRowDialogTarget | null => {
     if (!item) return null
-    if (item.kind === 'role') return { type: 'role' }
     return { type: 'people', attributeKey: item.key }
   }
 
@@ -95,69 +95,64 @@ export function ClaimRowDialog({
     if (!open) return
     setTarget(lockedTarget ?? firstAvailable(availableTargets[0]))
     setPath(initialPath ?? '')
-    setRole(initialRole ?? { claimPath: 'groups', rules: [] })
     // Reset only when the dialog opens. Parent re-renders rebuild availableTargets.
   }, [open])
 
   const resolvedTarget: ClaimRowDialogTarget | null =
     lockedTarget ??
-    (target?.type === 'people'
+    (target?.type === 'people' || target?.type === 'profile'
       ? target
-      : target?.type === 'role'
-        ? target
-        : target?.type === 'profile'
-          ? target
-          : firstAvailable(availableTargets[0]))
+      : firstAvailable(availableTargets[0]))
 
   const peopleDef =
     resolvedTarget?.type === 'people'
       ? definitions.find((d) => d.key === resolvedTarget.attributeKey)
       : undefined
 
+  const profileField = resolvedTarget?.type === 'profile' ? resolvedTarget.field : undefined
+  const isAvatar = profileField === 'image'
+  // Account ID, email and name get identity suggestions; username takes any
+  // scalar claim, like an attribute.
+  const identityField =
+    profileField === 'id' || profileField === 'email' || profileField === 'name'
+      ? profileField
+      : undefined
+  const avatarClaims = useMemo(
+    () => (isAvatar ? testSignInClaims(draft, capture) : null),
+    [isAvatar, draft, capture]
+  )
+  const avatarCheck = isAvatar ? checkAvatarClaim(draft, capture, path) : null
+
+  const helper = mode === 'edit' && profileField ? PROFILE_FIELD_SPECS[profileField].helper : null
+
   const title =
     mode === 'add'
       ? 'Add mapping'
-      : resolvedTarget?.type === 'profile'
-        ? `Edit ${PROFILE_ROW_LABELS[resolvedTarget.field]} mapping`
-        : resolvedTarget?.type === 'role'
-          ? 'Edit role rules'
-          : `Edit ${peopleDef?.label ?? 'attribute'} mapping`
+      : profileField
+        ? `Edit ${PROFILE_FIELD_SPECS[profileField].label} mapping`
+        : `Edit ${peopleDef?.label ?? 'attribute'} mapping`
 
   const canSubmit = (() => {
     if (!resolvedTarget) return false
     if (resolvedTarget.type === 'profile') {
+      // A value that is not an http(s) URL would never become an avatar.
+      if (avatarCheck?.kind === 'not_url') return false
       return mode === 'edit' || path.trim().length > 0
     }
-    if (resolvedTarget.type === 'people') {
-      return path.trim().length > 0 && resolvedTarget.attributeKey.trim().length > 0
-    }
-    return (
-      role.claimPath.trim().length > 0 &&
-      role.rules.every((rule) => rule.whenContains.trim().length > 0)
-    )
+    return path.trim().length > 0 && resolvedTarget.attributeKey.trim().length > 0
   })()
 
   const apply = () => {
     if (!resolvedTarget || !canSubmit) return
     if (resolvedTarget.type === 'profile') {
+      // A standard claim stays display-only and is not written. An explicit
+      // `sub` or `preferred_username` is written: it changes what sign-in reads.
       const trimmed = path.trim()
-      const defaultPath = OIDC_PROFILE_DEFAULTS[resolvedTarget.field]
-      // Identifier: empty Apply keeps the implicit default (userinfo `id` fallback).
-      // Explicitly choosing `sub` must persist `id: 'sub'`. Email/name defaults
-      // stay display-only and are not written.
-      const pathToCommit =
-        resolvedTarget.field === 'id'
-          ? trimmed || null
-          : !trimmed || trimmed === defaultPath
-            ? null
-            : trimmed
       onCommit({
         type: 'profile',
         field: resolvedTarget.field,
-        path: pathToCommit,
+        path: isCustomProfilePath(resolvedTarget.field, trimmed) ? trimmed : null,
       })
-    } else if (resolvedTarget.type === 'role') {
-      onCommit({ type: 'role', mapping: role })
     } else {
       onCommit({
         type: 'people',
@@ -177,9 +172,11 @@ export function ClaimRowDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      {/* The shared content clears aria-describedby, so the helper is linked here. */}
+      <DialogContent className="max-w-lg" aria-describedby={helper ? descriptionId : undefined}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
+          {helper && <DialogDescription id={descriptionId}>{helper}</DialogDescription>}
         </DialogHeader>
 
         <div className="space-y-4">
@@ -191,8 +188,7 @@ export function ClaimRowDialog({
               {availableTargets.length === 0 ? (
                 <div className="space-y-2 text-sm">
                   <p className="text-muted-foreground">
-                    Role rules are already mapped. Define an attribute under Users to map another
-                    claim.
+                    Define an attribute under Users to map another claim.
                   </p>
                   <Link to="/admin/settings/people" className={INLINE_LINK}>
                     Open Users settings
@@ -201,17 +197,9 @@ export function ClaimRowDialog({
               ) : (
                 <Select
                   value={
-                    resolvedTarget?.type === 'role'
-                      ? 'role'
-                      : resolvedTarget?.type === 'people'
-                        ? `people:${resolvedTarget.attributeKey}`
-                        : ''
+                    resolvedTarget?.type === 'people' ? `people:${resolvedTarget.attributeKey}` : ''
                   }
                   onValueChange={(value) => {
-                    if (value === 'role') {
-                      setTarget({ type: 'role' })
-                      return
-                    }
                     const key = value.replace(/^people:/, '')
                     setTarget({ type: 'people', attributeKey: key })
                   }}
@@ -220,37 +208,30 @@ export function ClaimRowDialog({
                     <SelectValue placeholder="Choose what to set" />
                   </SelectTrigger>
                   <SelectContent>
-                    {availableTargets.map((item) =>
-                      item.kind === 'role' ? (
-                        <SelectItem key="role" value="role">
-                          Role rules
-                        </SelectItem>
-                      ) : (
-                        <SelectItem key={item.key} value={`people:${item.key}`}>
-                          <span className="flex flex-col text-left">
-                            <span>{item.label}</span>
-                            <span className="text-xs font-normal text-muted-foreground">
-                              {item.key}, {PEOPLE_TYPE_LABEL[item.attrType] ?? item.attrType}
-                            </span>
+                    {availableTargets.map((item) => (
+                      <SelectItem key={item.key} value={`people:${item.key}`}>
+                        <span className="flex flex-col text-left">
+                          <span>{item.label}</span>
+                          <span className="text-xs font-normal text-muted-foreground">
+                            {item.key}, {PEOPLE_TYPE_LABEL[item.attrType] ?? item.attrType}
                           </span>
-                        </SelectItem>
-                      )
-                    )}
+                        </span>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               )}
             </div>
           )}
 
-          {resolvedTarget?.type === 'role' ? (
-            <RoleMappingRulesBody
-              mapping={role}
-              disabled={false}
+          {avatarCheck ? (
+            <AvatarClaimPicker
+              value={path}
+              onChange={setPath}
+              check={avatarCheck}
+              claims={avatarClaims}
               registrationId={registrationId}
               canTest={canTest}
-              capture={capture}
-              autoCreateUsers={autoCreateUsers}
-              onChange={setRole}
             />
           ) : resolvedTarget ? (
             <div className="space-y-1.5">
@@ -267,26 +248,20 @@ export function ClaimRowDialog({
                 }
                 ariaLabel="Provider claim"
                 capture={capture}
-                suggestionsFor={resolvedTarget.type === 'profile' ? 'identity' : 'attribute'}
+                suggestionsFor={identityField ? 'identity' : 'attribute'}
                 providerKind={providerKind}
-                identityField={resolvedTarget.type === 'profile' ? resolvedTarget.field : undefined}
+                identityField={identityField}
               />
-              {resolvedTarget.type === 'profile' && (
-                <p className="text-sm text-muted-foreground">
-                  {PROFILE_DIALOG_HELPERS[resolvedTarget.field]}
-                  {PROFILE_FALLBACK_NOTE[resolvedTarget.field]
-                    ? ` ${PROFILE_FALLBACK_NOTE[resolvedTarget.field]}`
-                    : ''}
-                </p>
-              )}
             </div>
           ) : null}
         </div>
 
         <DialogFooter>
-          {mode === 'edit' && resolvedTarget?.type === 'profile' && (
+          {mode === 'edit' && profileField && (
             <Button type="button" variant="outline" className="mr-auto" onClick={resetProfile}>
-              Use {OIDC_PROFILE_DEFAULTS[resolvedTarget.field]}
+              {profileField === 'username'
+                ? 'Use standard claims'
+                : `Use ${OIDC_PROFILE_DEFAULTS[profileField]}`}
             </Button>
           )}
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

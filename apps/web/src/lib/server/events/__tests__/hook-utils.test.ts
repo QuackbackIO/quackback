@@ -44,6 +44,14 @@ describe('isRetryableError', () => {
   })
 
   describe('error codes', () => {
+    it('returns true for a provider throttle, whatever status it came with', () => {
+      // The older SES name for its send-rate limit arrives as a 400, which on
+      // status alone reads as a rejected message.
+      expect(isRetryableError({ status: 400, code: 'Throttling' })).toBe(true)
+      expect(isRetryableError({ status: 400, code: 'ThrottlingException' })).toBe(true)
+      expect(isRetryableError({ code: 'TooManyRequestsException' })).toBe(true)
+    })
+
     it('returns true for ECONNRESET', () => {
       expect(isRetryableError({ code: 'ECONNRESET' })).toBe(true)
     })

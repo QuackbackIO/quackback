@@ -279,7 +279,7 @@ export function CommentThread({
         <p className="text-muted-foreground text-center py-4">
           {intl.formatMessage({
             id: 'portal.commentThread.empty',
-            defaultMessage: 'No comments yet. Be the first to share your thoughts!',
+            defaultMessage: 'No comments yet. Be the first to share your thoughts.',
           })}
         </p>
       ) : (

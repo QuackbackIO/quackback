@@ -100,7 +100,7 @@ export function EditWebhookDialog({ webhook, open, onOpenChange }: EditWebhookDi
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Edit webhook</DialogTitle>
             <DialogDescription>Update webhook configuration.</DialogDescription>

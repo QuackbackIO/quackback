@@ -11,11 +11,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
 import { createId, type PrincipalId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { principal, user, eq } from '@/lib/server/db'
+import { account, principal, user, eq } from '@/lib/server/db'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
+}))
+
+// No verified domains unless a test sets one; the provider registry is not what
+// this suite is about, so it stands in rather than needing provider rows.
+const sso = vi.hoisted(() => ({ providers: [] as unknown[] }))
+vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
+  listIdentityProviders: async () => sso.providers,
+}))
+vi.mock('@/lib/server/auth/registered-providers', () => ({
+  getRegisteredOidcProviderIds: async () => new Set(['oidc_acme']),
 }))
 
 import { updatePortalUserProfile } from '../user.update'
@@ -36,6 +46,7 @@ const runSuffix = () => `${Date.now().toString(36)}-${Math.random().toString(36)
 async function seedUser(opts: {
   name: string
   email: string | null
+  emailVerified?: boolean
 }): Promise<{ userId: UserId; principalId: PrincipalId }> {
   const userId = createId('user') as UserId
   const principalId = createId('principal') as PrincipalId
@@ -43,7 +54,7 @@ async function seedUser(opts: {
     id: userId,
     name: opts.name,
     email: opts.email,
-    emailVerified: false,
+    emailVerified: opts.emailVerified ?? false,
   })
   await testDb.insert(principal).values({
     id: principalId,
@@ -225,6 +236,137 @@ describe.skipIf(!fixture.available)('updatePortalUserProfile', () => {
       .from(user)
       .where(eq(user.id, second.userId))
     expect(row.email).toBe(own)
+  })
+
+  // An admin can type any address. Leaving it marked verified would let a
+  // provider that matches on verified addresses sign someone else in to this
+  // account, on nothing but the admin's word.
+  it('clears emailVerified when an admin changes the address', async () => {
+    const person = await seedUser({
+      name: 'Verified Person',
+      email: `verified-${runSuffix()}@example.com`,
+      emailVerified: true,
+    })
+
+    await updatePortalUserProfile({
+      principalId: person.principalId,
+      email: `typed-${runSuffix()}@example.com`,
+    })
+
+    const [row] = await testDb
+      .select({ emailVerified: user.emailVerified })
+      .from(user)
+      .where(eq(user.id, person.userId))
+    expect(row.emailVerified).toBe(false)
+  })
+
+  it('keeps emailVerified when the address is unchanged or only the name moves', async () => {
+    const address = `same-${runSuffix()}@example.com`
+    const person = await seedUser({ name: 'Same Person', email: address, emailVerified: true })
+
+    await updatePortalUserProfile({ principalId: person.principalId, email: address.toUpperCase() })
+    await updatePortalUserProfile({ principalId: person.principalId, name: 'Renamed' })
+
+    const [row] = await testDb
+      .select({ emailVerified: user.emailVerified })
+      .from(user)
+      .where(eq(user.id, person.userId))
+    expect(row.emailVerified).toBe(true)
+  })
+
+  describe('a domain that requires SSO', () => {
+    beforeEach(() => {
+      sso.providers = [
+        {
+          id: 'idp_acme',
+          registrationId: 'oidc_acme',
+          showButton: true,
+          domains: [{ name: 'acme.com', enforced: true, verifiedAt: '2026-01-01T00:00:00Z' }],
+        },
+      ]
+    })
+    afterEach(() => {
+      sso.providers = []
+    })
+
+    it('refuses to move someone off a managed address', async () => {
+      const person = await seedUser({ name: 'Sam', email: `sam-${runSuffix()}@acme.com` })
+
+      await expect(
+        updatePortalUserProfile({
+          principalId: person.principalId,
+          email: `sam-${runSuffix()}@gmail.com`,
+        })
+      ).rejects.toThrow(/single sign-on/i)
+    })
+
+    it('refuses to move someone onto a managed domain they do not sign in through', async () => {
+      const person = await seedUser({ name: 'Pat', email: `pat-${runSuffix()}@example.com` })
+
+      await expect(
+        updatePortalUserProfile({
+          principalId: person.principalId,
+          email: `pat-${runSuffix()}@acme.com`,
+        })
+      ).rejects.toThrow(/single sign-on/i)
+    })
+
+    it('lets someone who signs in through the owning provider get an address there', async () => {
+      const person = await seedUser({ name: 'Lee', email: null })
+      await testDb.insert(account).values({
+        accountId: `sub-${runSuffix()}`,
+        providerId: 'oidc_acme',
+        userId: person.userId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      const address = `lee-${runSuffix()}@acme.com`
+
+      await updatePortalUserProfile({ principalId: person.principalId, email: address })
+
+      const [row] = await testDb
+        .select({ email: user.email })
+        .from(user)
+        .where(eq(user.id, person.userId))
+      expect(row.email).toBe(address)
+    })
+
+    it('lets an admin correct an address within the domain for someone on its provider', async () => {
+      const person = await seedUser({ name: 'Jon', email: `jhon-${runSuffix()}@acme.com` })
+      await testDb.insert(account).values({
+        accountId: `sub-${runSuffix()}`,
+        providerId: 'oidc_acme',
+        userId: person.userId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      const corrected = `john-${runSuffix()}@acme.com`
+
+      await updatePortalUserProfile({ principalId: person.principalId, email: corrected })
+
+      const [row] = await testDb
+        .select({ email: user.email })
+        .from(user)
+        .where(eq(user.id, person.userId))
+      expect(row.email).toBe(corrected)
+    })
+
+    it('still renames someone at a managed address', async () => {
+      const address = `kim-${runSuffix()}@acme.com`
+      const person = await seedUser({ name: 'Kim', email: address })
+
+      await updatePortalUserProfile({
+        principalId: person.principalId,
+        name: 'Kim Lee',
+        email: address,
+      })
+
+      const [row] = await testDb
+        .select({ name: user.name, email: user.email })
+        .from(user)
+        .where(eq(user.id, person.userId))
+      expect(row).toEqual({ name: 'Kim Lee', email: address })
+    })
   })
 
   it('updates the display name on user and principal', async () => {

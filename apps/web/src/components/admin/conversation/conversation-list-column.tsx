@@ -1,3 +1,4 @@
+import { nameInitial } from '@/lib/shared/utils/initial'
 import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { conversationInboxQueries } from '@/lib/client/queries/conversation-inbox'
@@ -128,7 +129,7 @@ function TicketAssigneeGlyph({
         title={assignee.teamName ?? 'Team'}
         className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground"
       >
-        {(assignee.teamName ?? 'T').charAt(0).toUpperCase()}
+        {nameInitial(assignee.teamName ?? 'T')}
       </span>
     )
   }

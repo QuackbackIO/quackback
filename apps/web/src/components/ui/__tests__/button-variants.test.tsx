@@ -17,3 +17,22 @@ describe('Button outline-destructive', () => {
     expect(classList.contains('bg-primary')).toBe(false)
   })
 })
+
+describe('Button touch targets', () => {
+  it.each(['sm', 'icon-sm'] as const)(
+    'extends the %s hit area to 44px on a coarse pointer without growing the button',
+    (size) => {
+      render(<Button size={size}>Copy</Button>)
+      const { className } = screen.getByRole('button', { name: 'Copy' })
+      expect(className).toContain('relative')
+      expect(className).toContain('pointer-coarse:after:absolute')
+      expect(className).toContain('pointer-coarse:after:-inset-y-1.5')
+      expect(className).toContain('pointer-coarse:after:inset-x-0')
+    }
+  )
+
+  it('leaves the default size alone', () => {
+    render(<Button>Save</Button>)
+    expect(screen.getByRole('button', { name: 'Save' }).className).not.toContain('pointer-coarse')
+  })
+})

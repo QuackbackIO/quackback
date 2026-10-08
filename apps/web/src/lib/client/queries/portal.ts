@@ -66,7 +66,10 @@ export const portalQueries = {
   /**
    * Combined portal data fetch - all data in a single server call.
    * This is the optimized entry point for the portal page.
-   * Vote status is only shown for authenticated users (via userId -> principalId).
+   *
+   * `userId` is the viewer's id and only keys the cache, so two viewers never
+   * share an entry. It is not sent: the server reads the viewer, and so whose
+   * votes to return, from the session.
    */
   portalData: (params: {
     boardSlug?: string
@@ -98,7 +101,8 @@ export const portalQueries = {
         params.segmentIds,
       ],
       queryFn: async () => {
-        const data = await fetchPortalData({ data: params })
+        const { userId: _cacheKeyOnly, ...input } = params
+        const data = await fetchPortalData({ data: input })
         // Deserialize dates and cast branded types from server response
         return {
           ...data,

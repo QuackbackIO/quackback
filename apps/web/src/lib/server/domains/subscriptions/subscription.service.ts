@@ -534,17 +534,8 @@ export async function batchGenerateUnsubscribeTokens(
   return new Map(tokens.map((t) => [t.principalId, t.token]))
 }
 
-/**
- * Process an unsubscribe token
- * Returns the action performed with post details for redirect, or null if token is invalid/expired
- */
-export async function processUnsubscribeToken(token: string): Promise<{
-  action: string
-  principalId: PrincipalId
-  postId: PostId | null
-  post?: { title: string; boardSlug: string }
-} | null> {
-  log.debug('process unsubscribe token')
+/** A token that exists, is unused and has not expired; null otherwise. */
+async function findLiveUnsubscribeToken(token: string) {
   const tokenRecord = await db.query.unsubscribeTokens.findFirst({
     where: eq(unsubscribeTokens.token, token),
   })
@@ -561,11 +552,48 @@ export async function processUnsubscribeToken(token: string): Promise<{
     return null // Expired
   }
 
-  // Mark as used
-  await db
-    .update(unsubscribeTokens)
-    .set({ usedAt: new Date() })
-    .where(eq(unsubscribeTokens.id, tokenRecord.id))
+  return tokenRecord
+}
+
+/**
+ * What an unsubscribe token would do, without doing it or spending the token.
+ *
+ * Opening an emailed link must change nothing (mail scanners prefetch every
+ * link), so the page reads this to ask first. Null when the token is unknown,
+ * used or expired.
+ */
+export async function previewUnsubscribeToken(
+  token: string
+): Promise<{ action: string; postTitle?: string } | null> {
+  const tokenRecord = await findLiveUnsubscribeToken(token)
+  if (!tokenRecord) return null
+
+  if (!tokenRecord.postId) return { action: tokenRecord.action }
+  const post = await db.query.posts.findFirst({
+    where: eq(posts.id, tokenRecord.postId),
+    columns: { title: true },
+  })
+  return { action: tokenRecord.action, postTitle: post?.title }
+}
+
+/**
+ * Process an unsubscribe token
+ * Returns the action performed with post details for redirect, or null if token is invalid/expired
+ */
+export async function processUnsubscribeToken(token: string): Promise<{
+  action: string
+  principalId: PrincipalId
+  postId: PostId | null
+  post?: { title: string; boardSlug: string }
+} | null> {
+  log.debug('process unsubscribe token')
+  const tokenRecord = await findLiveUnsubscribeToken(token)
+  if (!tokenRecord) {
+    return null
+  }
+
+  // The token is spent only after the action lands (below), so a failure
+  // anywhere before then leaves the link working for a retry.
 
   // Get principal's organization for workspace context
   const principalRecord = await db.query.principal.findFirst({
@@ -611,6 +639,14 @@ export async function processUnsubscribeToken(token: string): Promise<{
       break
     }
   }
+
+  // Spend the token once. Every action above is idempotent, so a concurrent
+  // request that also got this far repeated a harmless write; the condition
+  // keeps the first stamp.
+  await db
+    .update(unsubscribeTokens)
+    .set({ usedAt: new Date() })
+    .where(and(eq(unsubscribeTokens.id, tokenRecord.id), isNull(unsubscribeTokens.usedAt)))
 
   return {
     action: tokenRecord.action,

@@ -323,6 +323,25 @@ export const account = pgTable(
   ]
 )
 
+/**
+ * The name and avatar URL an identity provider last wrote to an account's
+ * user, each kept only while the user's stored value still equals it. Profile
+ * sync on sign-in refreshes a recorded field and never one a person chose.
+ *
+ * A table of its own rather than columns on `account`: Better-Auth's adapter
+ * selects every `account` column, so a column there would fail every sign-in
+ * on a database that has not applied its migration yet. Nothing in Better-Auth
+ * reads this table. See 0292.
+ */
+export const accountProfileSync = pgTable('account_profile_sync', {
+  accountId: typeIdColumn('account')('account_id')
+    .primaryKey()
+    .references(() => account.id, { onDelete: 'cascade' }),
+  name: text('name'),
+  image: text('image'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
 export const verification = pgTable(
   'verification',
   {
@@ -575,19 +594,36 @@ export const settings = pgTable('settings', {
 /** Where identity may be read from, in resolver order. */
 export type IdentitySource = 'idToken' | 'userinfo' | 'accessTokenJwt'
 
-/** Profile fields a claim can be bound to. */
-export type ProfileField = 'id' | 'email' | 'name'
+/**
+ * Profile fields a claim can be bound to. `username` has no column of its
+ * own: it names the account when the provider sends no display name. `image`
+ * is the avatar, read as an http(s) URL.
+ */
+export type ProfileField = 'id' | 'email' | 'name' | 'username' | 'image'
 
 /**
  * Role-mapping rules applied to an OIDC claim at sign-in. Now the `role`
  * section of {@link IdentityProviderClaimMapping}; the shape is unchanged from
  * the former `attribute_mapping` column so migrated rows behave identically.
  */
+/** One role rule: when the claim contains a value, grant a role. */
+export type ClaimRoleRule = {
+  whenContains: string
+  role: 'admin' | 'member' | 'user'
+  /**
+   * A workspace role (custom or preset) granted on top of the `member` tier,
+   * the same way a custom-role invite or role change rides it. Only valid with
+   * `role: 'member'`. A matched rule naming a role that no longer exists
+   * grants nothing and leaves the person's role as it is.
+   */
+  roleId?: string
+}
+
 export type ClaimRoleMapping = {
   /** Dotted path or namespaced claim on the ID token. */
   claimPath: string
   /** First-match-wins role assignment from the resolved claim. */
-  rules: Array<{ whenContains: string; role: 'admin' | 'member' | 'user' }>
+  rules: ClaimRoleRule[]
   /** When true, every sign-in re-resolves and may demote/promote. */
   syncOnEverySignIn?: boolean
 }
@@ -603,12 +639,15 @@ export type ClaimRoleMapping = {
  * this is interpreted.
  */
 export type IdentityProviderClaimMapping = {
-  /** Which claim carries the account id, the email, the display name. */
+  /** Which claim carries the account id, the email, the display name, the
+   *  username and the avatar. */
   profile?: {
     sources?: IdentitySource[]
-    claims?: { id?: string; email?: string; name?: string }
+    claims?: Partial<Record<ProfileField, string>>
     /** Mint a placeholder address when the provider supplies no email. */
     allowMissingEmail?: boolean
+    /** Refresh the name and avatar from the provider on every sign-in. */
+    syncOnSignIn?: boolean
   }
   role?: ClaimRoleMapping
   /** Claim to user-attribute copying. */

@@ -9,6 +9,7 @@ import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { AuthSettings, type AuthTab } from '@/components/admin/settings/security/auth-settings'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { warmQuery } from '@/lib/client/queries/warm-query'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 const searchSchema = z.object({
   // The Access & Security page splits by CONCERN, not by surface:
@@ -29,6 +30,7 @@ const searchSchema = z.object({
 })
 
 export const Route = createFileRoute('/admin/settings/security/authentication')({
+  head: adminPageHead('Authentication settings'),
   validateSearch: searchSchema,
   loader: async ({ context, location }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.AUTH_MANAGE)

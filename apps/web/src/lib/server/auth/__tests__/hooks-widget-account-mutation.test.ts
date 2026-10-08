@@ -37,6 +37,9 @@ vi.mock('@/lib/server/domains/principals/bootstrap-admin', () => ({
   findHumanAdmin: vi.fn(),
   isOpenToBootstrapClaim: vi.fn(),
   isSetupOpenToClaim: vi.fn(async () => true),
+  // Nobody has claimed setup by creating an account; that claim is covered
+  // against real Postgres.
+  findSetupClaimant: async () => undefined,
 }))
 
 vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({

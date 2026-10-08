@@ -5,6 +5,7 @@
  * roles, and standard identity claims are never mappable. Pure + client-safe.
  */
 import type { JsonValue } from '@/lib/shared/json'
+import { getClaimByPath } from '@/lib/shared/oidc-claim-mapping'
 
 export type ClaimSuggestions = {
   /** Dotted (or literal URL) claim paths whose value is a non-empty string[]. */
@@ -55,6 +56,17 @@ function dedupeStrings(arr: JsonValue[]): string[] {
     }
   }
   return out
+}
+
+/**
+ * The distinct string values one claim path holds: every string member of an
+ * array claim, or a lone string. These are the values a role rule at that path
+ * can match.
+ */
+export function claimValuesAt(claims: Record<string, unknown>, path: string): string[] {
+  const value = getClaimByPath(claims, path)
+  if (Array.isArray(value)) return dedupeStrings(value as JsonValue[])
+  return typeof value === 'string' && value !== '' ? [value] : []
 }
 
 export function deriveClaimSuggestions(allClaims: Record<string, JsonValue>): ClaimSuggestions {

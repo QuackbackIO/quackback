@@ -21,13 +21,10 @@ import {
   claimMappingFor,
   type IdentityProviderClaimMapping,
   type IdentitySource,
+  type ProviderIdentityMapping,
   type SourceUnavailableReason,
 } from '@/lib/shared/oidc-claim-mapping'
-import {
-  finishBinding,
-  replayClaimMapping,
-  type IdentityMapping,
-} from '@/lib/shared/sso-claim-binder'
+import { finishBinding, replayClaimMapping } from '@/lib/shared/sso-claim-binder'
 import { finalizeProfileOutcome, type ProfileOutcome } from '@/lib/shared/sso-profile-outcome'
 import type {
   CapturedIdentity,
@@ -76,7 +73,7 @@ export interface HandshakeInput {
    */
   allowMissingEmail?: boolean
   /** Identity sources and claim paths — the same mapping production uses. */
-  identityMapping?: IdentityMapping
+  identityMapping?: ProviderIdentityMapping
   /**
    * Full stored mapping snapshotted at test start. Pre-deploy sessions may omit
    * this and carry only `identityMapping` for the existing 600-second TTL.
@@ -519,6 +516,7 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
   )
   const mappingOutcome = finalizeProfileOutcome(bound, {
     allowMissingEmail: input.allowMissingEmail === true,
+    usernameClaim: identityMapping?.usernameClaim,
   })
   const diagnosticClaims = mergeSnapshotClaims(snapshots)
   const capture = buildTestCapture({

@@ -6,19 +6,8 @@ import { PortalAuthFormInline } from '@/components/auth/portal-auth-form-inline'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { startOidcSignIn } from '@/lib/client/start-oidc-sign-in'
 import type { WorkspaceClaim } from '@/lib/server/functions/onboarding'
-import type { OidcSignInButton } from '@/lib/shared/oidc-sign-in-button'
+import type { AccountAuthConfig } from './-account-auth-config'
 import { track } from '@/lib/client/analytics'
-
-/** Sign-in methods the workspace actually allows, in the shape
- *  `PortalAuthFormInline` already consumes on the portal. */
-interface AccountAuthConfig {
-  found: boolean
-  oauth: Record<string, boolean | undefined>
-  openSignup?: boolean
-  oidcProviders?: OidcSignInButton[]
-  registeredAuthProviders?: string[]
-  twoFactorRequired?: boolean
-}
 
 export interface AccountStepProps {
   ssoEnabled: boolean
@@ -79,7 +68,9 @@ function StepCard({ children }: { children: React.ReactNode }) {
  * from the workspace itself: whether setup is already owned, whether arriving
  * here is still a way to take it, and whether the workspace accepts passwords.
  * An install that nobody has claimed and that accepts passwords keeps the
- * account-creation form unchanged.
+ * account-creation form unchanged. Once its first account exists, that account
+ * has claimed setup, and the screen asks everyone, its owner included, to sign
+ * in.
  *
  * The middle fact is why this screen cannot decide on `claimed` alone. A
  * workspace a control plane created for a customer has an owner before anyone
@@ -95,9 +86,17 @@ export function AccountStep({ ssoEnabled, claim, authConfig, workspaceName }: Ac
   // Only the first-user form creates an account; the others sign an existing
   // owner in, which a conversion funnel must not count as a sign-up.
   const signInOnly = ssoEnabled || claim.claimed || !claim.openToClaim
-  useAdvanceOnAuthSuccess(signInOnly ? 'onboarding_signed_in' : 'onboarding_account_created')
+  // Someone who already started setup can sign back in from the first-user
+  // screen, which creates nothing either.
+  const [signingIn, setSigningIn] = useState(false)
+  useAdvanceOnAuthSuccess(
+    signInOnly || signingIn ? 'onboarding_signed_in' : 'onboarding_account_created'
+  )
 
   if (ssoEnabled) return <SsoStep />
+  if (claim.claimed && claim.openToClaim) {
+    return <SetupInProgressStep authConfig={authConfig} workspaceName={workspaceName} />
+  }
   if (claim.claimed || !claim.openToClaim) {
     return (
       <SignInOnlyStep
@@ -114,7 +113,76 @@ export function AccountStep({ ssoEnabled, claim, authConfig, workspaceName }: Ac
       />
     )
   }
-  return <MethodsStep authConfig={authConfig} workspaceName={workspaceName} />
+  return (
+    <MethodsStep
+      authConfig={authConfig}
+      workspaceName={workspaceName}
+      // Before setup finishes, an account here claims it, so while this form
+      // shows nobody has one to sign back in with. A workspace stamped complete
+      // before its owner arrived is the exception: its accounts claim nothing.
+      offerSignIn={claim.setupComplete}
+      signingIn={signingIn}
+      onSigningInChange={setSigningIn}
+    />
+  )
+}
+
+/**
+ * Setup has started here: an account was created, and that account owns
+ * setup. Whoever created it signs back in and the wizard carries on from the
+ * workspace step; anyone else is told to wait for an invitation. Who started it
+ * stays unsaid, for the same reason {@link SignInOnlyStep} gives.
+ *
+ * The account may be one nobody here can sign in with: a test, a stray
+ * visitor, or a lost password with no mail to reset it. Only the server can
+ * hand setup to someone else, so the last line says who to ask.
+ *
+ * Signs in with every method this install can take, providers its runtime
+ * registered included, since the account may be linked to one.
+ */
+function SetupInProgressStep({
+  authConfig,
+  workspaceName,
+}: {
+  authConfig: AccountAuthConfig
+  workspaceName?: string
+}) {
+  return (
+    <StepCard>
+      <div className="mb-6 text-center">
+        <h1 className="text-2xl font-bold">
+          <FormattedMessage
+            id="onboarding.account.inProgress.title"
+            defaultMessage="Sign in to finish setting up"
+          />
+        </h1>
+        <p className="mt-2 text-muted-foreground">
+          <FormattedMessage
+            id="onboarding.account.inProgress.lead"
+            defaultMessage="Setup has started here. Sign in with the account you created to pick up where you left off."
+          />
+        </p>
+      </div>
+      <PortalAuthFormInline
+        mode="login"
+        authConfig={{ ...authConfig, oauth: authConfig.signInOAuth ?? authConfig.oauth }}
+        workspaceName={workspaceName}
+        callbackUrl={ONBOARDING_CALLBACK}
+      />
+      <p className="mt-6 text-center text-sm text-muted-foreground">
+        <FormattedMessage
+          id="onboarding.account.inProgress.notOwner"
+          defaultMessage="Someone else setting this up? Ask them to invite you once setup is done."
+        />
+      </p>
+      <p className="mt-2 text-center text-sm text-muted-foreground">
+        <FormattedMessage
+          id="onboarding.account.inProgress.restart"
+          defaultMessage="Setup started by mistake, or can't sign in? The server's operator can restart setup."
+        />
+      </p>
+    </StepCard>
+  )
 }
 
 /**
@@ -218,18 +286,32 @@ function SignInOnlyStep({
 }
 
 /**
- * Nobody owns setup yet, but the workspace does not accept passwords, so
- * the first user arrives through whichever method it does accept. Magic
- * link and social sign-in both create the account on first use, and the
- * wizard promotes that first user to admin exactly as before.
+ * Nobody owns setup yet, so the first account created here becomes the admin.
+ *
+ * Only the workspace's email methods are offered: a password, or an emailed
+ * link where passwords are off. Social and OIDC tiles are left out. Before
+ * setup no provider has credentials this workspace can vouch for, so a tile
+ * here is a button that fails; providers configured later appear on the
+ * sign-in page as usual. A workspace with neither email method keeps its
+ * providers: they are the only way in, and a workspace that has settings only
+ * lists providers whose credentials are configured.
  */
 function MethodsStep({
   authConfig,
   workspaceName,
+  offerSignIn,
+  signingIn,
+  onSigningInChange,
 }: {
   authConfig: AccountAuthConfig
   workspaceName?: string
+  offerSignIn: boolean
+  signingIn: boolean
+  onSigningInChange: (signingIn: boolean) => void
 }) {
+  if (signingIn && offerSignIn) {
+    return <ReturningSignIn authConfig={authConfig} onBack={() => onSigningInChange(false)} />
+  }
   return (
     <StepCard>
       <div className="mb-6 text-center">
@@ -239,7 +321,7 @@ function MethodsStep({
         <p className="mt-2 text-muted-foreground">
           <FormattedMessage
             id="onboarding.account.methodsDescription"
-            defaultMessage="Continue with one of your workspace's sign-in methods to set it up."
+            defaultMessage="Create your admin account to set up this workspace."
           />
         </p>
       </div>
@@ -251,10 +333,86 @@ function MethodsStep({
         // a workspace still open to be claimed would leave one nobody can ever
         // set up. This screen is only reached when it IS still open.
         mode="signup"
-        authConfig={{ ...authConfig, openSignup: true }}
+        authConfig={
+          authConfig.oauth.password !== false || authConfig.oauth.magicLink
+            ? {
+                ...authConfig,
+                oauth: {
+                  password: authConfig.oauth.password,
+                  magicLink: authConfig.oauth.magicLink,
+                },
+                oidcProviders: undefined,
+                openSignup: true,
+              }
+            : { ...authConfig, openSignup: true }
+        }
         workspaceName={workspaceName}
         callbackUrl={ONBOARDING_CALLBACK}
       />
+      {offerSignIn && (
+        <p className="mt-6 text-center text-sm text-muted-foreground">
+          <FormattedMessage
+            id="onboarding.account.startedSetup"
+            defaultMessage="Already started setting up?"
+          />{' '}
+          <button
+            type="button"
+            onClick={() => onSigningInChange(true)}
+            className="font-medium text-foreground underline-offset-4 hover:underline"
+          >
+            <FormattedMessage id="onboarding.account.signIn" defaultMessage="Sign in" />
+          </button>
+        </p>
+      )}
+    </StepCard>
+  )
+}
+
+/**
+ * Someone created their account on a workspace stamped complete before its
+ * owner arrived, then was signed out before finishing setup. An account there
+ * claims nothing, so the wizard still offers a new one, and that form would
+ * only refuse their address. They sign in with every method this install can
+ * take, including a provider their account may be linked to, and the wizard
+ * carries on from the workspace step.
+ */
+function ReturningSignIn({
+  authConfig,
+  onBack,
+}: {
+  authConfig: AccountAuthConfig
+  onBack: () => void
+}) {
+  return (
+    <StepCard>
+      <div className="mb-6 text-center">
+        <h1 className="text-2xl font-bold">
+          <FormattedMessage id="onboarding.account.returning.title" defaultMessage="Welcome back" />
+        </h1>
+        <p className="mt-2 text-muted-foreground">
+          <FormattedMessage
+            id="onboarding.account.returning.lead"
+            defaultMessage="Sign in with the account you created here to finish setting up."
+          />
+        </p>
+      </div>
+      <PortalAuthFormInline
+        mode="login"
+        authConfig={{ ...authConfig, oauth: authConfig.signInOAuth ?? authConfig.oauth }}
+        callbackUrl={ONBOARDING_CALLBACK}
+      />
+      <p className="mt-6 text-center">
+        <button
+          type="button"
+          onClick={onBack}
+          className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        >
+          <FormattedMessage
+            id="onboarding.account.returning.back"
+            defaultMessage="Create a new account instead"
+          />
+        </button>
+      </p>
     </StepCard>
   )
 }

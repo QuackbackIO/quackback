@@ -1,3 +1,4 @@
+import { nameInitial } from '@/lib/shared/utils/initial'
 import { useCallback, useEffect, useRef } from 'react'
 import { cn } from '@/lib/shared/utils'
 import type { PortalPreviewDraft } from '@/components/public/preview-draft-context'
@@ -120,7 +121,7 @@ export function PortalPreview({
             <img src={faviconUrl} alt="" className="size-3.5 rounded-sm" />
           ) : (
             <span className="flex size-3.5 items-center justify-center rounded-sm bg-primary text-[11px] leading-none font-bold text-primary-foreground">
-              {workspaceName.charAt(0).toUpperCase() || 'P'}
+              {nameInitial(workspaceName) || 'P'}
             </span>
           )}
           <span className="truncate text-xs text-muted-foreground">

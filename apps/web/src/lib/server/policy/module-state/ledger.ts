@@ -130,7 +130,7 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     reason:
       'Remembers which allowance windows already logged the over-allowance warning. Window start ' +
       'times are shared by every workspace on calendar months, so a cross-workspace hit would ' +
-      'silence another workspace\'s one warning for the period.',
+      "silence another workspace's one warning for the period.",
   },
   {
     file: 'apps/web/src/lib/server/auth/index.ts',
@@ -598,6 +598,18 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'Region plus key id of the client cached beside it, so a credential change rebuilds rather ' +
       'than being served stale. Fleet-wide for the same reason the client is, and carries no ' +
       'secret: the key id names a principal, the secret is never part of it.',
+  },
+  {
+    file: 'packages/email/src/ses.ts',
+    name: 'sharedLimiter',
+    category: 'process-lifetime',
+    reason:
+      'The per-process SES send pacer: holds only its rate and the monotonic time of the next free ' +
+      'send slot. It is shared across workspaces on purpose, because the quota it protects belongs ' +
+      'to the one SES credential the whole process sends with, not to any workspace; a per-workspace ' +
+      'limiter would let N busy workspaces send at N times the account rate. It carries no ' +
+      'workspace data (no recipient, message or key), so a cross-workspace hit can only delay a ' +
+      "send behind another workspace's sends by at most the 30s wait cap, never read or alter them.",
   },
   {
     file: 'packages/email/src/ses-identity.ts',

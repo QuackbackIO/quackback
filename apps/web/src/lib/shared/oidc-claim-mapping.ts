@@ -8,7 +8,8 @@
  * table, two of them misleadingly named — the same drift this area keeps
  * producing. So there is one column with named sections instead:
  *
- *   profile     which claim holds the account id, the email, the display name
+ *   profile     which claim holds the account id, the email, the display name,
+ *               the username and the avatar
  *   role        the former attribute_mapping, unchanged in behaviour
  *   attributes  claim to user-attribute copying
  *
@@ -18,10 +19,12 @@
  * alternative is throwing inside the auth callback.
  */
 
-import type { Role } from './roles'
+import { isValidTypeId } from '@quackback/ids'
+import type { IdentityMapping } from './sso-claim-binder'
 import { isPlainRecord as isRecord } from './record'
 import type {
   ClaimRoleMapping,
+  ClaimRoleRule,
   IdentityProviderClaimMapping,
   IdentitySource,
   ProfileField,
@@ -31,11 +34,35 @@ import type {
 
 export type {
   ClaimRoleMapping,
+  ClaimRoleRule,
   IdentityProviderClaimMapping,
   IdentitySource,
   ProfileField,
   SourceSnapshot,
   SourceUnavailableReason,
+}
+
+/** Every profile field a claim can be bound to. */
+export const PROFILE_FIELDS = [
+  'id',
+  'email',
+  'name',
+  'username',
+  'image',
+] as const satisfies readonly ProfileField[]
+
+/** The claim each profile field reads when none is mapped. Unmapped, the
+ *  username reads `preferred_username`, then `nickname`. */
+export const OIDC_PROFILE_DEFAULTS = {
+  id: 'sub',
+  email: 'email',
+  name: 'name',
+  username: 'preferred_username',
+  image: 'picture',
+} as const satisfies Record<ProfileField, string>
+
+export function isProfileField(value: unknown): value is ProfileField {
+  return (PROFILE_FIELDS as readonly unknown[]).includes(value)
 }
 
 /** Where identity may be read from, in the order the resolver tries them. */
@@ -76,7 +103,7 @@ function readProfile(value: unknown): IdentityProviderClaimMapping['profile'] {
   if (!isRecord(value)) return undefined
   const claims: Partial<Record<ProfileField, string>> = {}
   const rawClaims = isRecord(value.claims) ? value.claims : {}
-  for (const field of ['id', 'email', 'name'] as const) {
+  for (const field of PROFILE_FIELDS) {
     const path = usablePath(rawClaims[field])
     if (path) claims[field] = path
   }
@@ -87,7 +114,32 @@ function readProfile(value: unknown): IdentityProviderClaimMapping['profile'] {
   // Strictly `true`. A truthy string from a hand-edited row must not enable
   // one-way placeholder minting.
   if (value.allowMissingEmail === true) profile.allowMissingEmail = true
+  // Strictly `true` as well: sync overwrites profile fields on every sign-in.
+  if (value.syncOnSignIn === true) profile.syncOnSignIn = true
   return Object.keys(profile).length > 0 ? profile : undefined
+}
+
+/** Whether a value names a workspace role by id. Existence is checked at use. */
+export function isRoleRuleRoleId(value: unknown): value is string {
+  return typeof value === 'string' && isValidTypeId(value, 'role')
+}
+
+/**
+ * One stored rule, or undefined when it cannot be read. A custom role rides
+ * the member tier only. A rule whose `roleId` is malformed or sits on another
+ * tier is dropped whole, the same as a rule with an unknown tier: the admin
+ * chose a specific role, and granting the bare tier instead would hand out a
+ * bundle nobody picked (the member preset may well exceed the custom role).
+ * A well-formed id that names a deleted role is not detectable here; sign-in
+ * resolves that one.
+ */
+export function readRoleRule(value: unknown): ClaimRoleRule | undefined {
+  if (!isRecord(value) || typeof value.whenContains !== 'string') return undefined
+  if (!KNOWN_ROLES.includes(value.role as string)) return undefined
+  const role = value.role as ClaimRoleRule['role']
+  if (value.roleId == null) return { whenContains: value.whenContains, role }
+  if (role !== 'member' || !isRoleRuleRoleId(value.roleId)) return undefined
+  return { whenContains: value.whenContains, role, roleId: value.roleId }
 }
 
 function readRole(value: unknown): ClaimRoleMapping | undefined {
@@ -98,12 +150,10 @@ function readRole(value: unknown): ClaimRoleMapping | undefined {
   // configuration and gets default-role behaviour.
   if (!claimPath) return undefined
   const rules = Array.isArray(value.rules)
-    ? value.rules.filter(
-        (r): r is { whenContains: string; role: Role } =>
-          isRecord(r) &&
-          typeof r.whenContains === 'string' &&
-          KNOWN_ROLES.includes(r.role as string)
-      )
+    ? value.rules.flatMap((r) => {
+        const rule = readRoleRule(r)
+        return rule ? [rule] : []
+      })
     : []
   const role: ClaimRoleMapping = { claimPath, rules }
   if (value.syncOnEverySignIn === true) role.syncOnEverySignIn = true
@@ -155,30 +205,34 @@ export function allowsMissingEmail(stored: unknown): boolean {
   return claimMappingFor(stored).profile?.allowMissingEmail === true
 }
 
+/** Whether sign-in refreshes the name and avatar from this provider. Off unless set. */
+export function profileSyncEnabled(stored: unknown): boolean {
+  return claimMappingFor(stored).profile?.syncOnSignIn === true
+}
+
 /** The sources to try, in order, for this provider. */
 export function identitySourcesFor(stored: unknown): IdentitySource[] {
   return claimMappingFor(stored).profile?.sources ?? DEFAULT_IDENTITY_SOURCES
 }
 
-/** String-only identity mapping shared by production sign-in and the SSO test. */
-export function identityMappingFor(stored: unknown): {
+/** The binder's mapping, plus the username claim that only name synthesis reads. */
+export type ProviderIdentityMapping = IdentityMapping & {
   sources: IdentitySource[]
-  idClaim?: string
-  emailClaim?: string
-  nameClaim?: string
-} {
-  const mapping: {
-    sources: IdentitySource[]
-    idClaim?: string
-    emailClaim?: string
-    nameClaim?: string
-  } = { sources: identitySourcesFor(stored) }
-  const idClaim = profileClaimFor(stored, 'id')
-  const emailClaim = profileClaimFor(stored, 'email')
-  const nameClaim = profileClaimFor(stored, 'name')
-  if (idClaim) mapping.idClaim = idClaim
-  if (emailClaim) mapping.emailClaim = emailClaim
-  if (nameClaim) mapping.nameClaim = nameClaim
+  usernameClaim?: string
+}
+
+/**
+ * String-only identity mapping shared by production sign-in, the SSO test and
+ * the admin preview. An absent path means the standard claim.
+ */
+export function identityMappingFor(stored: unknown): ProviderIdentityMapping {
+  const mapping: ProviderIdentityMapping = { sources: identitySourcesFor(stored) }
+  const claims = claimMappingFor(stored).profile?.claims ?? {}
+  if (claims.id) mapping.idClaim = claims.id
+  if (claims.email) mapping.emailClaim = claims.email
+  if (claims.name) mapping.nameClaim = claims.name
+  if (claims.username) mapping.usernameClaim = claims.username
+  if (claims.image) mapping.imageClaim = claims.image
   return mapping
 }
 

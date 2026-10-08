@@ -179,8 +179,19 @@ export interface EngagedPost {
 /**
  * Full portal user detail with engaged posts and segments
  */
+/** A teammate's tier; roleId/roleName set only for a grant other than the tier's default preset. */
+export interface PersonTeamRole {
+  role: 'admin' | 'member'
+  roleId?: string
+  roleName?: string
+}
+
 export interface PortalUserDetail extends PortalUserListItem {
   createdAt: Date // user.createdAt (account creation)
+  /** Null for a portal user or lead; set for a teammate. */
+  teamRole: PersonTeamRole | null
+  /** Has signed in (provider account or non-widget session): may be added to the team directly. */
+  hasSignedIn: boolean
   /** All posts this user has engaged with (authored, commented, or voted on) */
   engagedPosts: EngagedPost[]
 }

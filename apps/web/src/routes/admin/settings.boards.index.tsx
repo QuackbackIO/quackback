@@ -12,6 +12,7 @@ import { CreateBoardDialog } from '@/components/admin/settings/boards/create-boa
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { isProductEnabled } from '@/lib/shared/types/settings'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 const searchSchema = z.object({
   board: z.string().optional(),
@@ -19,6 +20,7 @@ const searchSchema = z.object({
 })
 
 export const Route = createFileRoute('/admin/settings/boards/')({
+  head: adminPageHead('Boards settings'),
   validateSearch: searchSchema,
   beforeLoad: ({ context, search }) => {
     if (!isProductEnabled(context.settings?.featureFlags, 'feedback')) {

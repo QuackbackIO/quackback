@@ -366,6 +366,7 @@ describe('replayGateVerdict', () => {
       '0289_identity_provider_id_token_nonce',
       '0290_files',
       '0291_legacy_surface_switches',
+      '0292_account_profile_sync',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)

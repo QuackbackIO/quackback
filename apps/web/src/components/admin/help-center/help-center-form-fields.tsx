@@ -41,7 +41,7 @@ export function HelpCenterFormFields({
                   type="text"
                   aria-label="Page description"
                   placeholder="Page description (optional)"
-                  className="w-full bg-transparent border-0 outline-none text-sm text-muted-foreground placeholder:text-muted-foreground/50 focus-visible:ring-2 focus-visible:ring-ring/50"
+                  className="w-full bg-transparent border-0 outline-none text-sm text-muted-foreground placeholder:text-muted-foreground/50"
                   {...field}
                   value={field.value ?? ''}
                 />

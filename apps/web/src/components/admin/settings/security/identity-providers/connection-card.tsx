@@ -160,13 +160,13 @@ function failureSummary(identity: ProfileOutcome | null): string {
   if (identity?.kind === 'identity' || identity?.kind === 'placeholder_required') {
     return 'The last test failed with the previous settings. Test again to confirm the fix.'
   }
-  return 'The last test could not identify the account. Check the profile fields under User details, then test again.'
+  return 'The last test could not identify the account. Check the fields under Profile, then test again.'
 }
 
 /**
  * The one test failure an admin can fix from here: the account has no email
  * and the provider does not allow that. Everything else (wrong claim path,
- * missing identifier) is a User details problem and is explained there.
+ * missing identifier) is a Profile problem and is explained there.
  */
 function AllowMissingEmailOffer({ provider }: { provider: IdentityProvider }) {
   const { saving, saveClaimMapping } = useProviderSave(provider)

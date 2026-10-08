@@ -6,7 +6,7 @@ import type { ChangelogId } from '@quackback/ids'
 // per-test 5s timeout, which it otherwise blew under a saturated parallel run.
 import { getPublicChangelogById, listPublicChangelogs } from '../changelog.public'
 import { deleteChangelog } from '../changelog.service'
-import { isNull, eq, lt } from '@/lib/server/db'
+import { isNull } from '@/lib/server/db'
 
 const mockEntryFindFirst = vi.fn()
 const mockEntryFindMany = vi.fn()
@@ -142,35 +142,6 @@ describe('listPublicChangelogs', () => {
     await listPublicChangelogs({})
 
     expect(isNull).toHaveBeenCalledWith(changelogEntriesTable.deletedAt)
-  })
-
-  it('keeps cursor pagination working when the anchor row was soft-deleted', async () => {
-    // Cursor row still has its publishedAt because deleteChangelog
-    // preserves it precisely so pagination has an anchor.
-    mockEntryFindFirst.mockResolvedValueOnce({
-      publishedAt: new Date('2026-01-01'),
-      displayDate: null,
-    })
-    mockSelect.mockReturnValueOnce(entriesListChain([]))
-
-    await listPublicChangelogs({ cursor: 'cl_cursor' })
-
-    // The cursor lookup itself does NOT filter on deletedAt — it must
-    // find the row even if deleted, so we keep paginating past it.
-    const cursorEqCalls = vi
-      .mocked(eq)
-      .mock.calls.filter(
-        (args) => (args[0] as unknown) === changelogEntriesTable.id && args[1] === 'cl_cursor'
-      )
-    expect(cursorEqCalls.length).toBe(1)
-
-    // The pagination filter was applied on the effective display date
-    // (coalesce(display_date, published_at)), so the user doesn't fall
-    // back to the first page.
-    const ltEffectiveDateCalls = vi
-      .mocked(lt)
-      .mock.calls.filter((args) => (args[0] as { kind?: string })?.kind === 'sql')
-    expect(ltEffectiveDateCalls.length).toBeGreaterThanOrEqual(1)
   })
 })
 

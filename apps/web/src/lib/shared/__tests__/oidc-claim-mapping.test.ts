@@ -13,6 +13,11 @@ import {
   roleMappingFor,
   allowsMissingEmail,
   getClaimByPath,
+  identityMappingFor,
+  isProfileField,
+  OIDC_PROFILE_DEFAULTS,
+  PROFILE_FIELDS,
+  profileSyncEnabled,
   type ClaimRoleMapping,
   type IdentityProviderClaimMapping,
   type IdentitySource,
@@ -179,5 +184,59 @@ describe('attributes section', () => {
     expect(m.attributes?.map).toEqual([{ claimPath: 'department', attributeKey: 'dept' }])
     expect(m.attributes?.overrideExisting).toBe(true)
     expect(m.attributes?.syncOnSignIn).toBe(true)
+  })
+})
+
+describe('avatar and username profile fields', () => {
+  it('reads image and username claim paths and the profile sync flag', () => {
+    const m = claimMappingFor({
+      profile: {
+        claims: { image: 'photo_url', username: 'user.handle' },
+        syncOnSignIn: true,
+      },
+    })
+    expect(m.profile?.claims).toEqual({ image: 'photo_url', username: 'user.handle' })
+    expect(m.profile?.syncOnSignIn).toBe(true)
+    expect(profileClaimFor({ profile: { claims: { image: ' photo_url ' } } }, 'image')).toBe(
+      'photo_url'
+    )
+  })
+
+  it('turns sync on only for a literal true', () => {
+    expect(profileSyncEnabled({ profile: { syncOnSignIn: 'true' } })).toBe(false)
+    expect(profileSyncEnabled({ profile: { syncOnSignIn: 1 } })).toBe(false)
+    expect(profileSyncEnabled(null)).toBe(false)
+    expect(profileSyncEnabled({ profile: { syncOnSignIn: true } })).toBe(true)
+  })
+
+  it('hands the image and username paths to the identity resolver', () => {
+    expect(
+      identityMappingFor({ profile: { claims: { image: 'photo_url', username: 'handle' } } })
+    ).toEqual({
+      sources: DEFAULT_IDENTITY_SOURCES,
+      imageClaim: 'photo_url',
+      usernameClaim: 'handle',
+    })
+    expect(identityMappingFor(null)).toEqual({ sources: DEFAULT_IDENTITY_SOURCES })
+  })
+})
+
+describe('profile field vocabulary', () => {
+  it('names the standard claim every profile field reads when unmapped', () => {
+    expect(OIDC_PROFILE_DEFAULTS).toEqual({
+      id: 'sub',
+      email: 'email',
+      name: 'name',
+      username: 'preferred_username',
+      image: 'picture',
+    })
+    expect(Object.keys(OIDC_PROFILE_DEFAULTS).sort()).toEqual([...PROFILE_FIELDS].sort())
+  })
+
+  it('recognises exactly the profile fields', () => {
+    for (const field of PROFILE_FIELDS) expect(isProfileField(field)).toBe(true)
+    expect(isProfileField('picture')).toBe(false)
+    expect(isProfileField('__proto__')).toBe(false)
+    expect(isProfileField(1)).toBe(false)
   })
 })

@@ -29,6 +29,7 @@ import { actorFromAuth, withAuditEvent } from '@/lib/server/audit/log'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { diffProviderAudit } from '@/lib/server/auth/idp-audit-diff'
 import { applyClaimMappingEdits } from '@/lib/shared/sso-claim-mapping-edit'
+import { PROFILE_FIELDS, isRoleRuleRoleId } from '@/lib/shared/oidc-claim-mapping'
 import { OIDC_REDIRECT_STYLES } from '@/lib/shared/oidc-redirect'
 import { requireAuth } from './auth-helpers'
 
@@ -158,10 +159,31 @@ const identityProviderId = z.string().regex(/^idp_/) as z.ZodType<IdentityProvid
 
 const idpRole = z.enum(['admin', 'member', 'user'])
 
+/** A role rule. `roleId` grants a workspace role and rides the member tier only;
+ *  whether the saver may grant it is checked in the service. */
+const roleRuleFields = {
+  whenContains: z.string(),
+  role: idpRole,
+  roleId: z.string().refine(isRoleRuleRoleId, { message: 'Invalid role id.' }).optional(),
+}
+const customRoleOnMemberTier = {
+  check: (rule: { role: string; roleId?: string }) =>
+    rule.roleId === undefined || rule.role === 'member',
+  message: 'A workspace role can only be granted on the member tier.',
+}
+const roleRuleSchema = z
+  .object(roleRuleFields)
+  .refine(customRoleOnMemberTier.check, { message: customRoleOnMemberTier.message })
+
 /** Mirror of `IdentityProviderClaimMapping`, section by section. */
 const claimRoleSchema = z.object({
   claimPath: z.string(),
-  rules: z.array(z.object({ whenContains: z.string(), role: idpRole }).passthrough()),
+  rules: z.array(
+    z
+      .object(roleRuleFields)
+      .passthrough()
+      .refine(customRoleOnMemberTier.check, { message: customRoleOnMemberTier.message })
+  ),
   syncOnEverySignIn: z.boolean().optional(),
 })
 
@@ -175,10 +197,13 @@ const claimMappingSchema = z
             id: z.string().optional(),
             email: z.string().optional(),
             name: z.string().optional(),
+            username: z.string().optional(),
+            image: z.string().optional(),
           })
           .passthrough()
           .optional(),
         allowMissingEmail: z.boolean().optional(),
+        syncOnSignIn: z.boolean().optional(),
       })
       .passthrough()
       .optional(),
@@ -260,6 +285,7 @@ export const upsertIdentityProviderFn = createServerFn({ method: 'POST' })
 
     const { listIdentityProviders, upsertIdentityProvider } =
       await import('@/lib/server/domains/settings/identity-providers.service')
+    const { roleRuleGrantCheck } = await import('@/lib/server/domains/roles/role.rule-grants')
     const existing = await listIdentityProviders()
     const prior = data.id
       ? existing.find((p) => p.id === data.id)
@@ -310,17 +336,24 @@ export const upsertIdentityProviderFn = createServerFn({ method: 'POST' })
         after,
         headers: getRequestHeaders(),
       },
-      async () => upsertIdentityProvider(data)
+      async () =>
+        upsertIdentityProvider({
+          ...data,
+          checkRoleGrants: roleRuleGrantCheck(auth.permissions),
+        })
     )
   })
+
+const profileField = z.enum(PROFILE_FIELDS)
 
 const claimMappingOperationSchema = z.discriminatedUnion('op', [
   z.object({
     op: z.literal('setProfileClaim'),
-    field: z.enum(['id', 'email', 'name']),
+    field: profileField,
     path: z.string(),
   }),
-  z.object({ op: z.literal('resetProfileClaim'), field: z.enum(['id', 'email', 'name']) }),
+  z.object({ op: z.literal('resetProfileClaim'), field: profileField }),
+  z.object({ op: z.literal('setProfileSync'), syncOnSignIn: z.boolean() }),
   z.object({
     op: z.literal('setSources'),
     sources: z.array(z.enum(['idToken', 'userinfo', 'accessTokenJwt'])),
@@ -331,12 +364,12 @@ const claimMappingOperationSchema = z.discriminatedUnion('op', [
   z.object({
     op: z.literal('insertRoleRule'),
     index: z.number().int().nonnegative(),
-    rule: z.object({ whenContains: z.string(), role: idpRole }),
+    rule: roleRuleSchema,
   }),
   z.object({
     op: z.literal('editRoleRule'),
     index: z.number().int().nonnegative(),
-    rule: z.object({ whenContains: z.string(), role: idpRole }),
+    rule: roleRuleSchema,
   }),
   z.object({ op: z.literal('removeRoleRule'), index: z.number().int().nonnegative() }),
   z.object({
@@ -381,6 +414,7 @@ export const saveIdentityProviderClaimMappingFn = createServerFn({ method: 'POST
 
     const { listIdentityProviders, saveIdentityProviderClaimMapping } =
       await import('@/lib/server/domains/settings/identity-providers.service')
+    const { roleRuleGrantCheck } = await import('@/lib/server/domains/roles/role.rule-grants')
     const existing = await listIdentityProviders()
     const prior = existing.find((p) => p.id === data.id)
     if (!prior) {
@@ -408,6 +442,7 @@ export const saveIdentityProviderClaimMappingFn = createServerFn({ method: 'POST
           operations: data.operations,
           acknowledgeIdentifierChange: data.acknowledgeIdentifierChange,
           acknowledgeAdminRules: data.acknowledgeAdminRules,
+          checkRoleGrants: roleRuleGrantCheck(auth.permissions),
         })
     )
   })
@@ -813,4 +848,18 @@ export const getProviderAccountCountFn = createServerFn({ method: 'GET' })
     const { countProviderAccounts } =
       await import('@/lib/server/domains/settings/identity-provider-accounts')
     return { count: await countProviderAccounts(data.id) }
+  })
+
+/**
+ * The teammates who sign in through this provider and whether each holds
+ * admin-level access, so the role rules can warn before a change that could
+ * lock every admin out.
+ */
+export const listProviderAdminsFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ providerId: identityProviderId }))
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
+    const { listProviderAdmins } =
+      await import('@/lib/server/domains/settings/identity-provider-accounts')
+    return listProviderAdmins(data.providerId, auth.principal.id)
   })

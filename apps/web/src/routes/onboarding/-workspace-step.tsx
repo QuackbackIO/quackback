@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import { FormattedMessage, useIntl } from 'react-intl'
+import { toast } from 'sonner'
 import { GoalSelector } from '@/components/onboarding/goal-selector'
 import { getSetupState, type OnboardingOutcome } from '@/lib/shared/db-types'
 import { Input } from '@/components/ui/input'
@@ -229,6 +230,7 @@ function WorkspaceNameStep({
   const [workspaceName, setWorkspaceName] = useState(existingWorkspaceName)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [signedOut, setSignedOut] = useState(false)
   const nameValid = workspaceName.trim().length >= 2
 
   useEffect(() => {
@@ -270,6 +272,7 @@ function WorkspaceNameStep({
     }
     setIsLoading(true)
     setError('')
+    setSignedOut(false)
     try {
       // A config file owns managed goals: sending them would only be refused.
       const result = await saveWorkspaceAndGoalFn({
@@ -277,6 +280,28 @@ function WorkspaceNameStep({
           ? { workspaceName: workspaceName.trim() }
           : { workspaceName: workspaceName.trim(), goals, feedbackPrivate },
       })
+      if (!result.ok) {
+        if (result.refusal === 'signed_out') {
+          // The typed name stays in the draft, so it is still here after
+          // signing back in.
+          setSignedOut(true)
+          return
+        }
+        if (result.refusal === 'not_owner') {
+          await navigate({ to: '/onboarding/no-access' })
+          return
+        }
+        // Setup is final: the name and goal are changed in Settings now.
+        localStorage.removeItem(DRAFT_KEY)
+        toast.info(
+          intl.formatMessage({
+            id: 'onboarding.workspace.alreadyFinished',
+            defaultMessage: 'Setup is already finished.',
+          })
+        )
+        await navigate({ to: '/admin' })
+        return
+      }
       toastEnabledModules(result.enabledModules)
       void track('onboarding_workspace_saved', { enabledModules: result.enabledModules })
       localStorage.removeItem(DRAFT_KEY)
@@ -351,6 +376,27 @@ function WorkspaceNameStep({
           >
             {error}
           </p>
+        )}
+        {signedOut && (
+          <div
+            role="alert"
+            className="flex flex-col items-center gap-3 rounded-lg border bg-muted/40 px-4 py-3 text-center text-sm sm:flex-row sm:justify-between sm:text-start"
+          >
+            <span>
+              <FormattedMessage
+                id="onboarding.workspace.signedOut"
+                defaultMessage="You were signed out. Sign in to finish setting up."
+              />
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void navigate({ to: '/onboarding/account' })}
+            >
+              <FormattedMessage id="onboarding.workspace.signIn" defaultMessage="Sign in" />
+            </Button>
+          </div>
         )}
       </div>
 

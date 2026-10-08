@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { redirect, notFound } from '@tanstack/react-router'
+import { execValidator } from '@tanstack/react-start'
+import { z } from 'zod'
 import { classifyServerFnError, runWithServerFnLogging } from '../server-fn-log'
 import {
   ForbiddenError,
@@ -45,6 +47,27 @@ describe('classifyServerFnError', () => {
       issues: [{ message: 'Required' }],
     })
     expect(classifyServerFnError(standardSchemaish)).toBe('warn')
+  })
+
+  it('logs a rejection from the framework validator path at warn', async () => {
+    // createServerFn().validator(zodSchema) runs through execValidator, which
+    // does not rethrow the ZodError: it throws a plain Error whose message is
+    // the JSON-serialised issue list. Capture the real thrown value.
+    const schema = z.object({ token: z.string().uuid(), title: z.string().min(3) })
+    const thrown = await execValidator(schema, { token: 'nope', title: 'x' }).then(
+      () => undefined,
+      (error: unknown) => error
+    )
+    expect(thrown).toBeInstanceOf(Error)
+    expect((thrown as Error).name).toBe('Error')
+    expect(classifyServerFnError(thrown)).toBe('warn')
+  })
+
+  it('does not mistake an ordinary error with a JSON message for a validation failure', () => {
+    expect(classifyServerFnError(new Error('[]'))).toBe('error')
+    expect(classifyServerFnError(new Error('[1, 2, 3]'))).toBe('error')
+    expect(classifyServerFnError(new Error('{"message":"upstream said no"}'))).toBe('error')
+    expect(classifyServerFnError(new Error('[not json'))).toBe('error')
   })
 
   it('logs auth denials at warn', () => {

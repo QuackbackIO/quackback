@@ -53,7 +53,7 @@ vi.mock('@/lib/server/domains/settings/cloud/cloud.service', () => ({
   getCloudConfig: async () => ({ ...state.cloud }),
 }))
 
-const { enforceAiTokenBudget } = await import('../tier-enforce')
+const { enforceAiTokenBudget, aiBudgetAvailable } = await import('../tier-enforce')
 const { aiBudgetWindow } = await import('@/lib/server/domains/ai/ai-budget')
 
 const TRIAL = {
@@ -226,5 +226,28 @@ describe('a purchase in the middle of a trial', () => {
     const w = aiBudgetWindow({ ...PURCHASED, enabled: false }, new Date('2026-11-02T12:00:00Z'))
     expect(w.kind).toBe('month')
     expect(w.start.toISOString()).toBe('2026-11-01T00:00:00.000Z')
+  })
+})
+
+describe('aiBudgetAvailable', () => {
+  it('is false on a plan without AI (a zero allowance), like the gate', async () => {
+    state.cap = 0
+    state.rows = []
+    expect(await aiBudgetAvailable()).toBe(false)
+    await expect(enforceAiTokenBudget()).rejects.toThrow(TierLimitError)
+  })
+
+  it('is true when the allowance is unlimited', async () => {
+    state.cap = null
+    expect(await aiBudgetAvailable()).toBe(true)
+  })
+
+  it('is false once the allowance is used up, true while under it', async () => {
+    vi.useFakeTimers({ now: new Date('2026-11-20T12:00:00Z'), toFake: ['Date'] })
+    state.cap = 1000
+    state.rows = [{ at: '2026-11-02T10:00:00Z', tokens: 999 }]
+    expect(await aiBudgetAvailable()).toBe(true)
+    state.rows.push({ at: '2026-11-03T10:00:00Z', tokens: 1 })
+    expect(await aiBudgetAvailable()).toBe(false)
   })
 })

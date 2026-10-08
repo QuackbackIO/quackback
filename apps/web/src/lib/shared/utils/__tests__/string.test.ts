@@ -30,6 +30,11 @@ describe('getInitials', () => {
     expect(getInitials('John Michael Doe')).toBe('JM')
   })
 
+  it('keeps an emoji whole instead of splitting its surrogate pair', () => {
+    expect(getInitials('🦆 Duck')).toBe('🦆D')
+    expect(getInitials('🦆')).toBe('🦆')
+  })
+
   it('uppercases lowercase input', () => {
     expect(getInitials('jane doe')).toBe('JD')
   })

@@ -9,15 +9,21 @@ import {
   identityMappingFor,
   identitySourcesFor,
   profileClaimFor,
+  profileSyncEnabled,
+  readRoleRule,
+  getClaimByPath,
   type IdentityProviderClaimMapping,
   type IdentitySource,
+  type ProfileField,
 } from './oidc-claim-mapping'
 import { planClaimAttributeWrites, type AttributeDefinition } from './plan-claim-attribute-writes'
-import { resolveSsoRoleMatch } from './resolve-sso-role'
+import { resolveSsoRoleMatch, roleRuleMatchesClaim } from './resolve-sso-role'
+import { claimValuesAt } from './claim-suggestions'
+import { isPlainRecord as isRecord } from './record'
 import type { Role } from './roles'
 import { finishBinding, replayClaimMapping } from './sso-claim-binder'
 import { finalizeProfileOutcome, type ProfileOutcome } from './sso-profile-outcome'
-import { isReplayableCapture, type SsoTestCapture } from './sso-test-capture'
+import { isReplayableCapture, type SsoTestCapture, type SsoTestCaptureV2 } from './sso-test-capture'
 
 export const SOURCE_WORDS: Record<IdentitySource, string> = {
   idToken: 'ID token',
@@ -34,10 +40,27 @@ export type MappingPreviewPolicy = {
   registrationId: string
 }
 
+/**
+ * The rule a test person matched. `roleId` is the workspace role it grants on
+ * top of the tier, `roleName` its name when the caller passed the role list,
+ * and `roleMissing` marks a role that list no longer has: sign-in then grants
+ * nothing and leaves the person's role as it is.
+ */
+export type RolePreviewMatch = {
+  role: Role
+  ruleIndex: number
+  roleId?: string
+  roleName?: string
+  roleMissing?: true
+}
+
+/** A workspace role as the preview names it. */
+export type PreviewRole = { id: string; name: string }
+
 export type MappingPreview = {
   status: MappingPreviewStatus
   identity: ProfileOutcome | null
-  roleMatch: { role: Role; ruleIndex: number } | null
+  roleMatch: RolePreviewMatch | null
   peoplePlan: ReturnType<typeof planClaimAttributeWrites> | null
   stale: boolean
   limitations: string[]
@@ -86,6 +109,25 @@ export function captureConfigIsStale(
   return Number.isFinite(capturedMs) && currentMs > capturedMs
 }
 
+/** The profile outcome sign-in would compute from a capture under a draft. */
+function replayIdentity(draft: unknown, capture: SsoTestCaptureV2): ProfileOutcome {
+  const identityMapping = identityMappingFor(draft)
+  const bound = finishBinding(
+    replayClaimMapping(
+      {
+        mapping: identityMapping,
+        requiredClaimPaths: requiredClaimPathsFor(draft),
+        wantImage: true,
+      },
+      capture.replay.sources
+    )
+  )
+  return finalizeProfileOutcome(bound, {
+    allowMissingEmail: allowsMissingEmail(draft),
+    usernameClaim: identityMapping.usernameClaim,
+  })
+}
+
 function sourceMissingFromCapture(draft: unknown, capture: SsoTestCapture): IdentitySource | null {
   if (!isReplayableCapture(capture)) return null
   const captured = new Set(capture.replay.sources.map((s) => s.source))
@@ -95,16 +137,33 @@ function sourceMissingFromCapture(draft: unknown, capture: SsoTestCapture): Iden
   return null
 }
 
+function namedRoleMatch(
+  match: ReturnType<typeof resolveSsoRoleMatch>,
+  roles: ReadonlyArray<PreviewRole> | undefined
+): RolePreviewMatch | null {
+  if (!match) return null
+  const result: RolePreviewMatch = { ...match }
+  if (match.roleId && roles) {
+    const found = roles.find((r) => r.id === match.roleId)
+    if (found) result.roleName = found.name
+    else result.roleMissing = true
+  }
+  return result
+}
+
 export function previewClaimMapping({
   draft,
   capture,
   definitions,
   providerPolicy,
+  roles,
 }: {
   draft: IdentityProviderClaimMapping | null
   capture: SsoTestCapture | null
   definitions: AttributeDefinition[]
   providerPolicy: MappingPreviewPolicy
+  /** Workspace roles, to name a matched rule's role. */
+  roles?: ReadonlyArray<PreviewRole>
 }): MappingPreview {
   if (!capture || capture.registrationId !== providerPolicy.registrationId) {
     return {
@@ -150,21 +209,12 @@ export function previewClaimMapping({
     }
   }
 
-  const bound = finishBinding(
-    replayClaimMapping(
-      {
-        mapping: identityMappingFor(draft),
-        requiredClaimPaths: requiredClaimPathsFor(draft),
-        wantImage: true,
-      },
-      capture.replay.sources
-    )
-  )
-  const identity = finalizeProfileOutcome(bound, {
-    allowMissingEmail: allowsMissingEmail(draft),
-  })
+  const identity = replayIdentity(draft, capture)
   const mapping = claimMappingFor(draft)
-  const roleMatch = resolveSsoRoleMatch(identity.acceptedClaims, mapping.role)
+  const roleMatch = namedRoleMatch(
+    resolveSsoRoleMatch(identity.acceptedClaims, isRecord(draft) ? draft.role : undefined),
+    roles
+  )
   const peoplePlan = mapping.attributes
     ? planClaimAttributeWrites({
         claims: identity.acceptedClaims,
@@ -176,7 +226,9 @@ export function previewClaimMapping({
     : null
 
   const limitations: string[] = [
-    'Name and email show account-creation inputs. Existing profiles are not overwritten on later sign-ins.',
+    profileSyncEnabled(draft)
+      ? 'Name, email and avatar show what a new account gets. Later sign-ins update the name and avatar unless someone changed them in Quackback. Email is not changed.'
+      : 'Name, email and avatar show what a new account gets. Existing profiles are not changed on later sign-ins.',
     'People preview assumes no existing attributes.',
   ]
   if (stale) {
@@ -197,6 +249,104 @@ export function previewClaimMapping({
   }
 }
 
+/** How a draft's role rules fare against one test sign-in. */
+export type RoleRuleMatches = {
+  /** The role claim path the rules read. */
+  claimPath: string
+  /** Per draft rule, in draft order: whether the test person's claim holds its value. */
+  ruleMatches: boolean[]
+  /** The rule sign-in would apply (first match wins), or null when none matches. */
+  firstMatchIndex: number | null
+  /** The distinct values the test person's claim held at the path. */
+  valuesAtPath: string[]
+}
+
+/**
+ * Every role rule checked against a test sign-in, not only the winner, so the
+ * editor can mark each row. Indexes follow the draft's own rule list. A rule
+ * sign-in would not read (for example a malformed role id) never counts as the
+ * first match, though its row still reports whether the value is present.
+ *
+ * Null when there is no role section with a claim path, or whenever the
+ * outcome preview asks for a new test, so the two never disagree.
+ */
+export function previewRoleRuleMatches(
+  draft: unknown,
+  capture: SsoTestCapture | null | undefined
+): RoleRuleMatches | null {
+  if (!capture || !isReplayableCapture(capture)) return null
+  if (sourceMissingFromCapture(draft, capture)) return null
+  const roleSection = isRecord(draft) && isRecord(draft.role) ? draft.role : null
+  const claimPath = claimMappingFor(draft).role?.claimPath
+  if (!roleSection || !claimPath) return null
+  const rules = Array.isArray(roleSection.rules) ? roleSection.rules : []
+  const claims = replayIdentity(draft, capture).acceptedClaims
+  const claim = getClaimByPath(claims, claimPath)
+  const ruleMatches = rules.map(
+    (rule) =>
+      isRecord(rule) &&
+      typeof rule.whenContains === 'string' &&
+      roleRuleMatchesClaim(claim, rule.whenContains)
+  )
+  const first = ruleMatches.findIndex((hit, i) => hit && readRoleRule(rules[i]) !== undefined)
+  return {
+    claimPath,
+    ruleMatches,
+    firstMatchIndex: first < 0 ? null : first,
+    valuesAtPath: claimValuesAt(claims, claimPath),
+  }
+}
+
+/** What each profile field reads from one test sign-in. An absent key means
+ *  the field gets nothing from it. */
+export type ProfileFieldValues = Partial<Record<ProfileField, string>>
+
+/**
+ * The value each profile field takes from a test sign-in under a draft
+ * mapping, for the Profile card's "Last test sign-in" column. A projection of the
+ * profile outcome sign-in computes, so a mapped avatar claim never falls back
+ * to `picture`, only an http(s) URL counts, and the username follows
+ * `usernameFrom`.
+ *
+ * Every source is replayed: sign-in reads the username only when the provider
+ * sends no name, and the column shows what the test sent even when it did. The
+ * name is left out when the provider sent none, since sign-up would generate
+ * it rather than read it.
+ *
+ * Null whenever the outcome preview asks for a new test (no replayable
+ * capture, or a configured source the capture lacks), so the two never show
+ * different answers.
+ */
+export function previewProfileValues(
+  draft: unknown,
+  capture: SsoTestCapture | null | undefined
+): ProfileFieldValues | null {
+  if (!capture || !isReplayableCapture(capture)) return null
+  if (sourceMissingFromCapture(draft, capture)) return null
+  const mapping = identityMappingFor(draft)
+  const outcome = finalizeProfileOutcome(
+    finishBinding(
+      replayClaimMapping(
+        {
+          mapping,
+          requiredClaimPaths: mapping.usernameClaim ? [mapping.usernameClaim] : undefined,
+          wantImage: true,
+          exhaustive: true,
+        },
+        capture.replay.sources
+      )
+    ),
+    { allowMissingEmail: allowsMissingEmail(draft), usernameClaim: mapping.usernameClaim }
+  )
+  const values: ProfileFieldValues = {}
+  if (outcome.id) values.id = outcome.id
+  if (outcome.email) values.email = outcome.email
+  if (outcome.name && !outcome.nameSynthesized) values.name = outcome.name
+  if (outcome.username) values.username = outcome.username
+  if (outcome.image) values.image = outcome.image
+  return values
+}
+
 export function effectiveIdPath(draft: unknown): string {
   return profileClaimFor(draft, 'id') ?? 'sub'
 }
@@ -209,15 +359,9 @@ export function effectiveNamePath(draft: unknown): string {
   return profileClaimFor(draft, 'name') ?? 'name'
 }
 
-export function runtimeFallbackRole(autoProvisionRole: Role | null): {
-  role: Role
-  label: string
-} {
-  if (autoProvisionRole == null) return { role: 'member', label: 'Member (runtime default)' }
-  const labels: Record<Role, string> = {
-    admin: 'Admin',
-    member: 'Member',
-    user: 'User',
-  }
-  return { role: autoProvisionRole, label: labels[autoProvisionRole] }
-}
+/**
+ * The role a provider gives a new account at a verified domain when no rule
+ * matches and no default role was saved. Sign-in, the settings form and the
+ * preview all read it, so what an admin sees is what sign-in does.
+ */
+export const DEFAULT_PROVISION_ROLE: Role = 'member'

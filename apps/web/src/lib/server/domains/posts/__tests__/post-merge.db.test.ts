@@ -49,7 +49,7 @@ import { getCommentsWithReplies } from '../post.query'
 import { hasUserVoted, getVoteAndSubscriptionStatus } from '../post.public.utils'
 import { getPostVoters, listPostVoters } from '../post.voters'
 import { voteOnPost } from '../post.voting'
-import { getVotedPostIdsByUserId } from '../post.public'
+import { getAllUserVotedPostIds } from '../post.public'
 import { DEFAULT_BOARD_ACCESS } from '@/lib/shared/db-types'
 
 const fixture = await createDbTestFixture({
@@ -370,13 +370,9 @@ describe.skipIf(!fixture.available)('post merge aggregation (real DB)', () => {
     expect(status.subscription.level).toBe('all')
   })
 
-  it('maps a source vote to the canonical in getVotedPostIdsByUserId', async () => {
+  it('maps a source vote to the canonical in getAllUserVotedPostIds', async () => {
     const actor = await seedPrincipal('Admin')
     const voter = await seedPrincipal('Voter')
-    const [voterRow] = await testDb
-      .select({ userId: principal.userId })
-      .from(principal)
-      .where(eq(principal.id, voter))
     const boardId = await seedBoard()
     const canonical = await seedPost({
       boardId,
@@ -395,7 +391,7 @@ describe.skipIf(!fixture.available)('post merge aggregation (real DB)', () => {
     await seedVote(source, voter)
     await mergePost(source, canonical, actor)
 
-    const ids = await getVotedPostIdsByUserId(voterRow.userId!)
+    const ids = await getAllUserVotedPostIds(voter)
     expect(ids.has(canonical)).toBe(true)
     expect(ids.has(source)).toBe(true)
   })
