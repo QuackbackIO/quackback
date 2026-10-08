@@ -165,18 +165,15 @@ describe.skipIf(!fixture.available)('setup emails (real DB)', () => {
     expect(token.action).toBe('unsubscribe_onboarding')
   })
 
-  it('nudges once on day two with a test link, unless the first result has happened', async () => {
+  it('nudges once on day two with the next step, unless the first result has happened', async () => {
     expect(await sendOnboardingEmail('nudge', owner)).toEqual({ sent: true })
     expect(mail.nudge.mock.calls[0][0]).toMatchObject({
       subject: 'Your next step in Acme',
       cta: {
         label: 'Put Messenger on your site',
-        url: 'https://acme.quackback.test/admin?open=install-messenger',
+        url: 'https://acme.quackback.test/admin/settings/widget/install',
       },
-      secondary: {
-        label: 'Send a test message',
-        url: 'https://acme.quackback.test/admin?try=message',
-      },
+      secondary: null,
     })
     await testDb.delete(onboardingEmails)
 
@@ -214,7 +211,7 @@ describe.skipIf(!fixture.available)('setup emails (real DB)', () => {
     })
     expect(await sendOnboardingEmail('nudge', owner)).toEqual({ sent: true })
     expect(mail.nudge.mock.calls[0][0]).toMatchObject({
-      cta: { label: 'A customer posts an idea', url: 'https://acme.quackback.test/admin?try=idea' },
+      cta: { label: 'A customer posts an idea', url: 'https://acme.quackback.test/admin' },
     })
   })
 

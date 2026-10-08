@@ -240,7 +240,7 @@ describe('buildLaunchTasks', () => {
     expect(tasks.find((task) => task.id === 'create-board')!.isSkipped).toBe(true)
   })
 
-  it('opens Connect Messenger and Invite in place, and completes Invite on the first invite sent', () => {
+  it('links Connect Messenger to its install page, opens Invite in place, and completes Invite on the first invite sent', () => {
     const support: LaunchStatus = {
       ...base,
       features: { ...noExtraModules, supportInbox: true },
@@ -256,7 +256,8 @@ describe('buildLaunchTasks', () => {
     }
     const find = (status: LaunchStatus, id: string) =>
       buildLaunchTasks(status, 'customer_support').find((task) => task.id === id)
-    expect(find(support, 'connect-messenger')?.sheet).toBe('install-messenger')
+    expect(find(support, 'connect-messenger')?.sheet).toBeUndefined()
+    expect(find(support, 'connect-messenger')?.href).toBe('/admin/settings/widget/install')
     expect(find(support, 'invite-team')?.sheet).toBe('invite-team')
     expect(find(support, 'invite-team')?.isCompleted).toBe(false)
     expect(find({ ...support, hasTeamInvite: true }, 'invite-team')?.isCompleted).toBe(true)

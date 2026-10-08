@@ -5,7 +5,6 @@ import { FormattedMessage, IntlProvider, useIntl } from 'react-intl'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { getTourContextFn, markTourSeenFn } from '@/lib/server/functions/onboarding-progress'
-import { adminQueries } from '@/lib/client/queries/admin'
 import { useFeatureFlags } from '@/lib/client/hooks/use-root-context'
 import { usePermissions } from '@/lib/client/use-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -73,14 +72,11 @@ export function ProductTourRunner({
   runId,
   copilotOnHome = false,
   endAction,
-  openTest,
 }: {
   runId: number
   /** Home leads with the Copilot chat, so the tour opens on it. */
   copilotOnHome?: boolean
   endAction?: TourEndAction
-  /** Opens a test on the Try Messenger sheet; without it, no stop offers one. */
-  openTest?: (start: 'idea' | 'message') => void
 }) {
   const intl = useIntl()
   const router = useRouter()
@@ -137,15 +133,9 @@ export function ProductTourRunner({
     starting.current = true
     priorFocus.current = document.activeElement as HTMLElement | null
     try {
-      const canTest = Boolean(openTest) && permissions.has(PERMISSIONS.CONVERSATION_VIEW)
-      const [fetched, loadedMessages, status] = await Promise.all([
+      const [fetched, loadedMessages] = await Promise.all([
         getTourContextFn().catch(() => null),
         tourMessagesFor(intl.messages, intl.locale),
-        canTest && isProductEnabled(flags, 'feedback')
-          ? queryClient
-              .fetchQuery({ ...adminQueries.onboardingStatus(), staleTime: 60_000 })
-              .catch(() => null)
-          : null,
       ])
       const tourContext: TourContext = {
         copilotOnHome,
@@ -166,10 +156,6 @@ export function ProductTourRunner({
           helpCenter: false,
           status: false,
         },
-        tests: {
-          idea: canTest && status?.canPostTestIdea === true,
-          message: canTest && isProductEnabled(flags, 'support'),
-        },
       }
       const resolved = resolveTourStops(tourContext)
       if (resolved.length === 0) return
@@ -188,7 +174,7 @@ export function ProductTourRunner({
     } finally {
       starting.current = false
     }
-  }, [copilotOnHome, flags, permissions, queryClient, intl.messages, intl.locale, openTest])
+  }, [copilotOnHome, flags, permissions, queryClient, intl.messages, intl.locale])
 
   const finish = useCallback(async () => {
     setTargetElement(null)
@@ -216,14 +202,13 @@ export function ProductTourRunner({
 
   const stop = phase === 'tour' ? stops[index] : undefined
 
-  // A Try it leaves the tour and runs the real thing.
+  // A Try it leaves the tour and opens the page that does the job.
   const runTryIt = useCallback(
     (tryIt: TourTryIt) => {
       close()
-      if (tryIt.kind === 'test') openTest?.(tryIt.start)
-      else void goTo(tryIt.to)
+      void goTo(tryIt.to)
     },
-    [close, openTest, goTo]
+    [close, goTo]
   )
 
   // Open the stop's page, then point at its element once it is there.

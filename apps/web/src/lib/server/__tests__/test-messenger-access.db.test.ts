@@ -8,13 +8,12 @@ vi.mock('@/lib/server/db', async (original) => ({
   ...(await original<typeof import('@/lib/server/db')>()),
   db: (await import('./db-test-fixture')).testDb,
 }))
-import { getOrCreateTestCustomer, mintTestCustomerToken } from '../test-customer'
+import { getOrCreateTestCustomer } from '../test-customer'
 import { isConversationsEnabledFor } from '../domains/settings/settings.support'
 import {
   runGetMyConversation,
   runSendConversationMessage,
 } from '@/lib/server/functions/conversation'
-import { handleWidgetTestSession } from '@/routes/api/widget/test-session'
 
 const fixture = await createDbTestFixture()
 let owner: PrincipalId, ordinary: PrincipalId, customer: PrincipalId, customerUser: UserId
@@ -84,29 +83,4 @@ it('lets a test customer send and read its thread, and still refuses an ordinary
   // No marker is written; the thread goes to the teammate trying it out.
   expect(stored.customAttributes).toEqual({})
   expect(stored.assignedAgentPrincipalId).toBe(owner)
-})
-
-it('exchanges a test token for a Bearer once, without setting a cookie', async () => {
-  const { token } = await mintTestCustomerToken(owner, 'en')
-  const exchange = () =>
-    handleWidgetTestSession(
-      new Request('http://localhost/api/widget/test-session', {
-        method: 'POST',
-        body: JSON.stringify({ token }),
-      })
-    )
-  const first = await exchange()
-  expect(first.status).toBe(200)
-  expect(first.headers.get('set-cookie')).toBeNull()
-  const body = (await first.json()) as { data: { sessionToken: string; testSession: boolean } }
-  expect(body.data.sessionToken).toMatch(/^customer-session-/)
-  expect(body.data.testSession).toBe(true)
-  expect((await exchange()).status).toBe(401)
-})
-
-it('refuses a malformed exchange body', async () => {
-  const res = await handleWidgetTestSession(
-    new Request('http://localhost/api/widget/test-session', { method: 'POST', body: 'nope' })
-  )
-  expect(res.status).toBe(401)
 })

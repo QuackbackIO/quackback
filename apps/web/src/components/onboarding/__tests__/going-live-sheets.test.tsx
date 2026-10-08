@@ -5,21 +5,15 @@ import { StrictMode } from 'react'
 import { IntlProvider } from 'react-intl'
 import en from '@/locales/en.json'
 
-vi.mock('../install-messenger-sheet', () => ({ InstallMessengerSheet: () => null }))
 vi.mock('../invite-team-sheet', () => ({
   InviteTeamSheet: ({ open }: { open: boolean }) =>
     open ? <div role="region" aria-label="Invite your team" /> : null,
 }))
 vi.mock('@/components/admin/ask/copilot-on-home', () => ({ useCopilotOnHome: () => false }))
 
-import {
-  OPEN_TRY_MESSENGER_EVENT as LIVE_EVENT,
-  consumeSetupLink,
-  useGoingLiveSheets,
-} from '../going-live-sheets'
+import { consumeSetupLink, useGoingLiveSheets } from '../going-live-sheets'
 import { openGoingLiveSheet } from '../going-live-events'
 import { AdminProductTourProvider } from '../admin-product-tour'
-import { OPEN_TRY_MESSENGER_EVENT } from '../try-messenger-button'
 
 function SheetHost() {
   return <>{useGoingLiveSheets()}</>
@@ -31,36 +25,25 @@ afterEach(() => {
 })
 
 describe('setup email links', () => {
-  it('reads a step sheet or a test and strips only those parameters', () => {
-    expect(consumeSetupLink('https://a.test/admin?open=install-messenger&x=1')).toEqual({
-      open: 'install-messenger',
-      test: null,
+  it('reads the step sheet and strips only that parameter', () => {
+    expect(consumeSetupLink('https://a.test/admin?open=invite-team&x=1')).toEqual({
+      open: 'invite-team',
       rest: '/admin?x=1',
-    })
-    expect(consumeSetupLink('https://a.test/admin?try=idea')).toEqual({
-      open: null,
-      test: 'idea',
-      rest: '/admin',
     })
     expect(consumeSetupLink('https://a.test/admin?open=elsewhere')?.open).toBeNull()
     expect(consumeSetupLink('https://a.test/admin')).toBeNull()
   })
 
-  it('opens Try Messenger once its host is listening, even when the effect runs twice', async () => {
-    expect(LIVE_EVENT).toBe(OPEN_TRY_MESSENGER_EVENT)
-    window.history.replaceState(null, '', '/admin?try=idea')
-    const heard: unknown[] = []
-    const listen = (event: Event) => heard.push((event as CustomEvent).detail)
+  it('opens the linked sheet once, even when the effect runs twice', async () => {
+    window.history.replaceState(null, '', '/admin?open=invite-team')
     render(
-      <StrictMode>
-        <SheetHost />
-      </StrictMode>
+      <IntlProvider locale="en" messages={en}>
+        <StrictMode>
+          <SheetHost />
+        </StrictMode>
+      </IntlProvider>
     )
-    // The Try Messenger host can register after this effect.
-    window.addEventListener(OPEN_TRY_MESSENGER_EVENT, listen)
-    await new Promise((resolve) => setTimeout(resolve, 10))
-    window.removeEventListener(OPEN_TRY_MESSENGER_EVENT, listen)
-    expect(heard).toEqual(['idea'])
+    expect(await screen.findByRole('region', { name: 'Invite your team' })).toBeTruthy()
     expect(window.location.search).toBe('')
   })
 })

@@ -25,7 +25,7 @@ import {
 } from '@/components/admin/conversation/inbox-nav-sidebar'
 import { TicketStatusChip, TICKET_TYPE_CLASS } from '@/components/admin/inbox/ticket-chips'
 import { NewButton } from '@/components/shared/new-button'
-import { TryMessengerButton } from '@/components/onboarding/try-messenger-button'
+import { ActivationActionButton } from '@/components/admin/activation-action-button'
 import { SearchInput } from '@/components/shared/search-input'
 import {
   ConversationListToolbar,
@@ -459,13 +459,13 @@ function EmptyList({
           />
         </p>
       )}
-      {showMessengerCta && (
-        <TryMessengerButton variant="outline" className="h-11 sm:h-9">
-          <FormattedMessage
-            id="onboarding.test.sendTest"
-            defaultMessage="Send yourself a test message"
-          />
-        </TryMessengerButton>
+      {showMessengerCta && activationAction && (
+        <ActivationActionButton
+          action={activationAction}
+          surface="conversation_empty"
+          variant="outline"
+          className="h-11 sm:h-9"
+        />
       )}
     </div>
   )

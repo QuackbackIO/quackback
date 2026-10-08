@@ -49,15 +49,12 @@ export const Route = createFileRoute('/widget')({
   ssr: 'data-only',
   validateSearch: (
     search: Record<string, unknown>
-  ): { locale?: string; theme?: 'light' | 'dark'; test?: true } => ({
+  ): { locale?: string; theme?: 'light' | 'dark' } => ({
     locale: typeof search.locale === 'string' ? search.locale : undefined,
     // Forces the widget document's theme regardless of visitor preference or
     // branding themeMode. Used by the admin settings preview's Light/Dark
     // toggle; resolved in __root so it never persists to the theme cookie.
     theme: search.theme === 'light' || search.theme === 'dark' ? search.theme : undefined,
-    // A teammate's "try it as a customer" frame. It only ever drops the
-    // same-origin cookie identity; the test session itself is server-verified.
-    test: search.test === true || search.test === 1 || search.test === '1' ? true : undefined,
   }),
   loader: async ({ context, location }) => {
     const { settings, session, userRole } = context
@@ -79,20 +76,19 @@ export const Route = createFileRoute('/widget')({
     // If user is logged into the portal (same-origin), extract the signed
     // session cookie so the widget can reuse it directly as a Bearer token.
     // This prevents duplicate anonymous users and bypasses HMAC requirements.
-    const { locale: explicitLocale, test: testMode = false } = location.search as {
-      locale?: string
-      test?: true
-    }
-    const cookieSession = testMode ? null : session
     const portalUserBase =
-      cookieSession?.user && cookieSession.user.principalType !== 'anonymous'
+      session?.user && session.user.principalType !== 'anonymous'
         ? {
-            id: cookieSession.user.id,
-            name: cookieSession.user.name,
-            email: cookieSession.user.email,
-            avatarUrl: cookieSession.user.image ?? null,
+            id: session.user.id,
+            name: session.user.name,
+            email: session.user.email,
+            avatarUrl: session.user.image ?? null,
           }
         : null
+
+    // location.search isn't generically typed inside the loader — cast to
+    // the validateSearch shape, matching the pattern in _portal/index.tsx.
+    const { locale: explicitLocale } = location.search as { locale?: string }
 
     // Extract the signed session cookie during SSR — this is the only point
     // where the cookie is available in cross-origin iframes (SameSite=Lax
@@ -101,7 +97,7 @@ export const Route = createFileRoute('/widget')({
     // HTML is safe: cross-origin parent pages cannot read iframe content.
     // Independent of locale resolution, so run both concurrently.
     const [portalSessionToken, locale, portalAvatar] = await Promise.all([
-      cookieSession?.user ? getPortalSessionToken() : Promise.resolve(null),
+      session?.user ? getPortalSessionToken() : Promise.resolve(null),
       getWidgetLocale({ data: { explicitLocale } }),
       portalUserBase
         ? fetchUserAvatar({
@@ -127,8 +123,7 @@ export const Route = createFileRoute('/widget')({
       portalUser,
       portalSessionToken,
       hmacRequired: settings?.publicWidgetConfig?.hmacRequired ?? false,
-      canPortalHandoff: !testMode && !isTeamMember(userRole),
-      testMode,
+      canPortalHandoff: !isTeamMember(userRole),
       locale,
       messages,
     }
@@ -167,7 +162,6 @@ function WidgetLayout() {
     portalSessionToken,
     hmacRequired,
     canPortalHandoff,
-    testMode,
     locale,
     messages,
   } = Route.useLoaderData()
@@ -184,7 +178,6 @@ function WidgetLayout() {
       portalSessionToken={portalSessionToken}
       hmacRequired={hmacRequired}
       canPortalHandoff={canPortalHandoff}
-      testMode={testMode}
       initialLocale={locale}
       initialMessages={messages}
     >

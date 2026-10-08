@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { AnchorHTMLAttributes, ReactNode } from 'react'
@@ -8,7 +8,7 @@ import en from '@/locales/en.json'
 import de from '@/locales/de.json'
 import type { LaunchStatus } from '@/lib/shared/launch-checklist'
 
-const hoisted = vi.hoisted(() => ({ canConverse: true, opened: [] as unknown[] }))
+const hoisted = vi.hoisted(() => ({ canConverse: true }))
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
@@ -80,10 +80,6 @@ function mount(input: LaunchStatus = status, notice?: ReactNode) {
 
 beforeEach(() => {
   hoisted.canConverse = true
-  hoisted.opened = []
-  window.addEventListener('quackback:open-try-messenger', (event) =>
-    hoisted.opened.push((event as CustomEvent).detail)
-  )
 })
 afterEach(cleanup)
 
@@ -93,9 +89,12 @@ describe("Home's next step", () => {
     const card = screen.getByRole('region', { name: 'Share your board link' })
     expect(card).toHaveTextContent('Launch plan · Step 2 of 3')
     expect(card).toHaveTextContent('Paste it wherever they already talk to you.')
-    expect(within(card).getByRole('button', { name: 'Copy board link' })).toBeVisible()
-    fireEvent.click(within(card).getByRole('button', { name: 'Post a test idea' }))
-    expect(hoisted.opened).toContain('idea')
+    // The real step only: no test-as-a-customer beside it.
+    expect(
+      within(card)
+        .getAllByRole('button')
+        .map((button) => button.textContent)
+    ).toEqual(['Copy board link'])
     expect(within(card).getByRole('link', { name: /View board/ })).toHaveAttribute(
       'href',
       'https://acme.example.com/?board=feedback'
@@ -143,7 +142,7 @@ describe("Home's next step", () => {
     )
   })
 
-  it('makes the test the action once only the first win is left', () => {
+  it('offers sharing the board again once only the first win is left', () => {
     mount({ ...status, publicBoardLinkCopiedAt: '2026-10-04T10:00:00.000Z' })
     const card = screen.getByRole('region', { name: 'A customer posts an idea' })
     expect(card).toHaveTextContent('Launch plan · Step 3 of 3')
@@ -152,7 +151,7 @@ describe("Home's next step", () => {
       within(card)
         .getAllByRole('button')
         .map((button) => button.textContent)
-    ).toEqual(['Post a test idea'])
+    ).toEqual(['Copy board link'])
   })
 
   it('stays on Home when every chore is done but no customer has acted', () => {
@@ -198,12 +197,6 @@ describe("Home's next step", () => {
     expect(add).toHaveAttribute('href', '/admin/status')
     // Drawn like every other secondary action, not a hand-made outline.
     expect(add.className).toBe(cn(buttonVariants({ variant: 'outline', size: 'sm' })))
-  })
-
-  it('offers no test the person cannot run', () => {
-    hoisted.canConverse = false
-    mount()
-    expect(screen.queryByRole('button', { name: 'Post a test idea' })).toBeNull()
   })
 
   it('keeps the automatic logo notice beside the portal snapshot', () => {

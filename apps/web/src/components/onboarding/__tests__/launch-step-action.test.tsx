@@ -39,11 +39,11 @@ describe('a launch step done in place', () => {
     const heard: unknown[] = []
     const listen = (event: Event) => heard.push((event as CustomEvent).detail)
     window.addEventListener(OPEN_GOING_LIVE_EVENT, listen)
-    show(task({ sheet: 'install-messenger' }))
+    show(task({ sheet: 'invite-team' }))
     expect(screen.queryByRole('link')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Start' }))
     window.removeEventListener(OPEN_GOING_LIVE_EVENT, listen)
-    expect(heard).toEqual(['install-messenger'])
+    expect(heard).toEqual(['invite-team'])
   })
 
   it('still links to the page when the step has no sheet', () => {

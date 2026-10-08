@@ -21,7 +21,6 @@ import {
   loadSheetMessages,
   isLaunchMessage,
   loadLaunchMessages,
-  loadTryMessengerPageMessages,
 } from '../i18n'
 
 describe('normalizeLocale', () => {
@@ -252,24 +251,13 @@ describe('unsubscribe page strings', () => {
 })
 
 describe('setup sheet strings', () => {
-  it('load with the sheets, while the entry points pages render stay seeded', async () => {
+  it('load with the sheet, and no page seeds them', async () => {
     const [all, sheets] = await Promise.all([loadMessages('de'), loadSheetMessages('de')])
     const seeded = adminSeedMessages(all)
     expect(Object.keys(seeded).filter(isSheetMessage)).toEqual([])
-    expect(seeded['onboarding.live.install.title']).toBeUndefined()
-    expect(seeded['onboarding.test.badge']).toBeUndefined()
-    // Pages render these outside any sheet.
-    for (const key of [
-      'onboarding.test.title',
-      'onboarding.test.sendTest',
-      'onboarding.test.postTest',
-      'onboarding.test.postTestIdea',
-      'onboarding.test.sendTestMessage',
-    ]) {
-      expect(seeded[key]).toBe(all[key])
-    }
-    expect(sheets['onboarding.test.badge']).toBe(all['onboarding.test.badge'])
-    expect(Object.keys(sheets).length).toBeGreaterThan(40)
+    expect(seeded['onboarding.live.invite.title']).toBeUndefined()
+    expect(sheets['onboarding.live.invite.title']).toBe(all['onboarding.live.invite.title'])
+    expect(Object.keys(sheets).length).toBeGreaterThan(20)
     expect(Object.keys(sheets).every(isSheetMessage)).toBe(true)
   })
 })
@@ -292,23 +280,5 @@ describe('launch plan strings', () => {
     expect(launch['onboarding.win.generic']).toBe(all['onboarding.win.generic'])
     expect(Object.keys(launch).length).toBeGreaterThan(60)
     expect(Object.keys(launch).every(isLaunchMessage)).toBe(true)
-  })
-})
-
-describe('the Try Messenger phone page strings', () => {
-  it('are seeded by that page alone', async () => {
-    const [all, widget, portal, page] = await Promise.all([
-      loadMessages('de'),
-      loadWidgetMessages('de'),
-      loadPortalMessages('de'),
-      loadTryMessengerPageMessages('de'),
-    ])
-    const isPage = (key: string) => key.startsWith('widget.test.')
-    for (const seeded of [widget, portal, adminSeedMessages(all)]) {
-      expect(Object.keys(seeded).filter(isPage)).toEqual([])
-    }
-    expect(page['widget.test.sessionBanner']).toBe(all['widget.test.sessionBanner'])
-    expect(Object.keys(page).length).toBeGreaterThan(4)
-    expect(Object.keys(page).every(isPage)).toBe(true)
   })
 })

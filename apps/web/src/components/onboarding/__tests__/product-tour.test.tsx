@@ -77,17 +77,15 @@ function mount(
   {
     locale = 'en',
     messages = en,
-    openTest,
   }: {
     locale?: string
     messages?: Record<string, string>
-    openTest?: (start: 'idea' | 'message') => void
   } = {}
 ) {
   return render(
     <IntlProvider locale={locale} messages={messages}>
       <QueryClientProvider client={new QueryClient()}>
-        <ProductTourProvider endAction={endAction} openTest={openTest}>
+        <ProductTourProvider endAction={endAction}>
           <Start />
           {TARGETS.map((target) => (
             <div key={target} data-tour={target} />
@@ -248,25 +246,26 @@ describe('guided tour', () => {
     expect(dialog()).toHaveTextContent('1 of 5')
   })
 
-  it("runs a stop's Try it: the tour closes and the test opens", async () => {
-    const openTest = vi.fn()
+  it("runs a stop's Try it: the tour closes and the page that does it opens", async () => {
     hoisted.context = { ...hoisted.context, goals: ['customer_support'] }
     hoisted.flags = { ...hoisted.flags, supportInbox: true }
-    mount(undefined, { openTest })
+    hoisted.permissions = new Set([PERMISSIONS.SETTINGS_MANAGE])
+    mount()
     await startTour()
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Send a test message' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Put Messenger on your site' }))
     })
-    expect(openTest).toHaveBeenCalledWith('message')
+    expect(hoistedPath.navigations).toContain('/admin/settings/widget/install')
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('offers no Try it without a way to run it', async () => {
+  it('offers no Try it to someone who cannot do it', async () => {
     hoisted.flags = { ...hoisted.flags, supportInbox: true }
     hoisted.context = { ...hoisted.context, goals: ['customer_support'] }
+    hoisted.permissions = new Set()
     mount()
     await startTour()
-    expect(screen.queryByRole('button', { name: 'Send a test message' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Put Messenger on your site' })).toBeNull()
   })
 
   it('has no stops on a phone without Copilot on Home', async () => {

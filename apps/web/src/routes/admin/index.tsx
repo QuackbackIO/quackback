@@ -6,7 +6,6 @@ import { copilotAvailabilityQuery, useCopilotHome } from '@/components/admin/ask
 import { CopilotCreditsLock } from '@/components/admin/ask/copilot-credits-lock'
 import { OverviewCounts, OverviewDashboard } from '@/components/admin/admin-overview'
 import { HomeLaunchArea } from '@/components/onboarding/home-try-it'
-import { HomeLaunchChips } from '@/components/onboarding/home-launch-chips'
 import { HomeGreeting } from '@/components/onboarding/home-greeting'
 import { LaunchMessages } from '@/components/onboarding/launch-messages'
 import { adminQueries } from '@/lib/client/queries/admin'
@@ -115,7 +114,6 @@ function AdminHome() {
           threadKey={copilotThread}
           canAsk={copilotOnHome && !locked}
           header={header}
-          chips={admin ? <HomeLaunchChips /> : undefined}
           locked={locked ? <CopilotCreditsLock credits={locked} /> : undefined}
           below={
             admin ? (

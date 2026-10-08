@@ -16,7 +16,6 @@ function context(overrides: Partial<TourContext> = {}): TourContext {
     permissions: new Set([PERMISSIONS.HELP_CENTER_MANAGE, PERMISSIONS.STATUS_PAGE_MANAGE]),
     narrow: false,
     empty: { feedback: true, support: true, helpCenter: true, status: true },
-    tests: { idea: true, message: true },
     ...overrides,
   }
 }
@@ -97,16 +96,25 @@ describe('resolveTourStops', () => {
   it('offers a Try it that runs the real thing, only where it works', () => {
     const tries = (ctx: TourContext) =>
       Object.fromEntries(resolveTourStops(ctx).map((stop) => [stop.id, stop.tryIt ?? null]))
-    const full = tries(context({ goals: ['customer_support'], modules: allOn }))
-    expect(full.feedback).toMatchObject({ kind: 'test', start: 'idea' })
-    expect(full.support).toMatchObject({ kind: 'test', start: 'message' })
+    const full = tries(
+      context({
+        goals: ['customer_support'],
+        modules: allOn,
+        permissions: new Set([
+          PERMISSIONS.SETTINGS_MANAGE,
+          PERMISSIONS.HELP_CENTER_MANAGE,
+          PERMISSIONS.STATUS_PAGE_MANAGE,
+        ]),
+      })
+    )
+    expect(full.feedback).toBeNull()
+    expect(full.support).toMatchObject({ kind: 'link', to: '/admin/settings/widget/install' })
     expect(full['help-center']).toMatchObject({ kind: 'link', to: '/admin/help-center' })
     expect(tries(context()).roadmap).toBeNull()
     const none = tries(
       context({
         goals: ['customer_support'],
         modules: allOn,
-        tests: { idea: false, message: false },
         permissions: new Set(),
         empty: { feedback: false, support: false, helpCenter: false, status: false },
       })

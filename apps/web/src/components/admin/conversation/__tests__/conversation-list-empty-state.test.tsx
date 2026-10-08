@@ -127,7 +127,10 @@ describe('ConversationListColumn launch status', () => {
     fetchOnboardingStatus.mockClear()
     renderColumn([])
 
-    expect(await screen.findByText('Send yourself a test message')).toBeTruthy()
+    expect(await screen.findByRole('link', { name: 'Connect Messenger' })).toHaveAttribute(
+      'href',
+      '/admin/settings/widget/install'
+    )
     // Title and one action: no explanatory paragraph under the title.
     expect(screen.queryByText(/When customers message you/)).toBeNull()
     expect(fetchOnboardingStatus).toHaveBeenCalledTimes(1)
@@ -145,7 +148,8 @@ describe('first-run empty inbox', () => {
     inboxHistory.hasConversations = false
     renderColumn([])
     expect(await screen.findByText('No conversations yet')).toBeTruthy()
-    expect(await screen.findByText('Send yourself a test message')).toBeTruthy()
+    // A feedback workspace has no Messenger step to offer here.
+    expect(screen.queryByRole('link', { name: 'Connect Messenger' })).toBeNull()
     expect(screen.queryByText('Nothing to review')).toBeNull()
   })
 

@@ -18,8 +18,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { LaunchStepAction } from './launch-step-action'
 import { LaunchTaskLabel, launchTaskMessage } from './launch-task-label'
 import { LaunchTaskLink } from './launch-task-link'
-import { TryMessengerButton } from './try-messenger-button'
-import type { TryMessengerStart } from './try-messenger-sheet'
+import { FirstWinShareAction } from './goal-actions'
 
 /** Languages whose step titles start lowercase inside a sentence; German nouns, for one, do not. */
 const SENTENCE_CASE = new Set(['en', 'es', 'fr', 'nl', 'pl', 'pt', 'ru'])
@@ -28,25 +27,6 @@ const SENTENCE_CASE = new Set(['en', 'es', 'fr', 'nl', 'pl', 'pt', 'ru'])
 function continueSentence(text: string, locale: string, index: number): string {
   if (index === 0 || !SENTENCE_CASE.has(locale.split('-')[0]!.toLowerCase())) return text
   return text.charAt(0).toLocaleLowerCase(locale) + text.slice(1)
-}
-
-/** The test on the Try Messenger sheet that shows a step working, if it has one. */
-export function stepTest(task: LaunchTask): TryMessengerStart | null {
-  if (task.id === 'distribute-feedback') return 'idea'
-  if (task.id === 'connect-messenger') return 'message'
-  if (task.classification === 'first_win') {
-    if (task.variant === 'feedback' || task.variant === 'private') return 'idea'
-    if (task.variant === 'support') return 'message'
-  }
-  return null
-}
-
-function TestLabel({ start }: { start: TryMessengerStart }) {
-  return start === 'idea' ? (
-    <FormattedMessage id="onboarding.test.postTestIdea" defaultMessage="Post a test idea" />
-  ) : (
-    <FormattedMessage id="onboarding.test.sendTestMessage" defaultMessage="Send a test message" />
-  )
 }
 
 const PATH_HEADING: Record<LaunchPathGoal, { id: string; defaultMessage: string }> = {
@@ -142,8 +122,6 @@ export function HomeNextStep({
   const path = launchPath(status)
   const next = path.next
   if (path.complete || !next) return null
-  const test = stepTest(next)
-  const firstWin = next.classification === 'first_win'
   const why = launchTaskWhy(next)
   // A status page grows by services: offered beside sharing it even after
   // setup seeded the first one, to anyone who may add one.
@@ -151,7 +129,7 @@ export function HomeNextStep({
     path.goal === 'status' && status.permissions?.settingsManage !== false
       ? buildLaunchTasks(status).find((task) => task.id === 'add-status-service' && !task.isSkipped)
       : undefined
-  // Other goals' steps are Home's chips; the Later line is the polish.
+  // The Later line is the polish; other goals' steps are on the launch plan page.
   const later = path.later
     .filter(
       (task) =>
@@ -192,19 +170,8 @@ export function HomeNextStep({
               primary
               pending={pending}
               onCreateBoard={onCreateBoard}
-              firstWinAction={
-                firstWin && test ? (
-                  <TryMessengerButton start={test} size="sm" className="h-8">
-                    <TestLabel start={test} />
-                  </TryMessengerButton>
-                ) : null
-              }
+              firstWinAction={<FirstWinShareAction status={status} primary />}
             />
-            {!firstWin && test ? (
-              <TryMessengerButton start={test} variant="outline" size="sm" className="h-8">
-                <TestLabel start={test} />
-              </TryMessengerButton>
-            ) : null}
             {service ? (
               <LaunchTaskLink
                 task={service}

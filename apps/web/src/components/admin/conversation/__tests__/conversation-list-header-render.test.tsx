@@ -96,7 +96,7 @@ const PROPS: ComponentProps<typeof ConversationListColumn> = {
 }
 
 describe('ConversationListColumn', () => {
-  it('offers one real test action on a fresh Support inbox', () => {
+  it('offers putting Messenger on the site on a fresh Support inbox', () => {
     activation.firstRun = true
     const client = new QueryClient()
     render(
@@ -116,8 +116,11 @@ describe('ConversationListColumn', () => {
     )
     expect(screen.getByText('Aucune conversation pour le moment')).toBeVisible()
     expect(screen.queryByText('Widget string')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Send yourself a test message' })).toBeVisible()
-    expect(screen.queryByRole('link', { name: 'Connect Messenger' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Connect Messenger' })).toHaveAttribute(
+      'href',
+      '/admin/settings/widget/install'
+    )
+    expect(screen.queryByRole('button', { name: /test message/i })).not.toBeInTheDocument()
     expect(
       screen.queryByText('When customers message you, conversations show up here.')
     ).not.toBeInTheDocument()

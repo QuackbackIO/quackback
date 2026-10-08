@@ -2,39 +2,29 @@ import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { OPEN_GOING_LIVE_EVENT, type GoingLiveSheet } from './going-live-events'
 import { SheetMessages } from './sheet-messages'
 
-// Each sheet loads on its first open, with its strings, so no admin page pays
-// for them up front.
-const InstallMessengerSheet = lazy(() =>
-  import('./install-messenger-sheet').then((m) => ({ default: m.InstallMessengerSheet }))
-)
+// The sheet loads on its first open, with its strings, so no admin page pays
+// for it up front.
 const InviteTeamSheet = lazy(() =>
   import('./invite-team-sheet').then((m) => ({ default: m.InviteTeamSheet }))
 )
 
-/** The Try Messenger sheet's open event (see `try-messenger-button`). */
-export const OPEN_TRY_MESSENGER_EVENT = 'quackback:open-try-messenger'
-
-/** Read and strip an email deep link's `open` / `try` parameters. */
+/** Read and strip an email deep link's `open` parameter. */
 export function consumeSetupLink(href: string): {
   open: GoingLiveSheet | null
-  test: 'message' | 'idea' | null
   rest: string
 } | null {
   const url = new URL(href)
   const open = url.searchParams.get('open')
-  const test = url.searchParams.get('try')
-  if (!open && !test) return null
+  if (!open) return null
   url.searchParams.delete('open')
-  url.searchParams.delete('try')
   return {
-    open: open === 'install-messenger' || open === 'invite-team' ? open : null,
-    test: test === 'message' || test === 'idea' ? test : null,
+    open: open === 'invite-team' ? open : null,
     rest: `${url.pathname}${url.search}${url.hash}`,
   }
 }
 
 /**
- * The admin layout's going-live sheets, opened by `openGoingLiveSheet`: the
+ * The admin layout's going-live sheet, opened by `openGoingLiveSheet`: the
  * open sheet, for the layout's sheet host to render. A hook rather than a
  * component of its own, so every admin page renders nothing more for it until
  * a sheet opens.
@@ -44,22 +34,14 @@ export function useGoingLiveSheets(): ReactNode {
   useEffect(() => {
     const onOpen = (event: Event) => {
       const sheet = (event as CustomEvent<unknown>).detail
-      if (sheet === 'install-messenger' || sheet === 'invite-team') setState({ sheet, open: true })
+      if (sheet === 'invite-team') setState({ sheet, open: true })
     }
     window.addEventListener(OPEN_GOING_LIVE_EVENT, onOpen)
-    // Setup emails link straight to a step (`?open=`) or a test (`?try=`).
+    // Setup emails link straight to a step (`?open=`).
     const link = consumeSetupLink(window.location.href)
     if (link) {
       window.history.replaceState(window.history.state, '', link.rest)
       if (link.open) setState({ sheet: link.open, open: true })
-      // After this commit, so the Try Messenger host is listening whichever
-      // order its effect and this one run in.
-      const test = link.test
-      if (test) {
-        window.setTimeout(() =>
-          window.dispatchEvent(new CustomEvent(OPEN_TRY_MESSENGER_EVENT, { detail: test }))
-        )
-      }
     }
     // The link is consumed once, so a re-run (Strict Mode) must not cancel it.
     return () => window.removeEventListener(OPEN_GOING_LIVE_EVENT, onOpen)
@@ -69,11 +51,7 @@ export function useGoingLiveSheets(): ReactNode {
   return (
     <Suspense fallback={null}>
       <SheetMessages>
-        {state.sheet === 'install-messenger' ? (
-          <InstallMessengerSheet open={state.open} onOpenChange={onOpenChange} />
-        ) : (
-          <InviteTeamSheet open={state.open} onOpenChange={onOpenChange} />
-        )}
+        <InviteTeamSheet open={state.open} onOpenChange={onOpenChange} />
       </SheetMessages>
     </Suspense>
   )

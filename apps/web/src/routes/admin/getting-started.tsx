@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { LaunchPlanPage } from '@/components/onboarding/launch-plan-page'
-import { FirstWinTestAction } from '@/components/onboarding/test-actions'
+import { LaunchPlanFirstWinAction } from '@/components/onboarding/goal-actions'
 import { LaunchMessages } from '@/components/onboarding/launch-messages'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { DEFAULT_LOCALE, loadLaunchMessages } from '@/lib/shared/i18n'
@@ -28,7 +28,7 @@ function GettingStartedPage() {
   return (
     <LaunchMessages messages={launchMessages}>
       <ScrollArea className="h-full">
-        <LaunchPlanPage firstWinAction={<FirstWinTestAction />} />
+        <LaunchPlanPage firstWinAction={<LaunchPlanFirstWinAction />} />
       </ScrollArea>
     </LaunchMessages>
   )

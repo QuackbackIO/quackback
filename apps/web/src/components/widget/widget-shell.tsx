@@ -185,8 +185,7 @@ export function WidgetShell({
         reduceMotion || expanded ? { duration: 0 } : { duration: 0.16, ease: 'easeIn' as const },
     }),
   }
-  const { user, isIdentified, hmacRequired, canPortalHandoff, closeWidget, testSession } =
-    useWidgetAuth()
+  const { user, isIdentified, hmacRequired, canPortalHandoff, closeWidget } = useWidgetAuth()
 
   const onHome = activeTab === 'home' && !onBack
 
@@ -196,8 +195,6 @@ export function WidgetShell({
   // press closes. Popovers (Radix Select, menus) preventDefault on dismiss;
   // that runs in the target phase, after this capture listener, so the check
   // is deferred to a microtask, after the whole dispatch has finished.
-  // A test frame sits inside the app's own Try Messenger sheet, which closes
-  // on the first press like any dialog, so there a field never keeps the key.
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key !== 'Escape') return
@@ -213,12 +210,11 @@ export function WidgetShell({
           // without doing anything visible, so the composer would trap the
           // key: blur it and let the next press close.
           if (suggestionWasOpen) return
-          if (testSession) closeWidget()
-          else target.blur()
+          target.blur()
           return
         }
         if (e.defaultPrevented) return
-        if (!testSession && target?.closest('input, textarea, select, [role="dialog"]')) {
+        if (target?.closest('input, textarea, select, [role="dialog"]')) {
           target.blur()
           return
         }
@@ -227,7 +223,7 @@ export function WidgetShell({
     }
     document.addEventListener('keydown', handleKeyDown, true)
     return () => document.removeEventListener('keydown', handleKeyDown, true)
-  }, [closeWidget, testSession])
+  }, [closeWidget])
 
   // "Go to portal" CTA — shown only when ALL three conditions hold:
   //   1. The visitor is HMAC-verified (hmacRequired=true and they are identified)

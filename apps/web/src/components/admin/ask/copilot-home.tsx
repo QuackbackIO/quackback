@@ -65,8 +65,6 @@ export interface CopilotHomeProps {
   threadKey?: string
   canAsk: boolean
   header: ReactNode
-  /** Shortcuts under the composer, such as the launch plan's open steps. */
-  chips?: ReactNode
   /**
    * Copilot is out of AI credits: the composer shows greyed out, and this
    * offer of a way to get more appears over it on hover, focus or tap.
@@ -83,7 +81,7 @@ export function CopilotHome(props: CopilotHomeProps) {
   )
 }
 
-function CopilotHomeView({ threadKey, canAsk, header, chips, locked, below }: CopilotHomeProps) {
+function CopilotHomeView({ threadKey, canAsk, header, locked, below }: CopilotHomeProps) {
   const intl = useIntl()
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -345,7 +343,6 @@ function CopilotHomeView({ threadKey, canAsk, header, chips, locked, below }: Co
                   {error}
                 </p>
               )}
-              {chips}
               {latest && (
                 <button
                   type="button"

@@ -9,7 +9,7 @@ import { widgetHandoffPath } from '@/lib/shared/routing'
  * That route owns cookie install (and the teammate skip). Do not verify here.
  */
 export function isPortalOttPath(pathname: string): boolean {
-  return !pathname.startsWith('/auth/') && pathname !== '/try-messenger'
+  return !pathname.startsWith('/auth/')
 }
 
 /** Build the widget-handoff URL for a portal page that still has `?ott=`. */

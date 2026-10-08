@@ -232,8 +232,6 @@ export async function readyEmailCopy(
 export async function nudgeEmailCopy(
   input: CommonInput & {
     nextStep: EmailStep
-    /** A way to watch the goal work before any customer arrives. */
-    test: { kind: 'message' | 'idea'; url: string } | null
   }
 ): Promise<OnboardingEmailCopy> {
   const intl = await intlFor(input.locale)
@@ -284,25 +282,7 @@ export async function nudgeEmailCopy(
       ? { label: intl.formatMessage(SHARE_LABEL[share.kind]), url: share.url, text: share.text }
       : null,
     cta: { label: stepTitle(intl, input.nextStep), url: input.nextStep.url },
-    secondary: input.test
-      ? {
-          lead: intl.formatMessage({
-            id: 'email.onboarding.nudge.testLead',
-            defaultMessage: 'Want to see it work first?',
-          }),
-          label:
-            input.test.kind === 'message'
-              ? intl.formatMessage({
-                  id: 'email.onboarding.nudge.test.message',
-                  defaultMessage: 'Send a test message',
-                })
-              : intl.formatMessage({
-                  id: 'email.onboarding.nudge.test.idea',
-                  defaultMessage: 'Post a test idea',
-                }),
-          url: input.test.url,
-        }
-      : null,
+    secondary: null,
     footer: {
       reason: intl.formatMessage(
         {

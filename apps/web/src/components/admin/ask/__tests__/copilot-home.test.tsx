@@ -119,7 +119,6 @@ function Harness({
       threadKey={threadKey}
       canAsk={canAsk}
       header={<h1>Welcome, Acme</h1>}
-      chips={<a href="/admin?open=invite-team">Invite your team</a>}
       locked={locked ? <a href="/admin/settings/billing">Upgrade</a> : undefined}
       below={<p>Launch plan</p>}
     />
@@ -196,12 +195,6 @@ describe('Home idle', () => {
     expect(overview('Welcome, Acme')).toEqual({ state: 'closed', inert: true })
     expect(screen.getByRole('textbox', { name: 'Ask Copilot' })).toBe(composer)
     await waitFor(() => expect(document.activeElement).toBe(composer))
-  })
-
-  it('shows the chips it is given, which never start a Copilot turn', async () => {
-    mount()
-    expect(screen.getByRole('link', { name: 'Invite your team' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Set up my feedback board' })).toBeNull()
   })
 
   it('opens at the top of Home, with the composer in view', async () => {

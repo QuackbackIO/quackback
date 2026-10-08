@@ -40,14 +40,7 @@ export function WidgetMessenger({
   initialDraft,
 }: WidgetMessengerProps = {}) {
   const queryClient = useQueryClient()
-  const { user, ensureSession, sessionVersion, testSession, emitEvent } = useWidgetAuth()
-  // A teammate's test frame follows the exact thread its first message opens.
-  const onConversationStarted = useCallback(
-    (id: string) => {
-      if (testSession) emitEvent('conversation:started', { id })
-    },
-    [testSession, emitEvent]
-  )
+  const { user, ensureSession, sessionVersion } = useWidgetAuth()
   // Presence (online/offline + office hours) comes from the one shared query —
   // SSR-seeded, polled once, and shared with every other widget surface.
   const presence = useConversationPresence(true)
@@ -90,7 +83,6 @@ export function WidgetMessenger({
         showHeader={false}
         autofocusComposer={autofocusComposer}
         initialDraft={initialDraft}
-        onConversationStarted={onConversationStarted}
         compact
       />
     </VisitorSurfaceRpcProvider>

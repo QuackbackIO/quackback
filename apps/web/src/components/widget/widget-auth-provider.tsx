@@ -68,8 +68,6 @@ interface WidgetAuthContextValue {
   /** Latest sessionVersion, readable inside async handlers after ensureSession()
    *  may have bumped it (the rendered `sessionVersion` closure would be stale). */
   getSessionVersion: () => number
-  /** The server confirmed this frame is signed in as a teammate's test customer. */
-  testSession: boolean
 }
 
 const WidgetAuthContext = createContext<WidgetAuthContextValue | null>(null)
@@ -98,12 +96,6 @@ interface WidgetAuthProviderProps {
    *  layout loader so the first render is translated without a client
    *  catalog fetch. A runtime locale change still fetches the new catalog. */
   initialMessages?: Record<string, string>
-  /**
-   * A teammate's "try it as a customer" frame. The session comes only from a
-   * one-time token the same-origin parent posts; no persisted, minted, portal
-   * or SDK identity is ever adopted, so the teammate's own sessions are untouched.
-   */
-  testMode?: boolean
   children: ReactNode
 }
 
@@ -114,7 +106,6 @@ export function WidgetAuthProvider({
   canPortalHandoff: canPortalHandoffFromPortal,
   initialLocale,
   initialMessages,
-  testMode = false,
   children,
 }: WidgetAuthProviderProps) {
   const queryClient = useQueryClient()
@@ -132,11 +123,6 @@ export function WidgetAuthProvider({
   const [canPortalHandoff, setCanPortalHandoff] = useState(canPortalHandoffFromPortal ?? true)
   const [sessionVersion, setSessionVersion] = useState(initialSessionVersion)
   const [identityResolved, setIdentityResolved] = useState(false)
-  const [testSession, setTestSession] = useState(false)
-  const testExchangeRef = useRef<Promise<boolean> | null>(null)
-  const testDocumentId = useRef(
-    typeof window === 'undefined' ? '' : String(window.performance.timeOrigin)
-  )
   const isIdentified = user !== null
   const sessionReadyRef = useRef(portalSessionAdopted)
   const sessionSourceRef = useRef<SessionSource>(portalSessionAdopted ? 'portal' : null)
@@ -202,7 +188,6 @@ export function WidgetAuthProvider({
   const acquireSession = useCallback(
     async (allowMint: boolean): Promise<boolean> => {
       if (sessionReadyRef.current) return true
-      if (testMode) return (await testExchangeRef.current) ?? false
       const inFlight = sessionPromiseRef.current
       if (inFlight) {
         const ok = await inFlight
@@ -263,7 +248,7 @@ export function WidgetAuthProvider({
       sessionPromiseRef.current = p
       return p
     },
-    [storeToken, testMode]
+    [storeToken]
   )
   const ensureSession = useCallback((): Promise<boolean> => acquireSession(true), [acquireSession])
 
@@ -347,11 +332,11 @@ export function WidgetAuthProvider({
   const restoreAttemptedRef = useRef(false)
   useEffect(() => {
     if (restoreAttemptedRef.current) return
-    if (testMode || portalSessionToken || sessionReadyRef.current) return
+    if (portalSessionToken || sessionReadyRef.current) return
     restoreAttemptedRef.current = true
     if (!readPersistedToken()) return
     void acquireSession(false)
-  }, [testMode, portalSessionToken, acquireSession])
+  }, [portalSessionToken, acquireSession])
 
   const closeWidget = useCallback(() => {
     sendToHost({ type: 'quackback:close' })
@@ -418,54 +403,11 @@ export function WidgetAuthProvider({
       sendToHost({ type: 'quackback:auth-change', user: null })
     }
 
-    async function handleTestToken(token: string) {
-      if (testExchangeRef.current || sessionReadyRef.current) return
-      const exchange = (async () => {
-        try {
-          const res = await fetch('/api/widget/test-session', {
-            method: 'POST',
-            credentials: 'omit',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token }),
-          })
-          if (!res.ok) return false
-          const { data } = (await res.json()) as {
-            data: { sessionToken: string; testSession: boolean }
-          }
-          storeToken(data.sessionToken)
-          setTestSession(data.testSession)
-          setCanPortalHandoff(false)
-          return true
-        } catch {
-          return false
-        } finally {
-          setIdentityResolved(true)
-        }
-      })()
-      testExchangeRef.current = exchange
-      sendToHost({
-        type: 'quackback:test-session',
-        success: await exchange,
-        documentId: testDocumentId.current,
-      })
-    }
-
     function handleMessage(event: MessageEvent) {
       if (event.source !== window.parent) return
 
       const msg = event.data
       if (!msg || typeof msg !== 'object' || typeof msg.type !== 'string') return
-
-      if (testMode) {
-        // Only the teammate's own page may drive a test frame.
-        if (event.origin !== window.location.origin) return
-        if (msg.type === 'quackback:test-token' && typeof msg.data === 'string') {
-          if (msg.documentId !== undefined && msg.documentId !== testDocumentId.current) return
-          if (!sessionReadyRef.current) void handleTestToken(msg.data)
-          return
-        }
-        if (msg.type === 'quackback:identify') return
-      }
 
       if (msg.type === 'quackback:metadata' && msg.data && typeof msg.data === 'object') {
         setWidgetMetadata(msg.data as WidgetMetadata)
@@ -523,13 +465,10 @@ export function WidgetAuthProvider({
     }
 
     window.addEventListener('message', handleMessage)
-    sendToHost({
-      type: 'quackback:ready',
-      ...(testMode && { documentId: testDocumentId.current }),
-    })
+    sendToHost({ type: 'quackback:ready' })
 
     return () => window.removeEventListener('message', handleMessage)
-  }, [storeToken, applyIdentifyResult, testMode])
+  }, [storeToken, applyIdentifyResult])
 
   const contextValue = useMemo(
     () => ({
@@ -545,7 +484,6 @@ export function WidgetAuthProvider({
       metadata: widgetMetadata,
       sessionVersion,
       getSessionVersion,
-      testSession,
     }),
     [
       user,
@@ -559,7 +497,6 @@ export function WidgetAuthProvider({
       widgetMetadata,
       sessionVersion,
       getSessionVersion,
-      testSession,
     ]
   )
 

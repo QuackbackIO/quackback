@@ -143,14 +143,11 @@ describe('Launch plan page', () => {
   it('gives each open later step one action and a Skip, and skips it', async () => {
     mount()
     const messenger = row('Put Messenger on your site')
-    // Messenger opens its install sheet in place.
-    expect(within(messenger).queryByRole('link')).toBeNull()
-    const opened = vi.fn()
-    window.addEventListener('quackback:open-going-live', (event) =>
-      opened((event as CustomEvent).detail)
+    // Messenger's step opens its install settings page.
+    expect(within(messenger).getByRole('link', { name: 'Start' })).toHaveAttribute(
+      'href',
+      '/admin/settings/widget/install'
     )
-    fireEvent.click(within(messenger).getByRole('button', { name: 'Start' }))
-    expect(opened).toHaveBeenCalledWith('install-messenger')
     fireEvent.click(
       within(messenger).getByRole('button', { name: 'Skip Put Messenger on your site' })
     )

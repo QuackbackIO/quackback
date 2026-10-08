@@ -25,12 +25,11 @@ export type TourStopId =
   | 'view-portal'
   | 'search'
 
-export type TourRoute = '/admin' | '/admin/help-center' | '/admin/status'
+export type TourRoute =
+  '/admin' | '/admin/help-center' | '/admin/status' | '/admin/settings/widget/install'
 
-/** A stop's Try it: open a test on the Try Messenger sheet, or the page that does the job. */
-export type TourTryIt =
-  | { kind: 'test'; start: 'idea' | 'message'; label: MessageDescriptor }
-  | { kind: 'link'; to: TourRoute; label: MessageDescriptor }
+/** A stop's Try it: the page that does the job. */
+export type TourTryIt = { kind: 'link'; to: TourRoute; label: MessageDescriptor }
 
 export interface TourStop {
   id: TourStopId
@@ -62,8 +61,6 @@ export interface TourContext {
   narrow: boolean
   /** Products with nothing in them yet, where a first-item Try it helps. */
   empty: { feedback: boolean; support: boolean; helpCenter: boolean; status: boolean }
-  /** Which tests on the Try Messenger sheet work for this person. */
-  tests: { idea: boolean; message: boolean }
 }
 
 const COPY = {
@@ -137,8 +134,10 @@ const COPY = {
 } satisfies Record<TourStopId, { lead: MessageDescriptor; line: MessageDescriptor }>
 
 const TRY = {
-  idea: { id: 'onboarding.tour.stop.try.idea', defaultMessage: 'Post a test idea' },
-  message: { id: 'onboarding.tour.stop.try.message', defaultMessage: 'Send a test message' },
+  install: {
+    id: 'onboarding.tour.stop.try.install',
+    defaultMessage: 'Put Messenger on your site',
+  },
   article: { id: 'onboarding.tour.stop.try.article', defaultMessage: 'Write your first article' },
   service: { id: 'onboarding.tour.stop.try.service', defaultMessage: 'Add a service' },
 } satisfies Record<string, MessageDescriptor>
@@ -175,12 +174,7 @@ function moduleOn(key: ModuleKey, ctx: TourContext): boolean {
 function moduleStop(key: ModuleKey, ctx: TourContext): TourStop {
   switch (key) {
     case 'feedback':
-      return stop(
-        ctx.feedbackPrivate ? 'feedback-private' : 'feedback',
-        'nav-feedback',
-        undefined,
-        ctx.tests.idea ? { kind: 'test', start: 'idea', label: TRY.idea } : undefined
-      )
+      return stop(ctx.feedbackPrivate ? 'feedback-private' : 'feedback', 'nav-feedback')
     case 'roadmap':
       return stop('roadmap', 'nav-roadmap')
     case 'changelog':
@@ -190,7 +184,9 @@ function moduleStop(key: ModuleKey, ctx: TourContext): TourStop {
         'support',
         'nav-support',
         undefined,
-        ctx.tests.message ? { kind: 'test', start: 'message', label: TRY.message } : undefined
+        ctx.empty.support && ctx.permissions.has(PERMISSIONS.SETTINGS_MANAGE)
+          ? { kind: 'link', to: '/admin/settings/widget/install', label: TRY.install }
+          : undefined
       )
     case 'helpCenter':
       return stop(

@@ -9,7 +9,6 @@ describe('isPortalOttPath', () => {
   })
 
   it('leaves dedicated consume routes alone', () => {
-    expect(isPortalOttPath('/try-messenger')).toBe(false)
     expect(isPortalOttPath('/auth/open-handoff')).toBe(false)
     expect(isPortalOttPath('/auth/origin-transfer')).toBe(false)
     expect(isPortalOttPath('/auth/widget-handoff')).toBe(false)
@@ -33,6 +32,5 @@ describe('portalOttForwardUrl', () => {
   it('returns null without ott or on consume routes', () => {
     expect(portalOttForwardUrl('/b/ideas', '')).toBeNull()
     expect(portalOttForwardUrl('/auth/widget-handoff', '?ott=abc')).toBeNull()
-    expect(portalOttForwardUrl('/try-messenger', '?ott=customer-test')).toBeNull()
   })
 })

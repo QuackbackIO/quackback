@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 
 /** The going-live sheets the admin layout hosts. */
-export type GoingLiveSheet = 'install-messenger' | 'invite-team'
+export type GoingLiveSheet = 'invite-team'
 
 /**
  * The event that opens one of the admin's going-live sheets. An event, rather

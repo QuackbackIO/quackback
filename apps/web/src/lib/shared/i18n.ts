@@ -245,26 +245,14 @@ const WIZARD_ONLY_MESSAGE_PREFIXES = [
 ] as const
 
 /**
- * Strings only the setup sheets render (Try Messenger, install Messenger,
- * invite the team). Each sheet is a lazy chunk opened on a click, so admin
- * pages leave these out of the catalog they seed and the sheet loads them as
- * it opens (see `SheetMessages`). The few that pages render outside a sheet,
- * the buttons that open one, stay seeded.
+ * Strings only the invite-the-team sheet renders. The sheet is a lazy chunk
+ * opened on a click, so admin pages leave these out of the catalog they seed
+ * and the sheet loads them as it opens (see `SheetMessages`).
  */
-const SHEET_MESSAGE_PREFIXES = ['onboarding.live.', 'onboarding.test.'] as const
-const SEEDED_SHEET_MESSAGES: ReadonlySet<string> = new Set([
-  'onboarding.test.title',
-  'onboarding.test.sendTest',
-  'onboarding.test.postTest',
-  'onboarding.test.postTestIdea',
-  'onboarding.test.sendTestMessage',
-])
+const SHEET_MESSAGE_PREFIXES = ['onboarding.live.'] as const
 
 export function isSheetMessage(key: string): boolean {
-  return (
-    SHEET_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix)) &&
-    !SEEDED_SHEET_MESSAGES.has(key)
-  )
+  return SHEET_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
 }
 
 /** The setup sheets' strings in a locale. */
@@ -289,7 +277,6 @@ const LAUNCH_MESSAGE_PREFIXES = [
   'onboarding.win.',
   'onboarding.home.',
   'onboarding.path.',
-  'onboarding.chip.',
   'onboarding.launch.',
   'onboarding.branding.',
 ] as const
@@ -312,25 +299,6 @@ export async function loadLaunchMessages(locale: SupportedLocale): Promise<Recor
   const subset: Record<string, string> = {}
   for (const [key, value] of Object.entries(all)) {
     if (isLaunchMessage(key)) subset[key] = value
-  }
-  return subset
-}
-
-/**
- * The prefix of the Try Messenger phone page's strings (`/try-messenger`, opened
- * from the code on the Try Messenger sheet). Neither the Messenger nor the
- * portal renders them, so only that page seeds them.
- */
-const TRY_MESSENGER_PAGE_PREFIX = 'widget.test.'
-
-/** The Try Messenger phone page's strings in a locale. */
-export async function loadTryMessengerPageMessages(
-  locale: SupportedLocale
-): Promise<Record<string, string>> {
-  const all = await loadMessages(locale)
-  const subset: Record<string, string> = {}
-  for (const [key, value] of Object.entries(all)) {
-    if (key.startsWith(TRY_MESSENGER_PAGE_PREFIX)) subset[key] = value
   }
   return subset
 }
@@ -363,7 +331,6 @@ export function adminSeedMessages(all: Record<string, string>): Record<string, s
     if (isViewerMessage(key) || isTourMessage(key) || isAskMessage(key)) continue
     if (isSheetMessage(key) || isLaunchMessage(key)) continue
     if (key.startsWith('email.') || key.startsWith(UNSUBSCRIBE_MESSAGE_PREFIX)) continue
-    if (key.startsWith(TRY_MESSENGER_PAGE_PREFIX)) continue
     if (WIZARD_ONLY_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))) continue
     subset[key] = value
   }
@@ -389,7 +356,7 @@ export async function loadWidgetMessages(locale: SupportedLocale): Promise<Recor
   const all = await loadMessages(locale)
   const subset: Record<string, string> = {}
   for (const [key, value] of Object.entries(all)) {
-    if (isViewerMessage(key) || key.startsWith(TRY_MESSENGER_PAGE_PREFIX)) continue
+    if (isViewerMessage(key)) continue
     if (WIDGET_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))) subset[key] = value
   }
   return subset
@@ -474,7 +441,7 @@ export async function loadPortalMessages(locale: SupportedLocale): Promise<Recor
   const all = await loadMessages(locale)
   const subset: Record<string, string> = {}
   for (const [key, value] of Object.entries(all)) {
-    if (isViewerMessage(key) || key.startsWith(TRY_MESSENGER_PAGE_PREFIX)) continue
+    if (isViewerMessage(key)) continue
     if (PORTAL_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))) subset[key] = value
   }
   return subset

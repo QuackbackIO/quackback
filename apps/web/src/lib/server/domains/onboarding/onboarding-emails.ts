@@ -195,43 +195,25 @@ export async function onboardingEmailContext(
   }
 }
 
-function emailStep(task: LaunchTask, base: string, status?: LaunchStatus): EmailStep {
+function emailStep(task: LaunchTask, base: string): EmailStep {
   return {
     id: task.id,
     variant: task.variant,
     title: task.title,
-    url: stepUrl(task, base, status),
+    url: stepUrl(task, base),
   }
 }
 
 /**
- * Where a step's link lands: its sheet when it has one, the test that shows
- * the first win, else its page (with the view it needs).
+ * Where a step's link lands: its sheet when it has one, Home for the first
+ * win (which ticks itself), else its page (with the view it needs).
  */
-export function stepUrl(task: LaunchTask, base: string, status?: LaunchStatus): string {
+export function stepUrl(task: LaunchTask, base: string): string {
   const root = base.replace(/\/$/, '')
   if (task.sheet) return `${root}/admin?open=${task.sheet}`
-  if (task.classification === 'first_win') {
-    return (status && testLink(status, base)?.url) ?? `${root}/admin`
-  }
+  if (task.classification === 'first_win') return `${root}/admin`
   const search = task.search ? `?${new URLSearchParams(task.search).toString()}` : ''
   return `${root}${task.href ?? '/admin'}${search}`
-}
-
-/** The test that shows the primary goal working, as a link. */
-export function testLink(
-  status: LaunchStatus,
-  base: string
-): { kind: 'message' | 'idea'; label: string; url: string } | null {
-  const root = base.replace(/\/$/, '')
-  const primary = primaryGoal(status)
-  if (primary === 'customer_support' && status.features?.supportInbox) {
-    return { kind: 'message', label: 'Send a test message', url: `${root}/admin?try=message` }
-  }
-  if (primary === 'product_feedback' || primary === 'internal') {
-    return { kind: 'idea', label: 'Post a test idea', url: `${root}/admin?try=idea` }
-  }
-  return null
 }
 
 function primaryGoal(status: LaunchStatus): OnboardingOutcome | null {
@@ -315,7 +297,7 @@ async function deliver(
   if (kind === 'welcome') {
     const copy = await readyEmailCopy({
       ...common,
-      nextStep: next ? emailStep(next, base, context.status) : null,
+      nextStep: next ? emailStep(next, base) : null,
       homeUrl: `${root}/admin`,
       trial: await runningTrial(),
     })
@@ -326,11 +308,9 @@ async function deliver(
       ...copy,
     })
   } else {
-    const test = testLink(context.status, base)
     const copy = await nudgeEmailCopy({
       ...common,
-      nextStep: emailStep(next ?? context.path.steps[1], base, context.status),
-      test: test ? { kind: test.kind, url: test.url } : null,
+      nextStep: emailStep(next ?? context.path.steps[1], base),
     })
     await sendOnboardingNudgeEmail({
       to: context.to,

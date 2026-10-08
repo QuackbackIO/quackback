@@ -1,14 +1,13 @@
 // @vitest-environment happy-dom
 /**
- * Escape inside the widget. On a customer's site the first press inside a
- * field only leaves the field. In a test frame the host page is the app's own
- * Try Messenger sheet, so one press asks it to close.
+ * Escape inside the widget: the first press inside a field only leaves the
+ * field, and the next one closes the widget.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 
-const auth = vi.hoisted(() => ({ testSession: false, closeWidget: vi.fn() }))
+const auth = vi.hoisted(() => ({ closeWidget: vi.fn() }))
 
 vi.mock('../widget-auth-provider', () => ({
   useWidgetAuth: () => ({
@@ -18,7 +17,6 @@ vi.mock('../widget-auth-provider', () => ({
     canPortalHandoff: true,
     closeWidget: auth.closeWidget,
     sessionVersion: 1,
-    testSession: auth.testSession,
   }),
 }))
 vi.mock('../use-messenger-unread', () => ({ useMessengerUnread: () => 0 }))
@@ -64,27 +62,20 @@ async function pressEscape(target: HTMLElement) {
 
 beforeEach(() => {
   auth.closeWidget.mockReset()
-  auth.testSession = false
 })
 afterEach(cleanup)
 
 describe('WidgetShell Escape', () => {
-  it('on a customer site, the first press in a field only leaves the field', async () => {
+  it('the first press in a field only leaves the field, the next closes', async () => {
     const field = renderWithField()
     await pressEscape(field)
     expect(auth.closeWidget).not.toHaveBeenCalled()
     expect(document.activeElement).not.toBe(field)
-  })
-
-  it('in a test frame, one press in a field asks the host to close', async () => {
-    auth.testSession = true
-    const field = renderWithField()
-    await pressEscape(field)
+    await pressEscape(document.body)
     expect(auth.closeWidget).toHaveBeenCalledTimes(1)
   })
 
-  it('in a test frame, a press another control already handled does not close', async () => {
-    auth.testSession = true
+  it('a press another control already handled does not close', async () => {
     const field = renderWithField()
     field.addEventListener('keydown', (event) => event.preventDefault())
     await pressEscape(field)

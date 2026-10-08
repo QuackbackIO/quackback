@@ -123,11 +123,7 @@ export const Route = createFileRoute('/widget/')({
   validateSearch: searchSchema,
   loader: async ({ context, location }) => {
     const { queryClient, settings, session } = context
-    const search = location.search as z.infer<typeof searchSchema> & { test?: true }
-    // A test frame shows Messenger and Feedback before either is public. Only
-    // the tabs follow the flag: every conversation read and write is still
-    // gated server-side on the session being a teammate's test customer.
-    const testMode = search.test === true
+    const search = location.search as z.infer<typeof searchSchema>
     const feedbackProductEnabled = settings?.featureFlags?.feedback ?? true
     const changelogProductEnabled = settings?.featureFlags?.changelog ?? true
 
@@ -135,10 +131,8 @@ export const Route = createFileRoute('/widget/')({
     // module is; the tab is the widget surface. Hoisted so we only compute
     // presence when Messenger shows.
     const messengerTabEnabled =
-      testMode ||
-      (((settings?.featureFlags as { supportInbox?: boolean } | undefined)?.supportInbox ??
-        false) &&
-        (settings?.publicWidgetConfig?.tabs?.messenger ?? false))
+      ((settings?.featureFlags as { supportInbox?: boolean } | undefined)?.supportInbox ?? false) &&
+      (settings?.publicWidgetConfig?.tabs?.messenger ?? false)
 
     const helpTabEnabled =
       ((settings?.featureFlags as { helpCenter?: boolean } | undefined)?.helpCenter ?? false) &&
@@ -277,9 +271,7 @@ export const Route = createFileRoute('/widget/')({
       // advertises an action the board's tier rejects (#191). Keyed by board id.
       boardPermissions: portalData.boardPermissions,
       tabs: {
-        feedback:
-          feedbackProductEnabled &&
-          (testMode || (settings?.publicWidgetConfig?.tabs?.feedback ?? true)),
+        feedback: feedbackProductEnabled && (settings?.publicWidgetConfig?.tabs?.feedback ?? true),
         changelog: changelogTabEnabled,
         help: helpTabEnabled,
         // The persisted config names the messenger surface `messenger`; the

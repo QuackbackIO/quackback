@@ -22,7 +22,7 @@ const SHARE_STEP = {
 const MESSENGER_STEP = {
   id: 'connect-messenger',
   title: 'Put Messenger on your site',
-  url: `${BASE}/admin?open=install-messenger`,
+  url: `${BASE}/admin/settings/widget/install`,
 }
 
 function ready(locale: (typeof SUPPORTED_LOCALES)[number], trial = true) {
@@ -122,7 +122,6 @@ describe('readyEmailCopy', () => {
       goal: 'product_feedback',
       base: BASE,
       nextStep: SHARE_STEP,
-      test: { kind: 'idea', url: `${BASE}/admin?try=idea` },
     })
     const invite = await invitationEmailCopy({
       locale,
@@ -135,7 +134,7 @@ describe('readyEmailCopy', () => {
 })
 
 describe('nudgeEmailCopy', () => {
-  it('for support: names the next step on the button and offers a test message', async () => {
+  it('for support: names the next step on the button and offers nothing beside it', async () => {
     const copy = await nudgeEmailCopy({
       locale: 'en',
       name: 'Sam',
@@ -143,13 +142,12 @@ describe('nudgeEmailCopy', () => {
       goal: 'customer_support',
       base: BASE,
       nextStep: MESSENGER_STEP,
-      test: { kind: 'message', url: `${BASE}/admin?try=message` },
     })
     expect(copy.subject).toBe('Your next step in Acme')
     expect(copy.share).toBeNull()
     expect(copy.paragraphs[0]).toBe('No customer has started a conversation yet.')
     expect(copy.cta).toEqual({ label: 'Put Messenger on your site', url: MESSENGER_STEP.url })
-    expect(copy.secondary?.label).toBe('Send a test message')
+    expect(copy.secondary).toBeNull()
   })
 
   it('translates the step title from the plan catalogue', async () => {
@@ -160,7 +158,6 @@ describe('nudgeEmailCopy', () => {
       goal: 'customer_support',
       base: BASE,
       nextStep: MESSENGER_STEP,
-      test: null,
     })
     expect(copy.cta.label).not.toBe('Put Messenger on your site')
     expect(copy.subject).not.toBe('Your next step in Acme')

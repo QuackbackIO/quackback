@@ -5,7 +5,6 @@ import { EmptyState } from '@/components/shared/empty-state'
 import { useActivationAction } from '@/lib/client/hooks/use-activation-action'
 import { ActivationActionButton } from '@/components/admin/activation-action-button'
 import { useUserRole } from '@/lib/client/hooks/use-root-context'
-import { TryMessengerButton } from '@/components/onboarding/try-messenger-button'
 
 interface InboxEmptyStateProps {
   type: 'no-posts' | 'no-results' | 'no-selection'
@@ -53,12 +52,6 @@ export function InboxEmptyState({ type, onClearFilters }: InboxEmptyStateProps) 
                   className="h-11 sm:h-9"
                 />
               )}
-              <TryMessengerButton start="idea" variant="outline" className="h-11 sm:h-9">
-                {intl.formatMessage({
-                  id: 'onboarding.test.postTest',
-                  defaultMessage: 'Post a test idea',
-                })}
-              </TryMessengerButton>
             </div>
           }
         />

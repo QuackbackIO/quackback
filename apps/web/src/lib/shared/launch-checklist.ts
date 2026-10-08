@@ -113,7 +113,7 @@ export interface LaunchTask {
   /** Search params for {@link href}, for a step that lands on one view of a page. */
   search?: Record<string, string>
   /** Done in place: the step opens this going-live sheet instead of navigating. */
-  sheet?: 'install-messenger' | 'invite-team'
+  sheet?: 'invite-team'
   actionLabel?: string
   completedLabel: string
 }
@@ -359,7 +359,6 @@ function buildOutcomeTasks(
     canAct: permissions.settingsManage,
     classification: 'prerequisite',
     href: '/admin/settings/widget/install',
-    sheet: 'install-messenger',
     actionLabel: 'Connect Messenger',
     completedLabel: 'View installation',
   }

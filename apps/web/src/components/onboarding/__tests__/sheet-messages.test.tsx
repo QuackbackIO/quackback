@@ -8,7 +8,7 @@ import { SheetMessages } from '../sheet-messages'
 
 it('loads the setup sheet strings that the page seed leaves out', async () => {
   const seeded = adminSeedMessages(await loadMessages('fr'))
-  expect(seeded['onboarding.test.badge']).toBeUndefined()
+  expect(seeded['onboarding.live.invite.title']).toBeUndefined()
   // React retries a suspended use() only inside act.
   await act(async () => {
     render(
@@ -17,8 +17,8 @@ it('loads the setup sheet strings that the page seed leaves out', async () => {
           <SheetMessages>
             <p>
               <FormattedMessage
-                id="onboarding.live.install.title"
-                defaultMessage="Put Messenger on your site"
+                id="onboarding.live.invite.title"
+                defaultMessage="Invite your team"
               />
             </p>
             <p>
@@ -30,6 +30,6 @@ it('loads the setup sheet strings that the page seed leaves out', async () => {
     )
   })
   const all = await loadMessages('fr')
-  expect(await screen.findByText(all['onboarding.live.install.title']!)).toBeTruthy()
+  expect(await screen.findByText(all['onboarding.live.invite.title']!)).toBeTruthy()
   expect(screen.getByText(seeded['onboarding.launch.name']!)).toBeTruthy()
 })

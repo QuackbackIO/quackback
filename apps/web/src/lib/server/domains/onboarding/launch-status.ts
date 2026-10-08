@@ -24,14 +24,10 @@ import {
 import { getWidgetConfig } from '@/lib/server/domains/settings/settings.widget'
 import { getSetupState } from '@/lib/shared/db-types'
 import { permissionsForLegacyRole } from '@/lib/server/policy/permissions'
-import {
-  resolveFeatureFlags,
-  workspaceAllowsAnonymous,
-} from '@/lib/server/domains/settings/settings.types'
+import { resolveFeatureFlags } from '@/lib/server/domains/settings/settings.types'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 import { hasEntitlement } from '@/lib/server/domains/settings/cloud/entitlements'
 import { isAssistantConfigured } from '@/lib/server/domains/assistant'
-import { canTestCustomerPostIdea } from '@/lib/server/test-customer-feedback'
 import { detectFirstWin, internalWinScope, winOutcome } from '@/lib/server/activation-wins'
 import { isLaunchWindowOpen, launchWindowFor } from '@/lib/shared/launch-window'
 import { CURRENT_WIDGET_SDK_VERSION, widgetSdkNeedsUpdate } from '@/lib/shared/widget/sdk-version'
@@ -168,13 +164,6 @@ export async function loadLaunchStatus(caller: LaunchStatusCaller) {
     hasIntegration,
     hasFirstWin: firstWin.reached,
     firstWinAt: firstWin.reachedAt,
-    // "Post an idea" as the caller's test customer is offered only where it can land.
-    canPostTestIdea: canTestCustomerPostIdea(
-      caller.principalId,
-      new Set(caller.permissions),
-      orgBoards,
-      workspaceAllowsAnonymous(orgSettings?.portalConfig)
-    ),
     launchWindow,
     inLaunchWindow: isLaunchWindowOpen(launchWindow),
     useCase: setupState?.goals?.[0] ?? setupState?.useCase ?? null,
