@@ -703,13 +703,8 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
  */
 export const getPublicAuthConfig = createServerFn({ method: 'GET' }).handler(async () => {
   const { getRegisteredOidcProviderIds } = await import('@/lib/server/auth/registered-providers')
-  const { getCredentialedDefaultOAuth } =
-    await import('@/lib/server/domains/settings/settings.service')
-  const [registered, defaultSignInOAuth] = await Promise.all([
-    getRegisteredOidcProviderIds(),
-    getCredentialedDefaultOAuth(),
-  ])
-  return { ssoEnabled: registered.has('sso'), defaultSignInOAuth }
+  const ssoEnabled = (await getRegisteredOidcProviderIds()).has('sso')
+  return { ssoEnabled }
 })
 
 /**

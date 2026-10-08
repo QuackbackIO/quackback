@@ -468,6 +468,17 @@ describe('account step — after a sign-in completes', () => {
     await waitFor(() => expect(track).toHaveBeenCalledWith('onboarding_account_created'))
   })
 
+  // Someone who already started setup signs back in from the first-user
+  // screen. No account is created, so the funnel must not count one.
+  it('records a returning sign-in from the first-user screen as a sign-in', async () => {
+    track.mockClear()
+    renderStep(selfHosted())
+    fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }))
+    act(() => postAuthSuccess())
+    await waitFor(() => expect(track).toHaveBeenCalledWith('onboarding_signed_in'))
+    expect(track).not.toHaveBeenCalledWith('onboarding_account_created')
+  })
+
   it('records an owner signing in to a claimed workspace as a sign-in', async () => {
     track.mockClear()
     renderStep(provisioned())

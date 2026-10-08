@@ -84,7 +84,12 @@ export function AccountStep({ ssoEnabled, claim, authConfig, workspaceName }: Ac
   // Only the first-user form creates an account; the others sign an existing
   // owner in, which a conversion funnel must not count as a sign-up.
   const signInOnly = ssoEnabled || claim.claimed || !claim.openToClaim
-  useAdvanceOnAuthSuccess(signInOnly ? 'onboarding_signed_in' : 'onboarding_account_created')
+  // Someone who already started setup can sign back in from the first-user
+  // screen, which creates nothing either.
+  const [signingIn, setSigningIn] = useState(false)
+  useAdvanceOnAuthSuccess(
+    signInOnly || signingIn ? 'onboarding_signed_in' : 'onboarding_account_created'
+  )
 
   if (ssoEnabled) return <SsoStep />
   if (claim.claimed || !claim.openToClaim) {
@@ -103,7 +108,14 @@ export function AccountStep({ ssoEnabled, claim, authConfig, workspaceName }: Ac
       />
     )
   }
-  return <MethodsStep authConfig={authConfig} workspaceName={workspaceName} />
+  return (
+    <MethodsStep
+      authConfig={authConfig}
+      workspaceName={workspaceName}
+      signingIn={signingIn}
+      onSigningInChange={setSigningIn}
+    />
+  )
 }
 
 /**
@@ -220,13 +232,16 @@ function SignInOnlyStep({
 function MethodsStep({
   authConfig,
   workspaceName,
+  signingIn,
+  onSigningInChange,
 }: {
   authConfig: AccountAuthConfig
   workspaceName?: string
+  signingIn: boolean
+  onSigningInChange: (signingIn: boolean) => void
 }) {
-  const [signingIn, setSigningIn] = useState(false)
   if (signingIn) {
-    return <ReturningSignIn authConfig={authConfig} onBack={() => setSigningIn(false)} />
+    return <ReturningSignIn authConfig={authConfig} onBack={() => onSigningInChange(false)} />
   }
   return (
     <StepCard>
@@ -272,7 +287,7 @@ function MethodsStep({
         />{' '}
         <button
           type="button"
-          onClick={() => setSigningIn(true)}
+          onClick={() => onSigningInChange(true)}
           className="font-medium text-foreground underline-offset-4 hover:underline"
         >
           <FormattedMessage id="onboarding.account.signIn" defaultMessage="Sign in" />

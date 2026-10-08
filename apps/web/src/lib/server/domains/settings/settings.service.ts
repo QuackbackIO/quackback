@@ -126,20 +126,6 @@ function filterOAuthByCredentials(
 }
 
 /**
- * The sign-in methods a workspace with no settings row can honestly offer: the
- * shipped auth default, filtered by the credentials actually configured, the
- * same way the portal filters a set-up workspace's. Setup's account step uses
- * it to let someone who started setup and was signed out get back in.
- */
-export async function getCredentialedDefaultOAuth(): Promise<Record<string, boolean | undefined>> {
-  const [configuredTypes, passthroughKeys] = await Promise.all([
-    getConfiguredAuthTypes(),
-    getEmailDependentPassthroughKeys(),
-  ])
-  return filterOAuthByCredentials(DEFAULT_AUTH_CONFIG.oauth, configuredTypes, passthroughKeys)
-}
-
-/**
  * Email-dependent passthrough keys for `filterOAuthByCredentials`.
  * Shared by both team and portal surfaces — neither has an
  * `auth_password` / `auth_magicLink` credential row (they use the
