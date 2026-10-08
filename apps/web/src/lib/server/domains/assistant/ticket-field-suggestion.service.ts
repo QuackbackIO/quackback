@@ -38,6 +38,7 @@
  * shared middleware; no content rides the metadata (the ai_usage_log privacy
  * discipline).
  */
+import { getOpenAIClientOptions } from '@/lib/server/domains/ai/client-options'
 import { chat } from '@tanstack/ai'
 import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
 import { z } from 'zod'
@@ -233,10 +234,7 @@ export async function suggestTicketFieldValues(
   let output: Record<string, unknown>
   try {
     output = (await chat({
-      adapter: openaiCompatibleText(model, {
-        baseURL: config.openaiBaseUrl!,
-        apiKey: config.openaiApiKey!,
-      }),
+      adapter: openaiCompatibleText(model, getOpenAIClientOptions(config)),
       systemPrompts: [SYSTEM_PROMPT],
       messages: [
         {

@@ -24,6 +24,7 @@
  * logged here, so it never throws into its caller: the event reaction
  * (events/event-reactions.ts) that runs it.
  */
+import { getOpenAIClientOptions } from '@/lib/server/domains/ai/client-options'
 import { chat } from '@tanstack/ai'
 import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
 import { z } from 'zod'
@@ -140,10 +141,7 @@ export async function summarizeConversationOnClose(
     // counts as on-demand Summarize-chip calls; this fire-and-forget path
     // must meter against aiTokensPerMonth without inflating that report.
     const object = await chat({
-      adapter: openaiCompatibleText(model, {
-        baseURL: config.openaiBaseUrl!,
-        apiKey: config.openaiApiKey!,
-      }),
+      adapter: openaiCompatibleText(model, getOpenAIClientOptions(config)),
       systemPrompts: [SYSTEM_PROMPT],
       messages: [{ role: 'user', content: transcript }],
       outputSchema: ConversationSummarySchema,

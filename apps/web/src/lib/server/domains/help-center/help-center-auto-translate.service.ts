@@ -7,6 +7,7 @@
  * via the BYOK AI client and writes the result as a DRAFT translation --
  * never auto-published -- so a human always reviews before it goes live.
  */
+import { getOpenAIClientOptions } from '@/lib/server/domains/ai/client-options'
 import { chat } from '@tanstack/ai'
 import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
 import { z } from 'zod'
@@ -155,10 +156,7 @@ export async function translateArticleForLocale(
   let parsed: z.infer<typeof TranslationResultSchema>
   try {
     parsed = await chat({
-      adapter: openaiCompatibleText(model, {
-        baseURL: config.openaiBaseUrl!,
-        apiKey: config.openaiApiKey!,
-      }),
+      adapter: openaiCompatibleText(model, getOpenAIClientOptions(config)),
       systemPrompts: [system],
       messages: [{ role: 'user', content: user }],
       outputSchema: TranslationResultSchema,
