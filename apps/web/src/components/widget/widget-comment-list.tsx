@@ -59,7 +59,7 @@ export function WidgetCommentList({
       <p className="text-xs text-muted-foreground/60 text-center py-4">
         <FormattedMessage
           id="widget.commentList.empty"
-          defaultMessage="No comments yet. Be the first to share your thoughts!"
+          defaultMessage="No comments yet. Be the first to share your thoughts."
         />
       </p>
     )
