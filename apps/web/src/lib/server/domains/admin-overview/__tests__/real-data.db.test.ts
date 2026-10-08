@@ -6,6 +6,7 @@ import {
   conversations,
   helpCenterArticles,
   helpCenterCategories,
+  postStatuses,
   posts,
   principal,
   statusComponents,
@@ -188,6 +189,20 @@ describe('whether Home has real data', () => {
       ).metrics.map((metric) => metric.key)
     expect(await keys(false)).not.toContain('complete')
     expect(await keys(true)).toContain('complete')
+  })
+
+  it('does not look for shipped ideas to announce while Changelog is off', async () => {
+    await testDb
+      .insert(postStatuses)
+      .values({ name: 'Shipped', slug: `shipped-${createId('post')}`, category: 'complete' })
+    const feedback = withPermissions(PERMISSIONS.POST_VIEW_PRIVATE)
+    const asksForShipped = async (changelog: boolean) => {
+      statements.length = 0
+      await getAdminOverview({ actor: feedback, flags: { ...flags, feedback: true, changelog } })
+      return statements.some((sql) => /from "changelog_entry_posts"/i.test(sql))
+    }
+    expect(await asksForShipped(false)).toBe(false)
+    expect(await asksForShipped(true)).toBe(true)
   })
 
   it('reports real data without probing once the workspace is past its launch window', async () => {

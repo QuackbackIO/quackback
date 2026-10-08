@@ -104,7 +104,7 @@ export async function getAdminOverview(input: {
         })
       : Promise.resolve(disabledSupport()),
     feedbackOn
-      ? loadFeedback(viewerId, now).catch((err) => {
+      ? loadFeedback(viewerId, now, changelogOn).catch((err) => {
           log.error({ err }, 'overview feedback failed')
           return failedFeedback()
         })
@@ -516,15 +516,21 @@ async function selectFeedbackRows(
   return [...mine, ...rest]
 }
 
-async function loadFeedback(viewerId: PrincipalId | null, now: Date) {
+/**
+ * Ideas to review, and with a changelog to announce them in, shipped ideas
+ * not announced yet.
+ */
+async function loadFeedback(viewerId: PrincipalId | null, now: Date, changelogOn: boolean) {
   const defaultStatus = await db.query.postStatuses.findFirst({
     where: and(eq(postStatuses.isDefault, true), isNull(postStatuses.deletedAt)),
     columns: { id: true, name: true, slug: true },
   })
-  const completeStatuses = await db
-    .select({ id: postStatuses.id, name: postStatuses.name, slug: postStatuses.slug })
-    .from(postStatuses)
-    .where(and(eq(postStatuses.category, 'complete'), isNull(postStatuses.deletedAt)))
+  const completeStatuses = changelogOn
+    ? await db
+        .select({ id: postStatuses.id, name: postStatuses.name, slug: postStatuses.slug })
+        .from(postStatuses)
+        .where(and(eq(postStatuses.category, 'complete'), isNull(postStatuses.deletedAt)))
+    : []
 
   const livePost = and(
     isNull(posts.deletedAt),
