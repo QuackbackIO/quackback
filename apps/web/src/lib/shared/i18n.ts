@@ -283,6 +283,7 @@ const LAUNCH_MESSAGE_PREFIXES = [
 const SEEDED_LAUNCH_MESSAGES: ReadonlySet<string> = new Set([
   'onboarding.launch.name',
   'onboarding.launch.stepOf',
+  'onboarding.launch.done',
   'onboarding.launch.error',
 ])
 

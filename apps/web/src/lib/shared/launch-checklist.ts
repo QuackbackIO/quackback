@@ -653,6 +653,12 @@ export function openLaterSteps(path: LaunchPath): LaunchTask[] {
   return path.later.filter(isOpenLaunchStep)
 }
 
+/** Whether any step of the plan is still open: the path to the first win, or a later step. */
+export function launchPlanHasOpenSteps(status: LaunchStatus): boolean {
+  const path = launchPath(status)
+  return !path.complete || openLaterSteps(path).length > 0
+}
+
 /** The one count: the sidebar dock and the Launch plan page show this. */
 export function launchPlanProgress(status: LaunchStatus): {
   step: number

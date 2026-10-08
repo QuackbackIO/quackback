@@ -50,6 +50,9 @@ vi.mock('@tanstack/react-query', () => ({
     if (Array.isArray(queryKey) && queryKey.includes('owner-workspaces')) {
       return { data: mockBillingEnabled.current ? mockSiblings.current : undefined }
     }
+    if (Array.isArray(queryKey) && queryKey[0] === 'admin' && queryKey[1] === 'onboarding') {
+      return { data: enabled === false ? undefined : mockLaunchStatus.current }
+    }
     if (Array.isArray(queryKey) && queryKey.includes('moderationStatus')) {
       moderationQueryEnabled.current = enabled !== false
       if (enabled === false) return { data: undefined }
@@ -67,16 +70,16 @@ vi.mock('@/components/notifications', () => ({ NotificationBell: () => null }))
 
 vi.mock('@/lib/server/functions/conversation', () => ({ setAgentAvailabilityFn: vi.fn() }))
 
-const { mockSiblings, mockBillingEnabled, mockPending, moderationQueryEnabled } = vi.hoisted(
-  () => ({
+const { mockSiblings, mockBillingEnabled, mockPending, moderationQueryEnabled, mockLaunchStatus } =
+  vi.hoisted(() => ({
+    mockLaunchStatus: { current: undefined as unknown },
     mockPending: { current: 0 },
     moderationQueryEnabled: { current: null as boolean | null },
     mockSiblings: {
       current: [] as Array<{ instanceId: string; displayName: string; url: string | null }>,
     },
     mockBillingEnabled: { current: false },
-  })
-)
+  }))
 
 vi.mock('@/lib/server/functions/owner-workspaces', () => ({
   listOwnerWorkspacesFn: vi.fn(async () => mockSiblings.current),
@@ -423,6 +426,37 @@ describe('AdminSidebar: help and the phone menu', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: 'Help' }))
     expect(await screen.findByRole('menuitem', { name: 'Documentation' })).toBeTruthy()
     expect(screen.queryByRole('menuitem', { name: 'Contact us' })).toBeNull()
+  })
+
+  it('offers the Launch plan beside the tour while a step is open, and only then', async () => {
+    const now = Date.now()
+    mockLaunchStatus.current = {
+      hasBoards: true,
+      hasPublicBoard: true,
+      memberCount: 1,
+      hasBranding: false,
+      goals: ['product_feedback'],
+      launchWindow: {
+        startsAt: new Date(now - 86_400_000).toISOString(),
+        endsAt: new Date(now + 13 * 86_400_000).toISOString(),
+      },
+      inLaunchWindow: true,
+    }
+    renderSidebar('admin')
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Help' }))
+    const plan = await screen.findByRole('menuitem', { name: 'Launch plan' })
+    expect(plan).toHaveAttribute('href', '/admin/getting-started')
+    const items = screen.getAllByRole('menuitem').map((item) => item.textContent)
+    expect(items.indexOf('Launch plan')).toBe(items.indexOf('Replay the tour') + 1)
+    cleanup()
+
+    mockLaunchStatus.current = { ...(mockLaunchStatus.current as object), launchWindow: null }
+    renderSidebar('admin')
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Help' }))
+    await screen.findByRole('menuitem', { name: 'Documentation' })
+    expect(screen.queryByRole('menuitem', { name: 'Launch plan' })).toBeNull()
+    mockLaunchStatus.current = undefined
   })
 
   it('carries the launch plan and the trial in the phone menu, and names Changelog once', () => {

@@ -1,4 +1,4 @@
-import { LaunchPlanDock } from '@/components/onboarding/launch-plan-dock'
+import { LaunchPlanDock, useLaunchPlanInHelp } from '@/components/onboarding/launch-plan-dock'
 import { openHelpLauncher } from '@/components/shared/cloud-quackback-widget'
 import { PlanNoticeQuiet } from '@/components/admin/plan-notice-banner'
 import type { PlanNotice } from '@/lib/server/domains/settings/tier-limits.types'
@@ -25,6 +25,7 @@ import {
   QuestionMarkCircleIcon,
   HomeIcon,
   SignalIcon,
+  FlagIcon,
 } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
@@ -291,6 +292,7 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
   // Each part is selected: the route context is a new object after every
   // navigation, while these stay the same until the viewer or workspace changes.
   const tour = useProductTour()
+  const launchPlanInHelp = useLaunchPlanInHelp()
   const session = useSessionContext()
   const settings = useWorkspaceSettings()
   const billingEnabled = useBillingEnabled()
@@ -477,6 +479,16 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
                       defaultMessage="Replay the tour"
                     />
                   </DropdownMenuItem>
+                  {launchPlanInHelp && (
+                    <DropdownMenuItem asChild>
+                      <Link to="/admin/getting-started">
+                        <FormattedMessage
+                          id="onboarding.launch.name"
+                          defaultMessage="Launch plan"
+                        />
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                   {cloudEnabled && (
                     <DropdownMenuItem onClick={openHelpLauncher}>
                       <ChatBubbleLeftRightIcon className="mr-2 h-4 w-4" />
@@ -675,6 +687,16 @@ export function AdminSidebar({ initialUserData, latestVersion, planNotice }: Adm
                 <QuestionMarkCircleIcon className="h-5 w-5" />
                 <FormattedMessage id="onboarding.tour.replay" defaultMessage="Replay the tour" />
               </button>
+              {launchPlanInHelp && (
+                <Link
+                  to="/admin/getting-started"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-muted-foreground hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground"
+                >
+                  <FlagIcon className="h-5 w-5" />
+                  <FormattedMessage id="onboarding.launch.name" defaultMessage="Launch plan" />
+                </Link>
+              )}
               <div className="h-px bg-border/40 my-4" />
               <a
                 href="https://www.quackback.io/docs/"

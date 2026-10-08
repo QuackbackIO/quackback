@@ -228,10 +228,14 @@ describe('Home first-run cards', () => {
   it('keeps the plan row after the card is dismissed', async () => {
     hoisted.status = status({ hasFirstWin: true })
     hoisted.card.mockResolvedValue({ summary: null })
-    mount()
+    const { client } = mount()
     const card = await screen.findByRole('region', { name: 'Your first customer is here' })
     fireEvent.click(within(card).getByRole('button', { name: 'Dismiss' }))
     await waitFor(() => expect(hoisted.dismissWin).toHaveBeenCalledTimes(1))
+    // The sidebar dock reads the same marker, so it goes at once too.
+    expect(
+      client.getQueryData<{ firstWinShownAt?: string }>(['onboarding', 'progress'])?.firstWinShownAt
+    ).toBeTruthy()
     await waitFor(() =>
       expect(screen.queryByRole('region', { name: 'Your first customer is here' })).toBeNull()
     )

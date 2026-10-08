@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { setLaunchTaskResolutionFn } from '@/lib/server/functions/admin'
+import { getOnboardingProgressFn } from '@/lib/server/functions/onboarding-progress'
 import { isLaunchPlanActive, type LaunchStatus } from '@/lib/shared/launch-checklist'
 
 /** Poll only while the plan is open: a resolved plan has nothing left to watch for. */
@@ -17,6 +18,14 @@ export function launchStatusQuery() {
     ...adminQueries.onboardingStatus(),
     refetchInterval: (query: { state: { data?: LaunchStatus } }) =>
       launchStatusRefetchInterval(query.state.data),
+  }
+}
+
+/** This person's own first-run markers: the tour taken or put off, the first win dismissed. */
+export function onboardingProgressQuery() {
+  return {
+    queryKey: ['onboarding', 'progress'] as const,
+    queryFn: () => getOnboardingProgressFn(),
   }
 }
 

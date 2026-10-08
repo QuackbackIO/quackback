@@ -15,9 +15,13 @@ import { AutomaticBrandingNotice } from '@/components/admin/branding/automatic-b
 import { useAutomaticWebsiteBranding } from '@/components/admin/branding/use-automatic-website-branding'
 import { isLaunchPlanActive, launchPath, openLaterSteps } from '@/lib/shared/launch-checklist'
 import { adminQueries } from '@/lib/client/queries/admin'
-import { launchStatusQuery, useLaunchTaskResolution } from './use-launch-plan'
+import {
+  launchStatusQuery,
+  onboardingProgressQuery,
+  useLaunchTaskResolution,
+} from './use-launch-plan'
 
-const PROGRESS_KEY = ['onboarding', 'progress'] as const
+const PROGRESS_KEY = onboardingProgressQuery().queryKey
 const FIRST_WIN_KEY = ['onboarding', 'first-win'] as const
 type Progress = Awaited<ReturnType<typeof getOnboardingProgressFn>>
 
@@ -50,7 +54,14 @@ export function HomeGettingStarted({
   })
   const dismissWin = useMutation({
     mutationFn: () => dismissFirstWinFn(),
-    onMutate: () => queryClient.setQueryData(FIRST_WIN_KEY, null),
+    // The card and the sidebar dock both go as the person dismisses.
+    onMutate: () => {
+      queryClient.setQueryData(FIRST_WIN_KEY, null)
+      queryClient.setQueryData<Progress>(PROGRESS_KEY, (current) => ({
+        ...current,
+        firstWinShownAt: new Date().toISOString(),
+      }))
+    },
   })
   const planShown = !member && inWindow && isLaunchPlanActive(statusQuery.data)
   // Once the plan is done, a quiet line keeps the optional steps in reach
@@ -113,10 +124,7 @@ export function HomeGettingStarted({
 export function HomeTourOffer({ member = false }: { member?: boolean }) {
   const tour = useProductTour()
   const queryClient = useQueryClient()
-  const progress = useQuery({
-    queryKey: PROGRESS_KEY,
-    queryFn: () => getOnboardingProgressFn(),
-  })
+  const progress = useQuery(onboardingProgressQuery())
   const status = useQuery(member ? adminQueries.onboardingStatus() : launchStatusQuery())
   const dismissTour = useMutation({
     mutationFn: () => dismissTourOfferFn(),

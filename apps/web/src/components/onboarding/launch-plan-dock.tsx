@@ -5,18 +5,33 @@ import { useQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { useSessionContext, useUserRole } from '@/lib/client/hooks/use-root-context'
-import { launchPlanProgress } from '@/lib/shared/launch-checklist'
+import {
+  launchPlanHasOpenSteps,
+  launchPlanProgress,
+  type LaunchStatus,
+} from '@/lib/shared/launch-checklist'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { isAdmin } from '@/lib/shared/roles'
+import { onboardingProgressQuery } from './use-launch-plan'
 
-type DockProgress = ReturnType<typeof launchPlanProgress>
+type DockProgress = ReturnType<typeof launchPlanProgress> & {
+  /** Whether the dock shows: the plan is open, or its first win is not dismissed yet. */
+  shown: boolean
+}
 
 const STORAGE_PREFIX = 'quackback:launch-plan-dock:'
 
 function readStored(key: string): DockProgress | null {
   try {
-    const value = JSON.parse(localStorage.getItem(key) ?? 'null') as DockProgress | null
-    return value && typeof value.step === 'number' && typeof value.total === 'number' ? value : null
+    const value = JSON.parse(localStorage.getItem(key) ?? 'null') as Partial<DockProgress> | null
+    if (!value || typeof value.step !== 'number' || typeof value.total !== 'number') return null
+    const resolved = value.resolved === true
+    return {
+      step: value.step,
+      total: value.total,
+      resolved,
+      shown: typeof value.shown === 'boolean' ? value.shown : !resolved,
+    }
   } catch {
     return null
   }
@@ -26,43 +41,68 @@ function writeStored(key: string, value: DockProgress) {
   try {
     localStorage.setItem(key, JSON.stringify(value))
   } catch {
-    // Storage can be unavailable; the dock then shows only where the plan is loaded.
+    // Storage can be unavailable; the dock then waits for the launch status.
   }
 }
 
+/** The plan is the owner's: a teammate who joins later has their own first run. */
+function useCanSeePlan(): boolean {
+  const role = useUserRole()
+  return usePermission(PERMISSIONS.MEMBER_VIEW) && isAdmin(role)
+}
+
 /**
- * The sidebar's way back to the Launch plan page while the plan is open. It is
- * on every admin page, so it never fetches: it reads the launch status the
- * pages that already load it (Home, the Launch plan page) left in the cache,
- * and remembers the last progress it saw so a reload elsewhere keeps it.
+ * The launch status for the sidebar: read once as an admin page loads and
+ * again whenever the window regains focus, so a tab left open elsewhere
+ * catches up with a step done or a first win in another tab.
+ */
+function useSidebarLaunchStatus(enabled: boolean): LaunchStatus | undefined {
+  return useQuery({ ...adminQueries.onboardingStatus(), enabled, refetchOnWindowFocus: true }).data
+}
+
+/**
+ * The sidebar's way back to the Launch plan page while the plan is open, and
+ * after the first win until it is dismissed. It remembers the last progress
+ * it saw, so a reload shows it straight away while the status loads.
  */
 export function LaunchPlanDock() {
-  // The plan is the owner's: a teammate who joins later has their own first run.
-  const role = useUserRole()
-  const canView = usePermission(PERMISSIONS.MEMBER_VIEW) && isAdmin(role)
+  const canView = useCanSeePlan()
   const userId = useSessionContext()?.user?.id
-  const { data } = useQuery({ ...adminQueries.onboardingStatus(), enabled: false })
-  const [progress, setProgress] = useState<DockProgress | null>(null)
+  const data = useSidebarLaunchStatus(canView)
+  const winOpen = data?.hasFirstWin === true && data.inLaunchWindow === true
+  // Whether this person dismissed the first win, asked only once there is one.
+  const { data: progress } = useQuery({ ...onboardingProgressQuery(), enabled: canView && winOpen })
+  const [dock, setDock] = useState<DockProgress | null>(null)
   const storageKey = userId ? `${STORAGE_PREFIX}${userId}` : null
 
   useEffect(() => {
     if (!canView || !storageKey) return
-    if (data) {
-      // Outside the launch window the plan is over, whatever its state.
-      const next =
-        data.inLaunchWindow === false
-          ? { ...launchPlanProgress(data), resolved: true }
-          : launchPlanProgress(data)
-      writeStored(storageKey, next)
-      setProgress(next)
-    } else {
-      setProgress(readStored(storageKey))
+    if (!data) {
+      setDock(readStored(storageKey))
+      return
     }
-  }, [canView, data, storageKey])
+    const count = launchPlanProgress(data)
+    // Outside the launch window the plan is over, whatever its state.
+    if (data.inLaunchWindow === false) {
+      const over = { ...count, resolved: true, shown: false }
+      writeStored(storageKey, over)
+      setDock(over)
+      return
+    }
+    // After the win, wait to hear whether it was dismissed before deciding.
+    if (count.resolved && !progress) return
+    const next = { ...count, shown: !count.resolved || !progress?.firstWinShownAt }
+    writeStored(storageKey, next)
+    setDock(next)
+  }, [canView, data, progress, storageKey])
 
-  if (!canView || !progress || progress.resolved) return null
+  if (!canView || !dock?.shown) return null
   // The live page is step 1 and starts done; the bar shows the steps behind you.
-  const percent = progress.total > 0 ? Math.round(((progress.step - 1) / progress.total) * 100) : 0
+  const percent = dock.resolved
+    ? 100
+    : dock.total > 0
+      ? Math.round(((dock.step - 1) / dock.total) * 100)
+      : 0
   return (
     <Link
       to="/admin/getting-started"
@@ -73,14 +113,18 @@ export function LaunchPlanDock() {
           <FormattedMessage id="onboarding.launch.name" defaultMessage="Launch plan" />
         </span>
         <span className="shrink-0 tabular-nums text-muted-foreground">
-          <FormattedMessage
-            id="onboarding.launch.stepOf"
-            defaultMessage="Step {step} of {total}"
-            values={{ step: progress.step, total: progress.total }}
-          />
+          {dock.resolved ? (
+            <FormattedMessage id="onboarding.launch.done" defaultMessage="Done" />
+          ) : (
+            <FormattedMessage
+              id="onboarding.launch.stepOf"
+              defaultMessage="Step {step} of {total}"
+              values={{ step: dock.step, total: dock.total }}
+            />
+          )}
         </span>
       </span>
-      <span aria-hidden="true" className="block h-1 overflow-hidden rounded-full bg-muted">
+      <span aria-hidden="true" className="block h-1 overflow-hidden rounded-full bg-foreground/10">
         <span
           className="block h-full rounded-full bg-foreground motion-safe:transition-[width]"
           style={{ width: `${percent}%` }}
@@ -88,4 +132,16 @@ export function LaunchPlanDock() {
       </span>
     </Link>
   )
+}
+
+/**
+ * Whether Help offers the Launch plan page: to an admin of a workspace that
+ * had a launch plan, while any of its steps is still open, the optional ones
+ * after the first win included.
+ */
+export function useLaunchPlanInHelp(): boolean {
+  const canView = useCanSeePlan()
+  const data = useSidebarLaunchStatus(canView)
+  if (!canView || !data?.launchWindow) return false
+  return launchPlanHasOpenSteps(data)
 }

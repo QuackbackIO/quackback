@@ -273,6 +273,7 @@ describe('launch plan strings', () => {
     for (const key of [
       'onboarding.launch.name',
       'onboarding.launch.stepOf',
+      'onboarding.launch.done',
       'onboarding.launch.error',
     ]) {
       expect(seeded[key]).toBe(all[key])
