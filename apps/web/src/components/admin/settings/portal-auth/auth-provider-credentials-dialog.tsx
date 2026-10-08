@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { AuthProviderCredentialsForm } from './auth-provider-credentials-form'
 import type { PlatformCredentialField } from '@/lib/shared/integration-types'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
-import { NewTabHint } from '@/components/ui/new-tab-hint'
+import { NewTabHint } from '@/components/ui/button'
 
 interface AuthProviderCredentialsDialogProps {
   credentialType: string

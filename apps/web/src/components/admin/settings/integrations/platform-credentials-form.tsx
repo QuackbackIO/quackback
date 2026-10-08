@@ -4,13 +4,12 @@ import { useState } from 'react'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { useSavePlatformCredentials, useDeletePlatformCredentials } from '@/lib/client/mutations'
-import { Button } from '@/components/ui/button'
+import { Button, NewTabHint } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { CopyButton } from '@/components/shared/copy-button'
 import type { PlatformCredentialField } from '@/lib/shared/integration-types'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
-import { NewTabHint } from '@/components/ui/new-tab-hint'
 
 interface PlatformCredentialsFormProps {
   integrationType: string

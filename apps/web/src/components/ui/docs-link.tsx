@@ -1,6 +1,6 @@
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/16/solid'
 import { cn } from '@/lib/shared/utils'
-import { NewTabHint } from '@/components/ui/new-tab-hint'
+import { NewTabHint } from '@/components/ui/button'
 
 interface DocsLinkProps {
   href: string

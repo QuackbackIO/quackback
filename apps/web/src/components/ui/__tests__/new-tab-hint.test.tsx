@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import { DocsLink } from '../docs-link'
-import { NewTabHint } from '../new-tab-hint'
+import { NewTabHint } from '../button'
 
 afterEach(cleanup)
 

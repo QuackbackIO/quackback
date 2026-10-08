@@ -2,6 +2,7 @@ import * as React from 'react'
 import { Button as ButtonPrimitive } from '@base-ui/react/button'
 import { useRender } from '@base-ui/react/use-render'
 import { cva, type VariantProps } from 'class-variance-authority'
+import { IntlContext } from 'react-intl'
 
 import { cn } from '@/lib/shared/utils'
 
@@ -37,7 +38,8 @@ const buttonVariants = cva(
         sm: 'h-8 relative pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-1.5 gap-1.5 px-3 text-[13px] has-[>svg]:px-2.5',
         lg: 'h-11 px-6 has-[>svg]:px-5',
         icon: 'size-9',
-        'icon-sm': 'size-8 relative pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-1.5',
+        'icon-sm':
+          'size-8 relative pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-1.5',
         'icon-lg': 'size-11',
       },
     },
@@ -85,4 +87,25 @@ function Button({
 
 Button.displayName = 'Button'
 
-export { Button, buttonVariants }
+const NEW_TAB_MESSAGE = { id: 'common.opensInNewTab', defaultMessage: '(opens in a new tab)' }
+
+/**
+ * Visually hidden text for a link that opens in a new tab, so screen readers
+ * say so. Put it inside the link, after its label. It reads the intl context
+ * directly so a link rendered outside a provider still gets the English text.
+ *
+ * It lives beside Button because every page already loads this module: as a
+ * module of its own, the shell and the lazy settings pages would share it
+ * through a chunk of its own, one more request on every admin page.
+ */
+function NewTabHint() {
+  const intl = React.useContext(IntlContext)
+  return (
+    <span className="sr-only">
+      {' '}
+      {intl ? intl.formatMessage(NEW_TAB_MESSAGE) : NEW_TAB_MESSAGE.defaultMessage}
+    </span>
+  )
+}
+
+export { Button, buttonVariants, NewTabHint }

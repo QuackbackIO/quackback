@@ -3,7 +3,7 @@ import { ChevronDownIcon } from '@heroicons/react/24/solid'
 import { useOpenedOnce } from '@/lib/client/hooks/use-opened-once'
 import { lazyWithPreload } from '@/lib/client/lazy-with-preload'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
-import { NewTabHint } from '@/components/ui/new-tab-hint'
+import { NewTabHint } from '@/components/ui/button'
 
 // @uiw/react-codemirror + @codemirror/lang-css make this the largest route
 // chunk in the app, yet most visits never open the "Advanced CSS" panel, so

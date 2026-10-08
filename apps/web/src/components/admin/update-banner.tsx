@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { XMarkIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
 import type { LatestVersionResult } from '@/lib/server/functions/version'
 import { setUpdateBannerDismissedVersionCookie } from '@/lib/shared/update-banner-cookie'
-import { NewTabHint } from '@/components/ui/new-tab-hint'
+import { NewTabHint } from '@/components/ui/button'
 
 // Legacy localStorage key. Dismissal now lives in a cookie (readable during
 // SSR — see update-banner-cookie.ts) so the banner renders in its final

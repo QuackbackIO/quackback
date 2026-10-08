@@ -4,7 +4,7 @@ import { Link } from '@tanstack/react-router'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { ClipboardDocumentIcon } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
+import { Button, NewTabHint } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { ChevronDownIcon } from '@heroicons/react/24/solid'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
@@ -24,7 +24,6 @@ import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { useMintWidgetInstallCode } from '@/lib/client/mutations/settings'
 import { useBaseUrl } from '@/lib/client/hooks/use-root-context'
-import { NewTabHint } from '@/components/ui/new-tab-hint'
 
 export function WidgetInstallPage() {
   const baseUrl = useBaseUrl()

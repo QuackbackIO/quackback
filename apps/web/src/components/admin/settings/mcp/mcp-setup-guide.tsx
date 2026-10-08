@@ -12,7 +12,7 @@ import {
 import { cn } from '@/lib/shared/utils'
 import { useCopyToClipboard } from '@/lib/client/hooks/use-copy-to-clipboard'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
-import { NewTabHint } from '@/components/ui/new-tab-hint'
+import { NewTabHint } from '@/components/ui/button'
 
 // ——————————————————————————————————————————————————
 // Client icons (Simple Icons, 24x24 viewBox)

@@ -22,7 +22,7 @@ import { getIntegrationIcon } from './integration-ui'
 // Catalogs (metadata: name/description/iconBg/docsUrl/platformCredentialFields/settingsPath).
 import * as catalogs from '@/lib/shared/integration-catalog'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
-import { NewTabHint } from '@/components/ui/new-tab-hint'
+import { NewTabHint } from '@/components/ui/button'
 
 /** The `integration` object returned by `fetchIntegrationByType`. */
 export interface IntegrationSettingsData {

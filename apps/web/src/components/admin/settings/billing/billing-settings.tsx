@@ -7,7 +7,7 @@ import type { BillingCatalogue, CustomerInvoice } from '@/lib/server/control-pla
 import { billingQueries, cancelPlanDowngradeFn } from '@/lib/client/queries/billing'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Button, NewTabHint } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { useFormatNumber } from '@/components/ui/format-number'
 import { useLocalDateFormatter, type LocalDateFormatter } from '@/components/ui/local-date'
@@ -31,7 +31,6 @@ import { UsageMeter } from './usage-meter'
 import { TrialExpiredBilling } from './trial-expired-billing'
 import { PlanDowngradeDialog } from './free-downgrade-dialog'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
-import { NewTabHint } from '@/components/ui/new-tab-hint'
 
 /** Workspace-local presentation of the control-plane billing projection. */
 export function BillingSettings() {
