@@ -199,4 +199,13 @@ describe('overviewMetricGridClass', () => {
     expect(overviewMetricGridClass(3)).toBe('grid-cols-1 sm:grid-cols-3')
     expect(overviewMetricGridClass(4)).toBe('grid-cols-2 lg:grid-cols-4')
   })
+
+  it('fills every row with five or six counts, leaving no empty cell', () => {
+    // Six: three rows of two on a phone, two rows of three above it.
+    expect(overviewMetricGridClass(6)).toBe('grid-cols-2 sm:grid-cols-3')
+    // Five: the last count takes the rest of its row, two of three columns or both of two.
+    expect(overviewMetricGridClass(5)).toBe(
+      'grid-cols-2 sm:grid-cols-3 [&>*:last-child]:col-span-2'
+    )
+  })
 })

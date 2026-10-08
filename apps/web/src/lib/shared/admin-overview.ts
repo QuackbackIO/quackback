@@ -147,12 +147,18 @@ export function buildOverviewMetrics(input: OverviewMetricsInput): OverviewMetri
   return metrics
 }
 
-/** Never 3-up on a phone — 3 skinny columns overflow the metric labels. */
+/**
+ * The counts card's columns: never 3-up on a phone, where 3 skinny columns
+ * overflow the metric labels, and every row full, since an empty cell shows
+ * as a grey block. With five, the last count takes the rest of its row.
+ */
 export function overviewMetricGridClass(count: number): string {
   if (count <= 1) return 'grid-cols-1'
+  if (count === 2) return 'grid-cols-2'
   if (count === 3) return 'grid-cols-1 sm:grid-cols-3'
-  if (count >= 4) return 'grid-cols-2 lg:grid-cols-4'
-  return 'grid-cols-2'
+  if (count === 4) return 'grid-cols-2 lg:grid-cols-4'
+  if (count === 5) return 'grid-cols-2 sm:grid-cols-3 [&>*:last-child]:col-span-2'
+  return 'grid-cols-2 sm:grid-cols-3'
 }
 
 export type OverviewMomentumItem = {
