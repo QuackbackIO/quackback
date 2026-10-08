@@ -166,3 +166,21 @@ it('saves edits made after a failed publish into the same draft before publishin
   expect(calls.published).toEqual(['kb_article_1', 'kb_article_1'])
   expect(onOpenChange).toHaveBeenCalledWith(false)
 })
+
+it('hands a published article back to a caller that keeps the person where they are', async () => {
+  const onPublished = vi.fn()
+  const onOpenChange = vi.fn()
+  render(<CreateArticleDialog open onOpenChange={onOpenChange} onPublished={onPublished} />)
+  await userEvent.setup().click(await screen.findByRole('button', { name: 'Publish' }))
+  await waitFor(() => expect(onPublished).toHaveBeenCalledWith('kb_article_1'))
+  expect(onOpenChange).toHaveBeenCalledWith(false)
+  expect(calls.navigate).not.toHaveBeenCalled()
+})
+
+it('still opens a saved draft in the editor, even for such a caller', async () => {
+  const onPublished = vi.fn()
+  render(<CreateArticleDialog open onOpenChange={() => {}} onPublished={onPublished} />)
+  await userEvent.setup().click(await screen.findByRole('button', { name: 'Save draft' }))
+  await waitFor(() => expect(calls.navigate).toHaveBeenCalledTimes(1))
+  expect(onPublished).not.toHaveBeenCalled()
+})

@@ -21,8 +21,14 @@ const CreateArticleDialog = lazy(() =>
   }))
 )
 
-/** Opens the article editor in place: setup seeded a category, so the first article saves. */
+/**
+ * Opens the article editor in place: setup seeded a category, so the first
+ * article saves. Publishing keeps the person where they are, says so, and
+ * lets the plan move on to its next step there.
+ */
 function WriteArticleButton({ variant }: { variant: 'default' | 'outline' }) {
+  const intl = useIntl()
+  const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   return (
     <>
@@ -31,7 +37,19 @@ function WriteArticleButton({ variant }: { variant: 'default' | 'outline' }) {
       </Button>
       {open ? (
         <Suspense fallback={null}>
-          <CreateArticleDialog open onOpenChange={setOpen} />
+          <CreateArticleDialog
+            open
+            onOpenChange={setOpen}
+            onPublished={() => {
+              toast.success(
+                intl.formatMessage({
+                  id: 'onboarding.launch.articlePublished',
+                  defaultMessage: 'Article published',
+                })
+              )
+              void queryClient.invalidateQueries({ queryKey: ['admin', 'onboarding'] })
+            }}
+          />
         </Suspense>
       ) : null}
     </>

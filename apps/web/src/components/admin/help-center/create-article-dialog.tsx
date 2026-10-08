@@ -32,11 +32,17 @@ interface CreateArticleDialogProps {
   /** Controlled open state. When provided, the built-in trigger button is hidden. */
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  /**
+   * Takes a published article in place of opening it in the editor, for a
+   * caller that keeps the person where they are. A saved draft still opens.
+   */
+  onPublished?: (articleId: string) => void
 }
 
 export function CreateArticleDialog({
   open: openProp,
   onOpenChange,
+  onPublished,
 }: CreateArticleDialogProps = {}) {
   const [internalOpen, setInternalOpen] = useState(false)
   const isControlled = openProp !== undefined
@@ -116,6 +122,10 @@ export function CreateArticleDialog({
         return
       }
       handleOpenChange(false)
+      if (publish && onPublished) {
+        onPublished(articleId)
+        return
+      }
       void navigate({ to: '/admin/help-center', search: { article: articleId } })
     })
   const handleSubmit = save(false)

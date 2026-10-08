@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 
 vi.mock('@tanstack/react-router', () => ({
@@ -9,6 +9,17 @@ vi.mock('@tanstack/react-router', () => ({
   ),
 }))
 
+const article = vi.hoisted(() => ({ toast: vi.fn() }))
+vi.mock('sonner', () => ({ toast: { success: article.toast, error: vi.fn() } }))
+vi.mock('@/components/admin/help-center/create-article-dialog', () => ({
+  CreateArticleDialog: ({ onPublished }: { onPublished?: (id: string) => void }) => (
+    <button type="button" onClick={() => onPublished?.('kb_article_1')}>
+      Publish
+    </button>
+  ),
+}))
+
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { LaunchStepAction } from '../launch-step-action'
 import { OPEN_GOING_LIVE_EVENT } from '../going-live-events'
 import type { LaunchStatus, LaunchTask } from '@/lib/shared/launch-checklist'
@@ -51,5 +62,28 @@ describe('a launch step done in place', () => {
     expect(screen.getByRole('link', { name: 'Start' }).getAttribute('href')).toBe(
       '/admin/settings/widget/install'
     )
+  })
+})
+
+describe('the first article, from the launch plan', () => {
+  it('publishes in place: a Published toast, and the plan moves on without leaving', async () => {
+    const client = new QueryClient()
+    client.setQueryData(['admin', 'onboarding'], {})
+    render(
+      <QueryClientProvider client={client}>
+        <IntlProvider locale="en" defaultLocale="en" onError={() => {}}>
+          <LaunchStepAction
+            task={task({ id: 'help-article', href: '/admin/help-center' })}
+            status={{} as LaunchStatus}
+            primary
+            onCreateBoard={() => {}}
+          />
+        </IntlProvider>
+      </QueryClientProvider>
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Write article' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Publish' }))
+    await waitFor(() => expect(article.toast).toHaveBeenCalledWith('Article published'))
+    expect(client.getQueryState(['admin', 'onboarding'])?.isInvalidated).toBe(true)
   })
 })
