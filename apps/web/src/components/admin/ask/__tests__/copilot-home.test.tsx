@@ -120,7 +120,7 @@ function Harness({
       threadKey={threadKey}
       canAsk={canAsk}
       header={<h1>Welcome, Acme</h1>}
-      locked={locked ? <a href="/admin/settings/billing">Upgrade</a> : undefined}
+      paused={locked ? <a href="/admin/settings/billing">See usage</a> : undefined}
       below={<p>Launch plan</p>}
     />
   )
@@ -226,17 +226,11 @@ describe('Home idle', () => {
     )
   })
 
-  it('greys out the composer without credits and offers the way to get them', async () => {
+  it('shows the paused message in the composer’s place, with nothing to type into', async () => {
     mount({ canAsk: false, locked: true })
-    const composer = screen.getByRole('textbox', { name: 'Ask Copilot', hidden: true })
-    expect(composer.closest('[inert]')).not.toBeNull()
-    expect(screen.getByRole('link', { name: 'Upgrade' })).not.toBeVisible()
-    fireEvent.mouseEnter(screen.getByRole('group', { name: 'Ask Copilot' }))
-    expect(screen.getByRole('link', { name: 'Upgrade' })).toBeVisible()
-    expect(screen.getByRole('link', { name: 'Upgrade' })).toHaveAttribute(
-      'href',
-      '/admin/settings/billing'
-    )
+    expect(screen.getByRole('link', { name: 'See usage' })).toBeVisible()
+    expect(screen.queryByRole('textbox', { name: 'Ask Copilot' })).toBeNull()
+    expect(screen.getByText('Launch plan')).toBeTruthy()
   })
 })
 

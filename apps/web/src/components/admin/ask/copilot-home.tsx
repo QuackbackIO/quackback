@@ -31,7 +31,6 @@ import {
 } from '@/lib/server/functions/workspace-copilot'
 import { AskMessages } from './ask-messages'
 import { ChatComposer } from './chat-composer'
-import { LockedComposer } from './locked-composer'
 import { ConnectorCallCard } from './connector-call-card'
 import { useSearchPalette, useSearchShortcutLabel } from './search-palette'
 import { WorkspaceAssistantMessage } from './workspace-assistant-message'
@@ -67,10 +66,10 @@ export interface CopilotHomeProps {
   canAsk: boolean
   header: ReactNode
   /**
-   * Copilot is out of AI credits: the composer shows greyed out, and this
-   * offer of a way to get more appears over it on hover, focus or tap.
+   * Copilot is paused for the period: this says so in the composer's place,
+   * in plain sight.
    */
-  locked?: ReactNode
+  paused?: ReactNode
   below?: ReactNode
 }
 
@@ -82,7 +81,7 @@ export function CopilotHome(props: CopilotHomeProps) {
   )
 }
 
-function CopilotHomeView({ threadKey, canAsk, header, locked, below }: CopilotHomeProps) {
+function CopilotHomeView({ threadKey, canAsk, header, paused, below }: CopilotHomeProps) {
   const intl = useIntl()
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -303,19 +302,7 @@ function CopilotHomeView({ threadKey, canAsk, header, locked, below }: CopilotHo
               />
             )}
           </div>
-          {!canAsk && locked && !inChat && (
-            <LockedComposer overlay={locked}>
-              <ChatComposer
-                query=""
-                onQueryChange={() => {}}
-                canAsk={false}
-                busy={false}
-                onAsk={() => {}}
-                onStop={() => {}}
-                autoFocus={false}
-              />
-            </LockedComposer>
-          )}
+          {!canAsk && paused && !inChat ? paused : null}
           {canAsk && (
             <div
               ref={composer}

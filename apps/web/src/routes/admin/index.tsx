@@ -4,8 +4,12 @@ import { useQuery } from '@tanstack/react-query'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { HomeActions } from '@/components/admin/home-actions'
 import { HomeLoadingFrame } from '@/components/admin/home-frame'
-import { copilotAvailabilityQuery, useCopilotHome } from '@/components/admin/ask/copilot-on-home'
-import { CopilotCreditsLock } from '@/components/admin/ask/copilot-credits-lock'
+import {
+  copilotAvailabilityQuery,
+  homeCopilotState,
+  useCopilotHome,
+} from '@/components/admin/ask/copilot-on-home'
+import { CopilotPaused } from '@/components/admin/ask/copilot-paused'
 import { OverviewCounts, OverviewDashboard } from '@/components/admin/admin-overview'
 import { HomeLaunchArea, HomeTourArea } from '@/components/onboarding/home-try-it'
 import { HomeGreeting } from '@/components/onboarding/home-greeting'
@@ -57,7 +61,10 @@ export const Route = createFileRoute('/admin/')({
             .ensureQueryData(copilotAvailabilityQuery(context.principal?.id))
             .catch(() => null)
         : null
-    if (!copilot?.enabled) await context.queryClient.ensureQueryData(adminOverviewQueries.get())
+    // Without Copilot on Home (no AI set up, or no AI allowance), Home is the overview.
+    if (homeCopilotState(copilot, true).kind === 'off') {
+      await context.queryClient.ensureQueryData(adminOverviewQueries.get())
+    }
     return { modulesChanged, launchMessages: await launchMessages }
   },
   component: AdminOverviewPage,
@@ -85,8 +92,8 @@ function AdminHome() {
   const settings = useWorkspaceSettings()
   const copilot = useCopilotHome()
   const copilotOnHome = copilot.onHome
-  // Out of AI credits, Copilot stays on Home greyed out, with the way to get more.
-  const locked = copilotOnHome && copilot.credits !== 'available' ? copilot.credits : null
+  // With this period's AI allowance used, Copilot stays on Home and says until when.
+  const paused = copilot.state.kind === 'paused' ? copilot.state : null
   const canUseCopilot = useHasPermission(PERMISSIONS.COPILOT_USE)
   const canSeeTeam = useHasPermission(PERMISSIONS.MEMBER_VIEW)
   const admin = isAdmin(userRole)
@@ -119,9 +126,9 @@ function AdminHome() {
       <Suspense fallback={copilotThread ? null : <HomeLoadingFrame header={header} />}>
         <CopilotHome
           threadKey={copilotThread}
-          canAsk={copilotOnHome && !locked}
+          canAsk={copilotOnHome && !paused}
           header={header}
-          locked={locked ? <CopilotCreditsLock credits={locked} /> : undefined}
+          paused={paused ? <CopilotPaused resetsAt={paused.resetsAt} /> : undefined}
           below={
             <>
               {plan}

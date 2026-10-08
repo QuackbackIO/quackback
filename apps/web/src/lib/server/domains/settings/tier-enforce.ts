@@ -1,6 +1,6 @@
 import { TierLimitError } from '../../errors/tier-limit-error'
 import { getAiBudgetStatus } from '../ai/ai-budget'
-import { aiCreditsState, type AiCreditsState } from '@/lib/shared/billing/ai-credits'
+import { aiAllowance, type AiCreditsState } from '@/lib/shared/billing/ai-credits'
 import { getTierLimits } from './tier-limits.service'
 import type { TierFeatureFlags } from './tier-limits.types'
 import { db, emailSendingDomains, isNull, sql, statusComponents } from '@/lib/server/db'
@@ -157,11 +157,14 @@ export async function enforceAiTokenBudget(): Promise<void> {
 /**
  * Whether AI can run in the current allowance window (the calendar month, or
  * the whole trial while one runs): no cap, under the cap, none on the plan, or
- * used up.
+ * used up, and when a used-up allowance comes back.
  */
-export async function aiCreditsNow(): Promise<AiCreditsState> {
+export async function aiAllowanceNow(): Promise<{
+  credits: AiCreditsState
+  resetsAt: string | null
+}> {
   const status = await getAiBudgetStatus()
-  return aiCreditsState(status.cap, status.used)
+  return aiAllowance(status.cap, status.used, status.window.end)
 }
 
 /** True when {@link enforceAiTokenBudget} would not throw. */
