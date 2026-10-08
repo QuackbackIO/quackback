@@ -29,10 +29,12 @@ import { principalShownName } from '@/lib/shared/greeting-name'
 
 export interface FirstWinSummary {
   kind: 'idea' | 'vote' | 'teamIdea' | 'conversation' | 'helpful' | 'subscriber'
-  /** The person's name, when they gave one. */
+  /** The person's name, or the name a signed-out visitor was given. */
   name: string | null
-  /** A signed-out visitor, who left no name or email. */
+  /** A signed-out visitor: any name is one generated for them, not theirs. */
   visitor?: boolean
+  /** Their picture, when they have one. */
+  avatarUrl: string | null
   /** Their email's domain, which names their company. */
   domain: string | null
   /** The idea or article title, or the start of the message. */
@@ -55,17 +57,23 @@ interface Who {
   displayName: string | null
   userName: string | null
   email: string | null
+  avatarUrl: string | null
 }
 
-/** Who acted, by the shown-name rule; an anonymous visitor without a name is just a visitor. */
-function nameOf(row: Who): { name: string | null; visitor?: true } {
+/**
+ * Who acted, by the shown-name rule. A signed-out visitor is marked as one,
+ * so a generated name is never read as theirs.
+ */
+function nameOf(row: Who): { name: string | null; avatarUrl: string | null; visitor?: true } {
   const name = principalShownName({
     type: row.principalType,
     displayName: row.displayName,
     name: row.userName,
     email: row.email,
   })
-  return name === null && row.principalType === 'anonymous' ? { name, visitor: true } : { name }
+  return row.principalType === 'anonymous'
+    ? { name, avatarUrl: null, visitor: true }
+    : { name, avatarUrl: row.avatarUrl }
 }
 
 function snippet(text: string | null): string | null {
@@ -82,6 +90,7 @@ export async function firstWinSummary(state: SetupState | null): Promise<FirstWi
     displayName: principal.displayName,
     userName: user.name,
     email: user.email,
+    avatarUrl: principal.avatarUrl,
   }
 
   if (outcome === 'customer_support') {

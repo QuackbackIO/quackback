@@ -65,6 +65,10 @@ it('names the customer and the idea, never a teammate', async () => {
     .returning()
   const owner = await person('admin', 'Sam Rivera', `sam-${createId('user')}@acme.example`)
   const ana = await person('user', 'Ana Silva', `ana-${createId('user')}@northwind.example`)
+  await testDb
+    .update(principal)
+    .set({ avatarUrl: 'https://cdn.example/ana.png' })
+    .where(eq(principal.id, ana))
   await testDb.insert(posts).values([
     {
       boardId: board!.id,
@@ -89,7 +93,9 @@ it('names the customer and the idea, never a teammate', async () => {
     domain: 'northwind.example',
     subject: 'Export to CSV',
     votes: 1,
+    avatarUrl: 'https://cdn.example/ana.png',
   })
+  expect(summary?.visitor).toBeUndefined()
   expect(summary?.href).toMatch(/^\/admin\/feedback\?post=post_/)
 })
 
@@ -322,6 +328,7 @@ it('names the article a signed-out visitor found helpful', async () => {
     name: null,
     domain: null,
     visitor: true,
+    avatarUrl: null,
     subject: 'How do I reset my password?',
     at: '2026-10-01T10:00:00.000Z',
     href: `/admin/help-center?article=${article!.id}`,
@@ -340,7 +347,7 @@ async function anonymousVisitor(displayName: string | null) {
   return id
 }
 
-it('names an anonymous idea by the visitor generated name, else as a visitor', async () => {
+it('marks an anonymous idea as a visitor’s, keeping any generated name', async () => {
   const [board] = await testDb
     .insert(boards)
     .values({ name: 'Ideas', slug: createId('board') })
@@ -353,9 +360,14 @@ it('names an anonymous idea by the visitor generated name, else as a visitor', a
     content: '',
     createdAt: new Date('2026-10-01T10:00:00Z'),
   })
-  const named = await firstWinSummary(state(['product_feedback']))
-  expect(named).toMatchObject({ kind: 'idea', name: 'Snowy Cardinal', domain: null })
-  expect(named?.visitor).toBeUndefined()
+  // The generated name is kept, marked as a visitor's so it never reads as theirs.
+  expect(await firstWinSummary(state(['product_feedback']))).toMatchObject({
+    kind: 'idea',
+    name: 'Snowy Cardinal',
+    domain: null,
+    visitor: true,
+    avatarUrl: null,
+  })
 
   await testDb.delete(posts).where(eq(posts.principalId, snowy))
   const nameless = await anonymousVisitor(null)

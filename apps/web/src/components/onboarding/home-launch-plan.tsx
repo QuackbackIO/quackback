@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
-import { HomeFirstWin } from './home-first-win'
+import { HomeFirstWin, HomePlanDone } from './home-first-win'
 import { HomeNextStep } from './home-next-step'
 import { HomeTourPrompt } from './home-tour-prompt'
 import { useProductTour } from '@/components/onboarding/product-tour'
@@ -13,7 +13,7 @@ import {
 import { CreateBoardDialog } from '@/components/admin/settings/boards/create-board-dialog'
 import { AutomaticBrandingNotice } from '@/components/admin/branding/automatic-branding-notice'
 import { useAutomaticWebsiteBranding } from '@/components/admin/branding/use-automatic-website-branding'
-import { isLaunchPlanActive, launchPath } from '@/lib/shared/launch-checklist'
+import { isLaunchPlanActive, launchPath, openLaterSteps } from '@/lib/shared/launch-checklist'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { launchStatusQuery, useLaunchTaskResolution } from './use-launch-plan'
 
@@ -21,7 +21,7 @@ const PROGRESS_KEY = ['onboarding', 'progress'] as const
 const FIRST_WIN_KEY = ['onboarding', 'first-win'] as const
 type Progress = Awaited<ReturnType<typeof getOnboardingProgressFn>>
 
-/** Home's first-run area: the celebration, and the launch plan card. */
+/** Home's first-run area: the launch plan card, then the celebration and the finished plan's row. */
 export function HomeGettingStarted({
   portalUrl,
   member = false,
@@ -53,10 +53,11 @@ export function HomeGettingStarted({
     onMutate: () => queryClient.setQueryData(FIRST_WIN_KEY, null),
   })
   const planShown = !member && inWindow && isLaunchPlanActive(statusQuery.data)
-  const handOver =
-    launchPath(statusQuery.data).later.find(
-      (task) => !task.isCompleted && !task.isSkipped && task.availability !== 'blocked'
-    ) ?? null
+  // Once the plan is done, a quiet line keeps the optional steps in reach
+  // until each is done or skipped. Only a workspace that had a launch plan.
+  const path = launchPath(statusQuery.data)
+  const optional =
+    !member && statusQuery.data.launchWindow && path.complete ? openLaterSteps(path).length : 0
   // The lookup starts only while its notice has a live launch plan to sit in.
   const branding = useAutomaticWebsiteBranding({ enabled: planShown })
   const brandingShown =
@@ -78,11 +79,11 @@ export function HomeGettingStarted({
       {firstWin.data ? (
         <HomeFirstWin
           summary={firstWin.data.summary}
-          next={handOver}
           pending={dismissWin.isPending}
           onDismiss={() => dismissWin.mutate()}
         />
       ) : null}
+      {optional > 0 ? <HomePlanDone optional={optional} /> : null}
       {planShown ? (
         <HomeNextStep
           status={statusQuery.data}

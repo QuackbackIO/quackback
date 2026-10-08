@@ -138,7 +138,8 @@ describe('Home first-run cards', () => {
     await waitFor(() => expect(client.getQueryData(['onboarding', 'progress'])).toBeDefined())
     expect(screen.queryByText('New here? Take the 60-second tour')).toBeNull()
     expect(screen.queryByText(/Launch plan ·/)).toBeNull()
-    expect(screen.queryByRole('region', { name: 'First win' })).toBeNull()
+    expect(screen.queryByRole('region', { name: /first customer/ })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Launch plan done.' })).toBeNull()
     expect(hoisted.card).not.toHaveBeenCalled()
   })
 
@@ -193,7 +194,7 @@ describe('Home first-run cards', () => {
     expect(screen.queryByText('New here? Take the 60-second tour')).toBeNull()
   })
 
-  it('names the first win: who, on what, a link to it, and the next step', async () => {
+  it('celebrates the first win, and keeps a quiet row to the optional steps', async () => {
     hoisted.status = status({ goals: ['product_feedback'], hasFirstWin: true })
     hoisted.card.mockResolvedValue({
       summary: {
@@ -202,32 +203,56 @@ describe('Home first-run cards', () => {
         domain: 'northwind.com',
         subject: 'Export to CSV',
         votes: 1,
+        avatarUrl: null,
         at: new Date(NOW).toISOString(),
         href: '/admin/feedback?post=post_1',
       },
     })
     mount()
-    const card = await screen.findByRole('region', { name: 'First win' })
-    expect(card).toHaveTextContent('Ana from northwind.com posted an idea')
-    expect(card).toHaveTextContent('Export to CSV · 1 vote')
+    const card = await screen.findByRole('region', { name: 'Your first customer idea is in' })
+    expect(card).toHaveTextContent('Ana from northwind.com · 1 vote')
+    expect(card).toHaveTextContent('Export to CSV')
     expect(within(card).getByRole('link', { name: 'View idea' })).toHaveAttribute(
       'href',
       '/admin/feedback?post=post_1'
     )
-    expect(within(card).getByText(/^Next:/)).toBeVisible()
-    // The plan is done: Home no longer leads with a launch step.
+    // The plan is done: Home no longer leads with a launch step, and says so once.
     expect(screen.queryByText(/Launch plan ·/)).toBeNull()
+    const done = screen.getByRole('region', { name: 'Launch plan done.' })
+    expect(within(done).getByRole('link', { name: '4 optional steps' })).toHaveAttribute(
+      'href',
+      '/admin/getting-started'
+    )
   })
 
-  it('keeps the card until it is dismissed', async () => {
+  it('keeps the plan row after the card is dismissed', async () => {
     hoisted.status = status({ hasFirstWin: true })
     hoisted.card.mockResolvedValue({ summary: null })
     mount()
-    const card = await screen.findByRole('region', { name: 'First win' })
-    expect(card).toHaveTextContent('Your first customer is here')
+    const card = await screen.findByRole('region', { name: 'Your first customer is here' })
     fireEvent.click(within(card).getByRole('button', { name: 'Dismiss' }))
     await waitFor(() => expect(hoisted.dismissWin).toHaveBeenCalledTimes(1))
-    await waitFor(() => expect(screen.queryByRole('region', { name: 'First win' })).toBeNull())
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: 'Your first customer is here' })).toBeNull()
+    )
+    expect(screen.getByRole('region', { name: 'Launch plan done.' })).toBeVisible()
+  })
+
+  it('lets the plan row go once every optional step is done or skipped', async () => {
+    const skipped = { resolution: 'dismissed' as const, resolvedAt: new Date(NOW).toISOString() }
+    hoisted.status = status({
+      hasFirstWin: true,
+      hasWidgetInstalled: true,
+      hasWidgetEnabled: true,
+      hasBranding: true,
+      memberCount: 2,
+      publicBoardLinkCopiedAt: new Date(NOW).toISOString(),
+      taskResolutions: { customer_support: { 'connect-integration': skipped } },
+    })
+    hoisted.card.mockResolvedValue({ summary: null })
+    mount()
+    await screen.findByRole('region', { name: 'Your first customer is here' })
+    expect(screen.queryByRole('region', { name: 'Launch plan done.' })).toBeNull()
   })
 
   it('does not ask for the card before a first win', async () => {
@@ -241,7 +266,7 @@ describe('Home first-run cards', () => {
     hoisted.status = status({ hasFirstWin: true })
     hoisted.card.mockResolvedValue({ summary: null })
     const { client } = mount()
-    await screen.findByRole('region', { name: 'First win' })
+    await screen.findByRole('region', { name: 'Your first customer is here' })
     await waitFor(() => expect(client.getQueryData(['onboarding', 'progress'])).toBeDefined())
     expect(screen.queryByText('New here? Take the 60-second tour')).toBeNull()
   })
