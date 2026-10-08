@@ -67,6 +67,13 @@ export function OnboardingHeading({
   )
 }
 
+/**
+ * A setup text field: 48px, rounded, 16px text. An invalid field keeps a grey
+ * focus ring beside its red border, so focus never vanishes into the error.
+ */
+export const SETUP_FIELD_CLASS =
+  'h-12 rounded-xl px-4 text-base aria-invalid:focus-visible:ring-2 aria-invalid:focus-visible:ring-ring aria-invalid:focus-visible:ring-offset-2 aria-invalid:focus-visible:ring-offset-background'
+
 /** The lead paragraph under a setup heading. */
 export function OnboardingLead({ children }: { children: ReactNode }) {
   return (
