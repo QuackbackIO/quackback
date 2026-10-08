@@ -1236,6 +1236,12 @@
   "onboarding.account.inProgress.lead": "Настройка здесь уже начата. Войдите в созданный вами аккаунт, чтобы продолжить с того места, где остановились.",
   "onboarding.account.inProgress.notOwner": "Настройкой занимается кто-то другой? Попросите этого человека пригласить вас, когда настройка будет завершена.",
   "onboarding.account.inProgress.title": "Войдите, чтобы завершить настройку",
+  "onboarding.account.methodsDescription": "Создайте аккаунт администратора, чтобы настроить это рабочее пространство.",
+  "onboarding.account.returning.back": "Вместо этого создать новый аккаунт",
+  "onboarding.account.returning.lead": "Войдите в аккаунт, созданный здесь, чтобы завершить настройку.",
+  "onboarding.account.returning.title": "С возвращением",
+  "onboarding.account.signIn": "Войти",
+  "onboarding.account.startedSetup": "Уже начали настройку?",
   "onboarding.workspace.alreadyFinished": "Настройка уже завершена.",
   "onboarding.workspace.signIn": "Войти",
   "onboarding.workspace.signedOut": "Вы вышли из аккаунта. Войдите, чтобы завершить настройку."

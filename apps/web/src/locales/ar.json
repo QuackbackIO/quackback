@@ -1236,6 +1236,12 @@
   "onboarding.account.inProgress.lead": "بدأ الإعداد هنا. سجّل الدخول بالحساب الذي أنشأته لتكمل من حيث توقفت.",
   "onboarding.account.inProgress.notOwner": "هل يتولى شخص آخر الإعداد؟ اطلب منه دعوتك بعد اكتمال الإعداد.",
   "onboarding.account.inProgress.title": "سجّل الدخول لإكمال الإعداد",
+  "onboarding.account.methodsDescription": "أنشئ حساب المسؤول لإعداد مساحة العمل هذه.",
+  "onboarding.account.returning.back": "إنشاء حساب جديد بدلًا من ذلك",
+  "onboarding.account.returning.lead": "سجّل الدخول بالحساب الذي أنشأته هنا لإكمال الإعداد.",
+  "onboarding.account.returning.title": "مرحبًا بعودتك",
+  "onboarding.account.signIn": "تسجيل الدخول",
+  "onboarding.account.startedSetup": "هل بدأت الإعداد بالفعل؟",
   "onboarding.workspace.alreadyFinished": "اكتمل الإعداد بالفعل.",
   "onboarding.workspace.signIn": "تسجيل الدخول",
   "onboarding.workspace.signedOut": "تم تسجيل خروجك. سجّل الدخول لإكمال الإعداد."

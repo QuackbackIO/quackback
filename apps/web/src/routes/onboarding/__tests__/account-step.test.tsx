@@ -32,6 +32,7 @@ import {
 } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import { DEFAULT_AUTH_CONFIG } from '@/lib/shared/types/settings'
+import { loadMessages } from '@/lib/shared/i18n'
 
 const navigate = vi.fn()
 const invalidate = vi.fn(async () => {})
@@ -457,6 +458,38 @@ describe('account step — a self-hosted first user', () => {
       expect(screen.getByRole('button', { name: /continue with email/i })).toBeInTheDocument()
     )
     expect(screen.queryByText(/sign-ups are off/i)).toBeNull()
+  })
+})
+
+// A translated visitor sees each screen in one language: every string the
+// first-user form and its way back in render is in the catalogue.
+describe('account step: in a translated locale', () => {
+  it('renders the first-user screen and the way back in from the German catalogue', async () => {
+    const de = await loadMessages('de')
+    const props = preStamped()
+    props.authConfig.signInOAuth = { password: true, github: true }
+    rtlRender(
+      <IntlProvider locale="de" defaultLocale="en" messages={de} onError={() => {}}>
+        <AccountStep {...props} />
+      </IntlProvider>
+    )
+
+    expect(
+      screen.getByText('Erstelle dein Admin-Konto, um diesen Workspace einzurichten.')
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Schon mit der Einrichtung begonnen\?/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Anmelden' }))
+
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Willkommen zurück')
+    expect(
+      screen.getByText(
+        'Melde dich mit dem Konto an, das du hier erstellt hast, um die Einrichtung abzuschließen.'
+      )
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Stattdessen ein neues Konto erstellen' })
+    ).toBeInTheDocument()
   })
 })
 

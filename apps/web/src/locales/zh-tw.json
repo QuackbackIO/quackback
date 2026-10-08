@@ -1236,6 +1236,12 @@
   "onboarding.account.inProgress.lead": "此處的設定已經開始。請使用你建立的帳戶登入，從上次中斷的地方繼續。",
   "onboarding.account.inProgress.notOwner": "是別人在設定？請對方在設定完成後邀請你。",
   "onboarding.account.inProgress.title": "登入以完成設定",
+  "onboarding.account.methodsDescription": "建立你的管理員帳戶以設定此工作區。",
+  "onboarding.account.returning.back": "改為建立新帳戶",
+  "onboarding.account.returning.lead": "請使用你在此建立的帳戶登入以完成設定。",
+  "onboarding.account.returning.title": "歡迎回來",
+  "onboarding.account.signIn": "登入",
+  "onboarding.account.startedSetup": "已經開始設定了？",
   "onboarding.workspace.alreadyFinished": "設定已完成。",
   "onboarding.workspace.signIn": "登入",
   "onboarding.workspace.signedOut": "你已登出。請登入以完成設定。"

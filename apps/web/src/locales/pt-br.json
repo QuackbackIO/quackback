@@ -1236,6 +1236,12 @@
   "onboarding.account.inProgress.lead": "A configuração já começou aqui. Entre com a conta que você criou para continuar de onde parou.",
   "onboarding.account.inProgress.notOwner": "Outra pessoa está configurando? Peça para ela convidar você quando a configuração terminar.",
   "onboarding.account.inProgress.title": "Entre para concluir a configuração",
+  "onboarding.account.methodsDescription": "Crie sua conta de administrador para configurar este workspace.",
+  "onboarding.account.returning.back": "Criar uma nova conta em vez disso",
+  "onboarding.account.returning.lead": "Entre com a conta que você criou aqui para concluir a configuração.",
+  "onboarding.account.returning.title": "Bem-vindo de volta",
+  "onboarding.account.signIn": "Entrar",
+  "onboarding.account.startedSetup": "Já começou a configuração?",
   "onboarding.workspace.alreadyFinished": "A configuração já foi concluída.",
   "onboarding.workspace.signIn": "Entrar",
   "onboarding.workspace.signedOut": "Sua sessão foi encerrada. Entre para concluir a configuração."

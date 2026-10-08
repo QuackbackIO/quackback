@@ -1236,6 +1236,12 @@
   "onboarding.account.inProgress.lead": "Setup has started here. Sign in with the account you created to pick up where you left off.",
   "onboarding.account.inProgress.notOwner": "Someone else setting this up? Ask them to invite you once setup is done.",
   "onboarding.account.inProgress.title": "Sign in to finish setting up",
+  "onboarding.account.methodsDescription": "Create your admin account to set up this workspace.",
+  "onboarding.account.returning.back": "Create a new account instead",
+  "onboarding.account.returning.lead": "Sign in with the account you created here to finish setting up.",
+  "onboarding.account.returning.title": "Welcome back",
+  "onboarding.account.signIn": "Sign in",
+  "onboarding.account.startedSetup": "Already started setting up?",
   "onboarding.workspace.alreadyFinished": "Setup is already finished.",
   "onboarding.workspace.signIn": "Sign in",
   "onboarding.workspace.signedOut": "You were signed out. Sign in to finish setting up."

@@ -1236,6 +1236,12 @@
   "onboarding.account.inProgress.lead": "此处的设置已经开始。请使用你创建的账户登录，从上次中断的地方继续。",
   "onboarding.account.inProgress.notOwner": "是别人在设置？请对方在设置完成后邀请你。",
   "onboarding.account.inProgress.title": "登录以完成设置",
+  "onboarding.account.methodsDescription": "创建你的管理员账户以设置此工作区。",
+  "onboarding.account.returning.back": "改为创建新账户",
+  "onboarding.account.returning.lead": "请使用你在此创建的账户登录以完成设置。",
+  "onboarding.account.returning.title": "欢迎回来",
+  "onboarding.account.signIn": "登录",
+  "onboarding.account.startedSetup": "已经开始设置了？",
   "onboarding.workspace.alreadyFinished": "设置已完成。",
   "onboarding.workspace.signIn": "登录",
   "onboarding.workspace.signedOut": "你已退出登录。请登录以完成设置。"
