@@ -489,18 +489,18 @@ function WorkspaceNameStep({
           required={goalsRequired}
         />
 
-        <div aria-live="polite" aria-atomic="true" className="empty:hidden">
-          {error && (
-            <p
-              role="alert"
-              className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-            >
-              {error}
-            </p>
-          )}
-        </div>
-
         <SetupActions>
+          {/* Inside the pinned bar, so a refusal is never below the fold or under it. */}
+          <div aria-live="polite" aria-atomic="true" className="mb-3 empty:hidden">
+            {error && (
+              <p
+                role="alert"
+                className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+              >
+                {error}
+              </p>
+            )}
+          </div>
           <Button
             type="submit"
             disabled={isLoading}

@@ -340,4 +340,18 @@ describe('self-hosted ready step', () => {
     await waitFor(() => expect(screen.queryByText('Checking your install…')).toBeNull())
     expect(screen.queryByText('Your install')).toBeNull()
   })
+
+  // The create button is pinned to the window on a short screen. A refusal
+  // shown in the form above it would land below the fold or under the bar.
+  it('shows a server refusal in the pinned bar, above the button', async () => {
+    const user = userEvent.setup()
+    hoisted.save.mockRejectedValue(new Error('Authentication required'))
+    renderStep({ managedFieldPaths: [], goals: ['product_feedback'] })
+    await user.click(screen.getByRole('button', { name: 'Create workspace' }))
+
+    const alert = await screen.findByText('Authentication required')
+    const button = screen.getByRole('button', { name: 'Create workspace' })
+    expect(button.parentElement).toContainElement(alert)
+    expect(alert.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
 })
