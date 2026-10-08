@@ -282,4 +282,25 @@ describe('launch plan strings', () => {
     expect(Object.keys(launch).length).toBeGreaterThan(60)
     expect(Object.keys(launch).every(isLaunchMessage)).toBe(true)
   })
+
+  it("keep Home's counts and the first win's copy-link buttons out of other pages", async () => {
+    const [all, launch] = await Promise.all([loadMessages('de'), loadLaunchMessages('de')])
+    const seeded = adminSeedMessages(all)
+    expect(Object.keys(seeded).filter((key) => key.startsWith('admin.overview.'))).toEqual([])
+    for (const key of [
+      'admin.overview.metric.waiting',
+      'admin.overview.empty.feedback',
+      'onboarding.launch.copyHelpCenterLink',
+      'onboarding.launch.helpCenterLinkCopied',
+      'onboarding.launch.copyStatusLink',
+      'onboarding.launch.copyFailed',
+    ]) {
+      expect(seeded[key]).toBeUndefined()
+      expect(launch[key]).toBe(all[key])
+    }
+    // The tour's end card offers it on any page.
+    expect(seeded['onboarding.goalAction.installMessenger']).toBe(
+      all['onboarding.goalAction.installMessenger']
+    )
+  })
 })

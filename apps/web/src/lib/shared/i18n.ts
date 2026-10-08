@@ -267,10 +267,10 @@ export async function loadSheetMessages(locale: SupportedLocale): Promise<Record
 
 /**
  * Strings only Home and the Launch plan page render: the plan and its steps,
- * the next step and first win cards, the greeting. Those two routes load them
- * as they load (see `LaunchMessages`), so every other admin page leaves them
- * out of its seed. The sidebar dock and the tour's end card, on every page,
- * keep the few they render.
+ * the next step and first win cards, the greeting, Home's counts. Those two
+ * routes load them as they load (see `LaunchMessages`), so every other admin
+ * page leaves them out of its seed. The sidebar dock and the tour's end card,
+ * on every page, keep the few they render.
  */
 const LAUNCH_MESSAGE_PREFIXES = [
   'onboarding.task.',
@@ -279,6 +279,7 @@ const LAUNCH_MESSAGE_PREFIXES = [
   'onboarding.path.',
   'onboarding.launch.',
   'onboarding.branding.',
+  'admin.overview.',
 ] as const
 const SEEDED_LAUNCH_MESSAGES: ReadonlySet<string> = new Set([
   'onboarding.launch.name',

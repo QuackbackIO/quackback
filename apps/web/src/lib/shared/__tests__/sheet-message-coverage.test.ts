@@ -22,9 +22,11 @@ function walk(dir: string): string[] {
   return out
 }
 
-/** Every dotted `onboarding.` id a file names, template prefixes included. */
+/** Every dotted `onboarding.` or `admin.overview.` id a file names, template prefixes included. */
 function messageIds(source: string): string[] {
-  return [...source.matchAll(/['"`](onboarding\.[\w-]+\.[\w.-]*)/g)].map((m) => m[1])
+  return [...source.matchAll(/['"`]((?:onboarding|admin\.overview)\.[\w-]+\.?[\w.-]*)/g)].map(
+    (m) => m[1]
+  )
 }
 
 function namedOutside(isMember: (key: string) => boolean, owners: ReadonlySet<string>): string[] {
@@ -56,9 +58,12 @@ describe('lazily loaded strings', () => {
       'components/onboarding/home-launch-chips.tsx',
       'components/onboarding/home-next-step.tsx',
       'components/onboarding/home-first-win.tsx',
+      // The first win's copy-link buttons; the tour end card names none.
+      'components/onboarding/goal-actions.tsx',
       'components/onboarding/launch-plan-page.tsx',
       'components/onboarding/launch-step-action.tsx',
       'components/onboarding/launch-task-label.tsx',
+      'components/admin/admin-overview.tsx',
       'components/admin/branding/automatic-branding-notice.tsx',
       'components/admin/branding/use-automatic-website-branding.ts',
       'lib/shared/launch-checklist.ts',

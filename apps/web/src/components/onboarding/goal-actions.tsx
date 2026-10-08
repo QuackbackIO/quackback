@@ -105,19 +105,19 @@ const PORTAL_LINKS = {
   helpCenter: {
     path: '/hc',
     label: {
-      id: 'onboarding.goalAction.copyHelpCenterLink',
+      id: 'onboarding.launch.copyHelpCenterLink',
       defaultMessage: 'Copy help center link',
     },
     copied: {
-      id: 'onboarding.goalAction.helpCenterLinkCopied',
+      id: 'onboarding.launch.helpCenterLinkCopied',
       defaultMessage: 'Help center link copied',
     },
   },
   status: {
     path: '/status',
-    label: { id: 'onboarding.goalAction.copyStatusLink', defaultMessage: 'Copy status link' },
+    label: { id: 'onboarding.launch.copyStatusLink', defaultMessage: 'Copy status link' },
     copied: {
-      id: 'onboarding.goalAction.statusLinkCopied',
+      id: 'onboarding.launch.statusLinkCopied',
       defaultMessage: 'Status page link copied',
     },
   },
@@ -150,7 +150,7 @@ function CopyPortalLinkButton({
         } catch {
           toast.error(
             intl.formatMessage({
-              id: 'onboarding.goalAction.copyFailed',
+              id: 'onboarding.launch.copyFailed',
               defaultMessage: 'Could not copy the link. Try again.',
             })
           )
