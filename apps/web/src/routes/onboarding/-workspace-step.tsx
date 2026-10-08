@@ -70,7 +70,7 @@ export function WorkspaceStep({
     )
   }
   if (!cloudIdentity) return <CloudIdentityUnavailable />
-  return <CloudWorkspaceDetailsStep identity={cloudIdentity} />
+  return <CloudWorkspaceDetailsStep identity={cloudIdentity} goals={setupGoals?.goals} />
 }
 
 function CloudIdentityUnavailable() {
@@ -97,7 +97,15 @@ function CloudIdentityUnavailable() {
 }
 
 /** The cloud form's panel: the portal at the name and address being typed. */
-function CloudPreviewPanel({ name, hostname }: { name: string; hostname: string }) {
+function CloudPreviewPanel({
+  name,
+  hostname,
+  goals,
+}: {
+  name: string
+  hostname: string
+  goals?: OnboardingOutcome[]
+}) {
   return (
     <OnboardingPreviewPanel
       caption={
@@ -107,12 +115,15 @@ function CloudPreviewPanel({ name, hostname }: { name: string; hostname: string 
         />
       }
     >
-      <PortalPreview name={name} hostname={hostname} />
+      <PortalPreview name={name} hostname={hostname} goals={goals?.length ? goals : undefined} />
     </OnboardingPreviewPanel>
   )
 }
 
-export function CloudWorkspaceDetailsStep(props: { identity: CloudIdentity }) {
+export function CloudWorkspaceDetailsStep(props: {
+  identity: CloudIdentity
+  goals?: OnboardingOutcome[]
+}) {
   const navigate = useNavigate()
 
   async function continueToHome(transfer?: {
@@ -140,11 +151,12 @@ export function CloudWorkspaceDetailsStep(props: { identity: CloudIdentity }) {
     )
   }
 
-  return <CloudWorkspaceDetailsForm identity={props.identity} onSave={save} />
+  return <CloudWorkspaceDetailsForm identity={props.identity} goals={props.goals} onSave={save} />
 }
 
 export function CloudWorkspaceDetailsForm(props: {
   identity: CloudIdentity
+  goals?: OnboardingOutcome[]
   onSave: (input: { displayName: string; platformLabel: string }) => Promise<void>
 }) {
   const [displayName, setDisplayName] = useState(props.identity.displayName)
@@ -181,6 +193,7 @@ export function CloudWorkspaceDetailsForm(props: {
     <OnboardingSplit
       panel={
         <CloudPreviewPanel
+          goals={props.goals}
           name={displayName.trim()}
           hostname={platformLabel.trim() ? `${platformLabel.trim()}.${domainSuffix}` : ''}
         />

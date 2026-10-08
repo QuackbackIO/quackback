@@ -11,7 +11,7 @@ vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ invalidate: vi.fn() }),
 }))
 
-import { CloudWorkspaceDetailsForm } from '../-workspace-step'
+import { CloudWorkspaceDetailsForm, WorkspaceStep } from '../-workspace-step'
 
 /** The wizard always renders under the onboarding IntlProvider. */
 function render(ui: ReactElement) {
@@ -96,5 +96,34 @@ describe('cloud post-handoff onboarding', () => {
 
     expect(screen.getByText('.quackback.co.uk')).toBeInTheDocument()
     expect(screen.queryByText('.example.com')).not.toBeInTheDocument()
+  })
+
+  it('previews the portal the workspace was provisioned for', () => {
+    render(
+      <WorkspaceStep
+        isCloudProvisioned
+        cloudIdentity={IDENTITY}
+        existingWorkspaceName=""
+        managedFieldPaths={[]}
+        setupGoals={{ goals: ['customer_support'] }}
+      />
+    )
+
+    expect(screen.getByText('Support')).toBeInTheDocument()
+    expect(screen.queryByText('Changelog')).not.toBeInTheDocument()
+  })
+
+  it('previews a feedback portal when no goals were provisioned', () => {
+    render(
+      <WorkspaceStep
+        isCloudProvisioned
+        cloudIdentity={IDENTITY}
+        existingWorkspaceName=""
+        managedFieldPaths={[]}
+      />
+    )
+
+    expect(screen.getByText('Roadmap')).toBeInTheDocument()
+    expect(screen.getByText('Changelog')).toBeInTheDocument()
   })
 })
