@@ -1212,6 +1212,7 @@
   "onboarding.title.signIn": "登入 · Quackback",
   "onboarding.title.workspace": "為工作區命名 · Quackback",
   "onboarding.title.ready": "{name} 已就緒 · Quackback",
+  "onboarding.ready.openWorkspace": "開啟你的工作區",
   "onboarding.workspace.name": "工作區名稱",
   "onboarding.workspace.nameManaged": "此名稱由工作區管理員管理。",
   "onboarding.workspace.saving": "正在儲存…",

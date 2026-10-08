@@ -1212,6 +1212,7 @@
   "onboarding.title.signIn": "تسجيل الدخول · Quackback",
   "onboarding.title.workspace": "سمِّ مساحة العمل · Quackback",
   "onboarding.title.ready": "{name} جاهز · Quackback",
+  "onboarding.ready.openWorkspace": "افتح مساحة عملك",
   "onboarding.workspace.name": "اسم مساحة العمل",
   "onboarding.workspace.nameManaged": "يدير مسؤول مساحة العمل هذا الاسم.",
   "onboarding.workspace.saving": "جارٍ الحفظ…",

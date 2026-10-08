@@ -89,7 +89,7 @@ describe('self-hosted workspace step goals', () => {
     await waitFor(() => expect(hoisted.save).toHaveBeenCalledTimes(1))
     expect(hoisted.save).toHaveBeenCalledWith({ data: { workspaceName: 'Acme' } })
     // Setup ends on the ready step, and Home is one deliberate click away.
-    fireEvent.click(await screen.findByRole('button', { name: 'Open Acme' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Open your workspace' }))
     expect(hoisted.navigate).toHaveBeenCalledWith({ to: '/admin' })
   })
 
@@ -195,7 +195,7 @@ describe('self-hosted ready step', () => {
   ) {
     renderStep({ managedFieldPaths: [], goals, adminName })
     fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
-    await screen.findByRole('button', { name: 'Open Acme' })
+    await screen.findByRole('button', { name: 'Open your workspace' })
   }
 
   it('does not leave the wizard until the admin opens the workspace', async () => {
@@ -220,6 +220,23 @@ describe('self-hosted ready step', () => {
     expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ top: 0 }))
     expect(document.title).toBe('Acme is ready · Quackback')
     scrollTo.mockRestore()
+  })
+
+  // A real company name must not break the headline or the way in.
+  it('keeps a long name readable and the button label short', async () => {
+    const long = 'Featherstonehaugh Customer Success Group'
+    hoisted.save.mockResolvedValue({ enabledModules: [], name: long })
+    await finishSetup(['product_feedback'])
+
+    const heading = screen.getByRole('heading', { level: 1 })
+    expect(heading).toHaveTextContent(`${long} is ready`)
+    expect(heading.querySelector('br')).toBeNull()
+    expect(heading.className).toMatch(/text-balance/)
+    // Scaled down so the name takes fewer lines than a short one would at full size.
+    expect(heading.className).toMatch(/text-\[3[02]px\]/)
+    const open = screen.getByRole('button', { name: 'Open your workspace' })
+    expect(open.textContent).not.toContain('Featherstonehaugh')
+    expect(open.querySelector('.truncate')).toBeNull()
   })
 
   it('lists what was set up for each goal picked', async () => {

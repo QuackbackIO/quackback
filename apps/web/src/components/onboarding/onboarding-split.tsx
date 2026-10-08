@@ -95,9 +95,16 @@ export function OnboardingLead({
  * the bottom of the window, so the next move never has to be hunted for; where
  * the step fits, it sits in place under the form.
  */
-export function SetupActions({ children }: { children: ReactNode }) {
+export function SetupActions({ children, className }: { children: ReactNode; className?: string }) {
+  // Sticky holds only within its parent, so this belongs directly in the
+  // step's own column, not in a wrapper of its own height.
   return (
-    <div className="sticky bottom-0 z-10 bg-background pt-2 pb-4 before:pointer-events-none before:absolute before:inset-x-0 before:-top-6 before:h-6 before:bg-linear-to-t before:from-background before:to-transparent">
+    <div
+      className={cn(
+        'sticky bottom-0 z-10 bg-background pt-2 pb-4 before:pointer-events-none before:absolute before:inset-x-0 before:-top-6 before:h-6 before:bg-linear-to-t before:from-background before:to-transparent',
+        className
+      )}
+    >
       {children}
     </div>
   )

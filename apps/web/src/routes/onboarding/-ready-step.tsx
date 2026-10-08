@@ -3,7 +3,11 @@ import { useNavigate } from '@tanstack/react-router'
 import { FormattedMessage } from 'react-intl'
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
-import { OnboardingHeading, OnboardingLead } from '@/components/onboarding/onboarding-split'
+import {
+  OnboardingHeading,
+  OnboardingLead,
+  SetupActions,
+} from '@/components/onboarding/onboarding-split'
 import { SetupSteps } from '@/components/onboarding/setup-steps'
 import { SetupCheckIcon, SetupWarningIcon } from '@/components/onboarding/setup-icons'
 import { getInstallChecksFn } from '@/lib/server/functions/onboarding'
@@ -30,6 +34,12 @@ const GOAL_RESULTS: Partial<Record<OnboardingOutcome, { id: string; defaultMessa
     defaultMessage: 'A published status page',
   },
 }
+
+/** A list row: the loaded rows and their loading placeholders share it. */
+const ROW = 'flex items-start gap-3 text-[15px] leading-normal'
+
+/** Past this many characters the headline steps down a size. */
+const LONG_NAME = 20
 
 /** Stagger the list in, one row after another. */
 function rowAnimation(index: number) {
@@ -112,15 +122,22 @@ export function ReadyStep({
     <div className="flex flex-col">
       <SetupSteps current="ready" finished />
       <CheckCircleIcon
-        className="mt-10 size-12 text-primary motion-safe:animate-in motion-safe:zoom-in-50 motion-safe:duration-500"
+        className="mt-8 size-12 text-primary motion-safe:animate-in motion-safe:zoom-in-50 motion-safe:duration-500"
         aria-hidden="true"
       />
       <div className="mt-5">
-        <OnboardingHeading ref={heading} tabIndex={-1} className="break-words">
+        <OnboardingHeading
+          ref={heading}
+          tabIndex={-1}
+          className={cn(
+            'break-words text-balance',
+            workspaceName.length > LONG_NAME && 'text-[30px] leading-[1.1] sm:text-[32px]'
+          )}
+        >
           <FormattedMessage
             id="onboarding.ready.title"
-            defaultMessage="{name} is {br}ready"
-            values={{ name: workspaceName, br: <br /> }}
+            defaultMessage="{name} is ready"
+            values={{ name: workspaceName }}
           />
         </OnboardingHeading>
         <OnboardingLead>
@@ -131,7 +148,7 @@ export function ReadyStep({
         </OnboardingLead>
       </div>
 
-      <section className="mt-8 max-w-[440px]">
+      <section className="mt-7 max-w-[440px]">
         <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
           <FormattedMessage id="onboarding.ready.madeTitle" defaultMessage="Set up for you" />
         </h2>
@@ -140,7 +157,7 @@ export function ReadyStep({
             <li
               key={row.key}
               style={rowAnimation(index).style}
-              className={cn('flex items-start gap-3 text-[15px]', rowAnimation(index).className)}
+              className={cn(ROW, rowAnimation(index).className)}
             >
               <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-foreground text-background">
                 <SetupCheckIcon className="size-3.5" aria-hidden="true" />
@@ -153,7 +170,7 @@ export function ReadyStep({
 
       {checks === null ? null : <InstallSection checks={checks} offset={made.length} />}
 
-      <div className="mt-10 max-w-[440px]">
+      <SetupActions className="mt-8 max-w-[440px]">
         <Button
           type="button"
           disabled={opening}
@@ -163,13 +180,10 @@ export function ReadyStep({
           }}
           className="h-12 w-full rounded-full text-base"
         >
-          <span className="truncate">
-            <FormattedMessage
-              id="onboarding.ready.open"
-              defaultMessage="Open {name}"
-              values={{ name: workspaceName }}
-            />
-          </span>
+          <FormattedMessage
+            id="onboarding.ready.openWorkspace"
+            defaultMessage="Open your workspace"
+          />
         </Button>
         <p className="mt-3 text-xs text-muted-foreground">
           <FormattedMessage
@@ -177,7 +191,7 @@ export function ReadyStep({
             defaultMessage="Opens Home with your launch plan."
           />
         </p>
-      </div>
+      </SetupActions>
     </div>
   )
 }
@@ -278,7 +292,7 @@ function InstallSection({ checks, offset }: { checks: InstallChecks | 'loading';
   const allOk = rows.every((row) => row.ok)
 
   return (
-    <section className="mt-8 max-w-[440px]">
+    <section className="mt-7 max-w-[440px]">
       <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
         <FormattedMessage id="onboarding.ready.installTitle" defaultMessage="Your install" />
       </h2>
@@ -287,10 +301,7 @@ function InstallSection({ checks, offset }: { checks: InstallChecks | 'loading';
           <li
             key={row.key}
             style={rowAnimation(offset + index).style}
-            className={cn(
-              'flex items-start gap-3 text-[15px]',
-              rowAnimation(offset + index).className
-            )}
+            className={cn(ROW, rowAnimation(offset + index).className)}
           >
             {row.ok ? (
               <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-foreground text-background">

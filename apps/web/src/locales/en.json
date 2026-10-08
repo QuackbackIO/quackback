@@ -1212,6 +1212,7 @@
   "onboarding.title.signIn": "Sign in · Quackback",
   "onboarding.title.workspace": "Name your workspace · Quackback",
   "onboarding.title.ready": "{name} is ready · Quackback",
+  "onboarding.ready.openWorkspace": "Open your workspace",
   "onboarding.workspace.name": "Workspace name",
   "onboarding.workspace.nameManaged": "Your workspace admin manages this name.",
   "onboarding.workspace.saving": "Saving…",

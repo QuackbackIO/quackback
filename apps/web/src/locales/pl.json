@@ -1212,6 +1212,7 @@
   "onboarding.title.signIn": "Zaloguj się · Quackback",
   "onboarding.title.workspace": "Nazwij obszar roboczy · Quackback",
   "onboarding.title.ready": "{name} jest gotowy · Quackback",
+  "onboarding.ready.openWorkspace": "Otwórz swój obszar roboczy",
   "onboarding.workspace.name": "Nazwa obszaru roboczego",
   "onboarding.workspace.nameManaged": "Administrator obszaru zarządza tą nazwą.",
   "onboarding.workspace.saving": "Zapisywanie…",
