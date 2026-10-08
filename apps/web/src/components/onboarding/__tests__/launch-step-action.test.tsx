@@ -69,6 +69,7 @@ describe('the first article, from the launch plan', () => {
   it('publishes in place: a Published toast, and the plan moves on without leaving', async () => {
     const client = new QueryClient()
     client.setQueryData(['admin', 'onboarding'], {})
+    client.setQueryData(['admin', 'overview'], {})
     render(
       <QueryClientProvider client={client}>
         <IntlProvider locale="en" defaultLocale="en" onError={() => {}}>
@@ -85,5 +86,7 @@ describe('the first article, from the launch plan', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Publish' }))
     await waitFor(() => expect(article.toast).toHaveBeenCalledWith('Article published'))
     expect(client.getQueryState(['admin', 'onboarding'])?.isInvalidated).toBe(true)
+    // The article is Home's first real data: its counts catch up too.
+    expect(client.getQueryState(['admin', 'overview'])?.isInvalidated).toBe(true)
   })
 })

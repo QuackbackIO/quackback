@@ -48,6 +48,8 @@ function WriteArticleButton({ variant }: { variant: 'default' | 'outline' }) {
                 })
               )
               void queryClient.invalidateQueries({ queryKey: ['admin', 'onboarding'] })
+              // The article is real data: Home's counts catch up too.
+              void queryClient.invalidateQueries({ queryKey: ['admin', 'overview'] })
             }}
           />
         </Suspense>
