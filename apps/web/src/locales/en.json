@@ -1194,6 +1194,7 @@
   "onboarding.launch.error": "Could not update your launch plan. Try again.",
   "onboarding.feedback.empty": "No ideas yet",
   "onboarding.home.greeting": "Welcome, {name}",
+  "onboarding.home.greetingLater": "Hi, {name}",
   "onboarding.home.dismiss": "Dismiss",
   "onboarding.task.create-board": "Create a feedback board",
   "onboarding.task.distribute-feedback": "Share your board link",

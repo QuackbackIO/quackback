@@ -1194,6 +1194,7 @@
   "onboarding.launch.error": "No se pudo actualizar tu plan. Inténtalo de nuevo.",
   "onboarding.feedback.empty": "Aún no hay ideas",
   "onboarding.home.greeting": "Bienvenido, {name}",
+  "onboarding.home.greetingLater": "Hola, {name}",
   "onboarding.home.dismiss": "Cerrar",
   "onboarding.task.create-board": "Crear un tablero de comentarios",
   "onboarding.task.distribute-feedback": "Compartir el enlace de tu tablero",

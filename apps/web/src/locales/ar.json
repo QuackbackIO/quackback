@@ -1194,6 +1194,7 @@
   "onboarding.launch.error": "تعذر تحديث خطة الإطلاق. حاول مجددًا.",
   "onboarding.feedback.empty": "لا توجد أفكار بعد",
   "onboarding.home.greeting": "مرحبًا، {name}",
+  "onboarding.home.greetingLater": "مرحبًا، {name}",
   "onboarding.home.dismiss": "إغلاق",
   "onboarding.task.create-board": "إنشاء لوحة ملاحظات",
   "onboarding.task.distribute-feedback": "مشاركة رابط لوحتك",

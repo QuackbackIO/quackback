@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react'
+import { lazy, Suspense, useEffect, useRef } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -50,6 +50,9 @@ export const Route = createFileRoute('/admin/')({
     if (admin) {
       const ready = await ensureOnboardingHomeReadyFn()
       modulesChanged = ready.modulesChanged
+    }
+    // The launch status decides the plan, and for everyone on the team the greeting.
+    if (admin || (context.permissions ?? []).includes(PERMISSIONS.MEMBER_VIEW)) {
       await context.queryClient.ensureQueryData(adminQueries.onboardingStatus())
     }
     // Home is the Copilot chat when it is available to this teammate, so the
@@ -100,13 +103,26 @@ function AdminHome() {
   const flags = settings?.featureFlags as FeatureFlags | undefined
   // The owner's launch plan leads Home until the first win; then the
   // workspace's counts take its place, as they do for a teammate.
-  const launchStatus = useQuery({ ...adminQueries.onboardingStatus(), enabled: admin })
-  const planLeads = admin && launchPlanLeadsHome(launchStatus.data)
+  const launchStatus = useQuery({
+    ...adminQueries.onboardingStatus(),
+    enabled: admin || canSeeTeam,
+  })
+  const firstSessions = launchPlanLeadsHome(launchStatus.data)
+  const planLeads = admin && firstSessions
+  // The greeting is settled as Home opens, so a first win mid-visit does not change it.
+  const welcome = useRef<boolean | null>(null)
+  if (welcome.current === null && launchStatus.data) welcome.current = firstSessions
+  const branding = (settings as { brandingData?: { name?: string } } | undefined)?.brandingData
 
   // The portal's address shows once, in the launch plan's picture of it.
   const header = (
     <header>
-      <HomeGreeting name={session?.user.name} email={session?.user.email} />
+      <HomeGreeting
+        name={session?.user.name}
+        email={session?.user.email}
+        welcome={welcome.current ?? firstSessions}
+        workspace={branding?.name ?? settings?.name}
+      />
     </header>
   )
   // The owner's launch plan and the tour offer, in the launch window only. A

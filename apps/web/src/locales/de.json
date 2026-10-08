@@ -1194,6 +1194,7 @@
   "onboarding.launch.error": "Der Startplan konnte nicht aktualisiert werden. Versuche es erneut.",
   "onboarding.feedback.empty": "Noch keine Ideen",
   "onboarding.home.greeting": "Willkommen, {name}",
+  "onboarding.home.greetingLater": "Hallo, {name}",
   "onboarding.home.dismiss": "Schließen",
   "onboarding.task.create-board": "Feedback-Board erstellen",
   "onboarding.task.distribute-feedback": "Board-Link teilen",

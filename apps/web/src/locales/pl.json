@@ -1194,6 +1194,7 @@
   "onboarding.launch.error": "Nie udało się zaktualizować planu. Spróbuj ponownie.",
   "onboarding.feedback.empty": "Nie ma jeszcze pomysłów",
   "onboarding.home.greeting": "Witaj, {name}",
+  "onboarding.home.greetingLater": "Cześć, {name}",
   "onboarding.home.dismiss": "Zamknij",
   "onboarding.task.create-board": "Utwórz tablicę opinii",
   "onboarding.task.distribute-feedback": "Udostępnij link do tablicy",

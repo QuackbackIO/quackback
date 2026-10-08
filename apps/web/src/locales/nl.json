@@ -1194,6 +1194,7 @@
   "onboarding.launch.error": "Je startplan kon niet worden bijgewerkt. Probeer het opnieuw.",
   "onboarding.feedback.empty": "Nog geen ideeën",
   "onboarding.home.greeting": "Welkom, {name}",
+  "onboarding.home.greetingLater": "Hoi {name}",
   "onboarding.home.dismiss": "Sluiten",
   "onboarding.task.create-board": "Een feedbackbord maken",
   "onboarding.task.distribute-feedback": "Deel de link naar je bord",
