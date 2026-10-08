@@ -5,8 +5,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { WorkspaceIdentityCard } from '@/components/admin/settings/workspace-identity-card'
 
 vi.mock('@/components/admin/settings/logo-uploader', () => ({
-  LogoUploader: ({ workspaceName }: { workspaceName: string }) => (
-    <button type="button" aria-label="Change workspace logo">
+  LogoUploader: ({ workspaceName, focus }: { workspaceName: string; focus?: boolean }) => (
+    <button type="button" aria-label="Change workspace logo" data-focus={focus ? 'yes' : 'no'}>
       {workspaceName.charAt(0).toUpperCase() || 'W'}
     </button>
   ),
@@ -26,5 +26,27 @@ describe('General workspace identity', () => {
     expect(screen.queryByLabelText('Workspace URL')).not.toBeInTheDocument()
     expect(screen.queryByText(/Friendly Quackback URL/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/ws-/)).not.toBeInTheDocument()
+  })
+
+  it('passes the logo deep link through to the uploader', () => {
+    const { rerender } = render(
+      <WorkspaceIdentityCard workspaceName="Acme" managed={false} onWorkspaceNameChange={vi.fn()} />
+    )
+    expect(screen.getByRole('button', { name: 'Change workspace logo' })).toHaveAttribute(
+      'data-focus',
+      'no'
+    )
+    rerender(
+      <WorkspaceIdentityCard
+        workspaceName="Acme"
+        managed={false}
+        onWorkspaceNameChange={vi.fn()}
+        focusLogo
+      />
+    )
+    expect(screen.getByRole('button', { name: 'Change workspace logo' })).toHaveAttribute(
+      'data-focus',
+      'yes'
+    )
   })
 })
