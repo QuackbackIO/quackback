@@ -167,6 +167,7 @@
  */
 import { logger } from '@/lib/server/logger'
 import { signupOpenFor, type SignupAudience } from '@/lib/shared/signup-open'
+import { getSetupState, isOnboardingComplete } from '@/lib/shared/db-types'
 import { oidcCallbackProviderId } from './oidc-callback-path'
 
 const log = logger.child({ component: 'signup-policy' })
@@ -216,7 +217,13 @@ export async function isAccountCreationAllowed(
   // reachable yet, so nobody needs one, and a second account made now could
   // only contest the claim. Signing in to an account that exists is still a
   // sign-in, which is how the claimant comes back after signing out.
-  if (await findSetupClaimant(db)) {
+  //
+  // Nobody holds a setup claim once setup reads complete, so a finished
+  // workspace, which is every sign-in after the first day, answers from the
+  // settings already in hand without asking.
+  const setupComplete =
+    !!workspace && isOnboardingComplete(getSetupState(workspace.settings?.setupState ?? null))
+  if (!setupComplete && (await findSetupClaimant(db))) {
     const existing = await db.query.user.findFirst({
       where: eq(user.email, normalised),
       columns: { id: true },
