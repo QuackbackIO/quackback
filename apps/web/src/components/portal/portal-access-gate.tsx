@@ -12,6 +12,7 @@
  * After a successful sign-in the router is invalidated so the _portal loader
  * re-runs; if the visitor is now authorized, the real portal replaces this.
  */
+import { nameInitial } from '@/lib/shared/utils/initial'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
@@ -164,7 +165,7 @@ function DecorativeBackdrop({
                 <img src={logoUrl} alt="" className="h-8 w-8 rounded-md object-contain" />
               ) : (
                 <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
-                  {workspaceName.charAt(0).toUpperCase()}
+                  {nameInitial(workspaceName)}
                 </div>
               )}
               <span className="hidden max-w-[18ch] truncate font-semibold sm:block">
@@ -461,7 +462,7 @@ function GateCard({
         <img src={logoUrl} alt={workspaceName} className="mx-auto h-12 w-auto object-contain" />
       ) : (
         <div className="mx-auto flex h-12 w-12 items-center justify-center [border-radius:calc(var(--radius)*0.6)] bg-primary text-lg font-semibold text-primary-foreground">
-          {workspaceName.charAt(0).toUpperCase()}
+          {nameInitial(workspaceName)}
         </div>
       )}
 

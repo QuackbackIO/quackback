@@ -1,3 +1,4 @@
+import { nameInitial } from '@/lib/shared/utils/initial'
 import { useEffect, useRef, useState } from 'react'
 import { ArrowPathIcon, CameraIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
@@ -83,7 +84,7 @@ export function LogoUploader({ workspaceName, onLogoChange }: LogoUploaderProps)
           />
         ) : (
           <div className="h-14 w-14 rounded-xl bg-primary flex items-center justify-center text-primary-foreground text-xl font-semibold border border-border transition-opacity group-hover:opacity-80">
-            {workspaceName.charAt(0).toUpperCase() || 'W'}
+            {nameInitial(workspaceName) || 'W'}
           </div>
         )}
         {uploadMutation.isPending ? (
