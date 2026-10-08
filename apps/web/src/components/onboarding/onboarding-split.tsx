@@ -12,27 +12,16 @@ export function OnboardingSplit({
   children,
   footer,
   panel,
-  wide = false,
 }: {
   children: ReactNode
   footer?: ReactNode
   panel: ReactNode
-  /** The workspace step's goal tiles need a slightly wider column. */
-  wide?: boolean
 }) {
+  // One column width for every step, so the divider and the preview stay put
+  // as the steps change.
   return (
-    <div
-      className={cn(
-        'min-h-dvh bg-background text-foreground lg:grid',
-        wide ? 'lg:grid-cols-[600px_minmax(0,1fr)]' : 'lg:grid-cols-[560px_minmax(0,1fr)]'
-      )}
-    >
-      <div
-        className={cn(
-          'flex min-h-dvh flex-col px-5 pt-8 pb-8 sm:px-10 lg:pt-14 lg:pb-12 lg:pl-20 xl:pl-28',
-          wide ? 'lg:pr-16' : 'lg:pr-[72px]'
-        )}
-      >
+    <div className="min-h-dvh bg-background text-foreground lg:grid lg:grid-cols-[600px_minmax(0,1fr)]">
+      <div className="flex min-h-dvh flex-col px-5 pt-8 pb-8 sm:px-10 lg:pt-14 lg:pr-16 lg:pb-12 lg:pl-20 xl:pl-28">
         <div className="inline-flex items-center gap-2.5 self-start">
           <img src="/logo.png" alt="" width={30} height={30} className="size-[30px]" />
           <span className="text-lg font-bold tracking-[-0.01em]">Quackback</span>

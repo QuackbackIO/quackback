@@ -396,14 +396,14 @@ function WorkspaceNameStep({
 
   if (ready) {
     return (
-      <OnboardingSplit wide panel={panel}>
+      <OnboardingSplit panel={panel}>
         <ReadyStep workspaceName={ready.name} goals={ready.goals} adminName={adminName} />
       </OnboardingSplit>
     )
   }
 
   return (
-    <OnboardingSplit wide panel={panel} footer={<SignOutButton size="sm" className="-ms-3" />}>
+    <OnboardingSplit panel={panel} footer={<SignOutButton size="sm" className="-ms-3" />}>
       <SetupSteps current="workspace" />
       <form onSubmit={handleSubmit} className="mt-8 flex max-w-[480px] flex-col gap-8">
         <header>
