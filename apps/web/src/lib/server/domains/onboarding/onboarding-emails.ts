@@ -30,7 +30,7 @@ import {
 } from '@/lib/shared/launch-checklist'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { isTeamMember } from '@/lib/shared/roles'
-import { enqueueJob } from '@/lib/server/jobs/job-queue'
+import { enqueueJob, type JobSqlExecutor } from '@/lib/server/jobs/job-queue'
 import { getBaseUrl } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
 import { ONBOARDING_TIPS_KEY } from '@/lib/shared/onboarding-tips'
@@ -70,12 +70,15 @@ export type OnboardingEmailSkip =
 /**
  * Queue the welcome now and the nudge for day two; the job decides at run time.
  * `locale` is the language the owner's browser asked for when they landed,
- * used when they have not chosen one of their own.
+ * used when they have not chosen one of their own. Pass the transaction that
+ * marks setup handed off as `executor`, so the jobs commit with it or not at
+ * all: a stamp without its jobs would never be retried.
  */
 export async function scheduleOnboardingEmails(
   ownerPrincipalId: PrincipalId,
   now = new Date(),
-  locale?: SupportedLocale
+  locale?: SupportedLocale,
+  executor?: JobSqlExecutor
 ): Promise<void> {
   for (const [kind, runAt] of [
     ['welcome', now],
@@ -87,6 +90,7 @@ export async function scheduleOnboardingEmails(
       dedupeKey: `${ONBOARDING_EMAIL_QUEUE}:${kind}:${ownerPrincipalId}`,
       runAt,
       maxAttempts: 3,
+      ...(executor ? { executor } : {}),
     })
   }
 }

@@ -341,12 +341,35 @@ describe('wizard goals read and write', () => {
 
     await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme', goals: ['product_feedback'] } })
     expect(scheduleOnboardingEmails).toHaveBeenCalledTimes(1)
-    expect(scheduleOnboardingEmails).toHaveBeenCalledWith(owner!.id, expect.any(Date), undefined)
+    expect(scheduleOnboardingEmails).toHaveBeenCalledWith(
+      owner!.id,
+      expect.any(Date),
+      undefined,
+      expect.anything()
+    )
 
     // Saving the step again, and Home's own first-landing pass, queue nothing more.
     await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme', goals: ['product_feedback'] } })
     await ensureOnboardingHomeReadyFn()
     expect(scheduleOnboardingEmails).toHaveBeenCalledTimes(1)
+  })
+
+  // The jobs and the stamp commit together, or a failed enqueue would leave a
+  // handoff that every later pass reads as already done.
+  it('fails the save and stamps nothing when the emails cannot be queued', async () => {
+    scheduleOnboardingEmails.mockClear()
+    scheduleOnboardingEmails.mockRejectedValueOnce(new Error('queue unavailable'))
+
+    await expect(
+      saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme', goals: ['product_feedback'] } })
+    ).rejects.toThrow('queue unavailable')
+    expect(await testDb.query.settings.findFirst()).toBeUndefined()
+
+    // Trying again sets the workspace up and queues them.
+    await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme', goals: ['product_feedback'] } })
+    const row = await testDb.query.settings.findFirst()
+    expect(getSetupState(row!.setupState)!.activationHandoffSeenAt).toBeTruthy()
+    expect(scheduleOnboardingEmails).toHaveBeenCalledTimes(2)
   })
 
   it('records the first admin to land as the owner of a workspace an operator provisioned', async () => {

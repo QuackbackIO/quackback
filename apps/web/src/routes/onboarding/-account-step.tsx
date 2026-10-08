@@ -491,8 +491,10 @@ function FirstAdminStep() {
  * Nobody owns setup yet, but this workspace does not accept passwords, so the
  * first admin arrives by an emailed link instead.
  *
- * Only the workspace's email methods are offered. Social and OIDC tiles are
- * left out for the same reason as on the password form.
+ * Social and OIDC tiles are left out while an emailed link is on offer, for the
+ * same reason as on the password form. A workspace with neither email method
+ * keeps its providers: they are the only way in, and a workspace that has
+ * settings only lists providers whose credentials are configured.
  */
 function MethodsStep({
   authConfig,
@@ -528,12 +530,16 @@ function MethodsStep({
           // workspace still open to be claimed would leave one nobody can ever
           // set up. This screen is only reached when it IS still open.
           mode="signup"
-          authConfig={{
-            ...authConfig,
-            oauth: { password: authConfig.oauth.password, magicLink: authConfig.oauth.magicLink },
-            oidcProviders: undefined,
-            openSignup: true,
-          }}
+          authConfig={
+            authConfig.oauth.magicLink
+              ? {
+                  ...authConfig,
+                  oauth: { password: false, magicLink: true },
+                  oidcProviders: undefined,
+                  openSignup: true,
+                }
+              : { ...authConfig, openSignup: true }
+          }
           workspaceName={workspaceName}
           callbackUrl={ONBOARDING_CALLBACK}
         />

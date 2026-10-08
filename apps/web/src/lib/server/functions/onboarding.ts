@@ -295,9 +295,12 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
       let result: SaveWorkspaceAndGoalResult
       // Finishing setup stamps the activation handoff, which is also what
       // Home's first landing waits for before it queues the welcome emails.
-      // So the save that makes the first stamp queues them itself, or a
-      // workspace set up here would never get them.
-      let firstHandoff: { ownerPrincipalId: string } | null = null
+      // So the save that makes the first stamp queues them, in the same
+      // transaction: a stamp that committed without its jobs would never be
+      // retried, because every later pass sees the handoff already made.
+      const { scheduleOnboardingEmails } =
+        await import('@/lib/server/domains/onboarding/onboarding-emails')
+      const locale = await requestLocale()
       if (!existingSettings) {
         // Setup no longer offers a private board: a new workspace's board is public.
         const initialState: SetupState = finishIdentityOnboarding(
@@ -331,10 +334,12 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
           // The goals' modules turn on through the one flag write, with what
           // turning each on does (publishing the status page, for one).
           await applyOnboardingGoals(tx, row, initialState)
+          if (setupBy) {
+            await scheduleOnboardingEmails(setupBy.id as PrincipalId, new Date(), locale, tx)
+          }
           return row
         })
         await invalidateSettingsCache()
-        if (setupBy) firstHandoff = { ownerPrincipalId: setupBy.id }
         result = {
           id: created.id,
           name: created.name,
@@ -393,6 +398,9 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
             goal
           )
           await applyOnboardingGoals(tx, updated!, next)
+          if (!current.activationHandoffSeenAt && ownerPrincipalId) {
+            await scheduleOnboardingEmails(ownerPrincipalId as PrincipalId, new Date(), locale, tx)
+          }
           return {
             state: next,
             value: {
@@ -400,12 +408,9 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
               goal,
               managed: { name: nameManaged, slug: slugManaged, useCase: useCaseManaged },
               enabledModules,
-              firstHandoffOwner:
-                !current.activationHandoffSeenAt && ownerPrincipalId ? ownerPrincipalId : null,
             },
           }
         })
-        if (value.firstHandoffOwner) firstHandoff = { ownerPrincipalId: value.firstHandoffOwner }
         result = {
           id: value.updated.id,
           name: value.updated.name,
@@ -425,17 +430,6 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
         }))
         await db.insert(postStatuses).values(statusValues)
         log.info({ count: statusValues.length }, 'setup workspace: created default statuses')
-      }
-
-      if (firstHandoff) {
-        const { scheduleOnboardingEmails } =
-          await import('@/lib/server/domains/onboarding/onboarding-emails')
-        const locale = await requestLocale()
-        await scheduleOnboardingEmails(
-          firstHandoff.ownerPrincipalId as PrincipalId,
-          new Date(),
-          locale
-        ).catch((error) => log.warn({ err: error }, 'onboarding emails not scheduled'))
       }
 
       log.info({ workspace_id: result.id, slug: result.slug }, 'save workspace and goal complete')
