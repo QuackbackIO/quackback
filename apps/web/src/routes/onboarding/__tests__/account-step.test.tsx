@@ -335,25 +335,117 @@ describe('account step — a finished install with no admin left', () => {
 })
 
 describe('account step — a self-hosted first user', () => {
-  it('uses the shared email-first signup form when password is on', async () => {
+  function fillAdminForm(values: { name?: string; email?: string; password?: string }) {
+    if (values.name !== undefined) {
+      fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: values.name } })
+    }
+    if (values.email !== undefined) {
+      fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: values.email } })
+    }
+    if (values.password !== undefined) {
+      fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: values.password } })
+    }
+  }
+
+  function createAccountButton() {
+    return screen.getByRole('button', { name: /^create account$/i })
+  }
+
+  it('asks for name, email and password in one form', () => {
     const { container } = renderStep(selfHosted())
 
+    expect(screen.getByLabelText(/^name$/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument()
-    expect(container.querySelector('input[type="password"]')).toBeNull()
-    await continuePastEmail()
-    await waitFor(() => expect(container.querySelector('input[type="password"]')).not.toBeNull())
-    expect(screen.queryByText(/already has an owner/i)).toBeNull()
+    expect(container.querySelector('input[type="password"]')).not.toBeNull()
+    expect(createAccountButton()).toBeInTheDocument()
+    // No email-first stage: nobody has an account to look up yet.
+    expect(screen.queryByRole('button', { name: /continue/i })).toBeNull()
   })
 
   // The fixture carries the shipped default, which lists Google and GitHub as
   // on. Before setup nothing has credentials for them, so a tile here is a
-  // button that fails, and the first admin is always created with an email.
+  // button that fails.
   it('offers no social sign-up, even when the config turns providers on', () => {
     renderStep(selfHosted())
 
     expect(screen.queryByRole('button', { name: /google/i })).toBeNull()
     expect(screen.queryByRole('button', { name: /github/i })).toBeNull()
-    expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument()
+  })
+
+  it('creates the account from the name, email and password given', async () => {
+    const { authClient } = await import('@/lib/client/auth-client')
+    vi.mocked(authClient.signUp.email).mockResolvedValueOnce({ data: {}, error: null } as never)
+    renderStep(selfHosted())
+
+    fillAdminForm({
+      name: '  Alex Owner ',
+      email: ' alex@acme.example ',
+      password: 'correct-horse',
+    })
+    fireEvent.click(createAccountButton())
+
+    await waitFor(() =>
+      expect(authClient.signUp.email).toHaveBeenCalledWith({
+        name: 'Alex Owner',
+        email: 'alex@acme.example',
+        password: 'correct-horse',
+      })
+    )
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/onboarding' }))
+    expect(track).toHaveBeenCalledWith('onboarding_account_created')
+  })
+
+  // The name is what customers see on replies and updates; an account created
+  // without one shows the address's local part instead.
+  it('asks for a name before creating the account', async () => {
+    const { authClient } = await import('@/lib/client/auth-client')
+    renderStep(selfHosted())
+
+    fillAdminForm({ name: ' ', email: 'alex@acme.example', password: 'correct-horse' })
+    fireEvent.click(createAccountButton())
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/your name/i)
+    expect(screen.getByLabelText(/^name$/i)).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByLabelText(/^name$/i)).toHaveFocus()
+    expect(authClient.signUp.email).not.toHaveBeenCalled()
+  })
+
+  it('refuses a short password before calling the server', async () => {
+    const { authClient } = await import('@/lib/client/auth-client')
+    renderStep(selfHosted())
+
+    fillAdminForm({ name: 'Alex', email: 'alex@acme.example', password: 'short' })
+    fireEvent.click(createAccountButton())
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/at least 8 characters/i)
+    expect(authClient.signUp.email).not.toHaveBeenCalled()
+  })
+
+  it('shows the server refusal and stays on the form', async () => {
+    const { authClient } = await import('@/lib/client/auth-client')
+    vi.mocked(authClient.signUp.email).mockResolvedValueOnce({
+      data: null,
+      error: { message: 'User already exists. Use another email.' },
+    } as never)
+    renderStep(selfHosted())
+
+    fillAdminForm({ name: 'Alex', email: 'alex@acme.example', password: 'correct-horse' })
+    fireEvent.click(createAccountButton())
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/already exists/i)
+    expect(navigate).not.toHaveBeenCalled()
+    expect(createAccountButton()).not.toBeDisabled()
+  })
+
+  it('lets the password be shown while it is typed', () => {
+    renderStep(selfHosted())
+    const password = screen.getByLabelText(/^password$/i)
+
+    expect(password).toHaveAttribute('type', 'password')
+    fireEvent.click(screen.getByRole('button', { name: /show password/i }))
+    expect(password).toHaveAttribute('type', 'text')
+    fireEvent.click(screen.getByRole('button', { name: /hide password/i }))
+    expect(password).toHaveAttribute('type', 'password')
   })
 
   it('drops the password form when an unclaimed workspace has password off', () => {
@@ -367,7 +459,7 @@ describe('account step — a self-hosted first user', () => {
     expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument()
   })
 
-  it('offers no social or OIDC sign-up when an unclaimed workspace has password off', () => {
+  it('offers no social sign-up when an unclaimed workspace has password off', () => {
     const props = selfHosted()
     props.authConfig.oauth = {
       ...DEFAULT_AUTH_CONFIG.oauth,

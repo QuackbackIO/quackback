@@ -1,6 +1,7 @@
 import { FormattedMessage } from 'react-intl'
 import type { SVGProps } from 'react'
 import { LightBulbIcon, ChatBubbleLeftRightIcon, BookOpenIcon } from '@heroicons/react/24/outline'
+import { CheckCircleIcon } from '@heroicons/react/20/solid'
 import { Button } from '@/components/ui/button'
 import type { OnboardingOutcome } from '@/lib/shared/db-types'
 import { cn } from '@/lib/shared/utils'
@@ -33,10 +34,30 @@ function StatusPageIcon(props: SVGProps<SVGSVGElement>) {
 }
 
 const options = [
-  { id: 'product_feedback', label: 'Feedback & roadmap', icon: LightBulbIcon },
-  { id: 'customer_support', label: 'Support inbox', icon: ChatBubbleLeftRightIcon },
-  { id: 'help_center', label: 'Help center', icon: BookOpenIcon },
-  { id: 'status_page', label: 'Status page', icon: StatusPageIcon },
+  {
+    id: 'product_feedback',
+    label: 'Feedback & roadmap',
+    description: 'Collect ideas and votes, and share what you plan to build.',
+    icon: LightBulbIcon,
+  },
+  {
+    id: 'customer_support',
+    label: 'Support inbox',
+    description: 'Chat with customers and answer email in one shared inbox.',
+    icon: ChatBubbleLeftRightIcon,
+  },
+  {
+    id: 'help_center',
+    label: 'Help center',
+    description: 'Publish articles customers can search before they ask.',
+    icon: BookOpenIcon,
+  },
+  {
+    id: 'status_page',
+    label: 'Status page',
+    description: 'Tell customers when something is down, and when it is fixed.',
+    icon: StatusPageIcon,
+  },
 ] as const
 
 export function GoalSelector({
@@ -76,30 +97,60 @@ export function GoalSelector({
           )}
         </span>
       </legend>
-      <div className="grid grid-cols-2 gap-3">
-        {options.map(({ id, label, icon: Icon }) => (
-          <Button
-            key={id}
-            type="button"
-            variant="outline"
-            disabled={locked}
-            aria-pressed={goals.includes(id)}
-            className={cn(
-              'h-auto justify-start gap-3 whitespace-normal p-4 text-start focus-visible:ring-zinc-400/50',
-              goals.includes(id) && 'border-foreground bg-muted',
-              managed && goals.includes(id) && 'disabled:opacity-100'
-            )}
-            onClick={() =>
-              onGoalsChange(
-                goals.includes(id) ? goals.filter((goal) => goal !== id) : [...goals, id]
-              )
-            }
-          >
-            <Icon className="size-5 shrink-0" />
-            <FormattedMessage id={`onboarding.goals.${id}`} defaultMessage={label} />
-          </Button>
-        ))}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {options.map(({ id, label, description, icon: Icon }) => {
+          const picked = goals.includes(id)
+          return (
+            <Button
+              key={id}
+              type="button"
+              variant="outline"
+              disabled={locked}
+              aria-pressed={picked}
+              aria-labelledby={`goal-${id}-label`}
+              aria-describedby={`goal-${id}-description`}
+              className={cn(
+                'relative h-auto flex-col items-start justify-start gap-2 whitespace-normal rounded-[14px]! p-4 text-start focus-visible:ring-zinc-400/50',
+                picked && 'border-foreground bg-muted',
+                managed && picked && 'disabled:opacity-100'
+              )}
+              onClick={() =>
+                onGoalsChange(picked ? goals.filter((goal) => goal !== id) : [...goals, id])
+              }
+            >
+              <span className="flex w-full items-center gap-2.5">
+                <Icon className="size-5 shrink-0" aria-hidden="true" />
+                <span id={`goal-${id}-label`} className="font-semibold">
+                  <FormattedMessage id={`onboarding.goals.${id}`} defaultMessage={label} />
+                </span>
+                {picked ? (
+                  <CheckCircleIcon
+                    className="ms-auto size-5 shrink-0 motion-safe:animate-in motion-safe:zoom-in-50"
+                    aria-hidden="true"
+                  />
+                ) : null}
+              </span>
+              <span
+                id={`goal-${id}-description`}
+                className="text-[13px] leading-snug font-normal text-muted-foreground"
+              >
+                <FormattedMessage
+                  id={`onboarding.goals.${id}.description`}
+                  defaultMessage={description}
+                />
+              </span>
+            </Button>
+          )
+        })}
       </div>
+      {managed ? null : (
+        <p className="text-xs text-muted-foreground">
+          <FormattedMessage
+            id="onboarding.goals.later"
+            defaultMessage="You can turn any of these on or off later in Settings."
+          />
+        </p>
+      )}
     </fieldset>
   )
 }

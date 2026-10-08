@@ -1,9 +1,22 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useRouter } from '@tanstack/react-router'
 import { FormattedMessage, useIntl } from 'react-intl'
+import { ArrowPathIcon } from '@heroicons/react/24/solid'
+import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { PortalAuthFormInline } from '@/components/auth/portal-auth-form-inline'
-import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
+import {
+  OnboardingHeading,
+  OnboardingLead,
+  OnboardingPreviewPanel,
+  OnboardingSplit,
+  useBrowserHost,
+} from '@/components/onboarding/onboarding-split'
+import { PortalPreview } from '@/components/onboarding/portal-preview'
+import { SetupSteps } from '@/components/onboarding/setup-steps'
+import { authClient } from '@/lib/client/auth-client'
+import { postAuthSuccess, useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { startOidcSignIn } from '@/lib/client/start-oidc-sign-in'
 import type { WorkspaceClaim } from '@/lib/server/functions/onboarding'
 import type { AccountAuthConfig } from './-account-auth-config'
@@ -50,15 +63,52 @@ function useAdvanceOnAuthSuccess(
   })
 }
 
-function StepCard({ children }: { children: React.ReactNode }) {
+/**
+ * The account screens' frame: the setup split, with the whole portal in the
+ * panel so someone new to Quackback sees what customers will get before they
+ * have set anything up.
+ */
+function AccountFrame({
+  children,
+  workspaceName,
+}: {
+  children: React.ReactNode
+  workspaceName?: string
+}) {
+  const intl = useIntl()
+  const host = useBrowserHost()
   return (
-    <div className="w-full max-w-md mx-auto">
-      <div className="overflow-hidden rounded-2xl border bg-card">
-        <div className="p-8">{children}</div>
-      </div>
-    </div>
+    <OnboardingSplit
+      panel={
+        <OnboardingPreviewPanel
+          caption={
+            <FormattedMessage
+              id="onboarding.account.previewCaption"
+              defaultMessage="Your portal: where customers share ideas, vote and follow what you ship."
+            />
+          }
+        >
+          <PortalPreview
+            variant="overview"
+            name={
+              workspaceName ||
+              intl.formatMessage({
+                id: 'onboarding.preview.placeholderName',
+                defaultMessage: 'Your workspace',
+              })
+            }
+            hostname={host}
+          />
+        </OnboardingPreviewPanel>
+      }
+    >
+      {children}
+    </OnboardingSplit>
   )
 }
+
+/** The lighter heading the sign-in screens use: their titles are sentences. */
+const SENTENCE_HEADING = 'text-[30px] leading-[1.12] tracking-[-0.02em] sm:text-[34px]'
 
 /**
  * Which first screen this workspace has earned.
@@ -67,8 +117,8 @@ function StepCard({ children }: { children: React.ReactNode }) {
  * the only legitimate path to admin. Otherwise three facts decide, all read
  * from the workspace itself: whether setup is already owned, whether arriving
  * here is still a way to take it, and whether the workspace accepts passwords.
- * An install that nobody has claimed and that accepts passwords keeps the
- * account-creation form unchanged.
+ * An install that nobody has claimed and that accepts passwords gets the
+ * one-step admin form.
  *
  * The middle fact is why this screen cannot decide on `claimed` alone. A
  * workspace a control plane created for a customer has an owner before anyone
@@ -103,6 +153,7 @@ export function AccountStep({ ssoEnabled, claim, authConfig, workspaceName }: Ac
       />
     )
   }
+  if (authConfig.oauth.password !== false) return <FirstAdminStep />
   return <MethodsStep authConfig={authConfig} workspaceName={workspaceName} />
 }
 
@@ -138,9 +189,9 @@ function SignInOnlyStep({
   workspaceName?: string
 }) {
   return (
-    <StepCard>
-      <div className="mb-6 text-center">
-        <h1 className="text-2xl font-bold">
+    <AccountFrame workspaceName={workspaceName}>
+      <div className="mb-8">
+        <OnboardingHeading className={SENTENCE_HEADING}>
           {reason === 'claimed' ? (
             <FormattedMessage
               id="onboarding.account.claimed.title"
@@ -157,8 +208,8 @@ function SignInOnlyStep({
               defaultMessage="Sign in to set up this workspace"
             />
           )}
-        </h1>
-        <p className="mt-2 text-muted-foreground">
+        </OnboardingHeading>
+        <OnboardingLead>
           {reason === 'claimed' ? (
             <FormattedMessage
               id="onboarding.account.claimed.signIn"
@@ -175,7 +226,7 @@ function SignInOnlyStep({
               defaultMessage="This workspace was created for a specific account. Sign in with that account to set it up."
             />
           )}
-        </p>
+        </OnboardingLead>
       </div>
 
       {/* The one component that already renders exactly the methods a
@@ -188,7 +239,7 @@ function SignInOnlyStep({
         callbackUrl={ONBOARDING_CALLBACK}
       />
 
-      <p className="mt-6 text-center text-sm text-muted-foreground">
+      <p className="mt-6 text-sm text-muted-foreground">
         <FormattedMessage
           id="onboarding.account.claimed.notOwner"
           defaultMessage="Not the admin? Ask them to invite you, then sign in with the account they invite."
@@ -202,18 +253,246 @@ function SignInOnlyStep({
           </Link>
         )}
       </p>
-    </StepCard>
+    </AccountFrame>
+  )
+}
+
+/** Password rule the server enforces, checked here so the form can say so first. */
+const MIN_PASSWORD_LENGTH = 8
+
+/**
+ * A fresh install, nobody owns setup yet: the first account created here
+ * becomes the admin, in one form.
+ *
+ * There is no email-first stage: it exists to route an address that already
+ * has an account, and nobody has one yet. No social or OIDC tiles either:
+ * before setup no provider has credentials this workspace can vouch for, so a
+ * tile here would be a button that fails. Providers configured later appear on
+ * the sign-in page as usual.
+ *
+ * The name is required because it is what customers see on replies and
+ * updates; without one, the account shows its address's local part instead.
+ */
+function FirstAdminStep() {
+  const intl = useIntl()
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [error, setError] = useState('')
+  const [invalidField, setInvalidField] = useState<'name' | 'email' | 'password' | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+
+  /** Point at the field to fix: mark it invalid and move focus to it. */
+  function refuse(field: 'name' | 'email' | 'password', message: string) {
+    setInvalidField(field)
+    setError(message)
+    document.getElementById(`admin-${field}`)?.focus()
+  }
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault()
+    const trimmedName = name.trim()
+    const trimmedEmail = email.trim()
+    if (!trimmedName) {
+      refuse(
+        'name',
+        intl.formatMessage({
+          id: 'onboarding.account.error.name',
+          defaultMessage: 'Enter your name. Customers see it on your replies and updates.',
+        })
+      )
+      return
+    }
+    if (!/^[^\s@]+@[^\s@]+$/.test(trimmedEmail)) {
+      refuse(
+        'email',
+        intl.formatMessage({
+          id: 'onboarding.account.error.email',
+          defaultMessage: 'Enter a valid email address.',
+        })
+      )
+      return
+    }
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      refuse(
+        'password',
+        intl.formatMessage({
+          id: 'onboarding.account.error.password',
+          defaultMessage: 'Use a password of at least 8 characters.',
+        })
+      )
+      return
+    }
+    setError('')
+    setInvalidField(null)
+    setSubmitting(true)
+    try {
+      const result = await authClient.signUp.email({
+        name: trimmedName,
+        email: trimmedEmail,
+        password,
+      })
+      if (result.error) {
+        throw new Error(
+          result.error.message ||
+            intl.formatMessage({
+              id: 'onboarding.account.error.create',
+              defaultMessage: 'We could not create your account. Try again.',
+            })
+        )
+      }
+      // The same broadcast every other sign-in path ends with, so the one
+      // listener in AccountStep advances the wizard.
+      postAuthSuccess()
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : intl.formatMessage({
+              id: 'onboarding.account.error.create',
+              defaultMessage: 'We could not create your account. Try again.',
+            })
+      )
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <AccountFrame>
+      <SetupSteps current="account" />
+      <div className="mt-8">
+        <OnboardingHeading>
+          <FormattedMessage
+            id="onboarding.account.firstAdmin.title"
+            defaultMessage="Welcome to {br}Quackback"
+            values={{ br: <br /> }}
+          />
+        </OnboardingHeading>
+        <OnboardingLead>
+          <FormattedMessage
+            id="onboarding.account.firstAdmin.lead"
+            defaultMessage="Start with your admin account. You’ll use it to sign in, invite your team and change any setting."
+          />
+        </OnboardingLead>
+      </div>
+
+      <form onSubmit={submit} noValidate className="mt-8 flex max-w-[440px] flex-col gap-5">
+        <div className="flex flex-col gap-2">
+          <label htmlFor="admin-name" className="text-sm font-medium">
+            <FormattedMessage id="onboarding.account.field.name" defaultMessage="Name" />
+          </label>
+          <Input
+            id="admin-name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Jane Doe"
+            autoComplete="name"
+            autoFocus
+            aria-invalid={invalidField === 'name' || undefined}
+            disabled={submitting}
+            className="h-12 rounded-xl px-4 text-base"
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <label htmlFor="admin-email" className="text-sm font-medium">
+            <FormattedMessage id="onboarding.account.field.email" defaultMessage="Email" />
+          </label>
+          <Input
+            id="admin-email"
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="you@company.com"
+            autoComplete="email"
+            aria-invalid={invalidField === 'email' || undefined}
+            disabled={submitting}
+            className="h-12 rounded-xl px-4 text-base"
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <label htmlFor="admin-password" className="text-sm font-medium">
+            <FormattedMessage id="onboarding.account.field.password" defaultMessage="Password" />
+          </label>
+          <div className="relative">
+            <Input
+              id="admin-password"
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="new-password"
+              aria-invalid={invalidField === 'password' || undefined}
+              aria-describedby="admin-password-hint"
+              disabled={submitting}
+              className="h-12 rounded-xl px-4 pe-12 text-base"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((shown) => !shown)}
+              aria-pressed={showPassword}
+              aria-label={intl.formatMessage(
+                showPassword
+                  ? { id: 'onboarding.account.hidePassword', defaultMessage: 'Hide password' }
+                  : { id: 'onboarding.account.showPassword', defaultMessage: 'Show password' }
+              )}
+              className="absolute inset-y-0 end-0 grid w-12 place-items-center rounded-e-xl text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              {showPassword ? (
+                <EyeSlashIcon className="size-5" aria-hidden="true" />
+              ) : (
+                <EyeIcon className="size-5" aria-hidden="true" />
+              )}
+            </button>
+          </div>
+          <p id="admin-password-hint" className="text-xs text-muted-foreground">
+            <FormattedMessage
+              id="onboarding.account.passwordHint"
+              defaultMessage="At least 8 characters."
+            />
+          </p>
+        </div>
+
+        <div aria-live="polite" aria-atomic="true">
+          {error ? (
+            <p
+              role="alert"
+              className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+            >
+              {error}
+            </p>
+          ) : null}
+        </div>
+
+        <Button type="submit" disabled={submitting} className="h-12 w-full rounded-full text-base">
+          {submitting ? (
+            <>
+              <ArrowPathIcon className="size-4 animate-spin motion-reduce:animate-none" />
+              <FormattedMessage
+                id="onboarding.account.creating"
+                defaultMessage="Creating account…"
+              />
+            </>
+          ) : (
+            <FormattedMessage id="onboarding.account.create" defaultMessage="Create account" />
+          )}
+        </Button>
+        <p className="text-xs text-muted-foreground">
+          <FormattedMessage
+            id="onboarding.account.firstAdmin.reassure"
+            defaultMessage="Setup takes about a minute. You can change everything later in Settings."
+          />
+        </p>
+      </form>
+    </AccountFrame>
   )
 }
 
 /**
- * Nobody owns setup yet, so the first account created here becomes the admin.
+ * Nobody owns setup yet, but this workspace does not accept passwords, so the
+ * first admin arrives by an emailed link instead.
  *
- * Only the workspace's email methods are offered: a password, or an emailed
- * link where passwords are off. Social and OIDC tiles are left out. Before
- * setup no provider has credentials this workspace can vouch for, so a tile
- * here is a button that fails; providers configured later appear on the
- * sign-in page as usual.
+ * Only the workspace's email methods are offered. Social and OIDC tiles are
+ * left out for the same reason as on the password form.
  */
 function MethodsStep({
   authConfig,
@@ -223,36 +502,43 @@ function MethodsStep({
   workspaceName?: string
 }) {
   return (
-    <StepCard>
-      <div className="mb-6 text-center">
-        <h1 className="text-2xl font-bold">
-          <FormattedMessage id="onboarding.account.title" defaultMessage="Welcome to Quackback" />
-        </h1>
-        <p className="mt-2 text-muted-foreground">
+    <AccountFrame workspaceName={workspaceName}>
+      <SetupSteps current="account" />
+      <div className="mt-8 mb-8">
+        <OnboardingHeading>
+          <FormattedMessage
+            id="onboarding.account.firstAdmin.title"
+            defaultMessage="Welcome to {br}Quackback"
+            values={{ br: <br /> }}
+          />
+        </OnboardingHeading>
+        <OnboardingLead>
           <FormattedMessage
             id="onboarding.account.methodsDescription"
             defaultMessage="Create your admin account to set up this workspace."
           />
-        </p>
+        </OnboardingLead>
       </div>
-      <PortalAuthFormInline
-        // Nobody has an account on this workspace yet, so the tiles say "Sign
-        // up with", not "Sign in with". `openSignup` is forced on because the
-        // server does the same thing here and for the same reason: it governs
-        // who may open a PORTAL account, and refusing the very first arrival on
-        // a workspace still open to be claimed would leave one nobody can ever
-        // set up. This screen is only reached when it IS still open.
-        mode="signup"
-        authConfig={{
-          ...authConfig,
-          oauth: { password: authConfig.oauth.password, magicLink: authConfig.oauth.magicLink },
-          oidcProviders: undefined,
-          openSignup: true,
-        }}
-        workspaceName={workspaceName}
-        callbackUrl={ONBOARDING_CALLBACK}
-      />
-    </StepCard>
+      <div className="max-w-[440px]">
+        <PortalAuthFormInline
+          // Nobody has an account on this workspace yet, so the form says "Sign
+          // up", not "Sign in". `openSignup` is forced on because the server
+          // does the same thing here and for the same reason: it governs who
+          // may open a PORTAL account, and refusing the very first arrival on a
+          // workspace still open to be claimed would leave one nobody can ever
+          // set up. This screen is only reached when it IS still open.
+          mode="signup"
+          authConfig={{
+            ...authConfig,
+            oauth: { password: authConfig.oauth.password, magicLink: authConfig.oauth.magicLink },
+            oidcProviders: undefined,
+            openSignup: true,
+          }}
+          workspaceName={workspaceName}
+          callbackUrl={ONBOARDING_CALLBACK}
+        />
+      </div>
+    </AccountFrame>
   )
 }
 
@@ -299,57 +585,57 @@ function SsoStep() {
   }, [])
 
   return (
-    <div className="w-full max-w-md mx-auto">
-      <div className="overflow-hidden rounded-2xl border bg-card">
-        <div className="p-8 text-center">
-          <h1 className="text-2xl font-bold">
-            <FormattedMessage id="onboarding.account.title" defaultMessage="Welcome to Quackback" />
-          </h1>
-          <p className="mt-2 text-muted-foreground">
+    <AccountFrame>
+      <OnboardingHeading>
+        <FormattedMessage
+          id="onboarding.account.firstAdmin.title"
+          defaultMessage="Welcome to {br}Quackback"
+          values={{ br: <br /> }}
+        />
+      </OnboardingHeading>
+      <OnboardingLead>
+        <FormattedMessage
+          id="onboarding.account.ssoDescription"
+          defaultMessage="Continue with your company account."
+        />
+      </OnboardingLead>
+      <div aria-live="polite" aria-atomic="true">
+        {ssoRedirecting && !error && (
+          <p role="status" className="mt-4 text-sm text-muted-foreground">
             <FormattedMessage
-              id="onboarding.account.ssoDescription"
-              defaultMessage="Continue with your company account."
+              id="onboarding.account.redirecting"
+              defaultMessage="Taking you to your identity provider…"
             />
           </p>
-          <div aria-live="polite" aria-atomic="true">
-            {ssoRedirecting && !error && (
-              <p role="status" className="mt-4 text-sm text-muted-foreground">
-                <FormattedMessage
-                  id="onboarding.account.redirecting"
-                  defaultMessage="Taking you to your identity provider…"
-                />
-              </p>
-            )}
-            {error && (
-              <div
-                role="alert"
-                className="mt-4 rounded-lg bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive"
-              >
-                {error}
-              </div>
-            )}
-          </div>
-          <Button
-            onClick={() => void startSso()}
-            disabled={ssoRedirecting}
-            className="mt-6 w-full h-11"
+        )}
+        {error && (
+          <div
+            role="alert"
+            className="mt-4 max-w-[440px] rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive"
           >
-            {ssoRedirecting ? (
-              <FormattedMessage
-                id="onboarding.account.redirectingShort"
-                defaultMessage="Redirecting…"
-              />
-            ) : error ? (
-              <FormattedMessage id="onboarding.account.ssoRetry" defaultMessage="Try SSO again" />
-            ) : (
-              <FormattedMessage
-                id="onboarding.account.ssoContinue"
-                defaultMessage="Continue with SSO"
-              />
-            )}
-          </Button>
-        </div>
+            {error}
+          </div>
+        )}
       </div>
-    </div>
+      <Button
+        onClick={() => void startSso()}
+        disabled={ssoRedirecting}
+        className="mt-8 h-12 w-full max-w-[440px] rounded-full text-base"
+      >
+        {ssoRedirecting ? (
+          <FormattedMessage
+            id="onboarding.account.redirectingShort"
+            defaultMessage="Redirecting…"
+          />
+        ) : error ? (
+          <FormattedMessage id="onboarding.account.ssoRetry" defaultMessage="Try SSO again" />
+        ) : (
+          <FormattedMessage
+            id="onboarding.account.ssoContinue"
+            defaultMessage="Continue with SSO"
+          />
+        )}
+      </Button>
+    </AccountFrame>
   )
 }

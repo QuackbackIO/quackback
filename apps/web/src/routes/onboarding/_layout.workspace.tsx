@@ -28,6 +28,7 @@ export const Route = createFileRoute('/onboarding/_layout/workspace')({
       isCloudProvisioned,
       cloudIdentity: isCloudProvisioned ? await getCloudIdentityFn() : null,
       existingWorkspaceName: context.settings?.name ?? '',
+      adminName: session.user.name || null,
       // The client settings payload never carries setup state, so the goals a
       // config file or an earlier save chose come from the server here.
       setupGoals: {

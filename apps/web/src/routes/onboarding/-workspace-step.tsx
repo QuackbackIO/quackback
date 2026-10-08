@@ -3,6 +3,15 @@ import { useNavigate } from '@tanstack/react-router'
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { GoalSelector } from '@/components/onboarding/goal-selector'
+import {
+  OnboardingHeading,
+  OnboardingLead,
+  OnboardingPreviewPanel,
+  OnboardingSplit,
+  useBrowserHost,
+} from '@/components/onboarding/onboarding-split'
+import { PortalPreview } from '@/components/onboarding/portal-preview'
+import { SetupSteps } from '@/components/onboarding/setup-steps'
 import { getSetupState, type OnboardingOutcome } from '@/lib/shared/db-types'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -13,9 +22,10 @@ import {
   updateCloudIdentityFn,
 } from '@/lib/server/functions/cloud-identity'
 import { friendlyPlatformLabel, platformUrlSuffix } from '@/lib/shared/platform-label'
-import { toastEnabledModules } from '@/lib/client/enabled-modules-toast'
 import { isPathManagedFromBootstrap, MANAGED_PATHS } from '@/lib/client/config-file'
 import { track } from '@/lib/client/analytics'
+import { ReadyStep } from './-ready-step'
+import { SignOutButton } from './-sign-out-button'
 
 const DRAFT_KEY = 'quackback:onboarding:workspace-name'
 
@@ -32,6 +42,8 @@ export interface WorkspaceStepProps {
   existingWorkspaceName: string
   managedFieldPaths: string[]
   setupGoals?: WorkspaceSetupGoals
+  /** The signed-in admin's name, for the ready step. */
+  adminName?: string | null
 }
 
 export function WorkspaceStep({
@@ -40,6 +52,7 @@ export function WorkspaceStep({
   existingWorkspaceName,
   managedFieldPaths,
   setupGoals,
+  adminName,
 }: WorkspaceStepProps) {
   if (!isCloudProvisioned) {
     return (
@@ -47,6 +60,7 @@ export function WorkspaceStep({
         existingWorkspaceName={existingWorkspaceName}
         managedFieldPaths={managedFieldPaths}
         setupGoals={setupGoals}
+        adminName={adminName}
       />
     )
   }
@@ -56,15 +70,50 @@ export function WorkspaceStep({
 
 function CloudIdentityUnavailable() {
   return (
-    <div className="mx-auto max-w-lg space-y-5 text-center">
-      <h1 className="text-2xl font-bold">Workspace details are temporarily unavailable</h1>
-      <p className="text-sm text-muted-foreground">
+    <OnboardingSplit
+      panel={<CloudPreviewPanel name="" hostname="" />}
+      footer={<SignOutButton size="sm" className="-ms-3" />}
+    >
+      <OnboardingHeading className="text-[30px] leading-[1.12] tracking-[-0.02em] sm:text-[34px]">
+        Workspace details are temporarily unavailable
+      </OnboardingHeading>
+      <OnboardingLead>
         Your workspace is ready, but its verified cloud identity has not arrived yet.
-      </p>
-      <Button type="button" onClick={() => window.location.reload()}>
+      </OnboardingLead>
+      <Button
+        type="button"
+        onClick={() => window.location.reload()}
+        className="mt-8 h-12 w-full max-w-[440px] rounded-full text-base"
+      >
         Retry
       </Button>
-    </div>
+    </OnboardingSplit>
+  )
+}
+
+/** The cloud form's panel: the portal at the name and address being typed. */
+function CloudPreviewPanel({ name, hostname }: { name: string; hostname: string }) {
+  const intl = useIntl()
+  return (
+    <OnboardingPreviewPanel
+      caption={
+        <FormattedMessage
+          id="onboarding.workspace.previewCaption"
+          defaultMessage="Your portal. It updates as you type and choose."
+        />
+      }
+    >
+      <PortalPreview
+        name={
+          name ||
+          intl.formatMessage({
+            id: 'onboarding.preview.placeholderName',
+            defaultMessage: 'Your workspace',
+          })
+        }
+        hostname={hostname}
+      />
+    </OnboardingPreviewPanel>
   )
 }
 
@@ -134,76 +183,87 @@ export function CloudWorkspaceDetailsForm(props: {
   }
 
   return (
-    <form
-      onSubmit={submit}
-      className="mx-auto flex w-full max-w-xl flex-col gap-7 [--ring:var(--muted-foreground)] pb-24 sm:pb-0"
-    >
-      <header className="text-center">
-        <h1 className="text-2xl font-bold">Make this workspace yours</h1>
-        <p className="mx-auto mt-2 max-w-lg text-sm text-muted-foreground">
-          Choose a name and the address customers will use. You can change these later in Admin
-          Settings.
-        </p>
-      </header>
-
-      <div className="space-y-2">
-        <label htmlFor="cloud-workspace-name" className="text-sm font-medium">
-          Workspace name
-        </label>
-        <Input
-          id="cloud-workspace-name"
-          value={displayName}
-          onChange={(event) => setDisplayName(event.target.value)}
-          maxLength={80}
-          disabled={isSaving}
-          autoComplete="organization"
-          autoFocus
+    <OnboardingSplit
+      panel={
+        <CloudPreviewPanel
+          name={displayName.trim()}
+          hostname={platformLabel.trim() ? `${platformLabel.trim()}.${domainSuffix}` : ''}
         />
-      </div>
+      }
+      footer={<SignOutButton size="sm" className="-ms-3" />}
+    >
+      <form
+        onSubmit={submit}
+        className="flex w-full max-w-[440px] flex-col gap-7 [--ring:var(--muted-foreground)]"
+      >
+        <header>
+          <OnboardingHeading>
+            Make this <br />
+            workspace yours
+          </OnboardingHeading>
+          <OnboardingLead>
+            Choose a name and the address customers will use. You can change these later in Admin
+            Settings.
+          </OnboardingLead>
+        </header>
 
-      <div className="space-y-2">
-        <label htmlFor="cloud-platform-label" className="text-sm font-medium">
-          Workspace URL
-        </label>
-        <div className="flex items-center rounded-md border bg-background focus-within:ring-2 focus-within:ring-ring">
+        <div className="space-y-2">
+          <label htmlFor="cloud-workspace-name" className="text-sm font-medium">
+            Workspace name
+          </label>
           <Input
-            id="cloud-platform-label"
-            value={platformLabel}
-            onChange={(event) => setPlatformLabel(event.target.value)}
-            className="border-0 focus-visible:ring-0"
-            maxLength={63}
-            autoCapitalize="none"
-            autoCorrect="off"
+            id="cloud-workspace-name"
+            value={displayName}
+            onChange={(event) => setDisplayName(event.target.value)}
+            maxLength={80}
             disabled={isSaving}
-            placeholder="your-team"
-            required
+            autoComplete="organization"
+            autoFocus
           />
-          <span className="shrink-0 pe-3 text-sm text-muted-foreground">.{domainSuffix}</span>
         </div>
-      </div>
 
-      {error && (
-        <p
-          role="alert"
-          className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-        >
-          {error}
-        </p>
-      )}
+        <div className="space-y-2">
+          <label htmlFor="cloud-platform-label" className="text-sm font-medium">
+            Workspace URL
+          </label>
+          <div className="flex items-center rounded-md border bg-background focus-within:ring-2 focus-within:ring-ring">
+            <Input
+              id="cloud-platform-label"
+              value={platformLabel}
+              onChange={(event) => setPlatformLabel(event.target.value)}
+              className="border-0 focus-visible:ring-0"
+              maxLength={63}
+              autoCapitalize="none"
+              autoCorrect="off"
+              disabled={isSaving}
+              placeholder="your-team"
+              required
+            />
+            <span className="shrink-0 pe-3 text-sm text-muted-foreground">.{domainSuffix}</span>
+          </div>
+        </div>
 
-      <div className="flex flex-col items-center gap-2">
+        {error && (
+          <p
+            role="alert"
+            className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+          >
+            {error}
+          </p>
+        )}
+
         <Button
           type="submit"
           disabled={isSaving || !displayName.trim() || !platformLabel.trim()}
-          className="h-11 w-full max-w-sm"
+          className="h-12 w-full rounded-full text-base"
         >
           {isSaving && (
             <ArrowPathIcon className="h-4 w-4 animate-spin motion-reduce:animate-none" />
           )}
           Continue
         </Button>
-      </div>
-    </form>
+      </form>
+    </OnboardingSplit>
   )
 }
 
@@ -211,22 +271,25 @@ function WorkspaceNameStep({
   existingWorkspaceName,
   managedFieldPaths,
   setupGoals,
+  adminName,
 }: {
   existingWorkspaceName: string
   managedFieldPaths: string[]
   setupGoals?: WorkspaceSetupGoals
+  adminName?: string | null
 }) {
   const intl = useIntl()
+  const host = useBrowserHost()
   const goalsManaged = isPathManagedFromBootstrap('workspace.useCase', managedFieldPaths)
   const [goals, setGoals] = useState<OnboardingOutcome[]>(
     setupGoals?.goals?.length || goalsManaged ? (setupGoals?.goals ?? []) : ['product_feedback']
   )
-  const navigate = useNavigate()
   const nameManaged = isPathManagedFromBootstrap(MANAGED_PATHS.WORKSPACE_NAME, managedFieldPaths)
 
   const [workspaceName, setWorkspaceName] = useState(existingWorkspaceName)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [ready, setReady] = useState<{ name: string; goals: OnboardingOutcome[] } | null>(null)
   const nameValid = workspaceName.trim().length >= 2
 
   useEffect(() => {
@@ -248,8 +311,9 @@ function WorkspaceNameStep({
   }, [nameManaged, goalsManaged])
 
   useEffect(() => {
+    if (ready) return
     localStorage.setItem(DRAFT_KEY, JSON.stringify({ workspaceName, goals }))
-  }, [workspaceName, goals])
+  }, [workspaceName, goals, ready])
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
@@ -271,10 +335,9 @@ function WorkspaceNameStep({
           ? { workspaceName: workspaceName.trim() }
           : { workspaceName: workspaceName.trim(), goals },
       })
-      toastEnabledModules(result.enabledModules)
       void track('onboarding_workspace_saved', { enabledModules: result.enabledModules })
       localStorage.removeItem(DRAFT_KEY)
-      await navigate({ to: '/admin' })
+      setReady({ name: result.name ?? workspaceName.trim(), goals })
     } catch (err) {
       setError(
         err instanceof Error
@@ -289,79 +352,124 @@ function WorkspaceNameStep({
     }
   }
 
-  return (
-    <form
-      onSubmit={handleSubmit}
-      className="mx-auto flex w-full max-w-2xl flex-col gap-8 [--ring:var(--muted-foreground)] pb-24 sm:pb-0"
-    >
-      <header className="text-center">
-        <h1 className="text-2xl font-bold">
+  const previewName =
+    (ready?.name ?? workspaceName.trim()) ||
+    intl.formatMessage({
+      id: 'onboarding.preview.placeholderName',
+      defaultMessage: 'Your workspace',
+    })
+  const panel = (
+    <OnboardingPreviewPanel
+      caption={
+        ready ? (
           <FormattedMessage
-            id="onboarding.workspace.title"
-            defaultMessage="Create your workspace"
+            id="onboarding.workspace.previewLive"
+            defaultMessage="Your portal is live at {host}."
+            values={{ host: <span className="font-mono text-[13px]">{host}</span> }}
           />
-        </h1>
-      </header>
+        ) : (
+          <FormattedMessage
+            id="onboarding.workspace.previewCaption"
+            defaultMessage="Your portal. It updates as you type and choose."
+          />
+        )
+      }
+    >
+      <PortalPreview name={previewName} goals={ready?.goals ?? goals} hostname={host} />
+    </OnboardingPreviewPanel>
+  )
 
-      <div className="space-y-3">
-        <label htmlFor="workspaceName" className="text-sm font-medium">
-          <FormattedMessage id="onboarding.workspace.name" defaultMessage="Workspace name" />
-        </label>
-        <Input
-          id="workspaceName"
-          value={workspaceName}
-          onChange={(event) => setWorkspaceName(event.target.value)}
-          placeholder="Acme"
-          autoFocus
-          autoComplete="organization"
-          disabled={isLoading || nameManaged}
-          className="h-11"
-          aria-describedby={nameManaged ? 'workspace-name-hint' : undefined}
-        />
-        {nameManaged ? (
-          <p id="workspace-name-hint" className="text-xs text-muted-foreground">
+  if (ready) {
+    return (
+      <OnboardingSplit wide panel={panel}>
+        <ReadyStep workspaceName={ready.name} goals={ready.goals} adminName={adminName} />
+      </OnboardingSplit>
+    )
+  }
+
+  return (
+    <OnboardingSplit wide panel={panel} footer={<SignOutButton size="sm" className="-ms-3" />}>
+      <SetupSteps current="workspace" />
+      <form onSubmit={handleSubmit} className="mt-8 flex max-w-[480px] flex-col gap-8">
+        <header>
+          <OnboardingHeading>
             <FormattedMessage
-              id="onboarding.workspace.nameManaged"
-              defaultMessage="Your workspace admin manages this name."
+              id="onboarding.workspace.heading"
+              defaultMessage="Name your {br}workspace"
+              values={{ br: <br /> }}
             />
+          </OnboardingHeading>
+          <OnboardingLead>
+            <FormattedMessage
+              id="onboarding.workspace.lead"
+              defaultMessage="Your workspace is where your team works and what customers see on your portal. Most people use their company or product name."
+            />
+          </OnboardingLead>
+        </header>
+
+        <div className="flex flex-col gap-2">
+          <label htmlFor="workspaceName" className="text-sm font-medium">
+            <FormattedMessage id="onboarding.workspace.name" defaultMessage="Workspace name" />
+          </label>
+          <Input
+            id="workspaceName"
+            value={workspaceName}
+            onChange={(event) => setWorkspaceName(event.target.value)}
+            placeholder="Acme"
+            autoFocus
+            autoComplete="organization"
+            disabled={isLoading || nameManaged}
+            className="h-12 rounded-xl px-4 text-base"
+            aria-describedby="workspace-name-hint"
+          />
+          <p id="workspace-name-hint" className="text-xs text-muted-foreground">
+            {nameManaged ? (
+              <FormattedMessage
+                id="onboarding.workspace.nameManaged"
+                defaultMessage="Your workspace admin manages this name."
+              />
+            ) : (
+              <FormattedMessage
+                id="onboarding.workspace.nameHint"
+                defaultMessage="You can change it any time in Settings."
+              />
+            )}
           </p>
-        ) : null}
-      </div>
+        </div>
 
-      <GoalSelector
-        goals={goals}
-        onGoalsChange={setGoals}
-        disabled={isLoading}
-        managed={goalsManaged}
-      />
+        <GoalSelector
+          goals={goals}
+          onGoalsChange={setGoals}
+          disabled={isLoading}
+          managed={goalsManaged}
+        />
 
-      <div aria-live="polite" aria-atomic="true">
-        {error && (
-          <p
-            role="alert"
-            className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-          >
-            {error}
-          </p>
-        )}
-      </div>
+        <div aria-live="polite" aria-atomic="true" className="empty:hidden">
+          {error && (
+            <p
+              role="alert"
+              className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+            >
+              {error}
+            </p>
+          )}
+        </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 p-4 sm:static sm:border-0 sm:bg-transparent sm:p-0">
         <Button
           type="submit"
           disabled={isLoading || !nameValid || (!goalsManaged && goals.length === 0)}
-          className="mx-auto h-11 w-full max-w-sm"
+          className="h-12 w-full rounded-full text-base"
         >
           {isLoading ? (
             <>
-              <ArrowPathIcon className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-              <FormattedMessage id="onboarding.workspace.saving" defaultMessage="Saving…" />
+              <ArrowPathIcon className="size-4 animate-spin motion-reduce:animate-none" />
+              <FormattedMessage id="onboarding.workspace.creating" defaultMessage="Setting up…" />
             </>
           ) : (
-            <FormattedMessage id="onboarding.workspace.open" defaultMessage="Open workspace" />
+            <FormattedMessage id="onboarding.workspace.create" defaultMessage="Create workspace" />
           )}
         </Button>
-      </div>
-    </form>
+      </form>
+    </OnboardingSplit>
   )
 }

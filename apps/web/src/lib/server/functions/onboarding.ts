@@ -45,6 +45,9 @@ import {
 } from '@/lib/server/setup-state'
 import { applyOnboardingGoals, setupGoals } from '@/lib/server/onboarding-board'
 import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/identity-projection'
+import type { InstallChecks } from '@/lib/server/install-checks'
+import { requireAuth } from './auth-helpers'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 const log = logger.child({ component: 'onboarding' })
 
@@ -290,6 +293,11 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
       }
 
       let result: SaveWorkspaceAndGoalResult
+      // Finishing setup stamps the activation handoff, which is also what
+      // Home's first landing waits for before it queues the welcome emails.
+      // So the save that makes the first stamp queues them itself, or a
+      // workspace set up here would never get them.
+      let firstHandoff: { ownerPrincipalId: string } | null = null
       if (!existingSettings) {
         // Setup no longer offers a private board: a new workspace's board is public.
         const initialState: SetupState = finishIdentityOnboarding(
@@ -326,6 +334,7 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
           return row
         })
         await invalidateSettingsCache()
+        if (setupBy) firstHandoff = { ownerPrincipalId: setupBy.id }
         result = {
           id: created.id,
           name: created.name,
@@ -391,9 +400,12 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
               goal,
               managed: { name: nameManaged, slug: slugManaged, useCase: useCaseManaged },
               enabledModules,
+              firstHandoffOwner:
+                !current.activationHandoffSeenAt && ownerPrincipalId ? ownerPrincipalId : null,
             },
           }
         })
+        if (value.firstHandoffOwner) firstHandoff = { ownerPrincipalId: value.firstHandoffOwner }
         result = {
           id: value.updated.id,
           name: value.updated.name,
@@ -413,6 +425,17 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
         }))
         await db.insert(postStatuses).values(statusValues)
         log.info({ count: statusValues.length }, 'setup workspace: created default statuses')
+      }
+
+      if (firstHandoff) {
+        const { scheduleOnboardingEmails } =
+          await import('@/lib/server/domains/onboarding/onboarding-emails')
+        const locale = await requestLocale()
+        await scheduleOnboardingEmails(
+          firstHandoff.ownerPrincipalId as PrincipalId,
+          new Date(),
+          locale
+        ).catch((error) => log.warn({ err: error }, 'onboarding emails not scheduled'))
       }
 
       log.info({ workspace_id: result.id, slug: result.slug }, 'save workspace and goal complete')
@@ -514,3 +537,31 @@ export const saveUserNameFn = createServerFn({ method: 'POST' })
 
     log.info({ user_id: session.user.id }, 'save user name: saved')
   })
+
+/**
+ * What this install still needs before people outside the admin's browser can
+ * use it: email, file storage, and a BASE_URL that names the address in use.
+ * Shown once, at the end of setup. Null on a hosted workspace, where the
+ * operator is not the admin and nothing here is theirs to change.
+ */
+export const getInstallChecksFn = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<InstallChecks | null> => {
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    const { config } = await import('@/lib/server/config')
+    if (config.isPooledTenancy) return null
+    const { isEmailConfigured } = await import('@quackback/email')
+    const { isS3Usable } = await import('@/lib/server/storage/s3')
+    const { getRequestHeaders } = await import('@tanstack/react-start/server')
+    const { checkAddress } = await import('@/lib/server/install-checks')
+    const headers = getRequestHeaders()
+    return {
+      email: isEmailConfigured(),
+      storage: isS3Usable(),
+      address: checkAddress(
+        config.baseUrl,
+        headers.get('x-forwarded-host') ?? headers.get('host'),
+        headers.get('x-forwarded-proto')
+      ),
+    }
+  }
+)

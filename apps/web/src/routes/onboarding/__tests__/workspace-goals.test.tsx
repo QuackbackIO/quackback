@@ -7,11 +7,18 @@ import en from '@/locales/en.json'
 
 const hoisted = vi.hoisted(() => ({
   save: vi.fn(),
+  checks: vi.fn(),
   navigate: vi.fn(async () => {}),
 }))
 
-vi.mock('@tanstack/react-router', () => ({ useNavigate: () => hoisted.navigate }))
-vi.mock('@/lib/server/functions/onboarding', () => ({ saveWorkspaceAndGoalFn: hoisted.save }))
+vi.mock('@tanstack/react-router', () => ({
+  useNavigate: () => hoisted.navigate,
+  useRouter: () => ({ invalidate: vi.fn() }),
+}))
+vi.mock('@/lib/server/functions/onboarding', () => ({
+  saveWorkspaceAndGoalFn: hoisted.save,
+  getInstallChecksFn: hoisted.checks,
+}))
 vi.mock('@/lib/server/functions/cloud-identity', () => ({
   getCloudIdentityFn: vi.fn(),
   markCloudWorkspaceDetailsSeenFn: vi.fn(),
@@ -28,6 +35,7 @@ import { WorkspaceStep } from '../-workspace-step'
 function renderStep(props: {
   managedFieldPaths: string[]
   goals?: ('product_feedback' | 'customer_support' | 'help_center' | 'status_page')[]
+  adminName?: string
 }) {
   return render(
     <IntlProvider locale="en" messages={en}>
@@ -37,15 +45,24 @@ function renderStep(props: {
         existingWorkspaceName="Acme"
         managedFieldPaths={props.managedFieldPaths}
         setupGoals={{ goals: props.goals }}
+        adminName={props.adminName}
       />
     </IntlProvider>
   )
 }
 
+const ALL_SET = {
+  email: true,
+  storage: true,
+  address: { ok: true, baseUrl: 'https://feedback.acme.example', visitedOrigin: null },
+}
+
 beforeEach(() => {
   localStorage.clear()
   hoisted.save.mockReset()
-  hoisted.save.mockResolvedValue({ enabledModules: [] })
+  hoisted.save.mockResolvedValue({ enabledModules: [], name: 'Acme' })
+  hoisted.checks.mockReset()
+  hoisted.checks.mockResolvedValue(ALL_SET)
   hoisted.navigate.mockClear()
 })
 afterEach(cleanup)
@@ -67,10 +84,12 @@ describe('self-hosted workspace step goals', () => {
     expect(feedback).toHaveAttribute('aria-pressed', 'false')
     for (const tile of [support, help, feedback]) expect(tile).toBeDisabled()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open workspace' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
     await waitFor(() => expect(hoisted.save).toHaveBeenCalledTimes(1))
     expect(hoisted.save).toHaveBeenCalledWith({ data: { workspaceName: 'Acme' } })
-    await waitFor(() => expect(hoisted.navigate).toHaveBeenCalledWith({ to: '/admin' }))
+    // Setup ends on the ready step, and Home is one deliberate click away.
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Acme' }))
+    expect(hoisted.navigate).toHaveBeenCalledWith({ to: '/admin' })
   })
 
   it('starts from the stored goals and submits the selection when nothing manages it', async () => {
@@ -88,7 +107,7 @@ describe('self-hosted workspace step goals', () => {
       'aria-pressed',
       'false'
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Open workspace' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
     await waitFor(() => expect(hoisted.save).toHaveBeenCalledTimes(1))
     expect(hoisted.save).toHaveBeenCalledWith({
       data: {
@@ -104,11 +123,80 @@ describe('self-hosted workspace step goals', () => {
       'aria-pressed',
       'true'
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Open workspace' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
     await waitFor(() =>
       expect(hoisted.save).toHaveBeenCalledWith({
         data: { workspaceName: 'Acme', goals: ['product_feedback'] },
       })
     )
+  })
+})
+
+describe('self-hosted ready step', () => {
+  async function finishSetup(
+    goals: ('product_feedback' | 'customer_support' | 'help_center' | 'status_page')[],
+    adminName?: string
+  ) {
+    renderStep({ managedFieldPaths: [], goals, adminName })
+    fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
+    await screen.findByRole('button', { name: 'Open Acme' })
+  }
+
+  it('does not leave the wizard until the admin opens the workspace', async () => {
+    await finishSetup(['product_feedback'])
+
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Acme is ready')
+    expect(hoisted.navigate).not.toHaveBeenCalled()
+  })
+
+  it('lists what was set up for each goal picked', async () => {
+    await finishSetup(['product_feedback', 'help_center'], 'Sam Rivera')
+
+    expect(screen.getByText('An admin account for Sam Rivera')).toBeVisible()
+    expect(screen.getByText(/Feedback board customers can post and vote on/)).toBeVisible()
+    expect(screen.getByText(/help center with a General category/)).toBeVisible()
+    expect(screen.queryByText(/support inbox/i)).toBeNull()
+    expect(screen.queryByText(/status page/i)).toBeNull()
+  })
+
+  it('says so when the install has everything it needs', async () => {
+    await finishSetup(['product_feedback'])
+
+    expect(await screen.findByText('Everything your install needs is in place.')).toBeVisible()
+    expect(screen.getByText('Email is set up')).toBeVisible()
+    expect(screen.getByText('File uploads are set up')).toBeVisible()
+    expect(screen.getByText('https://feedback.acme.example')).toBeVisible()
+  })
+
+  it('names what is missing, and says it can wait', async () => {
+    hoisted.checks.mockResolvedValue({
+      email: false,
+      storage: false,
+      address: {
+        ok: false,
+        baseUrl: 'http://localhost:3000',
+        visitedOrigin: 'http://192.168.1.20:3000',
+      },
+    })
+    await finishSetup(['product_feedback'])
+
+    expect(await screen.findByText('Email isn’t set up yet')).toBeVisible()
+    expect(screen.getByText(/Invites and password resets can’t be sent/)).toBeVisible()
+    expect(screen.getByText('File uploads aren’t set up yet')).toBeVisible()
+    expect(screen.getByText('http://192.168.1.20:3000')).toBeVisible()
+    expect(screen.getByText(/set BASE_URL to it/)).toBeVisible()
+    expect(
+      screen.getByText('You can open your workspace now and finish these later.')
+    ).toBeVisible()
+    expect(screen.queryByText('Everything your install needs is in place.')).toBeNull()
+  })
+
+  // A hosted workspace answers null: the operator is not the admin there.
+  it('leaves the install section out where there is nothing to check', async () => {
+    hoisted.checks.mockResolvedValue(null)
+    await finishSetup(['product_feedback'])
+
+    await waitFor(() => expect(screen.queryByText('Checking your install…')).toBeNull())
+    expect(screen.queryByText('Your install')).toBeNull()
   })
 })

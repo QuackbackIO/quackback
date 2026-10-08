@@ -1,8 +1,26 @@
 // @vitest-environment happy-dom
 import '@testing-library/jest-dom/vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { ReactElement } from 'react'
+import { fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import { describe, expect, it, vi } from 'vitest'
+
+// The form sits in the setup split, whose footer carries the sign-out control.
+vi.mock('@tanstack/react-router', () => ({
+  useNavigate: () => vi.fn(),
+  useRouter: () => ({ invalidate: vi.fn() }),
+}))
+
 import { CloudWorkspaceDetailsForm } from '../-workspace-step'
+
+/** The wizard always renders under the onboarding IntlProvider. */
+function render(ui: ReactElement) {
+  return rtlRender(
+    <IntlProvider locale="en" defaultLocale="en" messages={{}}>
+      {ui}
+    </IntlProvider>
+  )
+}
 
 const IDENTITY = {
   version: 1,

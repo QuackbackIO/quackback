@@ -43,6 +43,10 @@ vi.mock('@/lib/server/auth/session', () => ({ getSession: async () => sessionSta
 vi.mock('@/lib/server/functions/workspace', () => ({
   getSettings: async () => (await testDb.query.settings.findFirst()) ?? null,
 }))
+const scheduleOnboardingEmails = vi.hoisted(() => vi.fn(async () => {}))
+vi.mock('@/lib/server/domains/onboarding/onboarding-emails', () => ({
+  scheduleOnboardingEmails,
+}))
 vi.mock('@/lib/server/domains/settings/settings.helpers', async (original) => ({
   ...(await original<typeof import('@/lib/server/domains/settings/settings.helpers')>()),
   invalidateSettingsCache: async () => {},
@@ -324,6 +328,25 @@ describe('wizard goals read and write', () => {
     await ensureOnboardingHomeReadyFn()
     row = await testDb.query.settings.findFirst()
     expect(getSetupState(row!.setupState)!.ownerPrincipalId).toBe(owner!.id)
+  })
+
+  // Saving the workspace stamps the activation handoff, which is what Home's
+  // first landing waits for before it queues the welcome emails. The save
+  // that makes the first stamp has to queue them, once.
+  it('queues the welcome and nudge emails once, for the admin who set the workspace up', async () => {
+    const owner = await testDb.query.principal.findFirst({
+      where: eq(principal.userId, (sessionState.current as { user: { id: UserId } }).user.id),
+    })
+    scheduleOnboardingEmails.mockClear()
+
+    await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme', goals: ['product_feedback'] } })
+    expect(scheduleOnboardingEmails).toHaveBeenCalledTimes(1)
+    expect(scheduleOnboardingEmails).toHaveBeenCalledWith(owner!.id, expect.any(Date), undefined)
+
+    // Saving the step again, and Home's own first-landing pass, queue nothing more.
+    await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme', goals: ['product_feedback'] } })
+    await ensureOnboardingHomeReadyFn()
+    expect(scheduleOnboardingEmails).toHaveBeenCalledTimes(1)
   })
 
   it('records the first admin to land as the owner of a workspace an operator provisioned', async () => {
