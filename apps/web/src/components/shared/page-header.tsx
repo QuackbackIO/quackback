@@ -72,7 +72,7 @@ export function PageHeader({
           description ? 'items-start' : 'items-center'
         )}
       >
-        <div className="max-w-full shrink-0">
+        <div className="min-w-0 flex-[1_1_16rem]">
           {logo || badge ? (
             <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
               {logo}

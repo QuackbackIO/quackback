@@ -40,10 +40,12 @@ describe('PageHeader', () => {
     const heading = screen.getByRole('heading', { level: 1, name: 'Overview' })
     const row = heading.closest('div[class*="justify-between"]') as HTMLElement
     expect(row.className).toContain('flex-wrap')
-    expect(heading.parentElement?.className).toContain('shrink-0')
-    expect(screen.getByRole('button', { name: 'Report incident' }).parentElement?.className).toContain(
-      'max-w-full'
-    )
+    // A basis rather than shrink-0: actions stay beside the title on wide
+    // screens, whatever the description's length, and wrap only when narrow.
+    expect(heading.parentElement?.className).toContain('flex-[1_1_16rem]')
+    expect(
+      screen.getByRole('button', { name: 'Report incident' }).parentElement?.className
+    ).toContain('max-w-full')
   })
 
   it('never renders an icon tile', () => {
