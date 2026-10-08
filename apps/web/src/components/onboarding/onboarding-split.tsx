@@ -163,7 +163,7 @@ export function useBrowserHost(): string {
 
 /**
  * Names the browser tab for a setup screen, and gives the previous title back
- * when the screen goes. The steps change in place, so the title is the one
+ * when the screen goes, unless another page has named the tab since. The steps change in place, so the title is the one
  * thing that tells a screen reader or a row of tabs which step this is.
  */
 export function useSetupTitle(title: string): void {
@@ -171,7 +171,8 @@ export function useSetupTitle(title: string): void {
     const previous = document.title
     document.title = title
     return () => {
-      document.title = previous
+      // A route the visitor is leaving for may already have set its own title.
+      if (document.title === title) document.title = previous
     }
   }, [title])
 }
