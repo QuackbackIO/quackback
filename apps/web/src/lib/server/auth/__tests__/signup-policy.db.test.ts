@@ -38,6 +38,7 @@ import { createId, type PrincipalId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import { settings, principal, user, invitation, sql, DEFAULT_SETUP_STATE } from '@/lib/server/db'
 import { finishIdentityOnboarding } from '@/lib/server/setup-state'
+import { mergeSetupState } from '@/lib/server/config-file/reconciler'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -90,6 +91,18 @@ async function seedUser(email: string): Promise<UserId> {
     updatedAt: new Date(),
   })
   return id
+}
+
+/** An account as sign-up leaves it, or a widget visitor's anonymous one. */
+async function seedAccount(email: string, type: 'user' | 'anonymous' = 'user'): Promise<void> {
+  const userId = await seedUser(email)
+  await testDb.insert(principal).values({
+    id: createId('principal') as PrincipalId,
+    userId,
+    role: 'user',
+    type,
+    createdAt: new Date(),
+  })
 }
 
 async function seedAdmin(email: string): Promise<void> {
@@ -394,6 +407,52 @@ describe.skipIf(!fixture.available)('isAccountCreationAllowed', () => {
       })
 
       expect(await isAccountCreationAllowed('stranger@evil.example', 'portal')).toBe(false)
+    })
+
+    // The first account created while setup is open claims it. Nothing but
+    // the wizard is reachable yet, so nobody else needs an account, and one
+    // made now could only be a second claim on the install.
+    it('takes no second account once the first has claimed setup', async () => {
+      hoisted.getWorkspaceSettings.mockResolvedValue(null)
+      await seedAccount('owner@acme.example')
+
+      expect(await isAccountCreationAllowed('second@elsewhere.example', 'portal')).toBe(false)
+    })
+
+    it('takes no second account while setup is claimed, even with sign-ups open', async () => {
+      await seedSettings()
+      hoisted.getWorkspaceSettings.mockResolvedValue(OPEN)
+      await seedAccount('owner@acme.example')
+
+      expect(await isAccountCreationAllowed('second@elsewhere.example', 'portal')).toBe(false)
+    })
+
+    it('still lets the account that claimed setup sign back in', async () => {
+      hoisted.getWorkspaceSettings.mockResolvedValue(null)
+      await seedAccount('owner@acme.example')
+
+      expect(await isAccountCreationAllowed('owner@acme.example', 'portal')).toBe(true)
+    })
+
+    it('is not closed by an anonymous visitor who arrived first', async () => {
+      hoisted.getWorkspaceSettings.mockResolvedValue(null)
+      await seedAccount('temp-visitor@anon.quackback.io', 'anonymous')
+
+      expect(await isAccountCreationAllowed('first@acme.example', 'portal')).toBe(true)
+    })
+
+    // A workspace the config file stamped complete has a live portal, so its
+    // accounts are customers and its own signup setting governs.
+    it('keeps a workspace stamped complete open to sign-ups it allows', async () => {
+      await seedSettings({
+        setupState: JSON.stringify(
+          mergeSetupState(null, { name: 'Acme', onboardingComplete: true })
+        ),
+      })
+      hoisted.getWorkspaceSettings.mockResolvedValue(OPEN)
+      await seedAccount('customer@elsewhere.example')
+
+      expect(await isAccountCreationAllowed('another@elsewhere.example', 'portal')).toBe(true)
     })
 
     it('lets an existing account sign in on a closed workspace', async () => {

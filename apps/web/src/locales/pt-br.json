@@ -1233,6 +1233,9 @@
   "unsubscribe.error.failed.message": "Não foi possível processar sua solicitação. Tente novamente mais tarde.",
   "unsubscribe.error.expired.title": "Link expirado",
   "unsubscribe.error.expired.message": "Este link de cancelamento já foi usado ou expirou.",
+  "onboarding.account.inProgress.lead": "A configuração já começou aqui. Entre com a conta que você criou para continuar de onde parou.",
+  "onboarding.account.inProgress.notOwner": "Outra pessoa está configurando? Peça para ela convidar você quando a configuração terminar.",
+  "onboarding.account.inProgress.title": "Entre para concluir a configuração",
   "onboarding.workspace.alreadyFinished": "A configuração já foi concluída.",
   "onboarding.workspace.signIn": "Entrar",
   "onboarding.workspace.signedOut": "Sua sessão foi encerrada. Entre para concluir a configuração."

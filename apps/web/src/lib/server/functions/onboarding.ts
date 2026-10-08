@@ -19,6 +19,7 @@ import {
 import {
   bootstrapAdminLock,
   findHumanAdmin,
+  findSetupClaimant,
   isOpenToBootstrapClaim,
   isSetupOpenToClaim,
   isSetupStateOpen,
@@ -78,10 +79,12 @@ function finishedMeanwhile(err: unknown): null {
 
 /**
  * The one place a workspace's first admin is created, and the one place the
- * workspace step's authorization is decided. Four answers, in order: an admin
+ * workspace step's authorization is decided. Five answers, in order: an admin
  * caller passes, a caller who is not the existing owner is refused, a caller on
- * a workspace that is not open to be claimed is refused, and a caller on an
- * unclaimed install nobody provisioned claims it.
+ * a workspace that is not open to be claimed is refused, a caller who is not
+ * the account that claimed setup is refused, and the claimant (or, where
+ * nobody has an account yet, the caller) on an install nobody provisioned is
+ * promoted.
  *
  * Reached only from the workspace step, where the caller has explicitly asked
  * to set this workspace up. Nothing that merely reports state may promote:
@@ -100,6 +103,8 @@ async function ensureBootstrapAdmin(userId: UserId): Promise<SaveWorkspaceRefusa
       where: eq(principal.userId, userId),
     })
     if (caller && isAdmin(caller.role)) return null
+    // Only a person owns setup; an anonymous visitor's principal never does.
+    if (caller && caller.type !== 'user') return 'not_owner'
 
     // Bootstrap promotion is only valid until the first human admin exists.
     const existingAdmin = await findHumanAdmin(tx)
@@ -125,6 +130,19 @@ async function ensureBootstrapAdmin(userId: UserId): Promise<SaveWorkspaceRefusa
       return 'setup_complete'
     }
 
+    // On an install still being set up, the first account created there owns
+    // setup. Anyone else who reaches this step, however they came to have an
+    // account, is refused, so the claimant can sign out and come back without
+    // losing the install to whoever arrived in between.
+    const claimant = await findSetupClaimant(tx)
+    if (claimant && claimant.userId !== userId) {
+      log.warn(
+        { user_id: userId },
+        'bootstrap admin promotion refused: another account claimed setup'
+      )
+      return 'not_owner'
+    }
+
     const { created, principal: p } = await ensurePrincipalForUser({ userId, role: 'admin' }, tx)
     if (!created && !isAdmin(p.role)) {
       await setPrincipalRole({ userId }, 'admin', { executor: tx, knownUserId: userId })
@@ -140,8 +158,13 @@ async function ensureBootstrapAdmin(userId: UserId): Promise<SaveWorkspaceRefusa
  * Server functions for onboarding workflow.
  */
 
-/** Whether a human admin already owns this workspace's setup. */
+/** Whether somebody already owns this workspace's setup. */
 export interface WorkspaceClaim {
+  /**
+   * A human admin owns setup, or, on an install still being set up, an
+   * account has been created and so has claimed it. Either way this screen
+   * offers sign-in rather than a new account.
+   */
   claimed: boolean
   /**
    * Whether the workspace's own pages are reachable yet. Until setup
@@ -150,7 +173,9 @@ export interface WorkspaceClaim {
    */
   setupComplete: boolean
   /**
-   * Whether arriving here is still a way to become this workspace's admin.
+   * Whether this workspace's setup is decided here at all: true on an install
+   * nobody provisioned whose setup is still open, where arriving is how setup
+   * is claimed, and {@link claimed} says whether anyone has.
    *
    * False on a workspace a control plane provisioned, whose owner is recorded
    * where it was created, and on a workspace whose setup is already finished.
@@ -172,34 +197,38 @@ export interface WorkspaceClaim {
  * unauthenticated first screen.
  *
  * The signals are the same ones {@link ensureBootstrapAdmin} decides on: an
- * owner is a principal that is a human (`type: 'user'`) and an admin, and a
- * workspace is open to be claimed only when no control plane created it. A
+ * owner is a principal that is a human (`type: 'user'`) and an admin, a
+ * workspace is open to be claimed only when no control plane created it, and
+ * on an install still being set up the first account created claims it. A
  * workspace that arrives with an owner already seeded reads `claimed: true` and
  * its first screen offers sign-in; a provisioned one whose owner has not
  * arrived reads `openToClaim: false` and offers sign-in too, because there is
  * no account for a stranger to create here; an install that starts empty reads
  * `claimed: false` with `openToClaim: true` and keeps the account-creation form
- * it has always had.
+ * it has always had, until its first account exists and it reads `claimed:
+ * true`, which sends the person who created it (and anyone else) to sign-in.
  *
  * Deliberately unauthenticated, because the visitor it exists for has no
  * session yet. It answers one question about the workspace as a whole and
  * never about any person, so it is not an account-presence oracle: the answer
  * is identical for every visitor.
  *
- * It deliberately says nothing about WHO the owner is. Everything a loader
- * returns is dehydrated into the SSR document, so an owner hint would be a
- * single unauthenticated GET away for anyone who can guess the hostname, and
- * the local part plus the whole corporate domain is a working target at the
- * moment that person is expecting setup mail. The same rule already governs
- * {@link checkOnboardingState} and the auth-method lookup.
+ * It deliberately says nothing about WHO the owner or claimant is, nor whether
+ * the claimant holds admin yet. Everything a loader returns is dehydrated into
+ * the SSR document, so an owner hint would be a single unauthenticated GET away
+ * for anyone who can guess the hostname, and the local part plus the whole
+ * corporate domain is a working target at the moment that person is expecting
+ * setup mail. The same rule already governs {@link checkOnboardingState} and
+ * the auth-method lookup.
  */
 export const getWorkspaceClaimFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<WorkspaceClaim> => {
     // Existence only, on the same predicates the promoter guards with, so the
     // screen and the promoter can never disagree about who owns setup or about
     // whether it is still there to be taken.
-    const [owner, unprovisioned, setupOpen] = await Promise.all([
+    const [owner, claimant, unprovisioned, setupOpen] = await Promise.all([
       findHumanAdmin(db),
+      findSetupClaimant(db),
       isOpenToBootstrapClaim(db),
       isSetupOpenToClaim(db),
     ])
@@ -209,7 +238,12 @@ export const getWorkspaceClaimFn = createServerFn({ method: 'GET' }).handler(
 
     // Same order the promoter refuses in: provenance first, then setup state.
     const closedReason = !unprovisioned ? 'provisioned' : !setupOpen ? 'setupComplete' : null
-    return { claimed: !!owner, setupComplete, openToClaim: closedReason === null, closedReason }
+    return {
+      claimed: !!owner || !!claimant,
+      setupComplete,
+      openToClaim: closedReason === null,
+      closedReason,
+    }
   }
 )
 

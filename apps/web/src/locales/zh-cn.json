@@ -1233,6 +1233,9 @@
   "unsubscribe.error.failed.message": "无法处理你的请求，请稍后再试。",
   "unsubscribe.error.expired.title": "链接已失效",
   "unsubscribe.error.expired.message": "此退订链接已被使用或已过期。",
+  "onboarding.account.inProgress.lead": "此处的设置已经开始。请使用你创建的账户登录，从上次中断的地方继续。",
+  "onboarding.account.inProgress.notOwner": "是别人在设置？请对方在设置完成后邀请你。",
+  "onboarding.account.inProgress.title": "登录以完成设置",
   "onboarding.workspace.alreadyFinished": "设置已完成。",
   "onboarding.workspace.signIn": "登录",
   "onboarding.workspace.signedOut": "你已退出登录。请登录以完成设置。"

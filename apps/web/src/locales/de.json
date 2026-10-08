@@ -1233,6 +1233,9 @@
   "unsubscribe.error.failed.message": "Wir konnten deine Anfrage nicht verarbeiten. Bitte versuche es später erneut.",
   "unsubscribe.error.expired.title": "Link abgelaufen",
   "unsubscribe.error.expired.message": "Dieser Abmeldelink wurde bereits verwendet oder ist abgelaufen.",
+  "onboarding.account.inProgress.lead": "Die Einrichtung hat hier schon begonnen. Melde dich mit dem Konto an, das du erstellt hast, um dort weiterzumachen, wo du aufgehört hast.",
+  "onboarding.account.inProgress.notOwner": "Richtet jemand anderes das ein? Bitte die Person, dich nach der Einrichtung einzuladen.",
+  "onboarding.account.inProgress.title": "Melde dich an, um die Einrichtung abzuschließen",
   "onboarding.workspace.alreadyFinished": "Die Einrichtung ist bereits abgeschlossen.",
   "onboarding.workspace.signIn": "Anmelden",
   "onboarding.workspace.signedOut": "Du wurdest abgemeldet. Melde dich an, um die Einrichtung abzuschließen."

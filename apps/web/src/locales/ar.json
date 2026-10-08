@@ -1233,6 +1233,9 @@
   "unsubscribe.error.failed.message": "تعذّرت معالجة طلبك. يرجى المحاولة لاحقًا.",
   "unsubscribe.error.expired.title": "انتهت صلاحية الرابط",
   "unsubscribe.error.expired.message": "تم استخدام رابط إلغاء الاشتراك هذا بالفعل أو انتهت صلاحيته.",
+  "onboarding.account.inProgress.lead": "بدأ الإعداد هنا. سجّل الدخول بالحساب الذي أنشأته لتكمل من حيث توقفت.",
+  "onboarding.account.inProgress.notOwner": "هل يتولى شخص آخر الإعداد؟ اطلب منه دعوتك بعد اكتمال الإعداد.",
+  "onboarding.account.inProgress.title": "سجّل الدخول لإكمال الإعداد",
   "onboarding.workspace.alreadyFinished": "اكتمل الإعداد بالفعل.",
   "onboarding.workspace.signIn": "تسجيل الدخول",
   "onboarding.workspace.signedOut": "تم تسجيل خروجك. سجّل الدخول لإكمال الإعداد."

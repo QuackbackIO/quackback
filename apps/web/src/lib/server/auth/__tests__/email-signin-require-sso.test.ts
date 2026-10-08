@@ -48,6 +48,13 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getWorkspaceSettings: vi.fn(async () => ({ authConfig: { openSignup: true } })),
 }))
 
+// Nobody has claimed setup by creating an account; that claim is covered
+// against real Postgres.
+vi.mock('@/lib/server/domains/principals/bootstrap-admin', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/domains/principals/bootstrap-admin')>()),
+  findSetupClaimant: async () => undefined,
+}))
+
 vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
   listIdentityProviders: (...a: unknown[]) => hoisted.listIdentityProviders(...a),
 }))

@@ -22,6 +22,12 @@
  * a workspace whose admin is gone is what that path is for, and it already
  * requires an address at a domain this provider verified.
  *
+ * On an install whose setup is still open, the onboarding promoter decides one
+ * thing more: who claimed it. That is the first human account created there
+ * ({@link findSetupClaimant}), not whoever reaches the workspace step first,
+ * because the gap between creating an account and finishing that step is a
+ * window in which a second visitor could otherwise take the install.
+ *
  * Two promoters, and both consult all three: `functions/onboarding.ts`'s
  * `ensureBootstrapAdmin` and `auth/hooks.ts`'s `handleSsoCallbackAfter`. The
  * second one used to consult only the first two, which produced the
@@ -35,7 +41,8 @@
  * them). A blocked admin still owns setup for the same reason: the promoter
  * counts them, so the screen must too.
  */
-import { and, eq, principal, sql } from '@/lib/server/db'
+import type { UserId } from '@quackback/ids'
+import { and, asc, eq, isNotNull, principal, sql } from '@/lib/server/db'
 import type { Database, Transaction } from '@/lib/server/db'
 import { isProvisionedWorkspace } from '@/lib/server/workspaces/provenance'
 import {
@@ -123,14 +130,20 @@ export async function isOpenToBootstrapClaim(exec: Executor): Promise<boolean> {
  * {@link isOpenToBootstrapClaim}.
  */
 export async function isSetupOpenToClaim(exec: Executor): Promise<boolean> {
+  const rows = await readSetupStates(exec)
+  if (rows.length === 0) return true
+  // Not a singleton: no honest answer, so refuse rather than open.
+  if (rows.length > 1) return false
+  return isSetupStateOpen(getSetupState(rows[0]!))
+}
+
+/** Up to two stored setup states: enough to tell none, one and too many apart. */
+async function readSetupStates(exec: Executor): Promise<Array<string | null>> {
   const result = await exec.execute(
     sql`SELECT s.setup_state AS setup_state FROM settings s LIMIT 2`
   )
   const rows = (result ?? []) as unknown as Array<{ setup_state: string | null }>
-  if (rows.length === 0) return true
-  // Not a singleton: no honest answer, so refuse rather than open.
-  if (rows.length > 1) return false
-  return isSetupStateOpen(getSetupState(rows[0]!.setup_state ?? null))
+  return rows.map((row) => row.setup_state ?? null)
 }
 
 /**
@@ -140,4 +153,55 @@ export async function isSetupOpenToClaim(exec: Executor): Promise<boolean> {
  */
 export function isSetupStateOpen(state: SetupState | null): boolean {
   return !isOnboardingComplete(state) || needsCloudOnboardingWizard(state)
+}
+
+/**
+ * Does the first account created on this workspace own its setup?
+ *
+ * Yes on an install nobody provisioned whose setup is not finished. Nothing but
+ * the wizard is reachable there (the root gate returns every other page to
+ * onboarding), so every account on it was made to set it up, and the first one
+ * belongs to whoever is doing that. Deciding at the workspace step instead left
+ * the time between creating an account and finishing that step open to anyone
+ * else who created one.
+ *
+ * No on a provisioned workspace, whose owner is recorded where it was created.
+ * No once setup reads complete, including on a workspace the config file
+ * stamped complete before its owner arrived: its portal is live, people sign up
+ * there to leave feedback, and being first to sign up says nothing about who
+ * set it up. A stamp is not an owner, so that workspace's first user still
+ * claims it at the workspace step.
+ *
+ * Take the transaction, not the pool, for the same reason as
+ * {@link isOpenToBootstrapClaim}.
+ */
+async function isSetupClaimedByFirstAccount(exec: Executor): Promise<boolean> {
+  if (!(await isOpenToBootstrapClaim(exec))) return false
+  const rows = await readSetupStates(exec)
+  if (rows.length === 0) return true
+  if (rows.length > 1) return false
+  return !isOnboardingComplete(getSetupState(rows[0]!))
+}
+
+/**
+ * The account that has claimed setup, where the first account does (see
+ * {@link isSetupClaimedByFirstAccount}). Undefined anywhere else, and before
+ * anyone has an account.
+ *
+ * The first human account, never an anonymous visitor: the widget mints
+ * anonymous principals for people who have not signed up, and one that arrives
+ * first must not own the install. Ties on creation time break on id, so every
+ * reader names the same account.
+ *
+ * Says nothing about whether that account holds admin yet: the workspace step
+ * is where the claimant is promoted.
+ */
+export async function findSetupClaimant(exec: Executor): Promise<{ userId: UserId } | undefined> {
+  if (!(await isSetupClaimedByFirstAccount(exec))) return undefined
+  const first = await exec.query.principal.findFirst({
+    where: and(eq(principal.type, 'user'), isNotNull(principal.userId)),
+    columns: { userId: true },
+    orderBy: [asc(principal.createdAt), asc(principal.id)],
+  })
+  return first?.userId ? { userId: first.userId } : undefined
 }

@@ -1233,6 +1233,9 @@
   "unsubscribe.error.failed.message": "Не удалось обработать запрос. Попробуйте позже.",
   "unsubscribe.error.expired.title": "Ссылка устарела",
   "unsubscribe.error.expired.message": "Эта ссылка для отписки уже использована или срок её действия истёк.",
+  "onboarding.account.inProgress.lead": "Настройка здесь уже начата. Войдите в созданный вами аккаунт, чтобы продолжить с того места, где остановились.",
+  "onboarding.account.inProgress.notOwner": "Настройкой занимается кто-то другой? Попросите этого человека пригласить вас, когда настройка будет завершена.",
+  "onboarding.account.inProgress.title": "Войдите, чтобы завершить настройку",
   "onboarding.workspace.alreadyFinished": "Настройка уже завершена.",
   "onboarding.workspace.signIn": "Войти",
   "onboarding.workspace.signedOut": "Вы вышли из аккаунта. Войдите, чтобы завершить настройку."

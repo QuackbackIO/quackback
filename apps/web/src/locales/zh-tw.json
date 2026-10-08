@@ -1233,6 +1233,9 @@
   "unsubscribe.error.failed.message": "無法處理你的要求，請稍後再試。",
   "unsubscribe.error.expired.title": "連結已失效",
   "unsubscribe.error.expired.message": "此取消訂閱連結已被使用或已過期。",
+  "onboarding.account.inProgress.lead": "此處的設定已經開始。請使用你建立的帳戶登入，從上次中斷的地方繼續。",
+  "onboarding.account.inProgress.notOwner": "是別人在設定？請對方在設定完成後邀請你。",
+  "onboarding.account.inProgress.title": "登入以完成設定",
   "onboarding.workspace.alreadyFinished": "設定已完成。",
   "onboarding.workspace.signIn": "登入",
   "onboarding.workspace.signedOut": "你已登出。請登入以完成設定。"

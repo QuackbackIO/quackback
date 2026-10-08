@@ -1233,6 +1233,9 @@
   "unsubscribe.error.failed.message": "Nous n'avons pas pu traiter votre demande. Réessayez plus tard.",
   "unsubscribe.error.expired.title": "Lien expiré",
   "unsubscribe.error.expired.message": "Ce lien de désabonnement a déjà été utilisé ou a expiré.",
+  "onboarding.account.inProgress.lead": "La configuration a déjà commencé ici. Connectez-vous avec le compte que vous avez créé pour reprendre là où vous en étiez.",
+  "onboarding.account.inProgress.notOwner": "Quelqu'un d'autre s'en charge ? Demandez-lui de vous inviter une fois la configuration terminée.",
+  "onboarding.account.inProgress.title": "Connectez-vous pour terminer la configuration",
   "onboarding.workspace.alreadyFinished": "La configuration est déjà terminée.",
   "onboarding.workspace.signIn": "Se connecter",
   "onboarding.workspace.signedOut": "Vous avez été déconnecté. Connectez-vous pour terminer la configuration."

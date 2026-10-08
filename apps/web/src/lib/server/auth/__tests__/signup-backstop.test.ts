@@ -47,6 +47,9 @@ vi.mock('@/lib/server/domains/principals/bootstrap-admin', () => ({
   isOpenToBootstrapClaim: (...a: unknown[]) => hoisted.isOpenToBootstrapClaim(...a),
   // Setup still open; a finished install is covered against real Postgres.
   isSetupOpenToClaim: async () => true,
+  // Nobody has claimed setup by creating an account; that claim is covered
+  // against real Postgres.
+  findSetupClaimant: async () => undefined,
 }))
 
 // The anonymous-email predicate stays REAL. It is the exemption that decides

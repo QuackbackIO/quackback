@@ -1233,6 +1233,9 @@
   "unsubscribe.error.failed.message": "We couldn't process your request. Please try again later.",
   "unsubscribe.error.expired.title": "Link Expired",
   "unsubscribe.error.expired.message": "This unsubscribe link has already been used or has expired.",
+  "onboarding.account.inProgress.lead": "Setup has started here. Sign in with the account you created to pick up where you left off.",
+  "onboarding.account.inProgress.notOwner": "Someone else setting this up? Ask them to invite you once setup is done.",
+  "onboarding.account.inProgress.title": "Sign in to finish setting up",
   "onboarding.workspace.alreadyFinished": "Setup is already finished.",
   "onboarding.workspace.signIn": "Sign in",
   "onboarding.workspace.signedOut": "You were signed out. Sign in to finish setting up."

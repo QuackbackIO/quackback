@@ -68,7 +68,9 @@ function StepCard({ children }: { children: React.ReactNode }) {
  * from the workspace itself: whether setup is already owned, whether arriving
  * here is still a way to take it, and whether the workspace accepts passwords.
  * An install that nobody has claimed and that accepts passwords keeps the
- * account-creation form unchanged.
+ * account-creation form unchanged. Once its first account exists, that account
+ * has claimed setup, and the screen asks everyone, its owner included, to sign
+ * in.
  *
  * The middle fact is why this screen cannot decide on `claimed` alone. A
  * workspace a control plane created for a customer has an owner before anyone
@@ -92,6 +94,9 @@ export function AccountStep({ ssoEnabled, claim, authConfig, workspaceName }: Ac
   )
 
   if (ssoEnabled) return <SsoStep />
+  if (claim.claimed && claim.openToClaim) {
+    return <SetupInProgressStep authConfig={authConfig} workspaceName={workspaceName} />
+  }
   if (claim.claimed || !claim.openToClaim) {
     return (
       <SignInOnlyStep
@@ -112,9 +117,61 @@ export function AccountStep({ ssoEnabled, claim, authConfig, workspaceName }: Ac
     <MethodsStep
       authConfig={authConfig}
       workspaceName={workspaceName}
+      // Before setup finishes, an account here claims it, so while this form
+      // shows nobody has one to sign back in with. A workspace stamped complete
+      // before its owner arrived is the exception: its accounts claim nothing.
+      offerSignIn={claim.setupComplete}
       signingIn={signingIn}
       onSigningInChange={setSigningIn}
     />
+  )
+}
+
+/**
+ * Setup has started here: an account was created, and that account owns
+ * setup. Whoever created it signs back in and the wizard carries on from the
+ * workspace step; anyone else is told to wait for an invitation. Who started it
+ * stays unsaid, for the same reason {@link SignInOnlyStep} gives.
+ *
+ * Signs in with every method this install can take, providers its runtime
+ * registered included, since the account may be linked to one.
+ */
+function SetupInProgressStep({
+  authConfig,
+  workspaceName,
+}: {
+  authConfig: AccountAuthConfig
+  workspaceName?: string
+}) {
+  return (
+    <StepCard>
+      <div className="mb-6 text-center">
+        <h1 className="text-2xl font-bold">
+          <FormattedMessage
+            id="onboarding.account.inProgress.title"
+            defaultMessage="Sign in to finish setting up"
+          />
+        </h1>
+        <p className="mt-2 text-muted-foreground">
+          <FormattedMessage
+            id="onboarding.account.inProgress.lead"
+            defaultMessage="Setup has started here. Sign in with the account you created to pick up where you left off."
+          />
+        </p>
+      </div>
+      <PortalAuthFormInline
+        mode="login"
+        authConfig={{ ...authConfig, oauth: authConfig.signInOAuth ?? authConfig.oauth }}
+        workspaceName={workspaceName}
+        callbackUrl={ONBOARDING_CALLBACK}
+      />
+      <p className="mt-6 text-center text-sm text-muted-foreground">
+        <FormattedMessage
+          id="onboarding.account.inProgress.notOwner"
+          defaultMessage="Someone else setting this up? Ask them to invite you once setup is done."
+        />
+      </p>
+    </StepCard>
   )
 }
 
@@ -232,15 +289,17 @@ function SignInOnlyStep({
 function MethodsStep({
   authConfig,
   workspaceName,
+  offerSignIn,
   signingIn,
   onSigningInChange,
 }: {
   authConfig: AccountAuthConfig
   workspaceName?: string
+  offerSignIn: boolean
   signingIn: boolean
   onSigningInChange: (signingIn: boolean) => void
 }) {
-  if (signingIn) {
+  if (signingIn && offerSignIn) {
     return <ReturningSignIn authConfig={authConfig} onBack={() => onSigningInChange(false)} />
   }
   return (
@@ -280,29 +339,32 @@ function MethodsStep({
         workspaceName={workspaceName}
         callbackUrl={ONBOARDING_CALLBACK}
       />
-      <p className="mt-6 text-center text-sm text-muted-foreground">
-        <FormattedMessage
-          id="onboarding.account.startedSetup"
-          defaultMessage="Already started setting up?"
-        />{' '}
-        <button
-          type="button"
-          onClick={() => onSigningInChange(true)}
-          className="font-medium text-foreground underline-offset-4 hover:underline"
-        >
-          <FormattedMessage id="onboarding.account.signIn" defaultMessage="Sign in" />
-        </button>
-      </p>
+      {offerSignIn && (
+        <p className="mt-6 text-center text-sm text-muted-foreground">
+          <FormattedMessage
+            id="onboarding.account.startedSetup"
+            defaultMessage="Already started setting up?"
+          />{' '}
+          <button
+            type="button"
+            onClick={() => onSigningInChange(true)}
+            className="font-medium text-foreground underline-offset-4 hover:underline"
+          >
+            <FormattedMessage id="onboarding.account.signIn" defaultMessage="Sign in" />
+          </button>
+        </p>
+      )}
     </StepCard>
   )
 }
 
 /**
- * Someone created their account here, then was signed out before setup
- * finished. Nobody is admin yet, so the wizard still offers a new account, and
- * that form would only refuse their address. They sign in with every method
- * this install can take, including a provider their account may be linked to,
- * and the wizard carries on from the workspace step.
+ * Someone created their account on a workspace stamped complete before its
+ * owner arrived, then was signed out before finishing setup. An account there
+ * claims nothing, so the wizard still offers a new one, and that form would
+ * only refuse their address. They sign in with every method this install can
+ * take, including a provider their account may be linked to, and the wizard
+ * carries on from the workspace step.
  */
 function ReturningSignIn({
   authConfig,

@@ -13,7 +13,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
 import { createId, type PrincipalId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { principal, user, settings, eq, getSetupState } from '@/lib/server/db'
+import { principal, user, settings, eq, sql, getSetupState } from '@/lib/server/db'
+import { mergeSetupState } from '@/lib/server/config-file/reconciler'
+import { ANON_EMAIL_DOMAIN } from '@/lib/shared/anonymous-email'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -47,7 +49,7 @@ vi.mock('@/lib/server/domains/principals/bootstrap-admin', async (importOriginal
   isSetupOpenToClaim: hoisted.isSetupOpenToClaim,
 }))
 
-import { saveWorkspaceAndGoalFn } from '../onboarding'
+import { getWorkspaceClaimFn, saveWorkspaceAndGoalFn } from '../onboarding'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -73,18 +75,45 @@ async function seedUser(email: string): Promise<UserId> {
   return id
 }
 
+/** Accounts are created one after another, a second apart. */
+let clock = Date.parse('2026-10-01T09:00:00.000Z')
+
 /** An account as sign-up leaves it: a principal at the default role. */
-async function seedAccount(email: string): Promise<UserId> {
+async function seedAccount(email: string, type: 'user' | 'anonymous' = 'user'): Promise<UserId> {
   const userId = await seedUser(email)
+  clock += 1000
   await testDb.insert(principal).values({
     id: createId('principal') as PrincipalId,
     userId,
     role: 'user',
-    type: 'user',
-    createdAt: new Date(),
+    type,
+    createdAt: new Date(clock),
   })
   return userId
 }
+
+/** The widget's visitor: an anonymous principal behind a placeholder address. */
+function seedVisitor(): Promise<UserId> {
+  return seedAccount(`temp-${createId('user')}@${ANON_EMAIL_DOMAIN}`, 'anonymous')
+}
+
+async function seedSettings(setupState: string): Promise<void> {
+  await testDb.insert(settings).values({
+    id: createId('workspace'),
+    name: 'Existing',
+    slug: `existing-${Math.random().toString(36).slice(2, 8)}`,
+    createdAt: new Date(),
+    setupState,
+  })
+}
+
+/** What a control plane writes on a workspace it created. */
+async function seedProvisionedWorkspace(): Promise<void> {
+  await seedSettings(JSON.stringify(mergeSetupState(null, { name: 'Acme' })))
+  await testDb.execute(sql`UPDATE settings SET cloud_workspace_key = 'ws_acme'`)
+}
+
+const NOT_OWNER = { ok: false, refusal: 'not_owner' }
 
 function signIn(userId: UserId | null): void {
   hoisted.getSession.mockResolvedValue(
@@ -169,6 +198,127 @@ describe.skipIf(!fixture.available)('the workspace step', () => {
       expect(await testDb.select({ name: settings.name }).from(settings)).toEqual([
         { name: 'Fernhill' },
       ])
+    })
+  })
+
+  describe('on an install still being set up', () => {
+    // The window this closes: the first person created their account and has
+    // not reached "Open workspace" yet. Before, the workspace step went to
+    // whoever submitted it first.
+    it('belongs to the first account created, and refuses the second', async () => {
+      const ownerId = await seedAccount('owner@acme.example')
+      const secondId = await seedAccount('second@elsewhere.example')
+
+      signIn(secondId)
+      const taken = await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Hijacked' } })
+      signIn(ownerId)
+      const owned = await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Fernhill' } })
+
+      expect(taken).toEqual(NOT_OWNER)
+      expect(owned).toMatchObject({ ok: true, name: 'Fernhill' })
+      expect(await roleOf(secondId)).toBe('user')
+      expect(await roleOf(ownerId)).toBe('admin')
+    })
+
+    // Signed out after creating the account, by the wizard's own Sign out or
+    // a lost cookie. The claim is the account's, not the session's.
+    it('still belongs to the claimant after they sign out and back in', async () => {
+      const ownerId = await seedAccount('owner@acme.example')
+      await seedAccount('second@elsewhere.example')
+
+      signIn(null)
+      const signedOut = await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Fernhill' } })
+      signIn(ownerId)
+      const back = await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Fernhill' } })
+
+      expect(signedOut).toEqual({ ok: false, refusal: 'signed_out' })
+      expect(back).toMatchObject({ ok: true, name: 'Fernhill' })
+      expect(await roleOf(ownerId)).toBe('admin')
+    })
+
+    // The widget can mint an anonymous visitor before anyone signs up. A
+    // visitor is not an account, so it neither claims setup nor holds it.
+    it('is not claimed by an anonymous visitor who arrived first', async () => {
+      const visitorId = await seedVisitor()
+      const ownerId = await seedAccount('owner@acme.example')
+
+      signIn(visitorId)
+      const visitor = await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Visitor Co' } })
+      signIn(ownerId)
+      const owner = await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Fernhill' } })
+
+      expect(visitor).toEqual(NOT_OWNER)
+      expect(owner).toMatchObject({ ok: true, name: 'Fernhill' })
+      expect(await roleOf(visitorId)).toBe('user')
+    })
+
+    it('reads as claimed once an account exists, without saying whose', async () => {
+      await seedVisitor()
+      await expect(getWorkspaceClaimFn()).resolves.toMatchObject({ claimed: false })
+
+      await seedAccount('jane.doe@acme.example')
+      const claim = await getWorkspaceClaimFn()
+
+      expect(claim).toEqual({
+        claimed: true,
+        setupComplete: false,
+        openToClaim: true,
+        closedReason: null,
+      })
+      expect(JSON.stringify(claim)).not.toMatch(/jane|acme/)
+    })
+  })
+
+  describe('where the first account does not claim setup', () => {
+    // The config file can stamp setup complete before its owner arrives. Its
+    // portal is live, so its first sign-up is a customer, not the owner: the
+    // workspace step still goes to whoever reaches it first, as before.
+    it('lets a later account claim a workspace the config file stamped complete', async () => {
+      await seedSettings(
+        JSON.stringify(mergeSetupState(null, { name: 'Acme', onboardingComplete: true }))
+      )
+      await seedAccount('customer@elsewhere.example')
+      const ownerId = await seedAccount('owner@acme.example')
+
+      await expect(getWorkspaceClaimFn()).resolves.toMatchObject({ claimed: false })
+      signIn(ownerId)
+      const owned = await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme' } })
+
+      expect(owned).toMatchObject({ ok: true })
+      expect(await roleOf(ownerId)).toBe('admin')
+    })
+
+    // Its owner is recorded where it was created; an account here claims
+    // nothing, and the screen keeps saying so.
+    it('leaves a provisioned workspace closed to every arrival', async () => {
+      await seedProvisionedWorkspace()
+      const arrivalId = await seedAccount('first@evil.example')
+
+      signIn(arrivalId)
+      const result = await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Taken' } })
+
+      expect(result).toEqual(NOT_OWNER)
+      expect(await roleOf(arrivalId)).toBe('user')
+      await expect(getWorkspaceClaimFn()).resolves.toMatchObject({
+        claimed: false,
+        openToClaim: false,
+        closedReason: 'provisioned',
+      })
+    })
+
+    it('leaves a finished workspace with accounts on it reading unclaimed and closed', async () => {
+      const ownerId = await seedAccount('owner@acme.example')
+      signIn(ownerId)
+      await saveWorkspaceAndGoalFn({ data: { workspaceName: 'Fernhill' } })
+      await testDb.update(principal).set({ role: 'user' }).where(eq(principal.userId, ownerId))
+      await seedAccount('customer@elsewhere.example')
+
+      await expect(getWorkspaceClaimFn()).resolves.toEqual({
+        claimed: false,
+        setupComplete: true,
+        openToClaim: false,
+        closedReason: 'setupComplete',
+      })
     })
   })
 

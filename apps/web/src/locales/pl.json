@@ -1233,6 +1233,9 @@
   "unsubscribe.error.failed.message": "Nie udało się przetworzyć żądania. Spróbuj ponownie później.",
   "unsubscribe.error.expired.title": "Link wygasł",
   "unsubscribe.error.expired.message": "Ten link do wypisania został już użyty lub wygasł.",
+  "onboarding.account.inProgress.lead": "Konfiguracja została już tu rozpoczęta. Zaloguj się na utworzone przez siebie konto, aby kontynuować od miejsca, w którym przerwano.",
+  "onboarding.account.inProgress.notOwner": "Ktoś inny to konfiguruje? Poproś tę osobę o zaproszenie po zakończeniu konfiguracji.",
+  "onboarding.account.inProgress.title": "Zaloguj się, aby dokończyć konfigurację",
   "onboarding.workspace.alreadyFinished": "Konfiguracja jest już zakończona.",
   "onboarding.workspace.signIn": "Zaloguj się",
   "onboarding.workspace.signedOut": "Wylogowano cię. Zaloguj się, aby dokończyć konfigurację."

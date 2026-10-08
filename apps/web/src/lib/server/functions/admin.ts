@@ -11,6 +11,7 @@ import { getSettings } from './workspace'
 import { db, invitation, principal, integrations, eq, and, gt, inArray } from '@/lib/server/db'
 import {
   findHumanAdmin,
+  findSetupClaimant,
   isOpenToBootstrapClaim,
   isSetupOpenToClaim,
 } from '@/lib/server/domains/principals/bootstrap-admin'
@@ -752,9 +753,14 @@ export const checkOnboardingState = createServerFn({ method: 'GET' }).handler(as
 
   // Whether this caller is shut out of setup: somebody who is not them already
   // holds it. Every account is created with a principal, so presence alone says
-  // nothing — the role does. A caller with no principal on an unclaimed
-  // workspace is the first user and may still claim it at the workspace step.
-  const setupClaimedByOther = !isAdmin(principalRecord?.role) && !!(await findHumanAdmin(db))
+  // nothing; the role does, and on an install still being set up so does which
+  // account was created first. That account claimed setup, so it is routed to
+  // the workspace step and every other account to the no-access page, the same
+  // answer the promoter gives each of them.
+  const callerIsAdmin = isAdmin(principalRecord?.role)
+  const claimant = callerIsAdmin ? undefined : await findSetupClaimant(db)
+  const setupClaimedByOther =
+    !callerIsAdmin && (!!(await findHumanAdmin(db)) || (!!claimant && claimant.userId !== userId))
 
   // The second half of the same question. A workspace a control plane created
   // reads unclaimed until its owner arrives, and arriving is not how its admin
