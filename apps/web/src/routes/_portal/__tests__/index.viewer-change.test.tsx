@@ -121,6 +121,7 @@ function renderPortal() {
       </IntlProvider>
     </QueryClientProvider>
   )
+  return queryClient
 }
 
 function isShown(element: HTMLElement) {
@@ -157,5 +158,20 @@ describe('portal feed when the viewer changes', () => {
     expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Feedback title' }).value).toBe(
       'Dark mode'
     )
+  })
+
+  // Signing in or out clears every viewer's feed before the session changes.
+  // There is no previous feed left to keep on screen, so the page fetches the
+  // new viewer's feed only, never the old viewer's again under the new cookie.
+  it('fetches only the new viewer feed when a sign-in cleared the old one', async () => {
+    const queryClient = renderPortal()
+
+    act(() => {
+      queryClient.removeQueries({ queryKey: ['portal', 'data'] })
+      rootContext.setSession({ user: { id: 'user_b', principalType: 'user' } })
+    })
+
+    await waitFor(() => expect(feed.pending.has('user_b')).toBe(true))
+    expect(feed.pending.has(undefined)).toBe(false)
   })
 })
