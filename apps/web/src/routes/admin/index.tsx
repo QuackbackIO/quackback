@@ -1,7 +1,8 @@
-import { lazy, Suspense, useEffect, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { HomeActions } from '@/components/admin/home-actions'
+import { HomeLoadingFrame } from '@/components/admin/home-frame'
 import { copilotAvailabilityQuery, useCopilotHome } from '@/components/admin/ask/copilot-on-home'
 import { CopilotCreditsLock } from '@/components/admin/ask/copilot-credits-lock'
 import { OverviewCounts, OverviewDashboard } from '@/components/admin/admin-overview'
@@ -109,7 +110,7 @@ function AdminHome() {
   // A review link opens its thread even when new chats are unavailable.
   if (canUseCopilot && (copilotOnHome || copilotThread))
     return (
-      <Suspense fallback={copilotThread ? null : <HomeFrame>{header}</HomeFrame>}>
+      <Suspense fallback={copilotThread ? null : <HomeLoadingFrame header={header} />}>
         <CopilotHome
           threadKey={copilotThread}
           canAsk={copilotOnHome && !locked}
@@ -141,17 +142,5 @@ function AdminHome() {
         </div>
       </div>
     </ScrollArea>
-  )
-}
-
-/** The chat-first Home frame, shown while its code loads. */
-function HomeFrame({ children }: { children: ReactNode }) {
-  return (
-    <div className="px-4 pt-10 pb-16 sm:px-6 sm:pt-20">
-      <div className="mx-auto w-full max-w-3xl space-y-6">
-        {children}
-        <div className="h-[118px] rounded-2xl border bg-card" aria-hidden="true" />
-      </div>
-    </div>
   )
 }

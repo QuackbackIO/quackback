@@ -36,6 +36,7 @@ import { ConnectorCallCard } from './connector-call-card'
 import { useSearchPalette, useSearchShortcutLabel } from './search-palette'
 import { WorkspaceAssistantMessage } from './workspace-assistant-message'
 import { WorkspaceSettingsProposalCard } from './workspace-settings-proposal-card'
+import { HomeColumn, HomeHeaderSpace } from '../home-frame'
 
 type DraftTurn = {
   threadKey: string
@@ -267,9 +268,9 @@ function CopilotHomeView({ threadKey, canAsk, header, locked, below }: CopilotHo
         data-slot="copilot-viewport"
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
       >
-        <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-4 sm:px-6">
+        <HomeColumn>
           <Collapse open={!inChat}>
-            <div className="pt-10 pb-6 sm:pt-20">{header}</div>
+            <HomeHeaderSpace>{header}</HomeHeaderSpace>
           </Collapse>
           <div
             className={cn(
@@ -364,7 +365,7 @@ function CopilotHomeView({ threadKey, canAsk, header, locked, below }: CopilotHo
               {below}
             </div>
           </Collapse>
-        </div>
+        </HomeColumn>
       </div>
     </div>
   )

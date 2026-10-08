@@ -102,6 +102,7 @@ vi.mock('@/components/shared/conversation/message-markdown', () => ({
 }))
 
 import { CopilotHome } from '../copilot-home'
+import { HOME_COMPOSER_HEIGHT, HomeLoadingFrame } from '../../home-frame'
 
 function Harness({
   initial,
@@ -204,6 +205,25 @@ describe('Home idle', () => {
     const viewport = view.container.querySelector('[data-slot="copilot-viewport"]') as HTMLElement
     expect(viewport.scrollTop).toBe(0)
     scrollHeight.mockRestore()
+  })
+
+  it('sits in the one Home column its loading frame uses, so the hand-off does not move', async () => {
+    const view = mount()
+    const column = screen.getByText('Welcome, Acme').closest('[data-slot="home-column"]')
+    expect(column).not.toBeNull()
+    expect(column?.querySelector('textarea')).not.toBeNull()
+    const columnClass = column?.className
+    const headerSpace = view.container.querySelector('h1')?.parentElement?.className
+    cleanup()
+
+    render(<HomeLoadingFrame header={<h1>Welcome, Acme</h1>} />)
+    const frame = screen.getByText('Welcome, Acme').closest('[data-slot="home-column"]')
+    expect(frame?.className).toBe(columnClass)
+    // The greeting sits in the same space, and the composer's place has its height.
+    expect(screen.getByText('Welcome, Acme').parentElement?.className).toBe(headerSpace)
+    expect(frame?.querySelector('[data-slot="composer-placeholder"]')?.className).toContain(
+      HOME_COMPOSER_HEIGHT
+    )
   })
 
   it('greys out the composer without credits and offers the way to get them', async () => {
