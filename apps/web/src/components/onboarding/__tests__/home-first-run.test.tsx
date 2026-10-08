@@ -381,4 +381,25 @@ describe('Home changing in place', () => {
     expect(document.activeElement).toBe(composer)
     composer.remove()
   })
+
+  it('leaves focus alone when it fell to the page after the person moved on from the plan', async () => {
+    hoisted.status = feedback({ publicBoardLinkCopiedAt: new Date().toISOString() })
+    hoisted.card.mockResolvedValue({ summary: null })
+    const { client } = mount({ tour: false })
+    // Last in the plan, then in the composer, which lets focus go (a click on
+    // blank space, or the composer disabling itself while it sends).
+    ;(await screen.findByRole('button', { name: 'Copy board link' })).focus()
+    const composer = document.createElement('textarea')
+    document.body.appendChild(composer)
+    composer.focus()
+    composer.blur()
+    expect(document.activeElement).toBe(document.body)
+    hoisted.status = feedback({ hasFirstWin: true })
+    await client.invalidateQueries({ queryKey: ['admin', 'onboarding'] })
+    const win = await screen.findByRole('heading', { name: 'Your first customer is here' })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(document.activeElement).not.toBe(win)
+    expect(document.activeElement).toBe(document.body)
+    composer.remove()
+  })
 })
