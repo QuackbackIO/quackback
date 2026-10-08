@@ -66,7 +66,7 @@ describe('buildWidgetLoaderSnippet', () => {
     expect(snippet).not.toMatch(/^\s*\/\//m)
     expect(snippet).not.toContain('identify')
     // Still a working script when an email client joins it into one line.
-    expect(() => new Function(snippet.replace(/<\/?script>/g, '').replace(/\n/g, ' '))).not.toThrow()
+    expect(() => new Function(snippet.replace(/<\/?script>/gi, '').replace(/\n/g, ' '))).not.toThrow()
   })
 })
 
