@@ -39,7 +39,7 @@ import {
 import {
   listPublicPosts,
   listPublicPostsWithVotesAndAvatars,
-  getVotedPostIdsByUserId,
+  getAllUserVotedPostIds,
 } from '@/lib/server/domains/posts/post.public'
 import { getPublicPostDetail } from '@/lib/server/domains/posts/post.public.detail'
 import { getPostMergeInfo, getMergedPosts } from '@/lib/server/domains/posts/post.merge'
@@ -79,7 +79,6 @@ const fetchPortalDataSchema = z.object({
   sort: sortSchema,
   statusSlugs: z.array(z.string()).optional(),
   tagIds: z.array(z.string()).optional(),
-  userId: z.string().optional(),
   minVotes: z.number().int().min(1).optional(),
   dateFrom: z
     .string()
@@ -182,18 +181,15 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
     const segmentIds =
       canViewPrivate && data.segmentIds?.length ? (data.segmentIds as SegmentId[]) : undefined
 
+    // The viewer's votes come from the session's principal, never from the
+    // request: a caller must not be able to name whose votes to read.
+    const principalId = auth?.principal.id ?? null
+
     // Run ALL queries in parallel for maximum performance — including the
     // (fail-closed) anonymous-ceiling read so buildBoardPermissions doesn't
     // serialize an extra round-trip onto this (highest-traffic) loader.
-    const [memberResult, boardsRaw, postsResult, statuses, tags, allVotedPosts, allowAnonymous] =
+    const [boardsRaw, postsResult, statuses, tags, allVotedPosts, allowAnonymous] =
       await Promise.all([
-        // Principal lookup (needed for principalId in response)
-        data.userId
-          ? db.query.principal.findFirst({
-              where: eq(principalTable.userId, data.userId as UserId),
-              columns: { id: true },
-            })
-          : null,
         listPublicBoardsWithStats(actor),
         // Posts WITHOUT embedded vote check (we get votes separately for parallelism)
         listPublicPostsWithVotesAndAvatars({
@@ -214,13 +210,10 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
         listPublicStatuses(),
         // Actor-scoped: internal tags are only listed for team viewers.
         listPublicPostTags(actor),
-        // Get ALL voted post IDs for this user (runs in parallel, we'll filter to displayed posts)
-        data.userId
-          ? getVotedPostIdsByUserId(data.userId as UserId)
-          : Promise.resolve(new Set<PostId>()),
+        // Every post the viewer has voted on, so later feed pages highlight too.
+        principalId ? getAllUserVotedPostIds(principalId) : Promise.resolve(new Set<PostId>()),
         loadAllowAnonymous(),
       ])
-    const principalId = memberResult?.id ?? null
 
     // Per-board submit/vote capability for THIS viewer, composed with the
     // workspace anonymous switch. The UI uses these booleans to decide whether
