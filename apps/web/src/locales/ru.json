@@ -1612,6 +1612,8 @@
   "unsubscribe.error.failed.title": "Что-то пошло не так",
   "unsubscribe.error.failed.body": "Не удалось обновить настройки. Попробуйте ещё раз чуть позже.",
   "onboarding.goals.pickOne": "Выберите хотя бы один вариант",
+  "onboarding.goals.startsHere": "Начало здесь",
+  "onboarding.goals.startsWith": "План запуска начинается с раздела «{goal}».",
   "onboarding.live.invite.problem.at": "В {email} не хватает @.",
   "onboarding.live.invite.problem.end": "В {email} не хватает окончания, например {example}.",
   "onboarding.live.invite.problem.format": "{email} не является адресом электронной почты.",

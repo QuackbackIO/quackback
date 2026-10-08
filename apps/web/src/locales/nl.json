@@ -1612,6 +1612,8 @@
   "unsubscribe.error.failed.title": "Er ging iets mis",
   "unsubscribe.error.failed.body": "We konden je voorkeuren niet bijwerken. Probeer het zo opnieuw.",
   "onboarding.goals.pickOne": "Kies er minstens één",
+  "onboarding.goals.startsHere": "Begint hier",
+  "onboarding.goals.startsWith": "Je startplan begint met {goal}.",
   "onboarding.live.invite.problem.at": "In {email} ontbreekt een @.",
   "onboarding.live.invite.problem.end": "Aan {email} ontbreekt het einde, zoals {example}.",
   "onboarding.live.invite.problem.format": "{email} is geen e-mailadres.",

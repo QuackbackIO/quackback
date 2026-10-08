@@ -118,16 +118,19 @@ describe('self-hosted workspace step goals', () => {
     })
   })
 
-  it('defaults a fresh install to Feedback', async () => {
+  // Nothing is chosen for the admin: the first goal they pick is the one
+  // the launch plan starts with, and the server keeps the order picked.
+  it('starts a fresh install with nothing picked and sends the pick order', async () => {
     renderStep({ managedFieldPaths: [] })
-    expect(screen.getByRole('button', { name: 'Feedback & roadmap' })).toHaveAttribute(
-      'aria-pressed',
-      'true'
-    )
+    for (const name of ['Feedback & roadmap', 'Support inbox', 'Help center', 'Status page']) {
+      expect(screen.getByRole('button', { name })).toHaveAttribute('aria-pressed', 'false')
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Support inbox' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Feedback & roadmap' }))
     fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
     await waitFor(() =>
       expect(hoisted.save).toHaveBeenCalledWith({
-        data: { workspaceName: 'Acme', goals: ['product_feedback'] },
+        data: { workspaceName: 'Acme', goals: ['customer_support', 'product_feedback'] },
       })
     )
   })

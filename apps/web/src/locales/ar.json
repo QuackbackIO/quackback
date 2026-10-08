@@ -1612,6 +1612,8 @@
   "unsubscribe.error.failed.title": "حدث خطأ ما",
   "unsubscribe.error.failed.body": "تعذّر تحديث تفضيلاتك. حاول مجددًا بعد قليل.",
   "onboarding.goals.pickOne": "اختر واحدًا على الأقل",
+  "onboarding.goals.startsHere": "البداية هنا",
+  "onboarding.goals.startsWith": "تبدأ خطة الإطلاق بـ {goal}.",
   "onboarding.live.invite.problem.at": "ينقص {email} الرمز @.",
   "onboarding.live.invite.problem.end": "ينقص {email} الجزء الأخير، مثل {example}.",
   "onboarding.live.invite.problem.format": "{email} ليس عنوان بريد إلكتروني.",

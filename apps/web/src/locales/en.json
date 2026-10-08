@@ -1612,6 +1612,8 @@
   "unsubscribe.error.failed.title": "Something went wrong",
   "unsubscribe.error.failed.body": "We could not update your preferences. Try again in a moment.",
   "onboarding.goals.pickOne": "Pick at least one",
+  "onboarding.goals.startsHere": "Starts here",
+  "onboarding.goals.startsWith": "Your launch plan starts with {goal}.",
   "onboarding.live.invite.problem.at": "{email} is missing an @.",
   "onboarding.live.invite.problem.end": "{email} is missing the end, like {example}.",
   "onboarding.live.invite.problem.format": "{email} is not an email address.",

@@ -1612,6 +1612,8 @@
   "unsubscribe.error.failed.title": "Etwas ist schiefgelaufen",
   "unsubscribe.error.failed.body": "Wir konnten deine Einstellungen nicht aktualisieren. Versuche es gleich noch einmal.",
   "onboarding.goals.pickOne": "Wähle mindestens eins",
+  "onboarding.goals.startsHere": "Startet hier",
+  "onboarding.goals.startsWith": "Dein Startplan beginnt mit {goal}.",
   "onboarding.live.invite.problem.at": "In {email} fehlt ein @.",
   "onboarding.live.invite.problem.end": "Bei {email} fehlt das Ende, etwa {example}.",
   "onboarding.live.invite.problem.format": "{email} ist keine E-Mail-Adresse.",

@@ -1612,6 +1612,8 @@
   "unsubscribe.error.failed.title": "出了点问题",
   "unsubscribe.error.failed.body": "无法更新你的偏好设置。请稍后重试。",
   "onboarding.goals.pickOne": "请至少选择一项",
+  "onboarding.goals.startsHere": "从这里开始",
+  "onboarding.goals.startsWith": "你的启动计划从{goal}开始。",
   "onboarding.live.invite.problem.at": "{email} 缺少 @。",
   "onboarding.live.invite.problem.end": "{email} 缺少结尾，例如 {example}。",
   "onboarding.live.invite.problem.format": "{email} 不是有效的邮箱地址。",

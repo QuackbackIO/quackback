@@ -1612,6 +1612,8 @@
   "unsubscribe.error.failed.title": "Coś poszło nie tak",
   "unsubscribe.error.failed.body": "Nie udało się zaktualizować preferencji. Spróbuj ponownie za chwilę.",
   "onboarding.goals.pickOne": "Wybierz co najmniej jedno",
+  "onboarding.goals.startsHere": "Zaczyna się tu",
+  "onboarding.goals.startsWith": "Twój plan uruchomienia zaczyna się od: {goal}.",
   "onboarding.live.invite.problem.at": "W {email} brakuje znaku @.",
   "onboarding.live.invite.problem.end": "W {email} brakuje końcówki, np. {example}.",
   "onboarding.live.invite.problem.format": "{email} nie jest adresem e-mail.",

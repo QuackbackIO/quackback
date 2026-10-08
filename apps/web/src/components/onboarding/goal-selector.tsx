@@ -77,9 +77,17 @@ export function GoalSelector({
 }) {
   const locked = disabled || managed
   const hintId = useId()
+  const startsId = useId()
   const missing = required && !managed && goals.length === 0
+  // The launch plan starts with the first goal picked, and the order picked
+  // is the order kept, so the start moves to the next pick when it is dropped.
+  const first = options.find((option) => option.id === goals[0])
   return (
-    <fieldset disabled={locked} aria-describedby={hintId} className="min-w-0">
+    <fieldset
+      disabled={locked}
+      aria-describedby={first ? `${hintId} ${startsId}` : hintId}
+      className="min-w-0"
+    >
       {/* The legend floats so the hint can sit beside it while staying out of
           the group's name: the hint describes the group rather than naming it. */}
       <legend className="float-start me-2 mb-3 text-sm font-medium">
@@ -106,6 +114,7 @@ export function GoalSelector({
       <div className="clear-both grid gap-3 sm:grid-cols-2">
         {options.map(({ id, label, description, icon: Icon }) => {
           const picked = goals.includes(id)
+          const starts = first?.id === id
           return (
             <Button
               key={id}
@@ -114,7 +123,9 @@ export function GoalSelector({
               disabled={locked}
               aria-pressed={picked}
               aria-labelledby={`goal-${id}-label`}
-              aria-describedby={`goal-${id}-description`}
+              aria-describedby={
+                starts ? `goal-${id}-description goal-${id}-starts` : `goal-${id}-description`
+              }
               className={cn(
                 'relative h-auto flex-col items-start justify-start gap-2 whitespace-normal rounded-[14px]! p-4 text-start focus-visible:ring-zinc-400/50',
                 picked && 'border-foreground bg-muted',
@@ -124,6 +135,14 @@ export function GoalSelector({
                 onGoalsChange(picked ? goals.filter((goal) => goal !== id) : [...goals, id])
               }
             >
+              {starts ? (
+                <span
+                  id={`goal-${id}-starts`}
+                  className="absolute -top-2.5 start-3 rounded-full bg-foreground px-2 text-[11px] leading-5 font-semibold text-background motion-safe:animate-in motion-safe:fade-in"
+                >
+                  <FormattedMessage id="onboarding.goals.startsHere" defaultMessage="Starts here" />
+                </span>
+              ) : null}
               <span className="flex w-full items-center gap-2.5">
                 <Icon className="size-5 shrink-0" aria-hidden="true" />
                 <span id={`goal-${id}-label`} className="font-semibold">
@@ -149,14 +168,32 @@ export function GoalSelector({
           )
         })}
       </div>
-      {managed ? null : (
-        <p className="mt-3 text-xs text-muted-foreground">
-          <FormattedMessage
-            id="onboarding.goals.later"
-            defaultMessage="You can turn any of these on or off later in Settings."
-          />
-        </p>
-      )}
+      <div className="mt-3 flex flex-col gap-1 text-xs text-muted-foreground">
+        {first ? (
+          <p id={startsId} className="text-foreground">
+            <FormattedMessage
+              id="onboarding.goals.startsWith"
+              defaultMessage="Your launch plan starts with {goal}."
+              values={{
+                goal: (
+                  <FormattedMessage
+                    id={`onboarding.goals.${first.id}`}
+                    defaultMessage={first.label}
+                  />
+                ),
+              }}
+            />
+          </p>
+        ) : null}
+        {managed ? null : (
+          <p>
+            <FormattedMessage
+              id="onboarding.goals.later"
+              defaultMessage="You can turn any of these on or off later in Settings."
+            />
+          </p>
+        )}
+      </div>
     </fieldset>
   )
 }

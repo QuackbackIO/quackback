@@ -1612,6 +1612,8 @@
   "unsubscribe.error.failed.title": "發生錯誤",
   "unsubscribe.error.failed.body": "無法更新你的偏好設定。請稍後再試。",
   "onboarding.goals.pickOne": "請至少選擇一項",
+  "onboarding.goals.startsHere": "從這裡開始",
+  "onboarding.goals.startsWith": "你的啟動計畫從{goal}開始。",
   "onboarding.live.invite.problem.at": "{email} 缺少 @。",
   "onboarding.live.invite.problem.end": "{email} 缺少結尾，例如 {example}。",
   "onboarding.live.invite.problem.format": "{email} 不是有效的電子郵件地址。",

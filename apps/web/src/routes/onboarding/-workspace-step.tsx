@@ -282,9 +282,9 @@ function WorkspaceNameStep({
   const intl = useIntl()
   const host = useBrowserHost()
   const goalsManaged = isPathManagedFromBootstrap('workspace.useCase', managedFieldPaths)
-  const [goals, setGoals] = useState<OnboardingOutcome[]>(
-    setupGoals?.goals?.length || goalsManaged ? (setupGoals?.goals ?? []) : ['product_feedback']
-  )
+  // Nothing is picked for the admin: the first goal they choose is the one the
+  // launch plan starts with, so a preselected goal would choose it for them.
+  const [goals, setGoals] = useState<OnboardingOutcome[]>(setupGoals?.goals ?? [])
   const nameManaged = isPathManagedFromBootstrap(MANAGED_PATHS.WORKSPACE_NAME, managedFieldPaths)
 
   const [workspaceName, setWorkspaceName] = useState(existingWorkspaceName)

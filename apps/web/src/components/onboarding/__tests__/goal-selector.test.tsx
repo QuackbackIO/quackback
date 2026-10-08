@@ -10,15 +10,20 @@ import type { OnboardingOutcome } from '@/lib/shared/db-types'
 
 afterEach(cleanup)
 
-function Picker() {
-  const [goals, setGoals] = useState<OnboardingOutcome[]>(['product_feedback'])
-  return <GoalSelector goals={goals} onGoalsChange={setGoals} />
+function Picker({ initial }: { initial: OnboardingOutcome[] }) {
+  const [goals, setGoals] = useState<OnboardingOutcome[]>(initial)
+  return (
+    <>
+      <GoalSelector goals={goals} onGoalsChange={setGoals} />
+      <output data-testid="order">{goals.join(',')}</output>
+    </>
+  )
 }
 
-function renderPicker() {
+function renderPicker(initial: OnboardingOutcome[] = ['product_feedback']) {
   return render(
     <IntlProvider locale="en">
-      <Picker />
+      <Picker initial={initial} />
     </IntlProvider>
   )
 }
@@ -76,4 +81,30 @@ it('asks for a pick only when the form needs one', async () => {
   )
   expect(screen.queryByRole('alert')).toBeNull()
   expect(screen.getByText('Pick any')).toBeInTheDocument()
+})
+
+// The first pick is the goal the launch plan starts with, so the screen says
+// which one that is, and the order picked is the order kept.
+it('marks the first pick as where the launch plan starts, and keeps pick order', async () => {
+  const user = userEvent.setup()
+  renderPicker([])
+  expect(screen.queryByText('Starts here')).toBeNull()
+  expect(screen.queryByText(/launch plan starts with/)).toBeNull()
+
+  const support = screen.getByRole('button', { name: 'Support inbox' })
+  const help = screen.getByRole('button', { name: 'Help center' })
+  await user.click(support)
+  await user.click(help)
+
+  expect(screen.getByTestId('order')).toHaveTextContent('customer_support,help_center')
+  expect(screen.getAllByText('Starts here')).toHaveLength(1)
+  expect(support).toHaveAccessibleDescription(/Starts here/)
+  expect(help).not.toHaveAccessibleDescription(/Starts here/)
+  expect(screen.getByText('Your launch plan starts with Support inbox.')).toBeInTheDocument()
+
+  // Deselecting the first pick hands the start to the next one picked.
+  await user.click(support)
+  expect(screen.getByTestId('order')).toHaveTextContent('help_center')
+  expect(help).toHaveAccessibleDescription(/Starts here/)
+  expect(screen.getByText('Your launch plan starts with Help center.')).toBeInTheDocument()
 })
