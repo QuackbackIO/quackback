@@ -13,6 +13,15 @@ describe('accountAuthConfig', () => {
     expect(config.oauth).toEqual({ password: true })
   })
 
+  // Someone may have created their account with a configured provider before
+  // setup finished. Signing back in offers what the credentials allow.
+  it('signs a returning account in with the configured providers before setup', () => {
+    const config = accountAuthConfig(null, [], { password: true, github: true, google: false })
+
+    expect(config.oauth).toEqual({ password: true })
+    expect(config.signInOAuth).toEqual({ password: true, github: true, google: false })
+  })
+
   it('passes a set-up workspace through unchanged', () => {
     const config = accountAuthConfig(
       {
@@ -35,6 +44,7 @@ describe('accountAuthConfig', () => {
       oidcProviders: [{ id: 'okta', name: 'Okta', logoUrl: null }],
       registeredAuthProviders: ['github'],
       twoFactorRequired: true,
+      signInOAuth: { github: true, password: false, magicLink: true },
     })
   })
 })

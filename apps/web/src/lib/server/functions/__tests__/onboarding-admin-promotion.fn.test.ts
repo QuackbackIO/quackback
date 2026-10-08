@@ -49,6 +49,11 @@ vi.mock('@/lib/server/onboarding-board', async (importOriginal) => ({
 }))
 
 vi.mock('@/lib/server/auth/session', () => ({ getSession: hoisted.getSession }))
+// Queuing the welcome emails is covered against a real transaction in
+// onboarding-goals.db.test.ts; this suite's transaction is a stand-in.
+vi.mock('@/lib/server/domains/onboarding/onboarding-emails', () => ({
+  scheduleOnboardingEmails: vi.fn(async () => {}),
+}))
 vi.mock('@/lib/server/functions/workspace', () => ({ getSettings: hoisted.getSettings }))
 vi.mock('@/lib/server/domains/principals/principal.service', () => ({
   syncPrincipalProfile: vi.fn(),

@@ -448,6 +448,40 @@ describe('account step — a self-hosted first user', () => {
     expect(password).toHaveAttribute('type', 'password')
   })
 
+  // Created here, then signed out before setup finished: the new-account form
+  // would only refuse the address, so there is a way to sign back in with the
+  // methods the install takes, providers included.
+  it('lets someone who already started setup sign back in', () => {
+    const props = selfHosted()
+    props.authConfig.signInOAuth = { password: true, github: true }
+    renderStep(props)
+
+    fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }))
+
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Welcome back')
+    expect(screen.getByRole('button', { name: /sign in with github/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^create account$/i })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /create a new account instead/i }))
+    expect(screen.getByRole('button', { name: /^create account$/i })).toBeInTheDocument()
+  })
+
+  it('offers to sign in when the address already has an account', async () => {
+    const { authClient } = await import('@/lib/client/auth-client')
+    vi.mocked(authClient.signUp.email).mockResolvedValueOnce({
+      data: null,
+      error: { code: 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL', message: 'User already exists.' },
+    } as never)
+    renderStep(selfHosted())
+
+    fillAdminForm({ name: 'Alex', email: 'alex@acme.example', password: 'correct-horse' })
+    fireEvent.click(createAccountButton())
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/already an account/i)
+    fireEvent.click(screen.getByRole('button', { name: /sign in instead/i }))
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Welcome back')
+  })
+
   it('drops the password form when an unclaimed workspace has password off', () => {
     const props = selfHosted()
     props.authConfig.oauth = { ...DEFAULT_AUTH_CONFIG.oauth, password: false, magicLink: true }

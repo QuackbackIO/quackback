@@ -153,7 +153,7 @@ export function AccountStep({ ssoEnabled, claim, authConfig, workspaceName }: Ac
       />
     )
   }
-  if (authConfig.oauth.password !== false) return <FirstAdminStep />
+  if (authConfig.oauth.password !== false) return <FirstAdminStep authConfig={authConfig} />
   return <MethodsStep authConfig={authConfig} workspaceName={workspaceName} />
 }
 
@@ -273,8 +273,10 @@ const MIN_PASSWORD_LENGTH = 8
  * The name is required because it is what customers see on replies and
  * updates; without one, the account shows its address's local part instead.
  */
-function FirstAdminStep() {
+function FirstAdminStep({ authConfig }: { authConfig: AccountAuthConfig }) {
   const intl = useIntl()
+  const [signingIn, setSigningIn] = useState(false)
+  const [accountExists, setAccountExists] = useState(false)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -326,6 +328,7 @@ function FirstAdminStep() {
     }
     setError('')
     setInvalidField(null)
+    setAccountExists(false)
     setSubmitting(true)
     try {
       const result = await authClient.signUp.email({
@@ -334,6 +337,17 @@ function FirstAdminStep() {
         password,
       })
       if (result.error) {
+        // Created here earlier, then signed out before setup finished.
+        if (result.error.code?.startsWith('USER_ALREADY_EXISTS')) {
+          setAccountExists(true)
+          throw new Error(
+            intl.formatMessage({
+              id: 'onboarding.account.error.exists',
+              defaultMessage:
+                'There is already an account for this email. Sign in to finish setup.',
+            })
+          )
+        }
         throw new Error(
           result.error.message ||
             intl.formatMessage({
@@ -356,6 +370,10 @@ function FirstAdminStep() {
       )
       setSubmitting(false)
     }
+  }
+
+  if (signingIn) {
+    return <ReturningSignIn authConfig={authConfig} onBack={() => setSigningIn(false)} />
   }
 
   return (
@@ -454,12 +472,24 @@ function FirstAdminStep() {
 
         <div aria-live="polite" aria-atomic="true">
           {error ? (
-            <p
+            <div
               role="alert"
               className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
             >
-              {error}
-            </p>
+              <p>{error}</p>
+              {accountExists ? (
+                <button
+                  type="button"
+                  onClick={() => setSigningIn(true)}
+                  className="mt-2 font-medium text-foreground underline underline-offset-4"
+                >
+                  <FormattedMessage
+                    id="onboarding.account.signInInstead"
+                    defaultMessage="Sign in instead"
+                  />
+                </button>
+              ) : null}
+            </div>
           ) : null}
         </div>
 
@@ -482,7 +512,80 @@ function FirstAdminStep() {
             defaultMessage="Setup takes about a minute. You can change everything later in Settings."
           />
         </p>
+        <StartedSetupLink onClick={() => setSigningIn(true)} />
       </form>
+    </AccountFrame>
+  )
+}
+
+/** The way back in for someone who already created their account here. */
+function StartedSetupLink({ onClick }: { onClick: () => void }) {
+  return (
+    <p className="text-sm text-muted-foreground">
+      <FormattedMessage
+        id="onboarding.account.startedSetup"
+        defaultMessage="Already started setting up?"
+      />{' '}
+      <button
+        type="button"
+        onClick={onClick}
+        className="font-medium text-foreground underline-offset-4 hover:underline"
+      >
+        <FormattedMessage id="onboarding.account.signIn" defaultMessage="Sign in" />
+      </button>
+    </p>
+  )
+}
+
+/**
+ * Someone created their account here, then was signed out before setup
+ * finished. Nobody is admin yet, so the wizard still offers a new account, and
+ * that form would only refuse their address. They sign in with every method
+ * this install can take, including a provider their account may be linked to,
+ * and the wizard carries on from the workspace step.
+ */
+function ReturningSignIn({
+  authConfig,
+  onBack,
+}: {
+  authConfig: AccountAuthConfig
+  onBack: () => void
+}) {
+  return (
+    <AccountFrame>
+      <SetupSteps current="account" />
+      <div className="mt-8 mb-8">
+        <OnboardingHeading>
+          <FormattedMessage
+            id="onboarding.account.returning.title"
+            defaultMessage="Welcome {br}back"
+            values={{ br: <br /> }}
+          />
+        </OnboardingHeading>
+        <OnboardingLead>
+          <FormattedMessage
+            id="onboarding.account.returning.lead"
+            defaultMessage="Sign in with the account you created here to finish setting up."
+          />
+        </OnboardingLead>
+      </div>
+      <div className="max-w-[440px]">
+        <PortalAuthFormInline
+          mode="login"
+          authConfig={{ ...authConfig, oauth: authConfig.signInOAuth ?? authConfig.oauth }}
+          callbackUrl={ONBOARDING_CALLBACK}
+        />
+        <button
+          type="button"
+          onClick={onBack}
+          className="mt-6 text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        >
+          <FormattedMessage
+            id="onboarding.account.returning.back"
+            defaultMessage="Create a new account instead"
+          />
+        </button>
+      </div>
     </AccountFrame>
   )
 }
@@ -503,6 +606,10 @@ function MethodsStep({
   authConfig: AccountAuthConfig
   workspaceName?: string
 }) {
+  const [signingIn, setSigningIn] = useState(false)
+  if (signingIn) {
+    return <ReturningSignIn authConfig={authConfig} onBack={() => setSigningIn(false)} />
+  }
   return (
     <AccountFrame workspaceName={workspaceName}>
       <SetupSteps current="account" />
@@ -543,6 +650,9 @@ function MethodsStep({
           workspaceName={workspaceName}
           callbackUrl={ONBOARDING_CALLBACK}
         />
+        <div className="mt-6">
+          <StartedSetupLink onClick={() => setSigningIn(true)} />
+        </div>
       </div>
     </AccountFrame>
   )

@@ -9,6 +9,8 @@ export interface AccountAuthConfig {
   oidcProviders?: OidcSignInButton[]
   registeredAuthProviders?: string[]
   twoFactorRequired?: boolean
+  /** The methods an account that already exists here can sign in with. */
+  signInOAuth?: Record<string, boolean | undefined>
 }
 
 /** The slice of the client settings payload the account step reads. */
@@ -33,10 +35,14 @@ interface AccountSettings {
  */
 export function accountAuthConfig(
   settings: AccountSettings | null | undefined,
-  registeredAuthProviders: string[] | undefined
+  registeredAuthProviders: string[] | undefined,
+  /** The shipped default filtered by configured credentials, for an account
+   *  someone created before setup finished and is coming back to. */
+  defaultSignInOAuth?: Record<string, boolean | undefined>
 ): AccountAuthConfig {
   const auth = settings?.publicAuthConfig
   return {
+    signInOAuth: auth?.oauth ?? defaultSignInOAuth ?? { password: true },
     found: !!auth,
     oauth: auth?.oauth ?? { password: true },
     openSignup: auth?.openSignup,
