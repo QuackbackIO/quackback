@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'react-intl'
+import '@testing-library/jest-dom/vitest'
 import { afterEach, expect, it } from 'vitest'
 import { GoalSelector } from '../goal-selector'
 import type { OnboardingOutcome } from '@/lib/shared/db-types'
@@ -42,12 +43,37 @@ it('selects multiple products with the keyboard and offers no private choice', a
   expect(screen.queryByText(/private/i)).toBeNull()
 })
 
-it('says to pick at least one when the last goal is removed', async () => {
-  const user = userEvent.setup()
+// The group is named by its question alone; the hint describes it.
+it('names the group by its question and describes it with the hint', () => {
   renderPicker()
-  expect(screen.queryByText('Pick at least one')).toBeNull()
+  const group = screen.getByRole('group', { name: 'What do you want to run first?' })
+  const hint = document.getElementById(group.getAttribute('aria-describedby')!.split(' ')[0]!)
+  expect(hint).toHaveTextContent('Pick any')
+  expect(hint?.tagName).toBe('P')
+  // Nothing in the group is a live region: toggling a goal announces nothing.
+  expect(group.querySelector('[aria-live]')).toBeNull()
+})
+
+// Only the moment of consequence is announced: trying to continue with nothing
+// picked. Removing a goal on its way to picking another stays quiet.
+it('asks for a pick only when the form needs one', async () => {
+  const user = userEvent.setup()
+  const { rerender } = renderPicker()
   await user.click(screen.getByRole('button', { name: 'Feedback & roadmap' }))
-  expect(screen.getByText('Pick at least one')).toBeInTheDocument()
-  await user.click(screen.getByRole('button', { name: 'Status page' }))
   expect(screen.queryByText('Pick at least one')).toBeNull()
+
+  rerender(
+    <IntlProvider locale="en">
+      <GoalSelector goals={[]} onGoalsChange={() => {}} required />
+    </IntlProvider>
+  )
+  expect(screen.getByRole('alert')).toHaveTextContent('Pick at least one')
+
+  rerender(
+    <IntlProvider locale="en">
+      <GoalSelector goals={['status_page']} onGoalsChange={() => {}} required />
+    </IntlProvider>
+  )
+  expect(screen.queryByRole('alert')).toBeNull()
+  expect(screen.getByText('Pick any')).toBeInTheDocument()
 })

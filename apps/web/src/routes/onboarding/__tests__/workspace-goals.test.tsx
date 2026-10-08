@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'react-intl'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '@/locales/en.json'
@@ -129,6 +130,58 @@ describe('self-hosted workspace step goals', () => {
         data: { workspaceName: 'Acme', goals: ['product_feedback'] },
       })
     )
+  })
+})
+
+describe('self-hosted workspace step submit', () => {
+  // The button says what happens next; the form says what is missing, at the
+  // moment it matters, rather than sitting greyed out with no reason.
+  it('keeps Create workspace enabled and explains a short name under the field', async () => {
+    renderStep({ managedFieldPaths: [], goals: ['product_feedback'] })
+    const name = screen.getByLabelText('Workspace name')
+    fireEvent.change(name, { target: { value: 'A' } })
+    const create = screen.getByRole('button', { name: 'Create workspace' })
+    expect(create).toBeEnabled()
+
+    fireEvent.click(create)
+
+    const error = await screen.findByRole('alert')
+    expect(error).toHaveTextContent('Enter a workspace name with at least 2 characters.')
+    expect(name).toHaveAttribute('aria-invalid', 'true')
+    expect(name.getAttribute('aria-describedby')?.split(' ')).toContain(error.id)
+    expect(error.parentElement).toBe(name.closest('[data-field]'))
+    expect(name).toHaveFocus()
+    expect(hoisted.save).not.toHaveBeenCalled()
+  })
+
+  // Enter is how a keyboard user submits, so it must reach the check too.
+  it('checks the name when Enter is pressed in the field', async () => {
+    const user = userEvent.setup()
+    renderStep({ managedFieldPaths: [], goals: ['help_center'] })
+    const name = screen.getByLabelText('Workspace name')
+    await user.clear(name)
+    await user.type(name, 'A{Enter}')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/at least 2 characters/)
+    expect(hoisted.save).not.toHaveBeenCalled()
+
+    await user.type(name, 'cme{Enter}')
+    await waitFor(() =>
+      expect(hoisted.save).toHaveBeenCalledWith({
+        data: { workspaceName: 'Acme', goals: ['help_center'] },
+      })
+    )
+  })
+
+  it('asks for a goal when none is picked, and saves nothing', async () => {
+    renderStep({ managedFieldPaths: [], goals: ['product_feedback'] })
+    fireEvent.click(screen.getByRole('button', { name: 'Feedback & roadmap' }))
+    expect(screen.queryByText('Pick at least one')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Pick at least one')
+    expect(hoisted.save).not.toHaveBeenCalled()
   })
 })
 

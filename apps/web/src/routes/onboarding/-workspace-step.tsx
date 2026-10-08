@@ -8,6 +8,7 @@ import {
   OnboardingLead,
   OnboardingPreviewPanel,
   OnboardingSplit,
+  SETUP_FIELD_CLASS,
   useBrowserHost,
 } from '@/components/onboarding/onboarding-split'
 import { PortalPreview } from '@/components/onboarding/portal-preview'
@@ -288,7 +289,11 @@ function WorkspaceNameStep({
 
   const [workspaceName, setWorkspaceName] = useState(existingWorkspaceName)
   const [isLoading, setIsLoading] = useState(false)
+  /** What the server said, which is about the form rather than one field. */
   const [error, setError] = useState('')
+  const [nameError, setNameError] = useState('')
+  /** Set once the admin tries to continue, so an empty pick is then said. */
+  const [goalsRequired, setGoalsRequired] = useState(false)
   const [ready, setReady] = useState<{ name: string; goals: OnboardingOutcome[] } | null>(null)
   const nameValid = workspaceName.trim().length >= 2
 
@@ -317,13 +322,23 @@ function WorkspaceNameStep({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
+    const goalsMissing = !goalsManaged && goals.length === 0
+    setGoalsRequired(goalsMissing)
+    setNameError(
+      nameValid
+        ? ''
+        : intl.formatMessage({
+            id: 'onboarding.workspace.error.name',
+            defaultMessage: 'Enter a workspace name with at least 2 characters.',
+          })
+    )
     if (!nameValid) {
-      setError(
-        intl.formatMessage({
-          id: 'onboarding.workspace.error.name',
-          defaultMessage: 'Enter a workspace name with at least 2 characters.',
-        })
-      )
+      setError('')
+      document.getElementById('workspaceName')?.focus()
+      return
+    }
+    if (goalsMissing) {
+      setError('')
       return
     }
     setIsLoading(true)
@@ -407,34 +422,45 @@ function WorkspaceNameStep({
           </OnboardingLead>
         </header>
 
-        <div className="flex flex-col gap-2">
+        <div data-field className="flex flex-col gap-2">
           <label htmlFor="workspaceName" className="text-sm font-medium">
             <FormattedMessage id="onboarding.workspace.name" defaultMessage="Workspace name" />
           </label>
           <Input
             id="workspaceName"
             value={workspaceName}
-            onChange={(event) => setWorkspaceName(event.target.value)}
+            onChange={(event) => {
+              setWorkspaceName(event.target.value)
+              setNameError('')
+            }}
             placeholder="Acme"
             autoFocus
             autoComplete="organization"
             disabled={isLoading || nameManaged}
-            className="h-12 rounded-xl px-4 text-base"
-            aria-describedby="workspace-name-hint"
+            className={SETUP_FIELD_CLASS}
+            aria-invalid={nameError ? true : undefined}
+            aria-describedby={nameError ? 'workspace-name-error' : 'workspace-name-hint'}
           />
-          <p id="workspace-name-hint" className="text-xs text-muted-foreground">
-            {nameManaged ? (
-              <FormattedMessage
-                id="onboarding.workspace.nameManaged"
-                defaultMessage="Your workspace admin manages this name."
-              />
-            ) : (
-              <FormattedMessage
-                id="onboarding.workspace.nameHint"
-                defaultMessage="You can change it any time in Settings."
-              />
-            )}
-          </p>
+          {/* The problem takes the hint's place, so the field says one thing. */}
+          {nameError ? (
+            <p id="workspace-name-error" role="alert" className="text-xs text-destructive">
+              {nameError}
+            </p>
+          ) : (
+            <p id="workspace-name-hint" className="text-xs text-muted-foreground">
+              {nameManaged ? (
+                <FormattedMessage
+                  id="onboarding.workspace.nameManaged"
+                  defaultMessage="Your workspace admin manages this name."
+                />
+              ) : (
+                <FormattedMessage
+                  id="onboarding.workspace.nameHint"
+                  defaultMessage="You can change it any time in Settings."
+                />
+              )}
+            </p>
+          )}
         </div>
 
         <GoalSelector
@@ -442,6 +468,7 @@ function WorkspaceNameStep({
           onGoalsChange={setGoals}
           disabled={isLoading}
           managed={goalsManaged}
+          required={goalsRequired}
         />
 
         <div aria-live="polite" aria-atomic="true" className="empty:hidden">
@@ -455,11 +482,7 @@ function WorkspaceNameStep({
           )}
         </div>
 
-        <Button
-          type="submit"
-          disabled={isLoading || !nameValid || (!goalsManaged && goals.length === 0)}
-          className="h-12 w-full rounded-full text-base"
-        >
+        <Button type="submit" disabled={isLoading} className="h-12 w-full rounded-full text-base">
           {isLoading ? (
             <>
               <ArrowPathIcon className="size-4 animate-spin motion-reduce:animate-none" />

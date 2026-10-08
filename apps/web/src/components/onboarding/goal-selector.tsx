@@ -1,5 +1,5 @@
+import { useId, type SVGProps } from 'react'
 import { FormattedMessage } from 'react-intl'
-import type { SVGProps } from 'react'
 import { LightBulbIcon, ChatBubbleLeftRightIcon, BookOpenIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import { SetupCheckCircleIcon } from './setup-icons'
@@ -65,39 +65,45 @@ export function GoalSelector({
   onGoalsChange,
   disabled,
   managed = false,
+  required = false,
 }: {
   goals: OnboardingOutcome[]
   onGoalsChange: (goals: OnboardingOutcome[]) => void
   disabled?: boolean
   /** A config file sets the goals: show its picks, read-only. */
   managed?: boolean
+  /** The form tried to continue: an empty pick is now a problem to say. */
+  required?: boolean
 }) {
   const locked = disabled || managed
+  const hintId = useId()
+  const missing = required && !managed && goals.length === 0
   return (
-    <fieldset disabled={locked} className="space-y-3">
-      <legend className="mb-3 text-sm font-medium">
+    <fieldset disabled={locked} aria-describedby={hintId} className="min-w-0">
+      {/* The legend floats so the hint can sit beside it while staying out of
+          the group's name: the hint describes the group rather than naming it. */}
+      <legend className="float-start me-2 mb-3 text-sm font-medium">
         <FormattedMessage
           id="onboarding.goals.title"
           defaultMessage="What do you want to run first?"
         />
-        {/* Polite live region: the hint turns into "Pick at least one" when
-            the last goal is removed, and the step cannot continue without one. */}
-        <span aria-live="polite" className="ms-2 text-xs font-normal text-muted-foreground">
-          {managed ? (
-            <FormattedMessage
-              id="onboarding.goals.managed"
-              defaultMessage="Set by your config file"
-            />
-          ) : goals.length === 0 ? (
-            <span className="text-foreground">
-              <FormattedMessage id="onboarding.goals.pickOne" defaultMessage="Pick at least one" />
-            </span>
-          ) : (
-            <FormattedMessage id="onboarding.goals.pickAny" defaultMessage="Pick any" />
-          )}
-        </span>
       </legend>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <p id={hintId} className="mb-3 text-xs leading-5 text-muted-foreground">
+        {managed ? (
+          <FormattedMessage
+            id="onboarding.goals.managed"
+            defaultMessage="Set by your config file"
+          />
+        ) : missing ? (
+          // Only this state is announced: it is the one that stops the step.
+          <span role="alert" className="font-medium text-destructive">
+            <FormattedMessage id="onboarding.goals.pickOne" defaultMessage="Pick at least one" />
+          </span>
+        ) : (
+          <FormattedMessage id="onboarding.goals.pickAny" defaultMessage="Pick any" />
+        )}
+      </p>
+      <div className="clear-both grid gap-3 sm:grid-cols-2">
         {options.map(({ id, label, description, icon: Icon }) => {
           const picked = goals.includes(id)
           return (
@@ -144,7 +150,7 @@ export function GoalSelector({
         })}
       </div>
       {managed ? null : (
-        <p className="text-xs text-muted-foreground">
+        <p className="mt-3 text-xs text-muted-foreground">
           <FormattedMessage
             id="onboarding.goals.later"
             defaultMessage="You can turn any of these on or off later in Settings."
