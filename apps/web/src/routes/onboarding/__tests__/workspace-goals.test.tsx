@@ -61,7 +61,7 @@ const ALL_SET = {
 beforeEach(() => {
   localStorage.clear()
   hoisted.save.mockReset()
-  hoisted.save.mockResolvedValue({ enabledModules: [], name: 'Acme' })
+  hoisted.save.mockResolvedValue({ ok: true, enabledModules: [], name: 'Acme' })
   hoisted.checks.mockReset()
   hoisted.checks.mockResolvedValue(ALL_SET)
   hoisted.navigate.mockClear()
@@ -204,7 +204,7 @@ describe('setup buttons while they work', () => {
     expect(saving).toBeDisabled()
     expect(saving).toHaveAttribute('aria-busy', 'true')
 
-    finishSave({ enabledModules: [], name: 'Acme' })
+    finishSave({ ok: true, enabledModules: [], name: 'Acme' })
     const open = await screen.findByRole('button', { name: 'Open your workspace' })
     fireEvent.click(open)
     expect(open).toBeDisabled()
@@ -249,7 +249,7 @@ describe('self-hosted ready step', () => {
   // A real company name must not break the headline or the way in.
   it('keeps a long name readable and the button label short', async () => {
     const long = 'Featherstonehaugh Customer Success Group'
-    hoisted.save.mockResolvedValue({ enabledModules: [], name: long })
+    hoisted.save.mockResolvedValue({ ok: true, enabledModules: [], name: long })
     await finishSetup(['product_feedback'])
 
     const heading = screen.getByRole('heading', { level: 1 })

@@ -8,6 +8,8 @@ export function WorkspaceIdentityCard(props: {
   managed: boolean
   onWorkspaceNameChange: (value: string) => void
   maxLength?: number
+  /** Bring the logo control into view and highlight it (the `?focus=logo` deep link). */
+  focusLogo?: boolean
 }) {
   return (
     <SettingsCard
@@ -15,7 +17,7 @@ export function WorkspaceIdentityCard(props: {
       description="Your logo and name, shown across the portal, widget and emails."
     >
       <div className="flex items-center gap-4">
-        <LogoUploader workspaceName={props.workspaceName} />
+        <LogoUploader workspaceName={props.workspaceName} focus={props.focusLogo} />
         <div className="min-w-0 flex-1 space-y-1.5">
           <Label htmlFor="workspace-name" className="text-xs text-muted-foreground">
             Workspace name

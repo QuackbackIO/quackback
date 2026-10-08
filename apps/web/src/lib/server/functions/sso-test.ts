@@ -38,9 +38,9 @@ import {
   claimMappingFor,
   identityMappingFor,
   type IdentityProviderClaimMapping,
+  type ProviderIdentityMapping,
 } from '@/lib/shared/oidc-claim-mapping'
 import { ssoTestResultKey, ssoTestSessionKey } from '@/lib/shared/sso-test-keys'
-import type { IdentityMapping } from '@/lib/server/auth/resolve-identity'
 
 const TTL_SECONDS = 600
 
@@ -76,7 +76,7 @@ type TestSession = {
   /** The prompt sent, replayed into a configuration-error hint. */
   requestedPrompt?: string
   /** Identity sources and claim paths — the same mapping production uses. */
-  identityMapping?: IdentityMapping
+  identityMapping?: ProviderIdentityMapping
   /** Full mapping snapshotted at start. Pre-deploy sessions may omit this. */
   claimMapping?: IdentityProviderClaimMapping
   /** The provider's `detailsChangedAt` at test-start. The callback only stamps

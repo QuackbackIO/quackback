@@ -1,6 +1,6 @@
-import { Suspense } from 'react'
+import { Suspense, useDeferredValue } from 'react'
 import { createFileRoute, notFound, redirect, useRouteContext } from '@tanstack/react-router'
-import { useSuspenseQuery } from '@tanstack/react-query'
+import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
 import { ViewerPortalNoBoards } from '@/components/public/portal-no-boards'
 import { FeedbackContainer } from '@/components/public/feedback/feedback-container'
@@ -172,8 +172,24 @@ function PortalFeed() {
   const currentSearch = search.search
   const currentSort = search.sort ?? 'trending'
 
+  // A visitor's first post or vote mints an anonymous session mid-action,
+  // which changes the viewer and so the feed's key. Deferring the viewer
+  // keeps the current feed, and the composer inside it, on screen while the
+  // new viewer's feed loads, instead of swapping them for the skeleton.
+  // Signing in or out clears every viewer's feed first, so there is nothing
+  // to keep on screen: key on the new viewer straight away, rather than
+  // fetching the old viewer's feed again under the new session.
+  const queryClient = useQueryClient()
+  const liveViewerId = session?.user?.id
+  const deferredViewerId = useDeferredValue(liveViewerId)
+  const previousFeedCached =
+    queryClient.getQueryData(
+      portalQueries.portalData(portalDataParams(search, deferredViewerId)).queryKey
+    ) !== undefined
+  const viewerId =
+    deferredViewerId !== liveViewerId && !previousFeedCached ? liveViewerId : deferredViewerId
   const { data: portalData } = useSuspenseQuery(
-    portalQueries.portalData(portalDataParams(search, session?.user?.id))
+    portalQueries.portalData(portalDataParams(search, viewerId))
   )
 
   // Seeds the shared statuses cache from this response so a post-detail

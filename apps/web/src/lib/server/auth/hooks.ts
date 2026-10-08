@@ -21,7 +21,9 @@
 
 import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { getJwtToken } from 'better-auth/plugins'
-import type { UserId } from '@quackback/ids'
+import type { PrincipalId, RoleId, UserId } from '@quackback/ids'
+import type { SsoRoleMatch } from '@/lib/shared/resolve-sso-role'
+import { SYSTEM_ROLES } from '@/lib/shared/permissions'
 import { toSessionScope, type Role } from '@/lib/shared/roles'
 import { TEST_CUSTOMER_SESSION_PREFIX } from '@/lib/shared/test-customer'
 import {
@@ -57,9 +59,8 @@ import { getBaseUrl } from '@/lib/server/config'
 import { isSyntheticAnonEmail } from '@/lib/shared/anonymous-email'
 import { readSsoClaims, readSsoClaimsWithProvenance, type ClaimRead } from './read-sso-claims'
 import { applyClaimAttributesAfter } from './apply-claim-attributes'
-import { decodeSsoClaims } from './sso-claims-decode'
-import { peekResolvedClaims } from './resolved-claims-stash'
-import { pickAvatarUrl } from './resolve-identity'
+import type { ResolvedProfile } from './resolved-claims-stash'
+import { profileSyncEnabled } from '@/lib/shared/oidc-claim-mapping'
 import { forgetRequestIdentity } from './request-session'
 import { logger } from '@/lib/server/logger'
 
@@ -721,16 +722,19 @@ export async function handleAutoProvisionAfter(
   // the email is not at one of the provider's verified domains.
   const { roleMappingFor } = await import('@/lib/shared/oidc-claim-mapping')
   const roleMapping = roleMappingFor(provider.claimMapping)
-  let claimRole: Role | null = null
+  let claimMatch: SsoRoleMatch | null = null
   if (roleMapping) {
     // Role resolution is indifferent to provenance: a role claim absent from
     // the stored token yields the default role either way.
     const claims = readClaims
       ? (await readClaims()).claims
       : await readSsoClaims(userIdTyped, providerId)
-    const { resolveSsoRole } = await import('@/lib/shared/resolve-sso-role')
-    claimRole = resolveSsoRole(claims, roleMapping)
+    const { resolveSsoRoleMatch } = await import('@/lib/shared/resolve-sso-role')
+    // The stored section, so a match names the rule by its stored position.
+    const stored = provider.claimMapping as { role?: unknown } | null
+    claimMatch = resolveSsoRoleMatch(claims, stored?.role)
   }
+  const claimRole: Role | null = claimMatch?.role ?? null
 
   // The default role (no claim matched) is NOT a per-user attestation, so it
   // stays scoped to the CALLBACK provider's own verified domains: without the
@@ -738,11 +742,12 @@ export async function handleAutoProvisionAfter(
   // team membership. A claim-matched role bypasses this gate.
   if (claimRole === null && findProviderForDomainEmail(email, [provider]) === null) return
 
-  const targetRole: Role = claimRole ?? provider.autoProvisionRole ?? 'member'
+  const { DEFAULT_PROVISION_ROLE } = await import('@/lib/shared/sso-mapping-preview')
+  const targetRole: Role = claimRole ?? provider.autoProvisionRole ?? DEFAULT_PROVISION_ROLE
 
   const p = await db.query.principal.findFirst({
     where: eq(principalTable.userId, userIdTyped),
-    columns: { role: true },
+    columns: { id: true, role: true },
   })
 
   // A missing principal is a returning user whose row was soft-removed
@@ -762,11 +767,39 @@ export async function handleAutoProvisionAfter(
   // demote an existing team-role user to 'user' under sync mode.
   if (targetRole === 'user' && !syncOnEverySignIn) return
 
-  if (currentRole === targetRole) return // no-op, save the write
+  // A rule may grant a workspace role on top of the member tier, through the
+  // same assignment path custom-role invites and role changes use. Looked up
+  // only once this sign-in may change the role.
+  const targetCustom = claimMatch?.roleId
+    ? await grantableRuleRole(claimMatch.roleId, claimMatch.ruleIndex, provider.id)
+    : null
+  // A matched rule whose role cannot be granted grants nothing. First match
+  // wins, so later rules and the default role do not apply either, and the
+  // person keeps whatever role they hold. Granting the bare tier instead would
+  // hand out the member preset, which can exceed the role the admin chose.
+  if (claimMatch?.roleId && !targetCustom) return
+
+  // Under sync the provider owns roles: a plain-member outcome (a rule with no
+  // workspace role, or the default) moves a member holding another workspace
+  // role back to the plain member role.
+  const plainMember = targetRole === 'member' && !targetCustom
+  const syncedMember = syncOnEverySignIn && plainMember && currentRole === 'member'
+  const currentCustom =
+    p && (targetCustom || syncedMember) ? await workspaceAssignmentOf(p.id as PrincipalId) : null
+  // Under sync, a person whose matched rule now names a different workspace
+  // role moves to it even when the tier is unchanged.
+  const customMoves = targetCustom != null && currentCustom?.id !== targetCustom.id
+  const clearsCustom =
+    syncedMember && currentCustom != null && currentCustom.key !== SYSTEM_ROLES.MANAGER
+  if (currentRole === targetRole && !customMoves && !clearsCustom) return // no-op
+  const assignRoleId = targetCustom?.id
 
   if (p) {
     // No tx -> the factory busts PRINCIPAL_BY_USER itself.
-    await setPrincipalRole({ userId: userIdTyped }, targetRole)
+    await setPrincipalRole({ userId: userIdTyped }, targetRole, {
+      assignRoleId,
+      resetAssignment: clearsCustom,
+    })
   } else {
     // Recreate the soft-removed principal in-band with the provisioned role.
     // Display fields come from the auth user so the rebuilt principal matches
@@ -786,26 +819,82 @@ export async function handleAutoProvisionAfter(
       lastSsoSignInAt: new Date(),
     })
     // If a concurrent lazy create won the race it seeded role 'user'; reapply the
-    // provisioned role so the SSO attestation isn't silently dropped.
-    if (!created && rebuilt.role !== targetRole) {
-      await setPrincipalRole({ userId: userIdTyped }, targetRole)
+    // provisioned role so the SSO attestation isn't silently dropped. A
+    // workspace role is written through the role writer either way, since a
+    // plain create records no assignment.
+    if (assignRoleId || (!created && rebuilt.role !== targetRole)) {
+      await setPrincipalRole({ userId: userIdTyped }, targetRole, { assignRoleId })
     }
   }
 
-  if (p?.role && p.role !== targetRole) {
+  if (p?.role && (p.role !== targetRole || customMoves || clearsCustom)) {
     const { recordAuditEvent } = await import('@/lib/server/audit/log')
     await recordAuditEvent({
       event: 'user.role.changed',
       outcome: 'success',
       actor: { userId: userIdTyped },
       target: { type: 'user', id: userIdTyped },
-      before: { role: p.role },
-      after: { role: targetRole },
+      before: {
+        role: p.role,
+        ...((customMoves || clearsCustom) && currentCustom
+          ? { assignedRole: currentCustom.name }
+          : {}),
+      },
+      after: { role: targetRole, ...(targetCustom ? { assignedRole: targetCustom.name } : {}) },
       metadata: { source: roleMapping ? 'claim_mapping' : 'auto_provision' },
     })
   }
 
   log.info({ user_id: userId, role: targetRole }, 'auto-provisioned verified-domain user via sso')
+}
+
+/**
+ * The workspace role a matched rule names, when it can still be granted. A
+ * role deleted since the rule was saved (or the Owner preset, which rides the
+ * admin tier and its own promotion path) yields null and the rule grants
+ * nothing; the warning carries ids only.
+ */
+async function grantableRuleRole(
+  roleId: string,
+  ruleIndex: number,
+  providerId: string
+): Promise<{ id: RoleId; name: string } | null> {
+  const { db, roles, eq } = await import('@/lib/server/db')
+  const [row] = await db
+    .select({ id: roles.id, key: roles.key, name: roles.name })
+    .from(roles)
+    .where(eq(roles.id, roleId as RoleId))
+    .limit(1)
+  if (row && row.key !== SYSTEM_ROLES.OWNER) return { id: row.id, name: row.name }
+  log.warn(
+    {
+      code: 'sso_role_rule_role_missing',
+      provider_id: providerId,
+      rule_index: ruleIndex,
+      role_id: roleId,
+    },
+    'sso role rule names a role that cannot be granted; leaving the role unchanged'
+  )
+  return null
+}
+
+/** The principal's workspace-wide role assignment, if any. */
+async function workspaceAssignmentOf(
+  principalId: PrincipalId
+): Promise<{ id: RoleId; key: string; name: string } | null> {
+  const { db, roles, principalRoleAssignments, and, eq, isNull } = await import('@/lib/server/db')
+  const [row] = await db
+    .select({ id: roles.id, key: roles.key, name: roles.name })
+    .from(principalRoleAssignments)
+    .innerJoin(roles, eq(roles.id, principalRoleAssignments.roleId))
+    .where(
+      and(
+        eq(principalRoleAssignments.principalId, principalId),
+        isNull(principalRoleAssignments.teamId)
+      )
+    )
+    .limit(1)
+  return row ?? null
 }
 
 type IdpRows = Awaited<
@@ -814,117 +903,214 @@ type IdpRows = Awaited<
   >
 >
 
-/**
- * Resolve a provider's userinfo endpoint: the manual URL if set, else the
- * `userinfo_endpoint` from its discovery document. SSRF-guarded, best-effort.
- */
-async function resolveUserInfoEndpoint(
-  provider: IdpRows[number] | undefined
-): Promise<string | null> {
-  if (!provider) return null
-  if (provider.userInfoUrl) return provider.userInfoUrl
-  if (!provider.discoveryUrl) return null
-  try {
-    const { safeFetch } = await import('@/lib/server/content/ssrf-guard')
-    const res = await safeFetch(provider.discoveryUrl, { timeoutMs: 5000 })
-    if (!res.ok) return null
-    const doc: unknown = await res.json()
-    const endpoint = (doc as { userinfo_endpoint?: unknown } | null)?.userinfo_endpoint
-    return typeof endpoint === 'string' ? endpoint : null
-  } catch {
-    return null
-  }
-}
+/** What a provider last wrote to an account's user, per `account_profile_sync`. */
+type SyncedProfile = { name: string | null; image: string | null }
 
-/** Fetch a userinfo document with the bearer token. Best-effort. */
-async function fetchUserInfoDoc(
-  url: string,
-  accessToken: string
-): Promise<Record<string, unknown> | null> {
-  try {
-    const { safeFetch } = await import('@/lib/server/content/ssrf-guard')
-    const res = await safeFetch(url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      timeoutMs: 5000,
-    })
-    if (!res.ok) return null
-    const body: unknown = await res.json()
-    return body !== null && typeof body === 'object' ? (body as Record<string, unknown>) : null
-  } catch {
-    return null
-  }
+/**
+ * One field of the next record: the stored value, while it equals what the
+ * provider sends now or is still provider-set. A provider-set value stays
+ * recorded, so turning sync on later can refresh it. Anything else was changed
+ * by someone other than the provider.
+ */
+function nextSyncedField(
+  stored: string | null,
+  providerValue: string | undefined,
+  providerSet: boolean
+): string | null {
+  return stored !== null && (stored === providerValue || providerSet) ? stored : null
 }
 
 /**
- * Fill `user.image` from the SSO `picture` claim — but only when the account
- * has no avatar yet.
+ * Keep `user.name` and `user.image` in step with the identity provider after an
+ * OIDC callback, without ever overwriting what a person chose in Quackback.
  *
- * Better-Auth's genericOAuth writes `image` only when it CREATES the user, and
- * we deliberately leave `overrideUserInfo` off ("set once, never clobber a
- * picture the user chose in Quackback"). Neither covers the common case: an
- * account that already existed before the workspace's IdP started returning a
- * `picture`, or before this feature shipped. This closes that gap without ever
- * overwriting a non-empty avatar.
+ * Better-Auth's genericOAuth writes `name` and `image` only when it CREATES the
+ * user, and `overrideUserInfo` stays off. So, on every callback:
  *
- * `picture` is sourced, in order:
- *   1. the request's resolved claims (peeked, not consumed, so role
- *      provisioning still takes its copy) — the free path;
- *   2. the stored ID token;
- *   3. a live userinfo call with the just-issued access token — the
- *      deterministic path for an IdP that exposes `picture` only at userinfo,
- *      where (1) can miss if role provisioning drained the stash first.
+ *  - Fill: an empty avatar takes the provider's avatar, for every provider.
+ *  - Sync, when the provider's claim mapping has `profile.syncOnSignIn`:
+ *    - the name follows the provider's name while the current name is
+ *      provider-set: the value recorded for the account or, for an account
+ *      with no record yet, a name sign-up generated for it. Once a record
+ *      exists, any other name is a person's edit;
+ *    - the avatar follows the provider's avatar while the current avatar is the
+ *      value this provider last wrote and nothing was uploaded (`imageKey`).
+ *  - Record: `account_profile_sync` keeps, per field, the provider-set value
+ *    the user's stored value equals (a generated name counts), whether sync is
+ *    on or off. A row means the account is tracked, so it is created on the
+ *    first sign-in and never deleted; after that it is written only when it
+ *    changes, so an ordinary sign-in costs no extra write. A record that
+ *    cannot be read (a database that has not created the table yet) counts as
+ *    no record and is left unwritten, so the avatar fill still runs.
  *
- * Runs BEFORE `handleAutoProvisionAfter` so the peek in (1) sees the stash.
+ * The user update and the principal copy commit together, and only while the
+ * name, avatar and upload are still what was read: a concurrent edit wins, and
+ * the refresh then writes nothing more. The record is written after that
+ * commit, outside it, since its table may not exist yet.
+ *
+ * The provider's name, avatar and generated names are the resolver's
+ * decisions for this sign-in, read through the shared per-callback claim
+ * reader. A stale read (the stored ID token, not this sign-in) changes
+ * nothing, the same stance as attribute sync.
+ *
+ * Name and avatar changes reach `principal.display_name` / `avatar_url` the way
+ * a profile edit does. A failure is logged and swallowed: a profile refresh
+ * must never block a sign-in.
  */
-export async function handleAvatarBackfillAfter(
+export async function handleProfileRefreshAfter(
   ctx: {
     path?: string
     params?: Record<string, unknown>
     context?: { newSession?: { user?: { id?: string } } | null }
   },
   registeredOidcIds: Set<string>,
-  providers: IdpRows
+  providers: IdpRows,
+  /** Shared per-callback claim reader. Omitted, falls back to `readSsoClaimsWithProvenance`. */
+  readClaims?: () => Promise<ClaimRead>
 ): Promise<void> {
   const providerId = oidcCallbackProviderId(ctx)
   if (!providerId || !isRegisteredOidcProvider(providerId, registeredOidcIds)) return
   const userId = ctx.context?.newSession?.user?.id
   if (typeof userId !== 'string' || userId.length === 0) return
-  type UserId = `user_${string}`
-  const userIdTyped = userId as UserId
+  try {
+    const read = await (readClaims
+      ? readClaims()
+      : readSsoClaimsWithProvenance(userId as UserId, providerId))
+    if (!read.fresh || !read.profile) return
+    const provider = providers.find((p) => p.registrationId === providerId)
+    await refreshSsoProfile(
+      userId as UserId,
+      providerId,
+      read.profile,
+      profileSyncEnabled(provider?.claimMapping)
+    )
+  } catch {
+    // No error object: a failed query's message can carry the values it wrote.
+    log.error(
+      { code: 'sso_profile_refresh_failed', user_id: userId, provider_id: providerId },
+      'sso profile refresh failed'
+    )
+  }
+}
 
-  const { db, user: userTable, account, and, eq, desc } = await import('@/lib/server/db')
+async function refreshSsoProfile(
+  userId: UserId,
+  providerId: string,
+  profile: ResolvedProfile,
+  sync: boolean
+): Promise<void> {
+  const {
+    db,
+    user: userTable,
+    account,
+    accountProfileSync,
+    and,
+    eq,
+    desc,
+    isNull,
+  } = await import('@/lib/server/db')
 
   const owner = await db.query.user.findFirst({
-    where: eq(userTable.id, userIdTyped),
-    columns: { image: true },
+    where: eq(userTable.id, userId),
+    columns: { name: true, image: true, imageKey: true },
   })
-  // Only fill an empty avatar — never replace one the user set.
-  if (!owner || (typeof owner.image === 'string' && owner.image.trim() !== '')) return
+  if (!owner) return
 
   const row = await db.query.account.findFirst({
-    where: and(eq(account.userId, userIdTyped), eq(account.providerId, providerId)),
-    columns: { idToken: true, accountId: true, accessToken: true },
+    where: and(eq(account.userId, userId), eq(account.providerId, providerId)),
+    columns: { id: true },
     orderBy: desc(account.createdAt),
   })
+  if (!row) return
 
-  const stashed = row?.accountId ? peekResolvedClaims(providerId, row.accountId) : null
-  let image = pickAvatarUrl(stashed ?? decodeSsoClaims(row?.idToken))
-
-  // Last resort: ask userinfo directly. `picture` frequently lives only there,
-  // and the stash can be gone by now.
-  if (!image && row?.accessToken) {
-    const endpoint = await resolveUserInfoEndpoint(
-      providers.find((p) => p.registrationId === providerId)
+  // `undefined`: no row, the account is not tracked yet. `null`: unreadable.
+  let recorded: SyncedProfile | undefined | null
+  try {
+    recorded = await db.query.accountProfileSync.findFirst({
+      where: eq(accountProfileSync.accountId, row.id),
+      columns: { name: true, image: true },
+    })
+  } catch {
+    recorded = null
+    log.warn(
+      { code: 'sso_profile_record_unreadable', user_id: userId, provider_id: providerId },
+      'sso profile record unreadable'
     )
-    if (endpoint) {
-      image = pickAvatarUrl((await fetchUserInfoDoc(endpoint, row.accessToken)) ?? {})
-    }
   }
 
-  if (!image) return
+  // A blank name is never written over a real one.
+  const providerName = profile.name?.trim() ? profile.name : undefined
+  const providerImage = profile.image
+  const imageEmpty = !owner.image?.trim()
+  const nameProviderSet = recorded
+    ? owner.name === recorded.name
+    : profile.generatedNames.includes(owner.name)
+  const imageProviderSet = owner.image !== null && owner.image === recorded?.image
 
-  await db.update(userTable).set({ image }).where(eq(userTable.id, userIdTyped))
-  log.info({ user_id: userId, provider_id: providerId }, 'backfilled sso avatar')
+  const changes: { name?: string; image?: string } = {}
+  if (sync && providerName && owner.name !== providerName && nameProviderSet) {
+    changes.name = providerName
+  }
+  if (
+    providerImage &&
+    owner.image !== providerImage &&
+    (imageEmpty || (sync && !owner.imageKey && imageProviderSet))
+  ) {
+    changes.image = providerImage
+  }
+
+  const fields = Object.keys(changes)
+  if (fields.length > 0) {
+    const { syncPrincipalProfile } =
+      await import('@/lib/server/domains/principals/principal.factory')
+    const applied = await db.transaction(async (tx) => {
+      const updated = await tx
+        .update(userTable)
+        .set(changes)
+        .where(
+          and(
+            eq(userTable.id, userId),
+            eq(userTable.name, owner.name),
+            owner.image === null ? isNull(userTable.image) : eq(userTable.image, owner.image),
+            owner.imageKey === null
+              ? isNull(userTable.imageKey)
+              : eq(userTable.imageKey, owner.imageKey)
+          )
+        )
+        .returning({ id: userTable.id })
+      if (updated.length === 0) return false
+      await syncPrincipalProfile(
+        userId,
+        {
+          ...(changes.name !== undefined ? { displayName: changes.name } : {}),
+          ...(changes.image !== undefined ? { avatarUrl: changes.image } : {}),
+        },
+        tx
+      )
+      return true
+    })
+    if (!applied) {
+      log.debug(
+        { user_id: userId, provider_id: providerId },
+        'sso profile refresh skipped: user changed concurrently'
+      )
+      return
+    }
+    log.info({ user_id: userId, provider_id: providerId, fields }, 'refreshed sso profile')
+  }
+
+  // Unknown state is left alone rather than overwritten.
+  if (recorded === null) return
+  const next: SyncedProfile = {
+    name: nextSyncedField(changes.name ?? owner.name, providerName, nameProviderSet),
+    image: nextSyncedField(changes.image ?? owner.image, providerImage, imageProviderSet),
+  }
+  if (recorded && next.name === recorded.name && next.image === recorded.image) return
+  const values = { ...next, updatedAt: new Date() }
+  await db
+    .insert(accountProfileSync)
+    .values({ accountId: row.id, ...values })
+    .onConflictDoUpdate({ target: accountProfileSync.accountId, set: values })
 }
 
 /**
@@ -1553,14 +1739,17 @@ export async function handleCountryCapture(ctx: {
  *     per-domain SSO enforcement or a disabled per-method toggle. SSO is
  *     allowed for every role, so verified-domain users pass this step; it
  *     gates the non-SSO providers.
- *  4. `applyClaimAttributesAfter` — copy mapped IdP claims into person
+ *  4. `handleProfileRefreshAfter`: fill an empty avatar and, with profile
+ *     sync on, keep provider-set name and avatar following the provider.
+ *     After cleanup so a revoked session changes nothing; never throws.
+ *  5. `applyClaimAttributesAfter`: copy mapped IdP claims into person
  *     attributes. After cleanup so a revoked session writes nothing;
  *     wrapped in try/catch so a DB error never blocks sign-in.
- *  5. `handleSignInSuccessAudit` — emits `auth.signin.success` if a
+ *  6. `handleSignInSuccessAudit`: emits `auth.signin.success` if a
  *     session still exists at this point (i.e. wasn't revoked by
  *     prior steps). Runs after the gates so it only records sign-ins
  *     that actually stuck.
- *  6. `handleNewDeviceNotification` — sends a "new device" email +
+ *  7. `handleNewDeviceNotification`: sends a "new device" email +
  *     records an audit row when an additional signed device cookie
  *     for this user hasn't been seen within the last 90 days. The
  *     first recorded device is seeded silently. Alerts cannot be
@@ -1646,8 +1835,8 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
   const workspace = await getWorkspaceSettings()
 
   // One claim read per callback. The stash is take-once, so role
-  // provisioning and attribute writes must share the result rather than
-  // each calling `takeResolvedClaims`.
+  // provisioning, the profile refresh and attribute writes must share the
+  // result rather than each calling `takeResolvedClaims`.
   let claimsPromise: Promise<ClaimRead> | undefined
   const callbackUserId = ctx.context?.newSession?.user?.id
   const callbackProviderId = oidcCallbackProviderId(ctx)
@@ -1664,13 +1853,6 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
         }
       : undefined
 
-  // Before auto-provision: this one only PEEKS the resolved-claims stash, and
-  // role provisioning (below) TAKES it — so the avatar has to look first.
-  await handleAvatarBackfillAfter(
-    ctx as Parameters<typeof handleAvatarBackfillAfter>[0],
-    registeredOidcIds,
-    providers
-  )
   await handleAutoProvisionAfter(
     ctx as Parameters<typeof handleAutoProvisionAfter>[0],
     providers,
@@ -1682,6 +1864,13 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
     workspace,
     providers,
     registeredOidcIds
+  )
+  // After cleanup, so a revoked session changes no profile. Never throws.
+  await handleProfileRefreshAfter(
+    ctx as Parameters<typeof handleProfileRefreshAfter>[0],
+    registeredOidcIds,
+    providers,
+    readClaims
   )
   try {
     await applyClaimAttributesAfter(

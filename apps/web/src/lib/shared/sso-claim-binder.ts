@@ -6,6 +6,7 @@
 
 import {
   DEFAULT_IDENTITY_SOURCES,
+  OIDC_PROFILE_DEFAULTS,
   claimPathIsUnsafe,
   getClaimByPath,
   isAffirmativeClaim,
@@ -177,10 +178,10 @@ export function createBindingState(config: BindingConfig = {}): BindingState {
   return {
     config: {
       sources: mapping?.sources ?? DEFAULT_IDENTITY_SOURCES,
-      idClaim: mapping?.idClaim ?? 'sub',
-      emailClaim: mapping?.emailClaim ?? 'email',
-      nameClaim: mapping?.nameClaim ?? 'name',
-      imageClaim: mapping?.imageClaim ?? 'picture',
+      idClaim: mapping?.idClaim ?? OIDC_PROFILE_DEFAULTS.id,
+      emailClaim: mapping?.emailClaim ?? OIDC_PROFILE_DEFAULTS.email,
+      nameClaim: mapping?.nameClaim ?? OIDC_PROFILE_DEFAULTS.name,
+      imageClaim: mapping?.imageClaim ?? OIDC_PROFILE_DEFAULTS.image,
       explicitIdClaim: Boolean(mapping?.idClaim),
       requiredClaimPaths: config.requiredClaimPaths,
       wantImage: config.wantImage === true,

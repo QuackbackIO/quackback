@@ -21,6 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { assistantQueries } from '@/lib/client/queries/assistant'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 const COPILOT_TABS = ['knowledge', 'guidance'] as const
 type CopilotTab = (typeof COPILOT_TABS)[number]
@@ -30,6 +31,7 @@ const searchSchema = z.object({
 })
 
 export const Route = createFileRoute('/admin/settings/copilot')({
+  head: adminPageHead('Copilot settings'),
   validateSearch: searchSchema,
   beforeLoad: ({ context, search }) => {
     if (search.tab === 'actions') {

@@ -7,7 +7,7 @@ import type { BillingCatalogue, CustomerInvoice } from '@/lib/server/control-pla
 import { billingQueries, cancelPlanDowngradeFn } from '@/lib/client/queries/billing'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Button, NewTabHint } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { useFormatNumber } from '@/components/ui/format-number'
 import { useLocalDateFormatter, type LocalDateFormatter } from '@/components/ui/local-date'
@@ -655,6 +655,7 @@ function PlanCard(props: {
             className={`${INLINE_LINK} mt-1 inline-flex items-center gap-1 text-[13px]`}
           >
             View & compare features
+            <NewTabHint />
           </a>
         </div>
         <p className="shrink-0 text-right">

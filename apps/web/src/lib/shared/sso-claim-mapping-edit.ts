@@ -5,19 +5,26 @@
 import {
   DEFAULT_IDENTITY_SOURCES,
   IDENTITY_SOURCES,
+  PROFILE_FIELDS,
   allowsMissingEmail,
   identitySourcesFor,
+  isProfileField,
+  isRoleRuleRoleId,
   profileClaimFor,
+  profileSyncEnabled,
   type IdentityProviderClaimMapping,
   type IdentitySource,
   type ProfileField,
 } from './oidc-claim-mapping'
 import type { Role } from './roles'
 import { isPlainRecord as isRecord } from './record'
+import { PERMISSIONS, WORKSPACE_ADMIN_PERMISSIONS, type PermissionKey } from './permissions'
 
 export const MAX_CLAIM_PATH_LENGTH = 256
 
-export type RoleRule = { whenContains: string; role: Role }
+/** A role rule as the editor writes it. `roleId` grants a workspace role on
+ *  top of the member tier and is only valid with `role: 'member'`. */
+export type RoleRule = { whenContains: string; role: Role; roleId?: string }
 export type PeopleEntry = { claimPath: string; attributeKey: string }
 
 export type ClaimMappingOperation =
@@ -26,6 +33,7 @@ export type ClaimMappingOperation =
   | { op: 'setSources'; sources: IdentitySource[] }
   | { op: 'resetSources' }
   | { op: 'setAllowMissingEmail'; allow: boolean }
+  | { op: 'setProfileSync'; syncOnSignIn: boolean }
   | { op: 'setRolePath'; claimPath: string }
   | { op: 'insertRoleRule'; index: number; rule: RoleRule }
   | { op: 'editRoleRule'; index: number; rule: RoleRule }
@@ -75,6 +83,26 @@ function requireRole(role: string): Role {
     throw new ClaimMappingEditError('INVALID_ROLE', 'Role must be admin, member, or user.')
   }
   return role
+}
+
+/** The stored shape of one rule, validated. Absent `roleId` means the plain tier. */
+function storedRoleRule(rule: RoleRule): Record<string, unknown> {
+  const whenContains = rule.whenContains.trim()
+  if (!whenContains) {
+    throw new ClaimMappingEditError('INVALID_ROLE_RULE', 'A role rule has no value.')
+  }
+  const role = requireRole(rule.role)
+  if (rule.roleId == null) return { whenContains, role }
+  if (role !== 'member') {
+    throw new ClaimMappingEditError(
+      'INVALID_ROLE_RULE',
+      'A workspace role can only be granted on the member tier.'
+    )
+  }
+  if (!isRoleRuleRoleId(rule.roleId)) {
+    throw new ClaimMappingEditError('INVALID_ROLE_RULE', 'That role does not exist.')
+  }
+  return { whenContains, role, roleId: rule.roleId }
 }
 
 function profileObject(next: Record<string, unknown>): Record<string, unknown> {
@@ -208,23 +236,23 @@ function applyOne(next: Record<string, unknown>, operation: ClaimMappingOperatio
       else delete profile.allowMissingEmail
       return
     }
+    case 'setProfileSync': {
+      const profile = profileObject(next)
+      if (operation.syncOnSignIn) profile.syncOnSignIn = true
+      else delete profile.syncOnSignIn
+      return
+    }
     case 'setRolePath': {
       roleObject(next).claimPath = trimPath(operation.claimPath, 'Role claim path')
       if (!Array.isArray(roleObject(next).rules)) roleObject(next).rules = []
       return
     }
     case 'insertRoleRule': {
-      const whenContains = operation.rule.whenContains.trim()
-      if (!whenContains) {
-        throw new ClaimMappingEditError('INVALID_ROLE_RULE', 'A role rule has no value.')
-      }
+      const stored = storedRoleRule(operation.rule)
       const role = roleObject(next)
       const rules = roleRules(role)
       const index = Math.max(0, Math.min(operation.index, rules.length))
-      rules.splice(index, 0, {
-        whenContains,
-        role: requireRole(operation.rule.role),
-      })
+      rules.splice(index, 0, stored)
       role.rules = rules
       if (typeof role.claimPath !== 'string' || !role.claimPath.trim()) {
         role.claimPath = 'groups'
@@ -237,15 +265,11 @@ function applyOne(next: Record<string, unknown>, operation: ClaimMappingOperatio
       if (operation.index < 0 || operation.index >= rules.length) {
         throw new ClaimMappingEditError('INVALID_OPERATION', 'Role rule index is out of range.')
       }
-      const existing = asRecord(rules[operation.index])
-      if (!operation.rule.whenContains.trim()) {
-        throw new ClaimMappingEditError('INVALID_ROLE_RULE', 'A role rule has no value.')
-      }
-      rules[operation.index] = {
-        ...existing,
-        whenContains: operation.rule.whenContains.trim(),
-        role: requireRole(operation.rule.role),
-      }
+      // Unknown keys on the stored rule survive; the custom role is a known
+      // key, so an edit without one clears it rather than keeping a stale grant.
+      const existing = { ...asRecord(rules[operation.index]) }
+      delete existing.roleId
+      rules[operation.index] = { ...existing, ...storedRoleRule(operation.rule) }
       role.rules = rules
       return
     }
@@ -323,12 +347,15 @@ export function explicitIdClaim(raw: unknown): string | undefined {
 export function effectiveProfileSignature(raw: unknown): string {
   const id = explicitIdClaim(raw)
   const profile = isRecord(raw) && isRecord(raw.profile) ? raw.profile : {}
+  // Username, avatar and sync are known keys outside the signature: none of
+  // them changes which account a sign-in matches, so editing one must not
+  // invalidate a passing connection test.
   const unknownProfileKeys = Object.keys(profile)
-    .filter((key) => key !== 'sources' && key !== 'claims' && key !== 'allowMissingEmail')
+    .filter((key) => !SUPPORTED_PROFILE.has(key))
     .sort()
   const claims = isRecord(profile.claims) ? profile.claims : {}
   const unknownClaimKeys = Object.keys(claims)
-    .filter((key) => key !== 'id' && key !== 'email' && key !== 'name')
+    .filter((key) => !isProfileField(key))
     .sort()
   return JSON.stringify({
     sources: identitySourcesFor(raw),
@@ -341,13 +368,43 @@ export function effectiveProfileSignature(raw: unknown): string {
   })
 }
 
+/**
+ * Whether a permission bundle reaches the admin tier: it holds any permission
+ * the Admin preset has and the Manager preset lacks. Workspace roles all ride
+ * the member column, so the bundle is the only place the tier shows.
+ */
+export function isAdminTierBundle(permissionKeys: readonly string[]): boolean {
+  return permissionKeys.some((key) => WORKSPACE_ADMIN_PERMISSIONS.includes(key as PermissionKey))
+}
+
+/**
+ * Whether a permission bundle can manage SSO, and so fix this provider's
+ * settings. Narrower than the admin tier: the save confirmation asks about
+ * any admin-level grant, while lockout decisions ask who could undo a mistake.
+ */
+export function canManageSso(permissionKeys: readonly string[]): boolean {
+  return permissionKeys.includes(PERMISSIONS.AUTH_MANAGE)
+}
+
+/** The ids of the roles whose bundle reaches the admin tier. */
+export function adminTierRoleIds(
+  roles: ReadonlyArray<{ id: string; permissionKeys: readonly string[] }>
+): Set<string> {
+  return new Set(roles.filter((r) => isAdminTierBundle(r.permissionKeys)).map((r) => r.id))
+}
+
+/** A rule that hands out admin-level access: the admin tier, or a workspace
+ *  role whose bundle reaches it. */
+export type AdminRoleRule = { index: number; role: Role; roleId?: string }
+
 export function mappingSaveRisks(
   before: unknown,
-  after: unknown
+  after: unknown,
+  opts: { adminTierRoleIds?: ReadonlySet<string> } = {}
 ): {
   identifierChanged: boolean
   hasAdminRules: boolean
-  adminRules: Array<{ index: number; role: Role }>
+  adminRules: AdminRoleRule[]
 } {
   const beforeId = explicitIdClaim(before)
   const afterId = explicitIdClaim(after)
@@ -356,9 +413,17 @@ export function mappingSaveRisks(
   const identifierChanged = beforeId !== afterId || sourcesChanged
   const role = isRecord(after) && isRecord(after.role) ? after.role : null
   const rules = role && Array.isArray(role.rules) ? role.rules : []
-  const adminRules: Array<{ index: number; role: Role }> = []
+  const adminRules: AdminRoleRule[] = []
   rules.forEach((rule, index) => {
-    if (isRecord(rule) && rule.role === 'admin') adminRules.push({ index, role: 'admin' })
+    if (!isRecord(rule)) return
+    if (rule.role === 'admin') adminRules.push({ index, role: 'admin' })
+    else if (
+      rule.role === 'member' &&
+      typeof rule.roleId === 'string' &&
+      opts.adminTierRoleIds?.has(rule.roleId)
+    ) {
+      adminRules.push({ index, role: 'member', roleId: rule.roleId })
+    }
   })
   return {
     identifierChanged,
@@ -367,15 +432,63 @@ export function mappingSaveRisks(
   }
 }
 
+function storedRoleRules(mapping: unknown): unknown[] {
+  const role = isRecord(mapping) && isRecord(mapping.role) ? mapping.role : null
+  return role && Array.isArray(role.rules) ? role.rules : []
+}
+
+/**
+ * The distinct workspace role ids a stored mapping's rules grant. With
+ * `newSince`, only those of rules that mapping lacked (added, or changed in
+ * value, tier or role): the grants a save from `newSince` would make.
+ */
+/**
+ * The workspace roles a save must be able to grant. Any change to the role
+ * section (claim path, rule order, rules added, removed or edited, the sync
+ * flag) can change who gets which role, so it re-grants every role its rules
+ * give; an untouched role section grants nothing new.
+ */
+export function roleRuleGrantsToCheck(before: unknown, after: unknown): string[] {
+  const section = (m: unknown) => (isRecord(m) ? m.role : undefined)
+  if (storedJsonEqual(section(before), section(after))) return []
+  return roleRuleRoleIds(after)
+}
+
+export function roleRuleRoleIds(mapping: unknown, opts: { newSince?: unknown } = {}): string[] {
+  const kept =
+    opts.newSince === undefined
+      ? null
+      : new Set(storedRoleRules(opts.newSince).map(roleRuleIdentity))
+  const ids = new Set<string>()
+  for (const rule of storedRoleRules(mapping)) {
+    if (!isRecord(rule) || !isRoleRuleRoleId(rule.roleId)) continue
+    if (kept?.has(roleRuleIdentity(rule))) continue
+    ids.add(rule.roleId)
+  }
+  return [...ids]
+}
+
+/**
+ * Checks the grants a role-mapping save makes, from the stored mapping to the
+ * proposed one, and reports which roles its rules name reach the admin tier.
+ * Built for the saving admin by the roles domain; throws to refuse the save.
+ */
+export type RoleRuleGrantCheck = (
+  before: unknown,
+  after: unknown
+) => Promise<{ adminTierRoleIds: ReadonlySet<string> }>
+
 export function sourcesAreDefault(sources: IdentitySource[] | undefined): boolean {
   if (!sources || sources.length === 0) return true
   return JSON.stringify(sources) === JSON.stringify(DEFAULT_IDENTITY_SOURCES)
 }
 
-function roleRuleIdentity(rule: unknown): string | null {
+/** A rule's identity: what it matches and what it grants, custom role included. */
+export function roleRuleIdentity(rule: unknown): string | null {
   if (!isRecord(rule)) return null
   if (typeof rule.whenContains !== 'string' || typeof rule.role !== 'string') return null
-  return `${rule.whenContains}\0${rule.role}`
+  const roleId = typeof rule.roleId === 'string' ? rule.roleId : ''
+  return `${rule.whenContains}\0${rule.role}\0${roleId}`
 }
 
 /** After identities are a submultiset of before: remove extras, then permute survivors. */
@@ -440,7 +553,13 @@ export function diffClaimMappingOperations(
     else ops.push({ op: 'setSources', sources: afterEffectiveSources })
   }
 
-  for (const field of ['id', 'email', 'name'] as const) {
+  const beforeProfileSync = profileSyncEnabled(before)
+  const afterProfileSync = profileSyncEnabled(proposed)
+  if (beforeProfileSync !== afterProfileSync) {
+    ops.push({ op: 'setProfileSync', syncOnSignIn: afterProfileSync })
+  }
+
+  for (const field of PROFILE_FIELDS) {
     const beforePath = profileClaimFor(before, field)
     const afterPath = proposed?.profile?.claims?.[field]?.trim() || undefined
     if (beforePath === afterPath) continue
@@ -475,11 +594,7 @@ export function diffClaimMappingOperations(
       for (let i = 0; i < commonRules; i++) {
         const left = beforeRules[i]
         const right = afterRules[i]
-        if (
-          !isRecord(left) ||
-          left.whenContains !== right.whenContains ||
-          left.role !== right.role
-        ) {
+        if (roleRuleIdentity(left) !== roleRuleIdentity(right)) {
           ops.push({ op: 'editRoleRule', index: i, rule: right })
         }
       }
@@ -556,14 +671,16 @@ export function storedJsonEqual(a: unknown, b: unknown): boolean {
 }
 
 const SUPPORTED_TOP = new Set(['profile', 'role', 'attributes'])
-const SUPPORTED_PROFILE = new Set(['sources', 'claims', 'allowMissingEmail'])
-const SUPPORTED_CLAIMS = new Set(['id', 'email', 'name'])
+const SUPPORTED_PROFILE = new Set(['sources', 'claims', 'allowMissingEmail', 'syncOnSignIn'])
+const SUPPORTED_CLAIMS: SupportedKeys = { has: isProfileField }
 const SUPPORTED_ROLE = new Set(['claimPath', 'rules', 'syncOnEverySignIn'])
-const SUPPORTED_ROLE_RULE = new Set(['whenContains', 'role'])
+const SUPPORTED_ROLE_RULE = new Set(['whenContains', 'role', 'roleId'])
 const SUPPORTED_ATTRIBUTES = new Set(['map', 'overrideExisting', 'syncOnSignIn'])
 const SUPPORTED_PEOPLE_ROW = new Set(['claimPath', 'attributeKey'])
 
-function hasLostKeys(stored: unknown, submitted: unknown, supported: Set<string>): boolean {
+type SupportedKeys = { has(key: string): boolean }
+
+function hasLostKeys(stored: unknown, submitted: unknown, supported: SupportedKeys): boolean {
   if (!isRecord(stored)) return false
   const dest = isRecord(submitted) ? submitted : {}
   for (const key of Object.keys(stored)) {

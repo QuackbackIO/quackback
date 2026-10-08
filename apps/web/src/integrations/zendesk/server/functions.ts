@@ -5,6 +5,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import type { PrincipalId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { ValidationError } from '@/lib/shared/errors'
 
 export interface ZendeskOAuthState {
   type: 'zendesk_oauth'
@@ -40,7 +41,8 @@ export const getZendeskConnectUrl = createServerFn({ method: 'POST' })
     const { hasPlatformCredentials } =
       await import('@/lib/server/domains/platform-credentials/platform-credential.service')
     if (!(await hasPlatformCredentials('zendesk'))) {
-      throw new Error(
+      throw new ValidationError(
+        'PLATFORM_CREDENTIALS_NOT_CONFIGURED',
         'Zendesk platform credentials not configured. Configure them in integration settings first.'
       )
     }

@@ -173,6 +173,8 @@ async function seedServiceAdmin(): Promise<void> {
 }
 
 const WORKSPACE_INPUT = { workspaceName: 'Acme', useCase: 'product_feedback' as const }
+const NOT_OWNER = { ok: false, refusal: 'not_owner' }
+const SETUP_COMPLETE = { ok: false, refusal: 'setup_complete' }
 
 describe.skipIf(!fixture.available)('bootstrap promotion guard', () => {
   beforeEach(async () => {
@@ -198,7 +200,7 @@ describe.skipIf(!fixture.available)('bootstrap promotion guard', () => {
       user: { id: intruderId },
     })
 
-    await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).rejects.toThrow(/only admin/i)
+    await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).resolves.toEqual(NOT_OWNER)
     expect(hoisted.ensurePrincipalForUser).not.toHaveBeenCalled()
     expect(hoisted.setPrincipalRole).not.toHaveBeenCalled()
   })
@@ -213,7 +215,7 @@ describe.skipIf(!fixture.available)('bootstrap promotion guard', () => {
       user: { id: memberId },
     })
 
-    await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).rejects.toThrow(/only admin/i)
+    await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).resolves.toEqual(NOT_OWNER)
     expect(hoisted.ensurePrincipalForUser).not.toHaveBeenCalled()
   })
 
@@ -303,9 +305,7 @@ describe.skipIf(!fixture.available)('bootstrap promotion guard', () => {
       .mockImplementationOnce(async () => undefined)
       .mockImplementation(realBootstrap.findHumanAdmin)
 
-    await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).rejects.toThrow(
-      /already claimed by an admin/i
-    )
+    await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).resolves.toEqual(NOT_OWNER)
     expect(hoisted.ensurePrincipalForUser).not.toHaveBeenCalled()
     expect(hoisted.setPrincipalRole).not.toHaveBeenCalled()
   })
@@ -322,9 +322,7 @@ describe.skipIf(!fixture.available)('bootstrap promotion guard', () => {
       user: { id: arrivalId },
     })
 
-    await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).rejects.toThrow(
-      /not open to be set up/i
-    )
+    await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).resolves.toEqual(NOT_OWNER)
     expect(hoisted.ensurePrincipalForUser).not.toHaveBeenCalled()
     expect(hoisted.setPrincipalRole).not.toHaveBeenCalled()
   })
@@ -341,9 +339,7 @@ describe.skipIf(!fixture.available)('bootstrap promotion guard', () => {
       user: { id: arrivalId },
     })
 
-    await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).rejects.toThrow(
-      /not open to be set up/i
-    )
+    await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).resolves.toEqual(NOT_OWNER)
     expect(hoisted.setPrincipalRole).not.toHaveBeenCalled()
   })
 
@@ -382,9 +378,7 @@ describe.skipIf(!fixture.available)('bootstrap promotion guard', () => {
       user: { id: arrivalId },
     })
 
-    await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).rejects.toThrow(
-      /not open to be set up/i
-    )
+    await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).resolves.toEqual(NOT_OWNER)
     expect(hoisted.ensurePrincipalForUser).not.toHaveBeenCalled()
   })
 
@@ -424,9 +418,7 @@ describe.skipIf(!fixture.available)('bootstrap promotion guard', () => {
       user: { id: portalUserId },
     })
 
-    await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).rejects.toThrow(
-      /already set up/i
-    )
+    await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).resolves.toEqual(SETUP_COMPLETE)
     expect(hoisted.ensurePrincipalForUser).not.toHaveBeenCalled()
     expect(hoisted.setPrincipalRole).not.toHaveBeenCalled()
     const [row] = await testDb.select({ name: settings.name }).from(settings)
@@ -482,7 +474,7 @@ describe.skipIf(!fixture.available)('bootstrap promotion guard', () => {
       user: { id: visitorId },
     })
 
-    await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).rejects.toThrow(/only admin/i)
+    await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).resolves.toEqual(NOT_OWNER)
     expect(hoisted.setPrincipalRole).not.toHaveBeenCalled()
   })
 })

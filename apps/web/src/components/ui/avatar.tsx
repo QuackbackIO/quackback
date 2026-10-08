@@ -21,6 +21,11 @@ interface AvatarProps extends React.ComponentProps<'div'> {
    * Class name for the fallback element.
    */
   fallbackClassName?: string
+  /**
+   * Called once the image fails to load, including a failure that happened
+   * before hydration. The fallback shows either way.
+   */
+  onImageError?: () => void
 }
 
 /**
@@ -47,6 +52,7 @@ function Avatar({
   name,
   fallback,
   fallbackClassName,
+  onImageError,
   children,
   ...props
 }: AvatarProps) {
@@ -95,7 +101,13 @@ function Avatar({
       className={cn('relative flex size-8 shrink-0 overflow-hidden rounded-full', className)}
       {...props}
     >
-      <AvatarImageWithFallback key={src} src={src} alt={altText} fallback={fallbackEl} />
+      <AvatarImageWithFallback
+        key={src}
+        src={src}
+        alt={altText}
+        fallback={fallbackEl}
+        onError={onImageError}
+      />
     </div>
   )
 }
@@ -112,17 +124,25 @@ function AvatarImageWithFallback({
   src,
   alt,
   fallback,
+  onError,
 }: {
   src: string
   alt: string
   fallback: React.ReactNode
+  onError?: () => void
 }) {
   const [status, setStatus] = React.useState<'loading' | 'loaded' | 'error'>('loading')
   const ref = React.useRef<HTMLImageElement>(null)
+  const fail = () => {
+    setStatus('error')
+    onError?.()
+  }
 
   React.useEffect(() => {
     const img = ref.current
-    if (img?.complete) setStatus(img.naturalWidth === 0 ? 'error' : 'loaded')
+    if (!img?.complete) return
+    if (img.naturalWidth === 0) fail()
+    else setStatus('loaded')
   }, [])
 
   return (
@@ -141,7 +161,7 @@ function AvatarImageWithFallback({
             status !== 'loaded' && 'opacity-0'
           )}
           onLoad={() => setStatus('loaded')}
-          onError={() => setStatus('error')}
+          onError={fail}
         />
       )}
     </>

@@ -27,6 +27,7 @@ import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
 import { accountDisplayName } from '@/lib/shared/greeting-name'
 import { workspaceAuthTrustedOrigins } from './trusted-origins'
 import { ensureMcpOauthResource } from './ensure-mcp-oauth-resource'
+import { HTTP_DISABLED_AUTH_PATHS } from './http-disabled-paths'
 
 const log = logger.child({ component: 'auth-config' })
 
@@ -289,8 +290,8 @@ async function createAuth() {
     fetchUserInfo: (url, accessToken) => fetchJson(url, { authorization: `Bearer ${accessToken}` }),
     // Observe-then-enforce: log the discrepancy so its real rate is known
     // before any release starts refusing sign-ins over it.
-    onResolved: (registrationId, accountId, claims) => {
-      stashResolvedClaims(registrationId, accountId, claims)
+    onResolved: (registrationId, accountId, resolved) => {
+      stashResolvedClaims(registrationId, accountId, resolved)
     },
     onResolutionWarning: (registrationId, warnings) => {
       log.warn({ registrationId, warnings }, 'identity resolution discrepancy observed')
@@ -299,6 +300,16 @@ async function createAuth() {
       log.warn({ registrationId, reason }, 'identity profile resolution failed')
     },
     placeholderEmailFor: resolvePlaceholderEmail,
+    // A failure here must never block the sign-in: Better Auth then answers as
+    // it would have without the vouch.
+    onProviderEmail: async (registrationId, accountId, email) => {
+      try {
+        const { vouchForEnforcedAddress } = await import('./enforcing-provider-email')
+        await vouchForEnforcedAddress({ registrationId, accountId, email, providers: providerRows })
+      } catch (error) {
+        log.error({ err: error, registrationId }, 'enforcing provider vouch failed')
+      }
+    },
     mapProfileToUser: mapProfileClaims,
   })
   genericOAuthConfigs.push(...oidcConfigs)
@@ -410,9 +421,8 @@ async function createAuth() {
     // Use SECRET_KEY for auth signing (Better Auth defaults to BETTER_AUTH_SECRET)
     secret: activeSecretKey(),
 
-    // Disable the JWT plugin's /token endpoint — conflicts with OAuth's /oauth2/token
-    // Does NOT affect magicLink or session management
-    disabledPaths: ['/token'],
+    // Closed to HTTP, still callable in process: see http-disabled-paths.ts.
+    disabledPaths: HTTP_DISABLED_AUTH_PATHS,
 
     database: drizzleAdapter(db, {
       provider: 'pg',
@@ -676,17 +686,8 @@ async function createAuth() {
           // `email-verification` (adding a first address) and `change-email`
           // (moving to a new one) both mean the same thing to the recipient:
           // prove you hold this address.
-          const { sendVerifyAddressEmail } = await import('@quackback/email')
-          const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
-          const settings = await db.query.settings.findFirst({
-            columns: { name: true, logoKey: true },
-          })
-          await sendVerifyAddressEmail({
-            to: email,
-            code: otp,
-            workspaceName: settings?.name ?? undefined,
-            logoUrl: getEmailSafeUrl(settings?.logoKey) ?? undefined,
-          })
+          const { sendVerifyAddressCode } = await import('./verify-address-email')
+          await sendVerifyAddressCode(email, otp)
         },
         otpLength: 6,
         expiresIn: 600,

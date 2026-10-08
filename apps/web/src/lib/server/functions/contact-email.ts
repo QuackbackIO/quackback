@@ -58,6 +58,11 @@ async function userRow(ctx: Awaited<ReturnType<typeof requireAuth>>) {
   return row
 }
 
+/** "Require SSO" for this flow: see `auth/sso-managed-email.ts`. */
+async function ssoRules() {
+  return import('@/lib/server/auth/sso-managed-email')
+}
+
 /**
  * Whether this account already has a reachable address, which decides whether
  * a current-address code is required. A placeholder is not reachable.
@@ -79,6 +84,10 @@ export const sendCurrentAddressCodeFn = createServerFn({ method: 'POST' }).handl
   if (!current) {
     throw new ValidationError('NO_CURRENT_EMAIL', 'This account has no confirmed address yet.')
   }
+  // The new address is not known yet, so refuse only what no destination
+  // could allow: an address managed by a provider this account does not sign
+  // in through. Step 1 judges the actual move.
+  await (await ssoRules()).assertEmailMoveAllowed({ userId: row.id, from: current, to: current })
 
   // Rate limited like its sibling. Better Auth's own OTP limits are declared as
   // path matchers on the HTTP router, so calling `auth.api.*` in process goes
@@ -93,12 +102,19 @@ export const sendCurrentAddressCodeFn = createServerFn({ method: 'POST' }).handl
     throw new ValidationError('RATE_LIMITED', 'Too many attempts. Try again a little later.')
   }
 
+  // Minted through the path-less endpoint and mailed here, not through the
+  // routed `sendVerificationOTP`: that one runs the SIGN-IN hook chain, whose
+  // email-sign-in toggle and "Require SSO" rule answer a different question
+  // than "does this person hold their current address". This flow's own rules
+  // are the ones above. `auth/__tests__/otp-endpoint-hooks.test.ts` pins that
+  // the path-less endpoint skips the chain.
   const { getAuth } = await import('@/lib/server/auth')
   const auth = await getAuth()
-  await auth.api.sendVerificationOTP({
+  const code = await auth.api.createVerificationOTP({
     body: { email: current, type: 'email-verification' },
-    headers,
   })
+  const { sendVerifyAddressCode } = await import('@/lib/server/auth/verify-address-email')
+  await sendVerifyAddressCode(current, code)
   return { ok: true as const }
 })
 
@@ -123,6 +139,7 @@ export const requestEmailChangeFn = createServerFn({ method: 'POST' })
     if (current && current.toLowerCase() === email) {
       throw new ValidationError('SAME_EMAIL', 'That is already your email address.')
     }
+    await (await ssoRules()).assertEmailMoveAllowed({ userId: row.id, from: current, to: email })
 
     const { getClientIp } = await import('@/lib/server/domains/api/rate-limit')
     const { checkContactEmailSendRateLimit } = await import('@/lib/server/auth/signin-rate-limit')
@@ -188,6 +205,16 @@ export const confirmEmailChangeFn = createServerFn({ method: 'POST' })
     const { acceptableContactEmail } = await import('@/lib/server/domains/principals/contact-email')
     const email = acceptableContactEmail(data.email)
     if (!email) throw new ValidationError('VALIDATION_ERROR', 'Enter a valid email address.')
+
+    // Checked again here, not only at step 1: a domain can start requiring SSO
+    // between the two steps, and the address can change under the session.
+    // Before the holder lookup below, so the answer for an address at such a
+    // domain never depends on whether an account holds it.
+    const row = await userRow(ctx)
+    const { isEmailMoveSsoBlocked } = await ssoRules()
+    if (await isEmailMoveSsoBlocked({ userId: row.id, from: realEmail(row.email), to: email })) {
+      return { ok: false as const, reason: 'sso_managed' as const }
+    }
 
     // Better Auth's own uniqueness gate lowercases the address it searches FOR
     // but compares it against stored values as-is, and `user_email_idx` is

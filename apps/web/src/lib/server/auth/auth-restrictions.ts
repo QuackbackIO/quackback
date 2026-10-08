@@ -176,14 +176,28 @@ export function isHardBound(
   providers: readonly ProviderWithDomains[] | undefined,
   registeredProviderIds: Set<string>
 ): boolean {
-  const owner = findProviderForDomainEmail(email, providers)
-  // Not at an enforced verified domain → no hard-binding.
-  if (!owner || owner.enforced !== true) return false
-  // Owner's IdP not viable right now → fail open (scoped to the owner) so a
-  // tier downgrade / missing secret can't self-lock the workspace.
-  if (!registeredProviderIds.has(owner.registrationId)) return false
+  const owner = ssoManagingProvider(email, providers, registeredProviderIds)
+  // Not at an enforced verified domain whose IdP is viable → no hard-binding.
+  if (!owner) return false
   // The owning provider's own callback IS the enforced method → exempt.
-  if (provider === owner.registrationId) return false
+  if (provider === owner) return false
   // Everything else (password, magic-link, social, a different OIDC) → block.
   return true
+}
+
+/**
+ * The registration id of the provider an address belongs to under "Require
+ * SSO", or null when the address is not hard-bound. Same rule as
+ * {@link isHardBound}, including its fail-open: an owner that is not
+ * registered right now (tier downgrade, missing secret) manages nothing.
+ */
+export function ssoManagingProvider(
+  email: string | null | undefined,
+  providers: readonly ProviderWithDomains[] | undefined,
+  registeredProviderIds: Set<string>
+): string | null {
+  const owner = findProviderForDomainEmail(email, providers)
+  if (!owner || owner.enforced !== true) return null
+  if (!registeredProviderIds.has(owner.registrationId)) return null
+  return owner.registrationId
 }

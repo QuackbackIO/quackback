@@ -211,11 +211,14 @@ export async function listPublicChangelogs(
       ? (cursorEntry.displayDate ?? cursorEntry.publishedAt)
       : null
     if (cursorEffective) {
+      // `effectiveDisplayDate` is an expression, not a column, so Drizzle has
+      // no column type to encode a Date with: bind the timestamp as a string.
+      const cursorAt = sql`${cursorEffective.toISOString()}::timestamptz`
       conditions.push(
         or(
-          lt(effectiveDisplayDate, cursorEffective),
+          sql`${effectiveDisplayDate} < ${cursorAt}`,
           and(
-            sql`${effectiveDisplayDate} = ${cursorEffective}`,
+            sql`${effectiveDisplayDate} = ${cursorAt}`,
             lt(changelogEntries.id, cursor as ChangelogId)
           )
         )!

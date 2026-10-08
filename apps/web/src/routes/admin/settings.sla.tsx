@@ -55,6 +55,7 @@ import {
 } from '@/components/ui/select'
 import { warmQuery } from '@/lib/client/queries/warm-query'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 const slaPoliciesQuery = queryOptions({
   queryKey: ['settings', 'slaPolicies'],
@@ -69,6 +70,7 @@ const slaOfficeHoursQuery = queryOptions({
 })
 
 export const Route = createFileRoute('/admin/settings/sla')({
+  head: adminPageHead('SLA settings'),
   beforeLoad: ({ context }) => {
     if (!isProductEnabled(context.settings?.featureFlags, 'support')) {
       throw redirect({ to: '/admin/settings/general' })

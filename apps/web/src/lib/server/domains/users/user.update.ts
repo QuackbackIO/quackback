@@ -14,10 +14,11 @@
  *   `user.dedup.findDuplicatesForPrincipal` reads contactEmail.
  */
 
-import { db, eq, and, sql, ne, principal, user } from '@/lib/server/db'
-import type { PrincipalId } from '@quackback/ids'
+import { db, eq, and, sql, ne, isNull, principal, user } from '@/lib/server/db'
+import type { PrincipalId, UserId } from '@quackback/ids'
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { acceptableContactEmail } from '@/lib/server/domains/principals/contact-email'
+import { realEmail } from '@/lib/shared/anonymous-email'
 import { syncPrincipalProfileById } from '@/lib/server/domains/principals/principal.factory'
 
 export interface UpdatePortalUserProfileInput {
@@ -26,6 +27,35 @@ export interface UpdatePortalUserProfileInput {
   name?: string
   /** New address; null clears it; undefined leaves it alone. */
   email?: string | null
+}
+
+/**
+ * The stored address, after checking that "Require SSO" allows the move: an
+ * address at a domain that requires SSO belongs to that domain's provider, for
+ * an admin's edit as for the person's own. Unchanged addresses pass, so renaming
+ * someone at such a domain still works. The caller writes only while the address
+ * is still this one, so a change in between cannot slip past the check.
+ */
+async function storedEmailAfterSsoCheck(userId: UserId, to: string | null): Promise<string | null> {
+  const [row] = await db.select({ email: user.email }).from(user).where(eq(user.id, userId))
+  const stored = row?.email ?? null
+  const from = realEmail(stored)
+  if (from?.toLowerCase() !== to) {
+    const { assertEmailMoveAllowed } = await import('@/lib/server/auth/sso-managed-email')
+    await assertEmailMoveAllowed({ userId, from, to })
+  }
+  return stored
+}
+
+function stillEmail(stored: string | null) {
+  return stored === null ? isNull(user.email) : eq(user.email, stored)
+}
+
+function emailChangedMeanwhile(): never {
+  throw new ConflictError(
+    'EMAIL_CHANGED',
+    "This person's email just changed. Reload and try again."
+  )
 }
 
 export async function updatePortalUserProfile(
@@ -53,9 +83,16 @@ export async function updatePortalUserProfile(
       }
       await db.update(principal).set({ contactEmail }).where(eq(principal.id, input.principalId))
     } else if (input.email === null) {
-      await db.update(user).set({ email: null }).where(eq(user.id, target.userId))
+      const stored = await storedEmailAfterSsoCheck(target.userId, null)
+      const written = await db
+        .update(user)
+        .set({ email: null, emailVerified: false })
+        .where(and(eq(user.id, target.userId), stillEmail(stored)))
+        .returning({ id: user.id })
+      if (written.length === 0) emailChangedMeanwhile()
     } else {
       const normalized = input.email.toLowerCase().trim()
+      const stored = await storedEmailAfterSsoCheck(target.userId, normalized)
       const existing = await db
         .select({ id: user.id })
         .from(user)
@@ -64,7 +101,18 @@ export async function updatePortalUserProfile(
       if (existing.length > 0) {
         throw new ConflictError('EMAIL_IN_USE', 'Email already in use')
       }
-      await db.update(user).set({ email: normalized }).where(eq(user.id, target.userId))
+      // An admin's typed address is not a proven one. Verification survives
+      // only when the address itself is unchanged; otherwise providers that
+      // match on verified addresses could sign someone else in to this account.
+      const written = await db
+        .update(user)
+        .set({
+          email: normalized,
+          emailVerified: sql`CASE WHEN LOWER(${user.email}) = ${normalized} THEN ${user.emailVerified} ELSE false END`,
+        })
+        .where(and(eq(user.id, target.userId), stillEmail(stored)))
+        .returning({ id: user.id })
+      if (written.length === 0) emailChangedMeanwhile()
     }
     updated = true
   }

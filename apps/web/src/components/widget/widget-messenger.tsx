@@ -17,8 +17,6 @@ interface WidgetMessengerProps {
   /** Which thread to open: an id opens that thread, 'new' starts a fresh one,
    *  undefined resumes the visitor's active/most-recent thread. */
   conversationTarget?: ConversationId | 'new'
-  /** When true, render link preview cards below message bubbles. */
-  linkPreviews?: boolean
   /** Put the cursor in the composer on mount (new-thread landings on desktop). */
   autofocusComposer?: boolean
   /** Text the composer starts with (a host's `open({ view: 'chat', body })`). */
@@ -35,7 +33,6 @@ export function WidgetMessenger({
   helpEnabled,
   onArticleSelect,
   conversationTarget,
-  linkPreviews = false,
   autofocusComposer = false,
   initialDraft,
 }: WidgetMessengerProps = {}) {
@@ -70,7 +67,9 @@ export function WidgetMessenger({
     <VisitorSurfaceRpcProvider value={widgetVisitorRpc}>
       <VisitorConversationThread
         conversationTarget={conversationTarget}
-        linkPreviews={linkPreviews}
+        // No link previews: the unfurl endpoint serves site sessions only and
+        // refuses the widget's Bearer session.
+        linkPreviews={false}
         getAuthHeaders={getWidgetAuthHeaders}
         ensureSession={ensureSession}
         sessionVersion={sessionVersion}

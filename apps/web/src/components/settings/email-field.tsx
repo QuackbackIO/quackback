@@ -10,6 +10,7 @@ import {
   requestEmailChangeFn,
   confirmEmailChangeFn,
 } from '@/lib/server/functions/contact-email'
+import { SSO_MANAGED_EMAIL_MESSAGE } from '@/lib/shared/sso-managed-email'
 
 /**
  * `address` is where the new address is named, with a proof of the current one
@@ -35,7 +36,15 @@ const message = (err: unknown, fallback: string) =>
  * proves the current address first so a stolen session cannot silently rebind
  * it.
  */
-export function EmailField() {
+export function EmailField({
+  ssoManaged = false,
+  onChanged,
+}: {
+  /** The address belongs to a domain that requires SSO; the server refuses changes too. */
+  ssoManaged?: boolean
+  /** After the address changes, so the page can re-read what depends on it. */
+  onChanged?: () => void | Promise<void>
+}) {
   const { data, refetch } = useQuery({
     queryKey: ['email-change-state'],
     queryFn: () => getEmailChangeStateFn(),
@@ -105,12 +114,17 @@ export function EmailField() {
     run(async () => {
       const res = await confirmEmailChangeFn({ data: { email: newEmail, code: newCode } })
       if (!res.ok) {
-        toast.error('That code is not right, or the address is no longer available.')
+        toast.error(
+          res.reason === 'sso_managed'
+            ? SSO_MANAGED_EMAIL_MESSAGE
+            : 'That code is not right, or the address is no longer available.'
+        )
         return
       }
       toast.success('Email updated.')
       reset()
       await refetch()
+      await onChanged?.()
     }, 'Could not confirm that code.')
 
   return (
@@ -127,9 +141,11 @@ export function EmailField() {
               disabled
               placeholder="No email address"
             />
-            <Button type="button" variant="outline" size="sm" onClick={begin} disabled={busy}>
-              {currentEmail ? 'Change' : 'Add email'}
-            </Button>
+            {!ssoManaged && (
+              <Button type="button" variant="outline" size="sm" onClick={begin} disabled={busy}>
+                {currentEmail ? 'Change' : 'Add email'}
+              </Button>
+            )}
           </div>
           {!currentEmail && (
             <p className="text-xs text-muted-foreground">

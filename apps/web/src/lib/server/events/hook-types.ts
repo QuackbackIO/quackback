@@ -43,6 +43,13 @@ export interface HookRunContext {
   /** BullMQ job ID for the dispatch. May be undefined for ad-hoc test
    *  callers; handlers must treat that case as "no dedup, just run". */
   jobId?: string
+  /**
+   * True when the queue will not run this job again if this attempt fails, so
+   * a handler can tell an expected, retried failure (a warning) from the one
+   * that loses the delivery (an error). Undefined for ad-hoc callers, which
+   * handlers treat as final.
+   */
+  finalAttempt?: boolean
 }
 
 /**

@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { useSavePlatformCredentials, useDeletePlatformCredentials } from '@/lib/client/mutations'
-import { Button } from '@/components/ui/button'
+import { Button, NewTabHint } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { CopyButton } from '@/components/shared/copy-button'
@@ -178,6 +178,7 @@ export function PlatformCredentialsForm({
                 className={`${INLINE_LINK} mt-1 inline-block text-xs`}
               >
                 Get credentials from provider
+                <NewTabHint />
               </a>
             )}
           </div>

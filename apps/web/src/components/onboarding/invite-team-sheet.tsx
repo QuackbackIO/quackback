@@ -10,7 +10,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { CopyButton } from '@/components/shared/copy-button'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { settingsQueries } from '@/lib/client/queries/settings'
-import { sendInvitationFn } from '@/lib/server/functions/admin'
+import { addTeamMembersFn } from '@/lib/server/functions/team-people'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -35,11 +35,6 @@ export function inviteEmailProblem(value: string): InviteEmailProblem | null {
   if (at === 0) return 'at'
   if (at === 1 && /^[^\s@]+@[^\s@.]+$/.test(value)) return 'end'
   return 'format'
-}
-
-/** A refusal because every seat is taken (pending invites hold seats too). */
-function isSeatLimitError(message: string | undefined): boolean {
-  return !!message && /seat/i.test(message)
 }
 
 type InviteRole = 'member' | 'admin'
@@ -105,11 +100,23 @@ function InviteTeamBody({ onDone }: { onDone: () => void }) {
       const out: InviteResult[] = []
       for (const email of list) {
         try {
-          const result = await sendInvitationFn({ data: { email, role } })
-          out.push({ email, ok: true, inviteLink: result.inviteLink })
+          // One address per request, so each gets its own result line.
+          const result = await addTeamMembersFn({
+            data: { principalIds: [], emails: [email], role },
+          })
+          if (result.ok) {
+            out.push({ email, ok: true, inviteLink: result.invited[0]?.inviteLink })
+          } else {
+            // A seat limit refusal counts pending invites too.
+            out.push({
+              email,
+              ok: false,
+              error: result.message,
+              seatLimit: result.code === 'SEAT_LIMIT',
+            })
+          }
         } catch (error) {
-          const message = error instanceof Error ? error.message : undefined
-          out.push({ email, ok: false, error: message, seatLimit: isSeatLimitError(message) })
+          out.push({ email, ok: false, error: error instanceof Error ? error.message : undefined })
         }
       }
       return out
@@ -118,10 +125,14 @@ function InviteTeamBody({ onDone }: { onDone: () => void }) {
       setResults(out)
       // Sent addresses leave; failed ones and any that never went stay to fix.
       const sentNow = new Set(out.filter((r) => r.ok).map((r) => r.email))
-      setEmails((prev) => [...new Set([...prev, ...out.map((r) => r.email)])].filter((e) => !sentNow.has(e)))
+      setEmails((prev) =>
+        [...new Set([...prev, ...out.map((r) => r.email)])].filter((e) => !sentNow.has(e))
+      )
       void queryClient.invalidateQueries({ queryKey: adminQueries.onboardingStatus().queryKey })
       void queryClient.invalidateQueries({ queryKey: ['admin', 'team'] })
-      void queryClient.invalidateQueries({ queryKey: settingsQueries.teamMembersAndInvitations().queryKey })
+      void queryClient.invalidateQueries({
+        queryKey: settingsQueries.teamMembersAndInvitations().queryKey,
+      })
     },
   })
 
@@ -235,12 +246,18 @@ function InviteTeamBody({ onDone }: { onDone: () => void }) {
             className="gap-2"
           >
             {(['member', 'admin'] as const).map((value) => (
-              <label key={value} className="flex cursor-pointer items-start gap-3 rounded-lg border p-3">
+              <label
+                key={value}
+                className="flex cursor-pointer items-start gap-3 rounded-lg border p-3"
+              >
                 <RadioGroupItem value={value} className="mt-0.5" />
                 <span className="space-y-0.5">
                   <span className="block text-sm font-medium">
                     {value === 'member' ? (
-                      <FormattedMessage id="onboarding.live.invite.member" defaultMessage="Member" />
+                      <FormattedMessage
+                        id="onboarding.live.invite.member"
+                        defaultMessage="Member"
+                      />
                     ) : (
                       <FormattedMessage id="onboarding.live.invite.admin" defaultMessage="Admin" />
                     )}
@@ -299,7 +316,10 @@ function InviteTeamBody({ onDone }: { onDone: () => void }) {
                 search={{ checkout: undefined, billing_error: undefined }}
                 className="shrink-0 underline underline-offset-2"
               >
-                <FormattedMessage id="onboarding.live.invite.manageSeats" defaultMessage="Manage seats" />
+                <FormattedMessage
+                  id="onboarding.live.invite.manageSeats"
+                  defaultMessage="Manage seats"
+                />
               </Link>
             </div>
             {overSeats && (

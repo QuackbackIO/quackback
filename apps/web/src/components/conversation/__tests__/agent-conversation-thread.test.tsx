@@ -881,6 +881,23 @@ describe('AgentConversationThread — composer focus handle', () => {
     expect(screen.getByTestId('editor').closest('[data-inbox-composer]')).not.toBeNull()
   })
 
+  // The editor inside is borderless, so the box is the only place focus shows.
+  // Both modes keep a cue, and it is neutral: never the brand or note amber.
+  it('shows a neutral focus cue on the composer box in reply and note mode', async () => {
+    const composerRef = renderWithHandle({ kind: 'conversation', id: 'conversation_1' })
+    const focusClasses = () =>
+      (screen.getByTestId('editor').closest('[data-inbox-composer]') as HTMLElement).className
+        .split(/\s+/)
+        .filter((c) => c.startsWith('focus-within:'))
+
+    await screen.findByTestId('editor')
+    expect(focusClasses().some((c) => c.includes('-ring'))).toBe(true)
+
+    act(() => composerRef.current?.focusComposer('note'))
+    expect(focusClasses().some((c) => c.includes('-ring'))).toBe(true)
+    expect(focusClasses().some((c) => /amber|primary/.test(c))).toBe(false)
+  })
+
   it('pasting an image on the composer stages the attachment tray, not an inline node', async () => {
     renderWithHandle({ kind: 'conversation', id: 'conversation_1' })
     const editor = await screen.findByTestId('editor')

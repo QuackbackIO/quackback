@@ -1,22 +1,17 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
-import {
-  generateId,
-  type InviteId,
-  type UserId,
-  type PrincipalId,
-  type SegmentId,
-} from '@quackback/ids'
+import { type InviteId, type UserId, type PrincipalId, type SegmentId } from '@quackback/ids'
 import type { BoardId, PostTagId, RoleId, UserTagId } from '@quackback/ids'
 import { getSetupState, isOnboardingComplete as checkComplete } from '@/lib/server/db'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
 import { requireAuth } from './auth-helpers'
 import { getSession } from '@/lib/server/auth/session'
 import { getSettings } from './workspace'
-import { db, invitation, principal, user, eq, and, gt } from '@/lib/server/db'
+import { db, invitation, principal, eq, and, gt } from '@/lib/server/db'
 import {
   findHumanAdmin,
+  findSetupClaimant,
   isOpenToBootstrapClaim,
   isSetupOpenToClaim,
 } from '@/lib/server/domains/principals/bootstrap-admin'
@@ -67,29 +62,6 @@ import { logger } from '@/lib/server/logger'
  */
 
 const log = logger.child({ component: 'admin' })
-
-/**
- * The invitation in the inviting teammate's language: the invitee has no
- * account yet, so the team's own language is the best guess at theirs.
- */
-async function invitationCopy(
-  inviterName: string | null | undefined,
-  inviteeName: string | null | undefined,
-  workspaceName: string
-) {
-  const { getRequestHeaders } = await import('@tanstack/react-start/server')
-  const { invitationEmailCopy } =
-    await import('@/lib/server/domains/onboarding/onboarding-email-copy')
-  let acceptLanguage: string | null = null
-  try {
-    acceptLanguage = getRequestHeaders().get('accept-language')
-  } catch {
-    acceptLanguage = null
-  }
-  const { resolveLocale } = await import('@/lib/shared/i18n')
-  const locale = resolveLocale(acceptLanguage)
-  return invitationEmailCopy({ locale, inviterName, inviteeName, workspaceName })
-}
 
 // Schemas for GET request parameters
 const inboxPostListSchema = z.object({
@@ -277,6 +249,7 @@ export const updateMemberRoleFn = createServerFn({ method: 'POST' })
       {
         assignRoleId: data.roleId as RoleId | undefined,
         granterPermissions: auth.permissions,
+        granterRole: auth.principal.role,
       }
     )
 
@@ -341,7 +314,8 @@ export const removeTeamMemberFn = createServerFn({ method: 'POST' })
       data.principalId as PrincipalId,
       auth.principal.id,
       actorFromAuth(auth),
-      getRequestHeaders()
+      getRequestHeaders(),
+      { granterRole: auth.principal.role }
     )
 
     log.info({ principal_id: data.principalId }, 'member removed')
@@ -630,9 +604,15 @@ export const checkOnboardingState = createServerFn({ method: 'GET' }).handler(as
 
   // Whether this caller is shut out of setup: somebody who is not them already
   // holds it. Every account is created with a principal, so presence alone says
-  // nothing — the role does. A caller with no principal on an unclaimed
-  // workspace is the first user and may still claim it at the workspace step.
-  const setupClaimedByOther = !isAdmin(principalRecord?.role) && !!(await findHumanAdmin(db))
+  // nothing; the role does, and on an install still being set up so does which
+  // account claimed it: the first one created, or the one at the address the
+  // operator named. That account is routed to the workspace step and every
+  // other account to the no-access page, the same answer the promoter gives
+  // each of them.
+  const callerIsAdmin = isAdmin(principalRecord?.role)
+  const claimant = callerIsAdmin ? undefined : await findSetupClaimant(db)
+  const setupClaimedByOther =
+    !callerIsAdmin && (!!(await findHumanAdmin(db)) || (!!claimant && claimant.userId !== userId))
 
   // The second half of the same question. A workspace a control plane created
   // reads unclaimed until its owner arrives, and arriving is not how its admin
@@ -754,7 +734,10 @@ export const getPortalUserFn = createServerFn({ method: 'GET' })
     log.debug({ principal_id: data.principalId }, 'get portal user')
     await requireAuth({ permission: PERMISSIONS.PEOPLE_VIEW })
 
-    const result = await getPortalUserDetail(data.principalId as PrincipalId)
+    // Teammates stay visible after they join the team from this page.
+    const result = await getPortalUserDetail(data.principalId as PrincipalId, {
+      includeTeammates: true,
+    })
 
     if (!result) {
       log.debug({ principal_id: data.principalId }, 'get portal user not found')
@@ -966,129 +949,13 @@ export const mergeLeadIntoUserFn = createServerFn({ method: 'POST' })
 // Invitation Operations
 // ============================================
 
-const sendInvitationSchema = z.object({
-  email: z.string().email(),
-  name: z.string().optional(),
-  role: z.enum(['admin', 'member']),
-  // Custom-role grant carried to accept; rides role='member'.
-  roleId: z.string().optional(),
-})
-
 const invitationByIdSchema = z.object({
   // Use plain z.string() for TanStack Start compatibility
   // TypeID validation with .refine() creates ZodEffects which isn't supported in validator
   invitationId: z.string(),
 })
 
-export type SendInvitationInput = z.infer<typeof sendInvitationSchema>
 export type InvitationByIdInput = z.infer<typeof invitationByIdSchema>
-
-/**
- * Send a team invitation
- */
-export const sendInvitationFn = createServerFn({ method: 'POST' })
-  .validator(sendInvitationSchema)
-  .handler(async ({ data }) => {
-    log.info({ role: data.role }, 'send invitation')
-    const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_MANAGE })
-
-    const email = data.email.toLowerCase()
-
-    // Parallelize invitation and user validation queries
-    const [existingInvitation, existingUser] = await Promise.all([
-      db.query.invitation.findFirst({
-        where: and(
-          eq(invitation.email, email),
-          eq(invitation.status, 'pending'),
-          eq(invitation.kind, 'team')
-        ),
-      }),
-      db.query.user.findFirst({
-        where: eq(user.email, email),
-      }),
-    ])
-
-    if (existingInvitation) {
-      throw new Error('An invitation has already been sent to this email')
-    }
-
-    if (existingUser) {
-      // Check if they already have a team member role (admin or member)
-      const existingPrincipal = await db.query.principal.findFirst({
-        where: eq(principal.userId, existingUser.id),
-      })
-
-      if (existingPrincipal && existingPrincipal.role !== 'user') {
-        throw new Error('A team member with this email already exists')
-      }
-      // Portal users (role='user' or no member record) can be invited to become team members
-    }
-
-    // A custom-role grant rides role='member', never points at the Owner
-    // preset, and is capped by the inviter's own permission set (assignment
-    // is a grant — same ceiling as authoring).
-    if (data.roleId) {
-      if (data.role !== 'member') {
-        throw new Error('Custom role invites use the member role')
-      }
-      const { assertGrantableRole } = await import('@/lib/server/domains/roles/role.grants')
-      await assertGrantableRole(data.roleId as RoleId, auth.permissions)
-    }
-
-    const invitationId = generateId('invite')
-    const expiresAt = new Date(Date.now() + INVITATION_EXPIRY_MS)
-    const now = new Date()
-
-    // Mint the magic link before the insert so the row records its token in
-    // its token set (cancel revokes every token in the set). invitationId is
-    // fixed above, so the callback path is already known.
-    const portalUrl = getBaseUrl()
-    const callbackURL = `/complete-signup/${invitationId}`
-    const minted = await generateInvitationMagicLink(email, callbackURL, portalUrl)
-    const { url: inviteLink, token: magicLinkToken } = minted
-
-    // Seat count and the pending-invite insert share one transaction and a
-    // settings-row lock so two concurrent invites cannot both take the last seat.
-    await db.transaction(async (tx) => {
-      const { enforceSeatLimit } = await import('@/lib/server/domains/principals/seat-limit')
-      await enforceSeatLimit({ executor: tx })
-      await tx.insert(invitation).values({
-        id: invitationId,
-        email,
-        name: data.name || null,
-        role: data.role,
-        roleId: (data.roleId as RoleId | undefined) ?? null,
-        status: 'pending',
-        expiresAt,
-        lastSentAt: now,
-        inviterId: auth.user.id,
-        createdAt: now,
-        magicLinkTokens: [magicLinkToken],
-      })
-    })
-
-    const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
-    const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
-    // Sealed class: the invitee has no account yet, so the address the token
-    // was minted for is the only correct recipient.
-    const { sealedRecipient } = await import('@/lib/server/email/recipient')
-    const result = await sendInvitationEmail({
-      to: sealedRecipient(minted),
-      invitedByName: auth.user.name,
-      inviteeName: data.name || undefined,
-      workspaceName: auth.settings.name,
-      inviteLink,
-      logoUrl,
-      copy: await invitationCopy(auth.user.name, data.name, auth.settings.name),
-    })
-
-    log.info({ invitation_id: invitationId, sent: result.sent }, 'invitation sent')
-    return {
-      invitationId,
-      emailSent: result.sent,
-      inviteLink: !result.sent ? inviteLink : undefined,
-    }
-  })
 
 /**
  * Cancel a pending invitation
@@ -1223,7 +1090,9 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
         workspaceName: auth.settings.name,
         inviteLink,
         logoUrl,
-        copy: await invitationCopy(auth.user.name, invitationRecord.name, auth.settings.name),
+        copy: await (
+          await import('@/lib/server/domains/onboarding/onboarding-email-copy')
+        ).invitationCopyForRequest(auth.user.name, invitationRecord.name, auth.settings.name),
       })
     } catch (sendError) {
       // The new link never went out — drop it from the set and revoke it.

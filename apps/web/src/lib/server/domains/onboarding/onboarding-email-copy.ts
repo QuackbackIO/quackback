@@ -296,6 +296,27 @@ export async function nudgeEmailCopy(
   }
 }
 
+/**
+ * The invitation in the inviting teammate's language: the invitee has no
+ * account yet, so the team's own language is the best guess at theirs.
+ */
+export async function invitationCopyForRequest(
+  inviterName: string | null | undefined,
+  inviteeName: string | null | undefined,
+  workspaceName: string
+) {
+  const { getRequestHeaders } = await import('@tanstack/react-start/server')
+  let acceptLanguage: string | null = null
+  try {
+    acceptLanguage = getRequestHeaders().get('accept-language')
+  } catch {
+    acceptLanguage = null
+  }
+  const { resolveLocale } = await import('@/lib/shared/i18n')
+  const locale = resolveLocale(acceptLanguage)
+  return invitationEmailCopy({ locale, inviterName, inviteeName, workspaceName })
+}
+
 /** A teammate invitation, in the inviting team's language. */
 export async function invitationEmailCopy(input: {
   locale: SupportedLocale

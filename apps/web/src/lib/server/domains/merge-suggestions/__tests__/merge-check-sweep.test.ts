@@ -62,6 +62,10 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   notInArray: vi.fn(),
 }))
 
+vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({
+  aiBudgetAvailable: vi.fn(async () => true),
+}))
+
 vi.mock('@/lib/server/domains/ai/config', () => ({
   getOpenAI: vi.fn(() => ({})),
 }))

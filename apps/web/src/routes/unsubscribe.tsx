@@ -1,3 +1,12 @@
+/**
+ * The emailed unsubscribe link, and the RFC 8058 one-click endpoint behind the
+ * `List-Unsubscribe` header on the same URL.
+ *
+ * Opening the link never writes: mail scanners prefetch every link in a
+ * message, so the page only looks the token up and asks first. The unsubscribe
+ * happens on the confirm button, or on a mail provider's one-click `POST` to
+ * this URL (see one-click-unsubscribe.ts).
+ */
 import { useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { z } from 'zod'
@@ -7,59 +16,60 @@ import { Button } from '@/components/ui/button'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
 import { loadUnsubscribeIntl } from '@/lib/server/functions/locale'
 import {
-  peekUnsubscribeTokenFn,
+  previewUnsubscribeTokenFn,
   processUnsubscribeTokenFn,
   type UnsubscribePreview,
   type UnsubscribeResult,
 } from '@/lib/server/functions/subscriptions'
+import { isUnsubscribeToken } from '@/lib/shared/unsubscribe-token'
 
 const searchSchema = z.object({
   token: z.string().optional(),
 })
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
 type PageError = 'missing' | 'malformed' | 'invalid' | 'failed'
+type UnsubscribeView = UnsubscribePreview | { status: 'error'; error: 'missing' | 'malformed' }
 
-/**
- * GET only reads the token and asks the person to confirm. Mail scanners and
- * link previews open every link in an email, so opening one must not change
- * anything. The confirm button (or a mail client's one-click POST to
- * /api/unsubscribe) is what spends the token.
- */
 export const Route = createFileRoute('/unsubscribe')({
   validateSearch: searchSchema,
   loaderDeps: ({ search }) => ({ token: search.token }),
-  loader: async ({
-    deps,
-  }): Promise<
-    Awaited<ReturnType<typeof loadUnsubscribeIntl>> & {
-      token: string | null
-      preview: UnsubscribePreview | { valid: false; error: PageError }
-    }
-  > => {
-    const intl = await loadUnsubscribeIntl()
-    if (!deps.token) return { ...intl, token: null, preview: { valid: false, error: 'missing' } }
-    if (!UUID.test(deps.token)) {
-      return { ...intl, token: null, preview: { valid: false, error: 'malformed' } }
-    }
-    const preview = await peekUnsubscribeTokenFn({ data: { token: deps.token } })
-    return { ...intl, token: deps.token, preview }
+  loader: async ({ deps }) => {
+    const [intl, view] = await Promise.all([loadUnsubscribeIntl(), lookUp(deps.token)])
+    return { ...intl, ...view, token: deps.token ?? null }
+  },
+  server: {
+    handlers: {
+      POST: async ({ request }) => {
+        const { handleOneClickUnsubscribe } =
+          await import('@/lib/server/functions/one-click-unsubscribe')
+        return handleOneClickUnsubscribe(request)
+      },
+    },
   },
   head: () => ({ meta: [{ name: 'robots', content: 'noindex' }] }),
   component: UnsubscribeRoute,
 })
 
+/** Read-only: the token is looked up, never spent. A malformed one never reaches the server. */
+async function lookUp(token: string | undefined): Promise<UnsubscribeView> {
+  if (!token) return { status: 'error', error: 'missing' }
+  if (!isUnsubscribeToken(token)) return { status: 'error', error: 'malformed' }
+  return previewUnsubscribeTokenFn({ data: { token } })
+}
+
 function UnsubscribeRoute() {
-  const { locale, messages, token, preview } = Route.useLoaderData()
+  const data = Route.useLoaderData()
   return (
-    <PortalIntlProvider locale={locale} messages={messages}>
+    <PortalIntlProvider locale={data.locale} messages={data.messages}>
       <main className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
         <div className="w-full max-w-md space-y-6 text-center">
-          {preview.valid && token ? (
-            <ConfirmFlow token={token} preview={preview} />
+          {data.status === 'confirm' && data.token ? (
+            <ConfirmFlow
+              token={data.token}
+              preview={{ action: data.action, postTitle: data.postTitle }}
+            />
           ) : (
-            <ErrorView error={preview.error ?? 'invalid'} />
+            <ErrorView error={data.status === 'error' ? data.error : 'invalid'} />
           )}
         </div>
       </main>
@@ -67,7 +77,13 @@ function UnsubscribeRoute() {
   )
 }
 
-function ConfirmFlow({ token, preview }: { token: string; preview: UnsubscribePreview }) {
+function ConfirmFlow({
+  token,
+  preview,
+}: {
+  token: string
+  preview: { action: string; postTitle?: string }
+}) {
   const intl = useIntl()
   const [state, setState] = useState<'confirm' | 'working' | 'failed'>('confirm')
   const [result, setResult] = useState<UnsubscribeResult | null>(null)

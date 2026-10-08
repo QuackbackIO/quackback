@@ -1,3 +1,4 @@
+import { nameInitial } from '@/lib/shared/utils/initial'
 import { memo, useEffect, useState } from 'react'
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
 import { useTheme } from 'next-themes'
@@ -296,10 +297,13 @@ export function PortalHeader({
                 />
               ) : (
                 <div className="h-8 w-8 [border-radius:calc(var(--radius)*0.6)] bg-primary flex items-center justify-center text-primary-foreground font-semibold">
-                  {orgName.charAt(0).toUpperCase()}
+                  {nameInitial(orgName)}
                 </div>
               )}
-              <span className="portal-header__name font-semibold hidden sm:block max-w-[18ch] line-clamp-2 text-[var(--header-foreground)]">
+              <span
+                title={orgName}
+                className="portal-header__name font-semibold hidden sm:block max-w-[18ch] truncate text-[var(--header-foreground)]"
+              >
                 {orgName}
               </span>
             </Link>

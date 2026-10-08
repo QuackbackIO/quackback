@@ -9,13 +9,21 @@ import {
   sendViaSes,
   SesEmailError,
   sesConfigurationSet,
+  sesMaxSendRate,
   sesRegion,
+  sesSendRateLimiter,
   stripPlatformControlledHeaders,
+  DEFAULT_SES_MAX_SEND_RATE,
 } from '../ses'
+import { SendRateQueueFullError } from '../send-rate'
+import type { SendRateLimiter } from '../send-rate'
 import type { SesSendClient } from '../ses'
 import {
   getEmailProvider,
+  sendChangelogPublishedEmail,
   sendConversationMessageEmail,
+  sendNewCommentEmail,
+  sendPostMentionEmail,
   sendRawEmail,
   sendStatusChangeEmail,
 } from '../index'
@@ -38,13 +46,16 @@ const sdkSend = vi.hoisted(() => vi.fn())
 /** The `warn` the console rung is asserted to reach. */
 const logWarn = vi.hoisted(() => vi.fn())
 
+/** The `error` a send failure that will not be retried is asserted to reach. */
+const logError = vi.hoisted(() => vi.fn())
+
 vi.mock('@quackback/logger', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@quackback/logger')>()
   const logger = {
     debug: vi.fn(),
     info: vi.fn(),
     warn: logWarn,
-    error: vi.fn(),
+    error: logError,
     child: () => logger,
   }
   return { ...actual, createLogger: () => logger }
@@ -72,6 +83,7 @@ const ENV_KEYS = [
   'RESEND_API_KEY',
   'EMAIL_INBOUND_PROVIDER',
   'EMAIL_FROM',
+  'EMAIL_SES_MAX_SEND_RATE',
 ] as const
 
 function withCleanEnv() {
@@ -150,6 +162,8 @@ function sentSimple(commands: SendEmailCommand[]) {
 }
 
 beforeEach(() => {
+  logWarn.mockClear()
+  logError.mockClear()
   sdkSend.mockReset()
   sdkSend.mockResolvedValue({
     MessageId: 'ses-assigned-1',
@@ -959,6 +973,66 @@ describe('dispatch on the ses rung', () => {
     expect(command.input.Content?.Simple?.Body?.Html?.Data).not.toContain('Unsubscribe')
   })
 
+  it('carries RFC 8058 one-click unsubscribe headers on a changelog email', async () => {
+    process.env.EMAIL_FROM = 'notifications@platform.test'
+    await sendChangelogPublishedEmail({
+      to: 'customer@example.test',
+      changelogTitle: 'May release',
+      changelogUrl: 'https://acme.example/changelog/1',
+      contentPreview: 'New things',
+      workspaceName: 'Acme',
+      unsubscribeUrl: 'https://acme.example/unsubscribe?token=tok-changelog',
+    })
+    const command = sdkSend.mock.calls[0][0] as SendEmailCommand
+    expect(command.input.Content?.Simple?.Headers).toEqual([
+      { Name: 'List-Unsubscribe', Value: '<https://acme.example/unsubscribe?token=tok-changelog>' },
+      { Name: 'List-Unsubscribe-Post', Value: 'List-Unsubscribe=One-Click' },
+    ])
+  })
+
+  it('carries them on a post update email, with that email’s own link', async () => {
+    process.env.EMAIL_FROM = 'notifications@platform.test'
+    await sendNewCommentEmail({
+      to: 'customer@example.test',
+      postTitle: 'Dark mode',
+      postUrl: 'https://acme.example/b/x/posts/1',
+      commenterName: 'Ada',
+      commentPreview: 'Shipped!',
+      isTeamMember: true,
+      workspaceName: 'Acme',
+      unsubscribeUrl: 'https://acme.example/unsubscribe?token=tok-post',
+    })
+    const command = sdkSend.mock.calls[0][0] as SendEmailCommand
+    expect(command.input.Content?.Simple?.Headers).toEqual([
+      { Name: 'List-Unsubscribe', Value: '<https://acme.example/unsubscribe?token=tok-post>' },
+      { Name: 'List-Unsubscribe-Post', Value: 'List-Unsubscribe=One-Click' },
+    ])
+  })
+
+  it('offers no one-click over plain http, and no header at all without a link', async () => {
+    process.env.EMAIL_FROM = 'notifications@platform.test'
+    const mention = (unsubscribeUrl?: string) =>
+      sendPostMentionEmail({
+        to: 'customer@example.test',
+        mentionerName: 'Ada',
+        postTitle: 'Dark mode',
+        excerpt: '',
+        postUrl: 'http://localhost:3000/b/x/posts/1',
+        workspaceName: 'Acme',
+        unsubscribeUrl,
+      })
+
+    await mention('http://localhost:3000/unsubscribe?token=tok-dev')
+    expect((sdkSend.mock.calls[0][0] as SendEmailCommand).input.Content?.Simple?.Headers).toEqual([
+      { Name: 'List-Unsubscribe', Value: '<http://localhost:3000/unsubscribe?token=tok-dev>' },
+    ])
+
+    await mention('')
+    expect(
+      (sdkSend.mock.calls[1][0] as SendEmailCommand).input.Content?.Simple?.Headers
+    ).toBeUndefined()
+  })
+
   it('carries attachments all the way from sendRawEmail to the SES wire shape', async () => {
     const content = new TextEncoder().encode('id,name\n1,ada')
     await sendRawEmail({
@@ -1115,5 +1189,127 @@ describe('why a send did not happen', () => {
       })
     }
     expect(logWarn).toHaveBeenCalledTimes(3)
+  })
+})
+
+/**
+ * Throttling is the provider saying "not this second", which every caller above
+ * this transport retries. It is logged at warn so an error line keeps meaning a
+ * send that went wrong; the caller that finally gives up logs that at error.
+ */
+describe('throttling', () => {
+  const send = (client: SesSendClient) =>
+    sendViaSes({ from: 'hi@platform.test', to: 'a@b.test', subject: 's' }, DEPS(client))
+
+  it('retries a send-rate rejection and logs it at warn, not error', async () => {
+    const { client } = refusingClient(
+      sesError('TooManyRequestsException', 'Maximum sending rate exceeded.', 429)
+    )
+    await expect(send(client)).rejects.toMatchObject({
+      status: 429,
+      code: 'TooManyRequestsException',
+      retryable: true,
+    })
+    expect(logWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 429, code: 'TooManyRequestsException' }),
+      'ses email send throttled'
+    )
+    expect(logError).not.toHaveBeenCalled()
+  })
+
+  it('treats the older Throttling name as the same thing, whatever its status', async () => {
+    const { client } = refusingClient(sesError('Throttling', 'Maximum sending rate exceeded.', 400))
+    await expect(send(client)).rejects.toMatchObject({ code: 'Throttling', retryable: true })
+    expect(logWarn).toHaveBeenCalledWith(expect.anything(), 'ses email send throttled')
+    expect(logError).not.toHaveBeenCalled()
+  })
+
+  it('still logs a rejection of the message itself at error', async () => {
+    const { client } = refusingClient(sesError('MessageRejected', 'not verified', 400))
+    await expect(send(client)).rejects.toMatchObject({ retryable: false })
+    expect(logError).toHaveBeenCalledWith(expect.anything(), 'ses email send failed')
+  })
+})
+
+describe('send rate', () => {
+  withCleanEnv()
+
+  it('defaults to a rate safely under the smallest production quota', () => {
+    expect(DEFAULT_SES_MAX_SEND_RATE).toBe(10)
+    expect(sesMaxSendRate()).toBe(10)
+    expect(sesSendRateLimiter().ratePerSecond).toBe(10)
+  })
+
+  it('takes the per-process rate from EMAIL_SES_MAX_SEND_RATE', () => {
+    process.env.EMAIL_SES_MAX_SEND_RATE = '4.5'
+    expect(sesMaxSendRate()).toBe(4.5)
+    expect(sesSendRateLimiter().ratePerSecond).toBe(4.5)
+  })
+
+  it('falls back to the default for a value that is not a positive rate', () => {
+    for (const bad of ['0', '-3', 'fast', 'Infinity']) {
+      process.env.EMAIL_SES_MAX_SEND_RATE = bad
+      expect(sesMaxSendRate(), bad).toBe(10)
+    }
+  })
+
+  it('waits for a slot before the send reaches SES', async () => {
+    let release!: () => void
+    const limiter: SendRateLimiter = {
+      ratePerSecond: 1,
+      acquire: () => new Promise<void>((resolve) => (release = resolve)),
+    }
+    const { client, send } = acceptingClient('id-1')
+    const pending = sendViaSes(
+      { from: 'hi@platform.test', to: 'a@b.test', subject: 's' },
+      { ...DEPS(client), limiter }
+    )
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    expect(send).not.toHaveBeenCalled()
+    release()
+    await expect(pending).resolves.toEqual({ messageId: 'id-1' })
+    expect(send).toHaveBeenCalledTimes(1)
+  })
+
+  it('paces sends through the process-wide limiter on the env-driven path', async () => {
+    process.env.EMAIL_SES_ACCESS_KEY_ID = 'AKIA'
+    process.env.EMAIL_SES_SECRET_ACCESS_KEY = 'secret'
+    process.env.EMAIL_SES_REGION = 'us-east-1'
+    // 20/s: one send every 50ms.
+    process.env.EMAIL_SES_MAX_SEND_RATE = '20'
+    const at: number[] = []
+    sdkSend.mockImplementation(async () => {
+      at.push(performance.now())
+      return { MessageId: 'ses-assigned-1', $metadata: { httpStatusCode: 200 } }
+    })
+    await Promise.all(
+      [1, 2, 3, 4].map((n) =>
+        sendViaSes({ from: 'hi@platform.test', to: `a${n}@b.test`, subject: 's' })
+      )
+    )
+    expect(at).toHaveLength(4)
+    // Slots are booked 50ms apart up front, so the last send leaves at least
+    // ~150ms after the first; unpaced, all four land within a millisecond.
+    // Measured across the whole run, not per gap: a loaded runner can delay
+    // one send, which shortens the gap after it without breaking the pace.
+    expect(at[at.length - 1] - at[0]).toBeGreaterThanOrEqual(120)
+  })
+
+  it('turns a full line into a retryable rate-limit error without sending', async () => {
+    const limiter: SendRateLimiter = {
+      ratePerSecond: 10,
+      acquire: async () => {
+        throw new SendRateQueueFullError(45_000)
+      },
+    }
+    const { client, send } = acceptingClient('id-1')
+    await expect(
+      sendViaSes(
+        { from: 'hi@platform.test', to: 'a@b.test', subject: 's' },
+        { ...DEPS(client), limiter }
+      )
+    ).rejects.toMatchObject({ name: 'SesEmailError', status: 429, retryable: true })
+    expect(send).not.toHaveBeenCalled()
+    expect(logError).not.toHaveBeenCalled()
   })
 })

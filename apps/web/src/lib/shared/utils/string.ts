@@ -1,3 +1,5 @@
+import { nameInitial } from './initial'
+
 /**
  * String utilities
  */
@@ -15,10 +17,10 @@ export function getInitials(name: string | null | undefined): string {
   if (!name) return '?'
   return name
     .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
+    .map((word) => nameInitial(word))
+    .filter(Boolean)
     .slice(0, 2)
+    .join('')
 }
 
 /**

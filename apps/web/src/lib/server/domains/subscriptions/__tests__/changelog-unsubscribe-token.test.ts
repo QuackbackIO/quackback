@@ -6,8 +6,6 @@ const mockTokenFindFirst = vi.fn()
 const mockPrincipalFindFirst = vi.fn()
 const mockUpdateSet = vi.fn()
 const mockUpdateWhere = vi.fn()
-/** Rows the conditional claim (`update ... where unused and unexpired returning`) hands back. */
-const mockClaimReturning = vi.fn()
 const mockUnsubscribeChangelog = vi.fn()
 
 vi.mock('@/lib/server/domains/changelog/changelog-subscription.service', () => ({
@@ -26,12 +24,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
     update: () => ({
       set: (values: unknown) => {
         mockUpdateSet(values)
-        return {
-          where: (...args: unknown[]) => {
-            mockUpdateWhere(...args)
-            return { returning: () => mockClaimReturning() }
-          },
-        }
+        return { where: (...args: unknown[]) => mockUpdateWhere(...args) }
       },
     }),
   },
@@ -88,17 +81,15 @@ describe('batchGenerateChangelogUnsubscribeTokens', () => {
 
 describe('processUnsubscribeToken — unsubscribe_changelog', () => {
   it('calls unsubscribeChangelog for the token principal', async () => {
-    mockClaimReturning.mockResolvedValueOnce([
-      {
-        id: 'unsub_token_01x',
-        token: 'tok123',
-        principalId: PRINCIPAL_ID,
-        postId: null,
-        action: 'unsubscribe_changelog',
-        usedAt: new Date(),
-        expiresAt: new Date(Date.now() + 60_000),
-      },
-    ])
+    mockTokenFindFirst.mockResolvedValueOnce({
+      id: 'unsub_token_01x',
+      token: 'tok123',
+      principalId: PRINCIPAL_ID,
+      postId: null,
+      action: 'unsubscribe_changelog',
+      usedAt: null,
+      expiresAt: new Date(Date.now() + 60_000),
+    })
     const { processUnsubscribeToken } = await import('../subscription.service')
 
     const result = await processUnsubscribeToken('tok123')
@@ -107,10 +98,16 @@ describe('processUnsubscribeToken — unsubscribe_changelog', () => {
     expect(result?.action).toBe('unsubscribe_changelog')
   })
 
-  // The used / expired / unknown filtering is the database's job here; the
-  // real-DB suite (unsubscribe-token.db.test.ts) holds those cases.
-  it('returns null when the claim matches no unused token', async () => {
-    mockClaimReturning.mockResolvedValueOnce([])
+  it('returns null for an already-used token', async () => {
+    mockTokenFindFirst.mockResolvedValueOnce({
+      id: 'unsub_token_01x',
+      token: 'tok123',
+      principalId: PRINCIPAL_ID,
+      postId: null,
+      action: 'unsubscribe_changelog',
+      usedAt: new Date('2020-01-01'),
+      expiresAt: new Date(Date.now() + 60_000),
+    })
     const { processUnsubscribeToken } = await import('../subscription.service')
 
     const result = await processUnsubscribeToken('tok123')

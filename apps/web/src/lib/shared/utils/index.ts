@@ -3,6 +3,7 @@
  */
 
 export { cn } from './cn'
+export { nameInitial } from './initial'
 export {
   getInitials,
   stripHtml,

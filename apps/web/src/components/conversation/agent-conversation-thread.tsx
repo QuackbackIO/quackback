@@ -2246,7 +2246,7 @@ export function AgentConversationThread({
             className={cn(
               'rounded-lg border px-3 py-2 transition-colors',
               noteMode || !capabilities.reply
-                ? 'border-amber-400/50 bg-amber-400/5'
+                ? 'border-amber-400/50 bg-amber-400/5 focus-within:ring-1 focus-within:ring-ring'
                 : 'border-border bg-background focus-within:border-ring/60'
             )}
             onPaste={handleComposerPaste}

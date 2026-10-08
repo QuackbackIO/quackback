@@ -4,9 +4,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
-const sendInvitationFn = vi.hoisted(() => vi.fn())
+const addTeamMembersFn = vi.hoisted(() => vi.fn())
 const team = vi.hoisted(() => vi.fn())
-vi.mock('@/lib/server/functions/admin', () => ({ sendInvitationFn }))
+vi.mock('@/lib/server/functions/team-people', () => ({ addTeamMembersFn }))
 vi.mock('@/lib/client/queries/admin', () => ({
   adminQueries: { onboardingStatus: () => ({ queryKey: ['admin', 'onboarding'] }) },
 }))
@@ -29,7 +29,7 @@ import {
 } from '../invite-team-sheet'
 
 beforeEach(() => {
-  sendInvitationFn.mockReset()
+  addTeamMembersFn.mockReset()
   team.mockReset()
   team.mockResolvedValue({ seatUsage: { used: 1, limit: null } })
 })
@@ -66,11 +66,20 @@ it('reads pasted lists of addresses', () => {
 })
 
 it('invites each address with the default member role and shows a link when mail is off', async () => {
-  sendInvitationFn.mockImplementation(async ({ data }: { data: { email: string } }) =>
-    data.email.startsWith('a')
-      ? { emailSent: true }
-      : { emailSent: false, inviteLink: 'https://acme.quackback.test/invite/b' }
-  )
+  addTeamMembersFn.mockImplementation(async ({ data }: { data: { emails: string[] } }) => ({
+    ok: true,
+    added: [],
+    invited: data.emails[0].startsWith('a')
+      ? [{ email: data.emails[0], invitationId: 'invite_a', emailSent: true }]
+      : [
+          {
+            email: data.emails[0],
+            invitationId: 'invite_b',
+            emailSent: false,
+            inviteLink: 'https://acme.quackback.test/invite/b',
+          },
+        ],
+  }))
   const client = new QueryClient()
   const invalidate = vi.spyOn(client, 'invalidateQueries')
   render(
@@ -86,12 +95,12 @@ it('invites each address with the default member role and shows a link when mail
   fireEvent.change(input, { target: { value: 'b@acme.example' } })
   expect(screen.getAllByTestId('invite-chip')).toHaveLength(1)
   fireEvent.click(screen.getByRole('button', { name: 'Send 2 invites' }))
-  await waitFor(() => expect(sendInvitationFn).toHaveBeenCalledTimes(2))
-  expect(sendInvitationFn).toHaveBeenNthCalledWith(1, {
-    data: { email: 'a@acme.example', role: 'member' },
+  await waitFor(() => expect(addTeamMembersFn).toHaveBeenCalledTimes(2))
+  expect(addTeamMembersFn).toHaveBeenNthCalledWith(1, {
+    data: { principalIds: [], emails: ['a@acme.example'], role: 'member' },
   })
-  expect(sendInvitationFn).toHaveBeenNthCalledWith(2, {
-    data: { email: 'b@acme.example', role: 'member' },
+  expect(addTeamMembersFn).toHaveBeenNthCalledWith(2, {
+    data: { principalIds: [], emails: ['b@acme.example'], role: 'member' },
   })
   expect(await screen.findByText('Invited a@acme.example')).toBeTruthy()
   expect(screen.getByText('https://acme.quackback.test/invite/b')).toBeTruthy()
@@ -99,7 +108,12 @@ it('invites each address with the default member role and shows a link when mail
 })
 
 it('keeps a failed address so it can be fixed and resent', async () => {
-  sendInvitationFn.mockRejectedValue(new Error('A team member with this email already exists'))
+  addTeamMembersFn.mockResolvedValue({
+    ok: false,
+    code: 'ALREADY_MEMBER',
+    message: 'A team member with this email already exists',
+    email: 'a@acme.example',
+  })
   render(
     <QueryClientProvider client={new QueryClient()}>
       <IntlProvider locale="en">
@@ -122,18 +136,24 @@ it('says what is wrong with each address that will not send', () => {
 })
 
 it('explains each bad chip beside it and still sends the good ones', async () => {
-  sendInvitationFn.mockResolvedValue({ emailSent: true })
+  addTeamMembersFn.mockImplementation(async ({ data }: { data: { emails: string[] } }) => ({
+    ok: true,
+    added: [],
+    invited: [{ email: data.emails[0], invitationId: 'invite_1', emailSent: true }],
+  }))
   renderSheet()
   addChips('mia@acme.example', 'jordan@acme')
   const reason = await screen.findByText('jordan@acme is missing the end, like jordan@acme.com.')
-  const bad = screen.getAllByTestId('invite-chip').find((chip) => chip.textContent?.includes('jordan'))!
+  const bad = screen
+    .getAllByTestId('invite-chip')
+    .find((chip) => chip.textContent?.includes('jordan'))!
   expect(bad.getAttribute('aria-invalid')).toBe('true')
   expect(bad.getAttribute('aria-describedby')).toBe(reason.id)
 
   fireEvent.click(screen.getByRole('button', { name: 'Send 1 invite' }))
-  await waitFor(() => expect(sendInvitationFn).toHaveBeenCalledTimes(1))
-  expect(sendInvitationFn).toHaveBeenCalledWith({
-    data: { email: 'mia@acme.example', role: 'member' },
+  await waitFor(() => expect(addTeamMembersFn).toHaveBeenCalledTimes(1))
+  expect(addTeamMembersFn).toHaveBeenCalledWith({
+    data: { principalIds: [], emails: ['mia@acme.example'], role: 'member' },
   })
   expect(await screen.findByText('Invited mia@acme.example')).toBeTruthy()
   expect(screen.getAllByTestId('invite-chip').map((chip) => chip.textContent)).toEqual([
@@ -149,9 +169,7 @@ it('counts pending invites in the seat meter and stops before the limit', async 
     '/admin/settings/billing'
   )
   addChips('a@acme.example', 'b@acme.example')
-  expect(
-    await screen.findByText('1 seat left. Remove an address or add seats.')
-  ).toBeTruthy()
+  expect(await screen.findByText('1 seat left. Remove an address or add seats.')).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Send 2 invites' }).hasAttribute('disabled')).toBe(true)
 })
 
@@ -162,9 +180,13 @@ it('shows no seat meter where seats are unlimited', async () => {
 })
 
 it('turns a seat limit refusal into a clear message', async () => {
-  sendInvitationFn.mockRejectedValue(
-    new Error("You've reached your plan's team seats limit (3). Upgrade to add more.")
-  )
+  addTeamMembersFn.mockResolvedValue({
+    ok: false,
+    code: 'SEAT_LIMIT',
+    message: 'Not enough seats',
+    needed: 1,
+    free: 0,
+  })
   renderSheet()
   addChips('a@acme.example')
   fireEvent.click(screen.getByRole('button', { name: 'Send 1 invite' }))

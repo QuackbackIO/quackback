@@ -3,6 +3,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
+import { z } from 'zod'
 import { Badge } from '@/components/ui/badge'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { SettingRow, SettingRows } from '@/components/admin/settings/setting-row'
@@ -28,8 +29,16 @@ import { WorkspaceDangerCard } from '@/components/admin/settings/workspace-dange
 import { WorkspaceIdentityCard } from '@/components/admin/settings/workspace-identity-card'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { useManagedFieldPaths, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { adminPageHead } from '@/lib/client/admin-head'
+
+const searchSchema = z.object({
+  /** `logo` scrolls to the workspace logo and highlights it. */
+  focus: z.enum(['logo']).optional().catch(undefined),
+})
 
 export const Route = createFileRoute('/admin/settings/general')({
+  head: adminPageHead('General settings'),
+  validateSearch: searchSchema,
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
     const ensure = readBatch(context.queryClient)
@@ -46,6 +55,7 @@ function GeneralSettingsPage() {
   const settings = useWorkspaceSettings()
   const managedFieldPaths = useManagedFieldPaths()
   const { cloudIdentity } = Route.useLoaderData()
+  const { focus } = Route.useSearch()
   const workspaceNameManaged = isPathManagedFromBootstrap(
     MANAGED_PATHS.WORKSPACE_NAME,
     managedFieldPaths ?? []
@@ -125,6 +135,7 @@ function GeneralSettingsPage() {
         managed={!cloudIdentity && workspaceNameManaged}
         onWorkspaceNameChange={handleNameChange}
         maxLength={cloudIdentity ? 80 : undefined}
+        focusLogo={focus === 'logo'}
       />
 
       <SettingsCard

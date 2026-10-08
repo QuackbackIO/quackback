@@ -105,7 +105,10 @@ export async function runHookJob(job: ClaimedJob): Promise<void> {
 
   let result: HookResult
   try {
-    result = await hook.run(event, target, hookConfig, { jobId: idempotencyKey })
+    result = await hook.run(event, target, hookConfig, {
+      jobId: idempotencyKey,
+      finalAttempt: job.attempts >= job.maxAttempts,
+    })
   } catch (error) {
     if (isRetryableError(error)) throw error
     throw new TerminalJobError(error instanceof Error ? error.message : 'Unknown error')
@@ -132,16 +135,18 @@ export async function onHookJobFailure(
   permanent: boolean
 ): Promise<void> {
   const data = job.payload as unknown as HookJobData
-  log.error(
-    {
-      err: error,
-      hook_type: data.hookType,
-      event_id: data.event?.id,
-      permanent,
-      attempt: job.attempts,
-    },
-    'hook failed'
-  )
+  const fields = {
+    err: error,
+    hook_type: data.hookType,
+    event_id: data.event?.id,
+    permanent,
+    attempt: job.attempts,
+  }
+  // A failure with attempts left is expected (a provider throttling a bulk
+  // send, a brief outage) and the queue will try again; only the failure that
+  // ends the job is an error worth paging on.
+  if (permanent) log.error(fields, 'hook failed')
+  else log.warn(fields, 'hook failed')
   if (!permanent || data.hookType !== 'webhook') return
   await updateWebhookFailureCount(
     data,

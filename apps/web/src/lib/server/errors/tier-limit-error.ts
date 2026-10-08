@@ -5,6 +5,8 @@ export interface TierLimitErrorPayload {
   message: string
   current?: number
   max?: number
+  /** Machine code for callers that branch on the specific limit; TIER_LIMIT_EXCEEDED when omitted. */
+  code?: string
 }
 
 /**
@@ -22,7 +24,7 @@ export class TierLimitError extends DomainException {
   readonly max?: number
 
   constructor(payload: TierLimitErrorPayload) {
-    super('TIER_LIMIT_EXCEEDED', payload.message)
+    super(payload.code ?? 'TIER_LIMIT_EXCEEDED', payload.message)
     this.limit = payload.limit
     this.current = payload.current
     this.max = payload.max

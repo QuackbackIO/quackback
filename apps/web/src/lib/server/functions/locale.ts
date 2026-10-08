@@ -40,8 +40,8 @@ export async function loadPortalIntl(): Promise<{
 }
 
 /**
- * The unsubscribe page's locale and strings. It renders only its own copy, so
- * it seeds that slice instead of the portal's.
+ * {@link loadPortalIntl} for the standalone /unsubscribe page, which renders
+ * only its own `unsubscribe.` strings and so seeds only those.
  */
 export async function loadUnsubscribeIntl(): Promise<{
   locale: SupportedLocale

@@ -175,11 +175,42 @@ export function isAskMessage(key: string): boolean {
   return key.startsWith('ask.') && !key.startsWith('ask.search.')
 }
 
-/** A catalog without the viewer's strings, for seeding a page. */
-export function withoutViewerMessages(all: Record<string, string>): Record<string, string> {
+/**
+ * Key prefix for the standalone /unsubscribe page. That page seeds only these
+ * (see {@link loadUnsubscribeMessages}), and no other surface renders them, so
+ * the portal slice leaves them out by prefix and the admin catalog drops them
+ * (see {@link adminSeedMessages}).
+ */
+export const UNSUBSCRIBE_MESSAGE_PREFIX = 'unsubscribe.'
+
+export function isUnsubscribeMessage(key: string): boolean {
+  return key.startsWith(UNSUBSCRIBE_MESSAGE_PREFIX)
+}
+
+/**
+ * Key prefixes only the setup wizard renders. The wizard seeds its own slice
+ * ({@link loadOnboardingMessages}), so the admin catalog leaves these out
+ * rather than carrying them in every admin page.
+ */
+export const SETUP_WIZARD_MESSAGE_PREFIXES = [
+  'onboarding.account.',
+  'onboarding.workspace.',
+  'onboarding.goals.',
+  'onboarding.error.',
+] as const
+
+export function isSetupWizardMessage(key: string): boolean {
+  return SETUP_WIZARD_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
+}
+
+/** The /unsubscribe page's strings in a locale, which is all that page renders. */
+export async function loadUnsubscribeMessages(
+  locale: SupportedLocale
+): Promise<Record<string, string>> {
+  const all = await loadMessages(locale)
   const subset: Record<string, string> = {}
   for (const [key, value] of Object.entries(all)) {
-    if (!isViewerMessage(key)) subset[key] = value
+    if (isUnsubscribeMessage(key)) subset[key] = value
   }
   return subset
 }
@@ -233,16 +264,6 @@ export async function loadTourMessages(locale: SupportedLocale): Promise<Record<
   }
   return subset
 }
-
-/**
- * Key prefixes only the onboarding wizard renders (it seeds its own slice,
- * see {@link loadOnboardingMessages}); no admin page shows them.
- */
-const WIZARD_ONLY_MESSAGE_PREFIXES = [
-  'onboarding.goals.',
-  'onboarding.workspace.',
-  'onboarding.error.',
-] as const
 
 /**
  * Strings only the invite-the-team sheet renders. The sheet is a lazy chunk
@@ -305,21 +326,6 @@ export async function loadLaunchMessages(locale: SupportedLocale): Promise<Recor
   return subset
 }
 
-/** The prefix of the unsubscribe page's strings, which no other page renders. */
-const UNSUBSCRIBE_MESSAGE_PREFIX = 'unsubscribe.'
-
-/** The unsubscribe page's strings in a locale: the one page that seeds them. */
-export async function loadUnsubscribeMessages(
-  locale: SupportedLocale
-): Promise<Record<string, string>> {
-  const all = await loadMessages(locale)
-  const subset: Record<string, string> = {}
-  for (const [key, value] of Object.entries(all)) {
-    if (key.startsWith(UNSUBSCRIBE_MESSAGE_PREFIX)) subset[key] = value
-  }
-  return subset
-}
-
 /**
  * The catalog an admin page seeds: everything but the strings that load with
  * a lazy surface (the file viewer, the product tour, Copilot and search, the
@@ -332,8 +338,8 @@ export function adminSeedMessages(all: Record<string, string>): Record<string, s
   for (const [key, value] of Object.entries(all)) {
     if (isViewerMessage(key) || isTourMessage(key) || isAskMessage(key)) continue
     if (isSheetMessage(key) || isLaunchMessage(key)) continue
-    if (key.startsWith('email.') || key.startsWith(UNSUBSCRIBE_MESSAGE_PREFIX)) continue
-    if (WIZARD_ONLY_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))) continue
+    if (key.startsWith('email.') || isUnsubscribeMessage(key)) continue
+    if (isSetupWizardMessage(key)) continue
     subset[key] = value
   }
   return subset

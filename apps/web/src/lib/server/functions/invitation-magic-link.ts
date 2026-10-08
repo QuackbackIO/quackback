@@ -6,11 +6,12 @@
  */
 import type { InviteId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
+import { TEAM_INVITATION_VALID_DAYS } from '@/lib/shared/team-people'
 
 const log = logger.child({ component: 'invitation-magic-link' })
 
 /**
- * Team invitation lifetime — 30 days. Source of truth for both the
+ * Team invitation lifetime, TEAM_INVITATION_VALID_DAYS days. Source of truth for both the
  * invitation row's `expiresAt` and the emailed magic-link token TTL.
  *
  * The token deliberately lives this long rather than falling back to
@@ -18,7 +19,7 @@ const log = logger.child({ component: 'invitation-magic-link' })
  * opened asynchronously — often days later — and the invitation row still
  * governs long-term access either way.
  */
-export const INVITATION_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000
+export const INVITATION_EXPIRY_MS = TEAM_INVITATION_VALID_DAYS * 24 * 60 * 60 * 1000
 
 /**
  * Mint the invite's one-click sign-in link (lives for INVITATION_EXPIRY_MS).

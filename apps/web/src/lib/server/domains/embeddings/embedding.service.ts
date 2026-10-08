@@ -13,6 +13,7 @@ import { withRetry } from '@/lib/server/domains/ai/retry'
 import { embeddingUsage, withUsageLogging } from '@/lib/server/domains/ai/usage-log'
 import { isTestPost } from '@/lib/server/test-data'
 import { logger } from '@/lib/server/logger'
+import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 
 const log = logger.child({ component: 'embeddings' })
 
@@ -127,7 +128,13 @@ export async function generatePostEmbedding(
   // Fire-and-forget: check for merge candidates now that embedding is fresh
   import('@/lib/server/domains/merge-suggestions/merge-check.service')
     .then(({ checkPostForMergeCandidates }) => checkPostForMergeCandidates(postId))
-    .catch((err) => log.error({ post_id: postId, err }, 'merge check failed'))
+    .catch((err) => {
+      if (err instanceof TierLimitError) {
+        log.info({ post_id: postId, err }, 'merge check skipped: ai budget unavailable')
+      } else {
+        log.error({ post_id: postId, err }, 'merge check failed')
+      }
+    })
 
   return true
 }

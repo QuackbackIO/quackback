@@ -8,6 +8,7 @@ import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ConversationAttributesList } from '@/components/admin/settings/conversation-data/conversation-attributes-list'
 import { ConversationTagsManager } from '@/components/admin/settings/conversation-data/conversation-tags-manager'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 const searchSchema = z.object({
   tab: z.enum(['attributes', 'tags']).optional(),
@@ -15,6 +16,7 @@ const searchSchema = z.object({
 type ConversationDataTab = 'attributes' | 'tags'
 
 export const Route = createFileRoute('/admin/settings/conversation-data')({
+  head: adminPageHead('Conversation data settings'),
   validateSearch: searchSchema,
   beforeLoad: ({ context }) => {
     if (!isProductEnabled(context.settings?.featureFlags, 'support')) {

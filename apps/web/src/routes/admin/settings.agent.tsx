@@ -29,6 +29,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import type { FeatureFlags } from '@/lib/shared/types'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 const AGENT_TABS = ['basics', 'knowledge', 'guidance'] as const
 type AgentTab = (typeof AGENT_TABS)[number]
@@ -38,6 +39,7 @@ const searchSchema = z.object({
 })
 
 export const Route = createFileRoute('/admin/settings/agent')({
+  head: adminPageHead('Agent settings'),
   validateSearch: searchSchema,
   beforeLoad: ({ context, search }) => {
     if (search.tab === 'actions') {

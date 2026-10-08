@@ -8,6 +8,7 @@ import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
 import type { BoardId, ChangelogCategoryId, ChangelogId, PostId, SegmentId } from '@quackback/ids'
 // Note: BoardId is only used for searchShippedPosts filtering
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
+import { isValidTypeId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { requireAuth, getOptionalAuth, policyActorFromAuth } from './auth-helpers'
@@ -194,6 +195,14 @@ export const runGetPublicChangelog = createServerOnlyFn(async function runGetPub
   data: z.infer<typeof getChangelogSchema>
 ) {
   log.debug({ changelog_id: data.id }, 'get public changelog')
+  // Anything that is not a changelog TypeID (e.g. a guessed /changelog/rss
+  // path) cannot name an entry: not found, without hitting the parser.
+  if (!isValidTypeId(data.id, 'changelog')) {
+    throw new NotFoundError(
+      'CHANGELOG_NOT_FOUND',
+      `Published changelog entry with ID ${data.id} not found`
+    )
+  }
   const actor = await policyActorFromAuth(authCtx)
 
   // Changelog audience gate (Settings > Changelog > Visibility): same

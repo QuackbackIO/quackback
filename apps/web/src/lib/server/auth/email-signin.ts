@@ -8,6 +8,20 @@ import { isSafeCallbackUrl, isTeamCallback } from '@/lib/shared/routing'
 const log = logger.child({ component: 'auth-email-signin' })
 
 /**
+ * A refusal the caller may report as-is. Only for answers that depend on the
+ * address's DOMAIN and on workspace configuration, never on whether an account
+ * exists: "Require SSO" on a verified domain is already visible to anyone who
+ * types an address there, because the sign-in form routes the domain to its
+ * provider. Account-dependent refusals stay silent (see below).
+ */
+export class EmailSigninRefusedError extends Error {
+  constructor(readonly code: 'verified_domain_requires_sso') {
+    super(code)
+    this.name = 'EmailSigninRefusedError'
+  }
+}
+
+/**
  * Sends a passwordless sign-in email containing both a magic-link button
  * and a 6-digit code. Either path consumes a verification record on the
  * server, so the user picks whichever fits their context (desktop click,
@@ -39,6 +53,17 @@ export async function requestEmailSignin(opts: {
   /** Path the user lands on after a successful magic-link click. */
   callbackURL: string
 }): Promise<void> {
+  // "Require SSO", in front of the mint. The link minted below is redeemed at
+  // `/magic-link/verify`, whose address travels inside the token, so the
+  // hook layer that enforces this for every other email path never sees it.
+  // Same rule and same owner-scoped fail-open as `hooks.before`.
+  const { loadSsoDomains } = await import('./sso-managed-email')
+  const { isHardBound } = await import('./auth-restrictions')
+  const { providers, registered } = await loadSsoDomains()
+  if (isHardBound('magic-link', opts.email, providers, registered)) {
+    throw new EmailSigninRefusedError('verified_domain_requires_sso')
+  }
+
   const auth = await getAuth()
 
   const { db } = await import('@/lib/server/db')

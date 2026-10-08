@@ -11,38 +11,63 @@
  */
 import { toast } from 'sonner'
 import { oidcRedirectUri, type OidcRedirectStyle } from '@/lib/shared/oidc-redirect'
-import type { Role } from '@/lib/shared/roles'
 import {
   DEFAULT_IDENTITY_SOURCES,
   IDENTITY_SOURCES,
+  OIDC_PROFILE_DEFAULTS,
+  PROFILE_FIELDS,
+  isProfileField,
   type IdentityProviderClaimMapping,
   type IdentitySource,
+  type ProfileField,
 } from '@/lib/shared/oidc-claim-mapping'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import type { IdpKind } from '../idp-shortcuts'
 import { sourcesAreDefault } from '@/lib/shared/sso-claim-mapping-edit'
 
-export const OIDC_PROFILE_DEFAULTS = {
-  id: 'sub',
-  email: 'email',
-  name: 'name',
-} as const
-
-export const PROFILE_FIELDS = ['id', 'email', 'name'] as const
-export type ProfileFieldKey = (typeof PROFILE_FIELDS)[number]
-
-export const PROFILE_ROW_LABELS: Record<ProfileFieldKey, string> = {
-  id: 'Account ID',
-  email: 'Email',
-  name: 'Name',
-}
-
-/** Shown only in the edit dialog, where the choice is being made. The table
- *  itself carries no per-row explanation. */
-export const PROFILE_DIALOG_HELPERS: Record<ProfileFieldKey, string> = {
-  id: 'Matches accounts on every sign-in. Choose a stable, unique value.',
-  email: 'Set when the account is created.',
-  name: 'Set when the account is created. If missing, a name is generated from a username or the account ID.',
+/**
+ * Everything the editor says about one profile field: its row label, the
+ * muted line under it saying what the field expects, the dialog description
+ * where the claim is chosen, and what the test sign-in column shows when the
+ * field gets nothing from the test.
+ */
+export const PROFILE_FIELD_SPECS: Record<
+  ProfileField,
+  { label: string; hint: string; helper: string; emptyTestText: string }
+> = {
+  id: {
+    label: 'Account ID',
+    hint: 'Unique, never changes',
+    helper:
+      'Matches accounts on every sign-in. Choose a stable, unique value. Leave blank for the standard behaviour: sub, then a userinfo id fallback for older providers. Setting sub explicitly turns that fallback off.',
+    emptyTestText: 'Not sent',
+  },
+  email: {
+    label: 'Email',
+    hint: 'Email address',
+    helper: 'Set when the account is created.',
+    emptyTestText: 'Not sent',
+  },
+  name: {
+    label: 'Name',
+    hint: 'Display name',
+    helper:
+      'Set when the account is created. If missing, a name is generated from a username or the account ID.',
+    emptyTestText: 'Not sent',
+  },
+  username: {
+    label: 'Username',
+    hint: 'Used when no name is sent',
+    helper:
+      'Names the account when the provider sends no name. Unmapped, it uses preferred_username, then nickname.',
+    emptyTestText: 'Name is used',
+  },
+  image: {
+    label: 'Avatar',
+    hint: 'Image URL',
+    helper: "Choose the claim that holds a link to the person's picture.",
+    emptyTestText: 'Not sent, initials are shown',
+  },
 }
 
 export const PEOPLE_TYPE_LABEL: Record<string, string> = {
@@ -71,8 +96,6 @@ export const SIGN_IN_TAB = {
 export const SSO_CRUMBS = [{ label: 'Access & Security', ...SIGN_IN_TAB }]
 
 export const IDP_KIND_OPTIONS: IdpKind[] = ['okta', 'auth0', 'entra', 'keycloak', 'google', 'other']
-
-export const ROLES: Role[] = ['admin', 'member', 'user']
 
 /** The role section of `claim_mapping` — the claim→role rules. */
 export type RoleMapping = NonNullable<IdentityProviderClaimMapping['role']>
@@ -214,9 +237,8 @@ export function identityMappingIssue(
   if (profile && isRecord(profile)) {
     const claims = isRecord(profile.claims) ? profile.claims : null
     if (claims) {
-      if (blankSupportedPath(claims.id)) return 'Account ID mapping has no claim path'
-      if (blankSupportedPath(claims.email)) return 'Email mapping has no claim path'
-      if (blankSupportedPath(claims.name)) return 'Name mapping has no claim path'
+      const blank = PROFILE_FIELDS.find((field) => blankSupportedPath(claims[field]))
+      if (blank) return `${PROFILE_FIELD_SPECS[blank].label} mapping has no claim path`
     }
     if (Array.isArray(profile.sources)) {
       const kept = profile.sources.filter((s) =>
@@ -238,9 +260,21 @@ export function identityMappingIssue(
 }
 
 /**
+ * Whether a stored claim path changes what sign-in reads for a field. Any
+ * stored Account ID does, even `sub`, because an explicit path turns off the
+ * userinfo `id` fallback. Any stored username does, even `preferred_username`,
+ * because a mapped username claim is read alone, without `nickname`. Every
+ * other field is custom only off its standard claim.
+ */
+export function isCustomProfilePath(field: ProfileField, path: unknown): boolean {
+  if (typeof path !== 'string' || path.trim() === '') return false
+  if (field === 'id' || field === 'username') return true
+  return path.trim() !== OIDC_PROFILE_DEFAULTS[field]
+}
+
+/**
  * Drop display-only OIDC defaults so an untouched table Save does not persist
- * `profile`. Explicit `id: 'sub'` is kept because it disables userinfo `id`
- * fallback.
+ * `profile`. Profile sync is kept only when on.
  */
 export function normalizeProfileClaims(
   profile: IdentityProviderClaimMapping['profile'] | undefined
@@ -248,6 +282,7 @@ export function normalizeProfileClaims(
   if (!profile) return undefined
   const next: NonNullable<IdentityProviderClaimMapping['profile']> = {}
   if (profile.allowMissingEmail === true) next.allowMissingEmail = true
+  if (profile.syncOnSignIn === true) next.syncOnSignIn = true
   if (profile.sources && !sourcesAreDefault(profile.sources)) {
     const sources = profile.sources.filter((s) =>
       (IDENTITY_SOURCES as readonly string[]).includes(s)
@@ -256,12 +291,10 @@ export function normalizeProfileClaims(
   }
   const claims: NonNullable<NonNullable<IdentityProviderClaimMapping['profile']>['claims']> = {}
   const rawClaims = profile.claims ?? {}
-  const id = typeof rawClaims.id === 'string' ? rawClaims.id.trim() : ''
-  const email = typeof rawClaims.email === 'string' ? rawClaims.email.trim() : ''
-  const name = typeof rawClaims.name === 'string' ? rawClaims.name.trim() : ''
-  if (id) claims.id = id
-  if (email && email !== OIDC_PROFILE_DEFAULTS.email) claims.email = email
-  if (name && name !== OIDC_PROFILE_DEFAULTS.name) claims.name = name
+  for (const field of PROFILE_FIELDS) {
+    const path = rawClaims[field]
+    if (typeof path === 'string' && isCustomProfilePath(field, path)) claims[field] = path.trim()
+  }
   if (Object.keys(claims).length > 0) next.claims = claims
   return Object.keys(next).length > 0 ? next : undefined
 }
@@ -269,43 +302,30 @@ export function normalizeProfileClaims(
 export function hasCustomProfileClaims(
   mapping: IdentityProviderClaimMapping | null | undefined
 ): boolean {
-  const claims = mapping?.profile?.claims
-  if (!claims) return false
-  if (claims.id !== undefined && String(claims.id).trim() !== '') return true
-  const email = typeof claims.email === 'string' ? claims.email.trim() : ''
-  const name = typeof claims.name === 'string' ? claims.name.trim() : ''
-  return (
-    (email !== '' && email !== OIDC_PROFILE_DEFAULTS.email) ||
-    (name !== '' && name !== OIDC_PROFILE_DEFAULTS.name)
-  )
+  return buildProfileRows(mapping).some((row) => !row.isDefault)
 }
 
-/** Profile claim keys beyond id / email / name: legacy or forward-compatible
- *  entries this UI cannot edit but must keep showing so they are not
- *  mistaken for a standard mapping. */
+/** Profile claim keys beyond the five profile fields: legacy or
+ *  forward-compatible entries this UI cannot edit but must keep showing so
+ *  they are not mistaken for a standard mapping. */
 export function extraProfileClaimKeys(
   mapping: IdentityProviderClaimMapping | null | undefined
 ): string[] {
   const claims = mapping?.profile?.claims
   if (!claims) return []
-  return Object.keys(claims).filter((key) => key !== 'id' && key !== 'email' && key !== 'name')
+  return Object.keys(claims).filter((key) => !isProfileField(key))
 }
 
 export type PeopleDefinition = { key: string; label: string; type: string }
 
 export type ClaimsProfileRow = {
   kind: 'profile'
-  field: ProfileFieldKey
+  field: ProfileField
   label: string
+  /** What the field expects, shown under the label in the editor. */
+  hint: string
   path: string
   isDefault: boolean
-}
-
-export type ClaimsRoleRow = {
-  kind: 'role'
-  claimPath: string
-  rules: Array<{ whenContains: string; role: Role }>
-  syncOnEverySignIn: boolean
 }
 
 export type ClaimsPeopleRow = {
@@ -326,40 +346,27 @@ export type ClaimsUnsupportedRow = {
   detail: string
 }
 
-export type ClaimsTableRow =
-  ClaimsProfileRow | ClaimsRoleRow | ClaimsPeopleRow | ClaimsUnsupportedRow
+export type ClaimsTableRow = ClaimsProfileRow | ClaimsPeopleRow | ClaimsUnsupportedRow
 
-export type AddClaimTarget =
-  { kind: 'role' } | { kind: 'people'; key: string; label: string; attrType: string }
-
-function profilePath(
-  mapping: IdentityProviderClaimMapping | null | undefined,
-  field: 'id' | 'email' | 'name'
-): string | undefined {
-  const value = mapping?.profile?.claims?.[field]
-  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
-}
+export type AddClaimTarget = { kind: 'people'; key: string; label: string; attrType: string }
 
 /**
- * The three profile fields, always present. Account ID is "custom" whenever a
- * path is stored — even an explicit `sub` — because an explicit path disables
- * the userinfo `id` compatibility fallback. Email and name are custom only
- * when the stored path differs from the standard claim.
+ * The five profile fields, always present, in table order, each showing its
+ * stored claim or the standard one. Custom per `isCustomProfilePath`.
  */
 export function buildProfileRows(
   mapping: IdentityProviderClaimMapping | null | undefined
 ): ClaimsProfileRow[] {
   return PROFILE_FIELDS.map((field) => {
-    const path = profilePath(mapping, field)
+    const stored = mapping?.profile?.claims?.[field]
+    const path = typeof stored === 'string' ? stored.trim() : ''
     return {
       kind: 'profile',
       field,
-      label: PROFILE_ROW_LABELS[field],
-      path: path ?? OIDC_PROFILE_DEFAULTS[field],
-      isDefault:
-        field === 'id'
-          ? path === undefined
-          : path === undefined || path === OIDC_PROFILE_DEFAULTS[field],
+      label: PROFILE_FIELD_SPECS[field].label,
+      hint: PROFILE_FIELD_SPECS[field].hint,
+      path: path || OIDC_PROFILE_DEFAULTS[field],
+      isDefault: !isCustomProfilePath(field, path),
     }
   })
 }
@@ -372,16 +379,8 @@ export function buildClaimsTableModel({
   definitions: PeopleDefinition[]
 }): { profile: ClaimsProfileRow[]; additional: ClaimsTableRow[] } {
   const profile = buildProfileRows(mapping)
+  // Role rules are the Roles card's; this table lists what is read about a person.
   const additional: ClaimsTableRow[] = []
-  const role = mapping?.role
-  if (role && (role.claimPath || (role.rules?.length ?? 0) > 0 || role.syncOnEverySignIn)) {
-    additional.push({
-      kind: 'role',
-      claimPath: role.claimPath || 'groups',
-      rules: role.rules ?? [],
-      syncOnEverySignIn: role.syncOnEverySignIn === true,
-    })
-  }
   const defByKey = new Map(definitions.map((d) => [d.key, d]))
   const map = mapping?.attributes?.map ?? []
   const keyCounts = new Map<string, number>()
@@ -415,24 +414,12 @@ export function buildClaimsTableModel({
 
 /**
  * Whether the provider reads identity from a non-standard source list. Shown
- * as a compatibility exception; the controls live under Customize.
+ * as a compatibility exception on the Profile card.
  */
 export function hasCustomSources(
   mapping: IdentityProviderClaimMapping | null | undefined
 ): boolean {
   return !sourcesAreDefault(mapping?.profile?.sources)
-}
-
-/** The number of things User details shows beyond the standard profile. */
-export function userDetailsAreStandard(
-  mapping: IdentityProviderClaimMapping | null | undefined
-): boolean {
-  if (hasCustomProfileClaims(mapping)) return false
-  if (extraProfileClaimKeys(mapping).length > 0) return false
-  if (mapping?.role) return false
-  if ((mapping?.attributes?.map?.length ?? 0) > 0) return false
-  if (hasCustomSources(mapping)) return false
-  return true
 }
 
 export function availableAddTargets({
@@ -443,13 +430,6 @@ export function availableAddTargets({
   definitions: PeopleDefinition[]
 }): AddClaimTarget[] {
   const targets: AddClaimTarget[] = []
-  const hasRole = Boolean(
-    mapping?.role &&
-    (mapping.role.claimPath ||
-      (mapping.role.rules?.length ?? 0) > 0 ||
-      mapping.role.syncOnEverySignIn)
-  )
-  if (!hasRole) targets.push({ kind: 'role' })
   const used = new Set(
     (mapping?.attributes?.map ?? []).map((row) => row.attributeKey).filter(Boolean)
   )
@@ -491,14 +471,4 @@ export function reportMissingIdpFields(fields: { label?: string; clientId?: stri
   field?.scrollIntoView({ block: 'center' })
   field?.focus()
   return true
-}
-
-/** This provider is the last thing standing between the workspace and a
- *  no-auth lockout when it's the sole enabled + configured sign-in method;
- *  turning it off (or removing it) must be blocked. */
-export function isOnlyWorkingMethod(
-  provider: { enabled: boolean; configured: boolean } | null | undefined,
-  enabledMethodCount: number
-): boolean {
-  return enabledMethodCount === 1 && !!provider?.enabled && !!provider?.configured
 }

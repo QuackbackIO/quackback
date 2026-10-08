@@ -1,5 +1,7 @@
 /**
- * Hands the resolver's freshly-validated claims to the role-provisioning hook.
+ * Hands the resolver's freshly-validated claims, and its profile decisions, to
+ * the callback after-hooks (role provisioning, attribute writes, profile
+ * refresh).
  *
  * Role assignment re-reads `account.id_token` from the database, which has two
  * problems the resolver already solved. Providers that resolve identity from
@@ -15,8 +17,8 @@
  *
  * Same shape as the magic-link and OTP stashes in the auth config: a short TTL,
  * take-once semantics, and a fallback path that still works if the entry is
- * missed. Nothing depends on the stash hitting — a miss just means the old
- * behaviour of reading the stored token.
+ * missed. A miss means reading the stored token instead, and a profile
+ * refresh that changes nothing for that sign-in.
  */
 
 /**
@@ -37,7 +39,23 @@ import { getWorkspaceScope, runWithWorkspaceScope } from '@/lib/server/workspace
 
 const TTL_MS = 30_000
 
-type Entry = { claims: Record<string, unknown>; ts: number }
+/** What the resolver decided about the profile for one sign-in. */
+export type ResolvedProfile = {
+  /** The display name exactly as the provider sent it. Never synthesized. */
+  name?: string
+  /** The avatar URL the binder resolved from the mapped avatar claim. */
+  image?: string
+  /** Every name sign-up could have generated for this account. */
+  generatedNames: string[]
+}
+
+/** One sign-in as the resolver saw it. */
+export type ResolvedSignIn = {
+  claims: Record<string, unknown>
+  profile: ResolvedProfile
+}
+
+type Entry = ResolvedSignIn & { ts: number }
 
 const entries = new WorkspaceKeyedCache<Entry>(4_096)
 
@@ -48,14 +66,14 @@ function key(providerId: string, accountId: string): string {
   return `${providerId}\u0000${accountId}`
 }
 
-/** Record the claims that just resolved for this identity. */
+/** Record the sign-in that just resolved for this identity. */
 export function stashResolvedClaims(
   providerId: string,
   accountId: string,
-  claims: Record<string, unknown>
+  resolved: ResolvedSignIn
 ): void {
   const k = key(providerId, accountId)
-  entries.set(k, { claims, ts: Date.now() })
+  entries.set(k, { ...resolved, ts: Date.now() })
   // Self-cleaning, so a sign-in that never reaches provisioning (blocked by
   // policy, say) cannot leave claims resident.
   //
@@ -71,29 +89,12 @@ export function stashResolvedClaims(
   setTimeout(() => (scope ? runWithWorkspaceScope(scope, sweep) : sweep()), TTL_MS).unref?.()
 }
 
-/** Take the stashed claims, if this identity resolved in this request. */
-export function takeResolvedClaims(
-  providerId: string,
-  accountId: string
-): Record<string, unknown> | null {
+/** Take the stashed sign-in, if this identity resolved in this request. */
+export function takeResolvedClaims(providerId: string, accountId: string): ResolvedSignIn | null {
   const k = key(providerId, accountId)
   const held = entries.get(k)
   if (!held) return null
   entries.delete(k)
   if (Date.now() - held.ts >= TTL_MS) return null
-  return held.claims
-}
-
-/**
- * Read the stashed claims WITHOUT consuming them, so another after-hook that
- * takes them (role provisioning) still gets its copy. Same TTL rule as
- * {@link takeResolvedClaims}.
- */
-export function peekResolvedClaims(
-  providerId: string,
-  accountId: string
-): Record<string, unknown> | null {
-  const held = entries.get(key(providerId, accountId))
-  if (!held || Date.now() - held.ts >= TTL_MS) return null
-  return held.claims
+  return { claims: held.claims, profile: held.profile }
 }

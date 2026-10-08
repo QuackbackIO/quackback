@@ -198,11 +198,26 @@ describe.skipIf(!fixture.available)('getWorkspaceClaimFn', () => {
     await expect(getWorkspaceClaimFn()).resolves.toMatchObject({ openToClaim: true })
   })
 
+  // On a provisioned workspace an account is not a claim, so only an owner
+  // makes it claimed, and holding a team role is not being one.
   it('does not read a non-admin member as the owner', async () => {
+    await seedControlPlaneStamp()
     const userId = await seedUser('member@acme.example')
     await seedPrincipal({ userId, role: 'member', type: 'user' })
 
     await expect(getWorkspaceClaimFn()).resolves.toMatchObject({ claimed: false })
+  })
+
+  // On an install still being set up, the first account created claims it,
+  // whatever its role.
+  it('reads an install with an account on it as claimed', async () => {
+    const userId = await seedUser('member@acme.example')
+    await seedPrincipal({ userId, role: 'user', type: 'user' })
+
+    await expect(getWorkspaceClaimFn()).resolves.toMatchObject({
+      claimed: true,
+      openToClaim: true,
+    })
   })
 
   it('does not read a service principal as the owner', async () => {

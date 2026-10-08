@@ -132,7 +132,7 @@ export const emailHook: HookHandler = {
     // One hook job is one send, and its id is stable across the queue's
     // retries, so it is the identity every attempt carries to the provider.
     return withEmailIdempotencyKey(ctx?.jobId ? `hook:${ctx.jobId}` : undefined, () =>
-      deliverEmail(event, target, config)
+      deliverEmail(event, target, config, ctx?.finalAttempt ?? true)
     )
   },
 }
@@ -140,7 +140,8 @@ export const emailHook: HookHandler = {
 async function deliverEmail(
   event: EventData,
   target: unknown,
-  config: unknown
+  config: unknown,
+  finalAttempt: boolean
 ): Promise<HookResult> {
   const { email, unsubscribeUrl } = target as EmailTarget
   const cfg = config as EmailConfig
@@ -294,11 +295,19 @@ async function deliverEmail(
     return { success: true }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-    log.error({ err: error, event_type: event.type }, 'email send failed')
+    const shouldRetry = isRetryableError(error)
+    // A retryable failure with attempts left (a throttled send in a bulk
+    // announcement, most often) is a warning: the queue sends it again. The
+    // attempt that gives up, or a failure no retry can fix, is the error.
+    if (shouldRetry && !finalAttempt) {
+      log.warn({ err: error, event_type: event.type }, 'email send failed')
+    } else {
+      log.error({ err: error, event_type: event.type }, 'email send failed')
+    }
     return {
       success: false,
       error: errorMsg,
-      shouldRetry: isRetryableError(error),
+      shouldRetry,
     }
   }
 }

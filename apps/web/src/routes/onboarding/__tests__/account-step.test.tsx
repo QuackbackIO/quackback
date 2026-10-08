@@ -32,6 +32,7 @@ import {
 } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import { DEFAULT_AUTH_CONFIG } from '@/lib/shared/types/settings'
+import { loadMessages } from '@/lib/shared/i18n'
 
 const navigate = vi.fn()
 const invalidate = vi.fn(async () => {})
@@ -155,6 +156,28 @@ function selfHosted(): AccountStepProps {
       twoFactorRequired: false,
     },
   }
+}
+
+/**
+ * The same install once its first account exists: that account has claimed
+ * setup, so everyone who arrives now, its owner included, is asked to sign in.
+ */
+function selfHostedClaimed(): AccountStepProps {
+  const props = selfHosted()
+  props.claim = { claimed: true, setupComplete: false, openToClaim: true, closedReason: null }
+  props.authConfig.signInOAuth = { password: true, github: true }
+  return props
+}
+
+/**
+ * A workspace the config file stamped complete before its owner arrived. Its
+ * portal is live, so an account there is not a claim, and the first-user form
+ * stays, with a way back in for someone who already made their account.
+ */
+function preStamped(): AccountStepProps {
+  const props = selfHosted()
+  props.claim = { claimed: false, setupComplete: true, openToClaim: true, closedReason: null }
+  return props
 }
 
 function renderStep(props: AccountStepProps) {
@@ -379,16 +402,6 @@ describe('account step — a self-hosted first user', () => {
     expect(screen.queryByRole('button', { name: /continue/i })).toBeNull()
   })
 
-  // The fixture carries the shipped default, which lists Google and GitHub as
-  // on. Before setup nothing has credentials for them, so a tile here is a
-  // button that fails.
-  it('offers no social sign-up, even when the config turns providers on', () => {
-    renderStep(selfHosted())
-
-    expect(screen.queryByRole('button', { name: /google/i })).toBeNull()
-    expect(screen.queryByRole('button', { name: /github/i })).toBeNull()
-  })
-
   it('creates the account from the name, email and password given', async () => {
     const { authClient } = await import('@/lib/client/auth-client')
     vi.mocked(authClient.signUp.email).mockResolvedValueOnce({ data: {}, error: null } as never)
@@ -536,24 +549,6 @@ describe('account step — a self-hosted first user', () => {
     expect(password).toHaveAttribute('type', 'password')
   })
 
-  // Created here, then signed out before setup finished: the new-account form
-  // would only refuse the address, so there is a way to sign back in with the
-  // methods the install takes, providers included.
-  it('lets someone who already started setup sign back in', () => {
-    const props = selfHosted()
-    props.authConfig.signInOAuth = { password: true, github: true }
-    renderStep(props)
-
-    fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }))
-
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Welcome back')
-    expect(screen.getByRole('button', { name: /sign in with github/i })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^create account$/i })).toBeNull()
-
-    fireEvent.click(screen.getByRole('button', { name: /create a new account instead/i }))
-    expect(screen.getByRole('button', { name: /^create account$/i })).toBeInTheDocument()
-  })
-
   it('offers to sign in when the address already has an account', async () => {
     const { authClient } = await import('@/lib/client/auth-client')
     vi.mocked(authClient.signUp.email).mockResolvedValueOnce({
@@ -570,6 +565,43 @@ describe('account step — a self-hosted first user', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Welcome back')
   })
 
+  // The fixture carries the shipped default, which lists Google and GitHub as
+  // on. Before setup nothing has credentials for them, so a tile here is a
+  // button that fails, and the first admin is always created with an email.
+  it('offers no social sign-up, even when the config turns providers on', () => {
+    renderStep(selfHosted())
+
+    expect(screen.queryByRole('button', { name: /google/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /github/i })).toBeNull()
+    expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument()
+  })
+
+  // Nobody has an account here yet, so there is nobody to sign back in.
+  it('offers no sign-in before anyone has an account', () => {
+    renderStep(selfHosted())
+
+    expect(screen.queryByText(/already started setting up/i)).toBeNull()
+    expect(screen.queryByRole('button', { name: /^sign in$/i })).toBeNull()
+  })
+
+  // On a workspace stamped complete, creating an account does not claim it,
+  // so someone who made theirs and was signed out still needs a way back.
+  it('lets someone who already started setup on a stamped workspace sign back in', () => {
+    const props = preStamped()
+    props.authConfig.signInOAuth = { password: true, github: true }
+    renderStep(props)
+
+    fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }))
+
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Welcome back')
+    expect(screen.getByRole('button', { name: /sign in with github/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^create account$/i })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /create a new account instead/i }))
+    expect(screen.queryByRole('button', { name: /sign in with github/i })).toBeNull()
+    expect(screen.getByRole('button', { name: /^create account$/i })).toBeInTheDocument()
+  })
+
   it('drops the password form when an unclaimed workspace has password off', () => {
     const props = selfHosted()
     props.authConfig.oauth = { ...DEFAULT_AUTH_CONFIG.oauth, password: false, magicLink: true }
@@ -581,7 +613,7 @@ describe('account step — a self-hosted first user', () => {
     expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument()
   })
 
-  it('offers no social sign-up when an unclaimed workspace has password off', () => {
+  it('offers no social or OIDC sign-up when an unclaimed workspace has password off', () => {
     const props = selfHosted()
     props.authConfig.oauth = {
       ...DEFAULT_AUTH_CONFIG.oauth,
@@ -628,6 +660,95 @@ describe('account step — a self-hosted first user', () => {
   })
 })
 
+// A translated visitor sees each screen in one language: every string the
+// first-user form and its way back in render is in the catalogue.
+describe('account step: in a translated locale', () => {
+  it('renders the first-user screen and the way back in from the German catalogue', async () => {
+    const de = await loadMessages('de')
+    const props = preStamped()
+    // Passwords off, so the first-user screen is the emailed-link one.
+    props.authConfig.oauth = { ...DEFAULT_AUTH_CONFIG.oauth, password: false, magicLink: true }
+    props.authConfig.signInOAuth = { password: true, github: true }
+    rtlRender(
+      <IntlProvider locale="de" defaultLocale="en" messages={de} onError={() => {}}>
+        <AccountStep {...props} />
+      </IntlProvider>
+    )
+
+    expect(
+      screen.getByText('Erstelle dein Admin-Konto, um diesen Workspace einzurichten.')
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Schon mit der Einrichtung begonnen\?/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Anmelden' }))
+
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Willkommen zurück')
+    expect(
+      screen.getByText(
+        'Melde dich mit dem Konto an, das du hier erstellt hast, um die Einrichtung abzuschließen.'
+      )
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Stattdessen ein neues Konto erstellen' })
+    ).toBeInTheDocument()
+  })
+})
+
+// The window this closes: the first person created an account and has not
+// finished setup. Anyone who opens the address now, the owner after a sign-out
+// included, gets sign-in, not a second "Create account".
+describe('account step — an install whose first account has claimed setup', () => {
+  it('asks for sign-in to finish setting up, and offers no new account', async () => {
+    const { container } = renderStep(selfHostedClaimed())
+
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+      'Sign in to finish setting up'
+    )
+    expect(screen.queryByText(/create your admin account/i)).toBeNull()
+    expect(screen.queryByText(/already has an owner/i)).toBeNull()
+    // Sign-in mode: the providers this install can sign an existing account
+    // in with, and a password stage rather than account creation.
+    expect(screen.getByRole('button', { name: /sign in with github/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /sign up with/i })).toBeNull()
+    await continuePastEmail('owner@acme.example')
+    await waitFor(() => expect(container.querySelector('input[type="password"]')).not.toBeNull())
+    expect(screen.queryByRole('button', { name: /^create account$/i })).toBeNull()
+  })
+
+  it('tells anyone else to wait for an invitation, without naming the owner', () => {
+    const { container } = renderStep(selfHostedClaimed())
+
+    expect(screen.getByText(/ask them to invite you/i)).toBeInTheDocument()
+    // Nothing to request access to yet: every page but this one returns here.
+    expect(screen.queryByRole('link', { name: /request access/i })).toBeNull()
+    expect(container.innerHTML).not.toContain('acme.example')
+    expect(container.textContent).not.toMatch(/\*{2,}\s*@/)
+  })
+
+  // A first account nobody here can sign in with (a test, a stray visitor, a
+  // lost password) leaves the install stuck, and the way out is the server's.
+  it('says the server operator can restart setup, without naming anyone', () => {
+    const { container } = renderStep(selfHostedClaimed())
+
+    expect(screen.getByText(/the server's operator can restart setup/i)).toBeInTheDocument()
+    expect(container.innerHTML).not.toContain('acme.example')
+  })
+
+  it('says nothing about restarting setup before anyone has started it', () => {
+    renderStep(selfHosted())
+
+    expect(screen.queryByText(/restart setup/i)).toBeNull()
+  })
+
+  it('records the owner coming back as a sign-in', async () => {
+    track.mockClear()
+    renderStep(selfHostedClaimed())
+    act(() => postAuthSuccess())
+    await waitFor(() => expect(track).toHaveBeenCalledWith('onboarding_signed_in'))
+    expect(track).not.toHaveBeenCalledWith('onboarding_account_created')
+  })
+})
+
 describe('account step — after a sign-in completes', () => {
   // Every method this screen offers ends the same way: the OAuth popup's
   // callback page broadcasts success and closes, and the in-page password and
@@ -669,7 +790,7 @@ describe('account step — after a sign-in completes', () => {
   // screen. No account is created, so the funnel must not count one.
   it('records a returning sign-in from the first-user screen as a sign-in', async () => {
     track.mockClear()
-    renderStep(selfHosted())
+    renderStep(preStamped())
     fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }))
     act(() => postAuthSuccess())
     await waitFor(() => expect(track).toHaveBeenCalledWith('onboarding_signed_in'))

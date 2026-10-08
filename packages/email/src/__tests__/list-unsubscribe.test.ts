@@ -2,7 +2,8 @@
  * Every email carrying an unsubscribe token also carries RFC 2369
  * `List-Unsubscribe` and RFC 8058 `List-Unsubscribe-Post` headers, so the mail
  * client's own unsubscribe button works in one click. The one-click URL is the
- * POST endpoint, never the confirm page a GET reaches.
+ * emailed link itself: a POST there unsubscribes, while a GET only shows the
+ * confirm page.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -11,8 +12,8 @@ vi.mock('nodemailer', () => ({
   default: { createTransport: () => ({ sendMail: sendMailMock }) },
 }))
 
+import { listUnsubscribeHeaders } from '../list-unsubscribe'
 import {
-  listUnsubscribeHeaders,
   sendChangelogPublishedEmail,
   sendInvitationEmail,
   sendOnboardingNudgeEmail,
@@ -29,7 +30,6 @@ const ENV_KEYS = [
 const saved: Record<string, string | undefined> = {}
 const TOKEN = '6f1c1c47-3c0e-4d55-9a43-0d2a4f1c9b10'
 const PAGE = `https://acme.test/unsubscribe?token=${TOKEN}`
-const ONE_CLICK = `https://acme.test/api/unsubscribe?token=${TOKEN}`
 
 beforeEach(() => {
   for (const key of ENV_KEYS) {
@@ -52,17 +52,16 @@ function sentHeaders(): Record<string, string> | undefined {
 }
 
 describe('listUnsubscribeHeaders', () => {
-  it('points one-click at the POST endpoint for a token link', () => {
+  it('offers one-click on the token link itself', () => {
     expect(listUnsubscribeHeaders(PAGE)).toEqual({
-      'List-Unsubscribe': `<${ONE_CLICK}>`,
+      'List-Unsubscribe': `<${PAGE}>`,
       'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
     })
   })
 
-  it('offers a plain link, without one-click, for anything else', () => {
-    expect(listUnsubscribeHeaders('https://acme.test/settings/preferences')).toEqual({
-      'List-Unsubscribe': '<https://acme.test/settings/preferences>',
-    })
+  it('offers a plain link, without one-click, over plain http', () => {
+    const local = `http://localhost:3000/unsubscribe?token=${TOKEN}`
+    expect(listUnsubscribeHeaders(local)).toEqual({ 'List-Unsubscribe': `<${local}>` })
   })
 
   it('adds nothing for a missing or unparsable link', () => {
@@ -87,7 +86,7 @@ describe('token emails carry the headers', () => {
       unsubscribeUrl: PAGE,
     })
     expect(sentHeaders()).toMatchObject({
-      'List-Unsubscribe': `<${ONE_CLICK}>`,
+      'List-Unsubscribe': `<${PAGE}>`,
       'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
     })
   })
@@ -102,7 +101,7 @@ describe('token emails carry the headers', () => {
       workspaceName: 'Acme',
       unsubscribeUrl: PAGE,
     })
-    expect(sentHeaders()).toMatchObject({ 'List-Unsubscribe': `<${ONE_CLICK}>` })
+    expect(sentHeaders()).toMatchObject({ 'List-Unsubscribe': `<${PAGE}>` })
   })
 
   it('a changelog email', async () => {
@@ -114,7 +113,7 @@ describe('token emails carry the headers', () => {
       changelogUrl: 'https://acme.test/changelog/1',
       unsubscribeUrl: PAGE,
     })
-    expect(sentHeaders()).toMatchObject({ 'List-Unsubscribe': `<${ONE_CLICK}>` })
+    expect(sentHeaders()).toMatchObject({ 'List-Unsubscribe': `<${PAGE}>` })
   })
 
   it('but not an invitation, which has nothing to unsubscribe from', async () => {

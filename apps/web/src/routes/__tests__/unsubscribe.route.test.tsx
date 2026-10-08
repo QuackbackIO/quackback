@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 
 const fns = vi.hoisted(() => ({
-  peek: vi.fn(),
+  preview: vi.fn(),
   process: vi.fn(),
   loaderData: null as unknown,
 }))
@@ -25,7 +25,7 @@ vi.mock('@tanstack/react-router', () => ({
   ),
 }))
 vi.mock('@/lib/server/functions/subscriptions', () => ({
-  peekUnsubscribeTokenFn: (...args: unknown[]) => fns.peek(...args),
+  previewUnsubscribeTokenFn: (...args: unknown[]) => fns.preview(...args),
   processUnsubscribeTokenFn: (...args: unknown[]) => fns.process(...args),
 }))
 vi.mock('@/lib/server/functions/locale', () => ({
@@ -39,7 +39,7 @@ const route = Route as unknown as { loader: Loader; component: () => React.React
 const TOKEN = '6f1c1c47-3c0e-4d55-9a43-0d2a4f1c9b10'
 
 beforeEach(() => {
-  fns.peek.mockReset()
+  fns.preview.mockReset()
   fns.process.mockReset()
 })
 afterEach(cleanup)
@@ -52,17 +52,17 @@ async function openPage(token: string | undefined) {
 
 describe('/unsubscribe', () => {
   it('opening the link reads the token and changes nothing', async () => {
-    fns.peek.mockResolvedValue({ valid: true, action: 'unsubscribe_onboarding' })
+    fns.preview.mockResolvedValue({ status: 'confirm', action: 'unsubscribe_onboarding' })
 
     await openPage(TOKEN)
 
-    expect(fns.peek).toHaveBeenCalledWith({ data: { token: TOKEN } })
+    expect(fns.preview).toHaveBeenCalledWith({ data: { token: TOKEN } })
     expect(fns.process).not.toHaveBeenCalled()
     expect(screen.getByRole('heading', { name: 'Stop setup tips?' })).toBeTruthy()
   })
 
   it('performs the change only when the person confirms', async () => {
-    fns.peek.mockResolvedValue({ valid: true, action: 'unsubscribe_onboarding' })
+    fns.preview.mockResolvedValue({ status: 'confirm', action: 'unsubscribe_onboarding' })
     fns.process.mockResolvedValue({ success: true, action: 'unsubscribe_onboarding' })
 
     await openPage(TOKEN)
@@ -77,7 +77,7 @@ describe('/unsubscribe', () => {
   })
 
   it('shows the expired state for a used or expired token without trying to spend it', async () => {
-    fns.peek.mockResolvedValue({ valid: false, error: 'invalid' })
+    fns.preview.mockResolvedValue({ status: 'error', error: 'invalid' })
 
     await openPage(TOKEN)
 
@@ -88,7 +88,7 @@ describe('/unsubscribe', () => {
   it('never calls the server for a malformed token', async () => {
     await openPage('not-a-uuid')
 
-    expect(fns.peek).not.toHaveBeenCalled()
+    expect(fns.preview).not.toHaveBeenCalled()
     expect(screen.getByRole('heading', { name: 'This link is not valid' })).toBeTruthy()
   })
 })

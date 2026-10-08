@@ -81,7 +81,7 @@ const core = {
 
 /**
  * `settings.metadata.brandingLookup`. Any value under that key, including the
- * `{ status: 'skipped', reason: 'existing' }` marker migration 0294 writes for
+ * `{ status: 'skipped', reason: 'existing' }` marker migration 0295 writes for
  * workspaces that predate the lookup, means the lookup never runs again.
  */
 export const brandingLookupSchema = z.discriminatedUnion('status', [

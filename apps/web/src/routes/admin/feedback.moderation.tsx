@@ -24,8 +24,10 @@ import type { TiptapContent } from '@/lib/shared/db-types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { warmQuery } from '@/lib/client/queries/warm-query'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 export const Route = createFileRoute('/admin/feedback/moderation')({
+  head: adminPageHead('Moderation'),
   // The parent `/admin` guard admits team members; the queue needs the
   // permission its server functions check, so a teammate without it is turned
   // away instead of seeing an empty queue.

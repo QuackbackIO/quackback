@@ -163,6 +163,7 @@ export {
   // Schema tables - auth
   account,
   accountRelations,
+  accountProfileSync,
   invitation,
   invitationRelations,
   jwks,

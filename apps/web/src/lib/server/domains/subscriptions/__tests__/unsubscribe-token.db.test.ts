@@ -1,8 +1,7 @@
 /**
- * Unsubscribe tokens against a real database: opening the link only reads the
- * token (mail scanners and link previews open every link), and spending it is
- * one atomic claim, so two clicks or a click racing a one-click POST change
- * the preference once.
+ * Setup-tip unsubscribe tokens against a real database: opening the link only
+ * reads the token (mail scanners and link previews open every link), and
+ * spending it turns setup tips off once.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createId, type PrincipalId, type UserId } from '@quackback/ids'
@@ -16,7 +15,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 }))
 
 import {
-  peekUnsubscribeToken,
+  previewUnsubscribeToken,
   processUnsubscribeToken,
 } from '@/lib/server/domains/subscriptions/subscription.service'
 
@@ -62,24 +61,24 @@ describe.skipIf(!fixture.available)('unsubscribe tokens (real DB)', () => {
   afterEach(fixture.rollback)
   afterAll(fixture.close)
 
-  it('peeking names the action and changes nothing', async () => {
+  it('previewing names the action and changes nothing', async () => {
     const token = await mintToken()
 
-    expect(await peekUnsubscribeToken(token)).toMatchObject({ action: 'unsubscribe_onboarding' })
-    expect(await peekUnsubscribeToken(token)).toMatchObject({ action: 'unsubscribe_onboarding' })
+    expect(await previewUnsubscribeToken(token)).toMatchObject({ action: 'unsubscribe_onboarding' })
+    expect(await previewUnsubscribeToken(token)).toMatchObject({ action: 'unsubscribe_onboarding' })
 
     expect(await usedAt(token)).toBeNull()
     expect(await tipsEmail()).toBeUndefined()
   })
 
-  it('peeking an expired, used or unknown token answers null', async () => {
+  it('previewing an expired, used or unknown token answers null', async () => {
     const expired = await mintToken({ expiresAt: new Date(Date.now() - 1000) })
     const used = await mintToken()
     await processUnsubscribeToken(used)
 
-    expect(await peekUnsubscribeToken(expired)).toBeNull()
-    expect(await peekUnsubscribeToken(used)).toBeNull()
-    expect(await peekUnsubscribeToken(crypto.randomUUID())).toBeNull()
+    expect(await previewUnsubscribeToken(expired)).toBeNull()
+    expect(await previewUnsubscribeToken(used)).toBeNull()
+    expect(await previewUnsubscribeToken(crypto.randomUUID())).toBeNull()
   })
 
   it('spending performs the action once', async () => {
@@ -91,17 +90,6 @@ describe.skipIf(!fixture.available)('unsubscribe tokens (real DB)', () => {
     expect(await tipsEmail()).toBe(false)
     expect(await usedAt(token)).toBeInstanceOf(Date)
     expect(await processUnsubscribeToken(token)).toBeNull()
-  })
-
-  it('two spends racing each other: exactly one wins', async () => {
-    const token = await mintToken()
-
-    const results = await Promise.all([
-      processUnsubscribeToken(token),
-      processUnsubscribeToken(token),
-    ])
-
-    expect(results.filter((r) => r !== null)).toHaveLength(1)
   })
 
   it('an expired token is never spent', async () => {

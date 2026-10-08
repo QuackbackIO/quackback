@@ -16,6 +16,7 @@ import { adminQueries } from '@/lib/client/queries/admin'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { useBaseUrl } from '@/lib/client/hooks/use-root-context'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 const searchSchema = z.object({
   tab: z.enum(['keys', 'webhooks', 'mcp']).optional(),
@@ -24,6 +25,7 @@ const searchSchema = z.object({
 type ApiTab = 'keys' | 'webhooks' | 'mcp'
 
 export const Route = createFileRoute('/admin/settings/developers')({
+  head: adminPageHead('Developers settings'),
   validateSearch: searchSchema,
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.API_KEY_MANAGE)
