@@ -485,6 +485,19 @@ describe('account step — a self-hosted first user', () => {
     expect(authClient.signUp.email).not.toHaveBeenCalled()
   })
 
+  it('marks Create account busy while the account is created', async () => {
+    const { authClient } = await import('@/lib/client/auth-client')
+    vi.mocked(authClient.signUp.email).mockReturnValueOnce(new Promise(() => {}) as never)
+    renderStep(selfHosted())
+
+    fillAdminForm({ name: 'Alex', email: 'alex@acme.example', password: 'correct-horse' })
+    fireEvent.click(createAccountButton())
+
+    const busy = await screen.findByRole('button', { name: /creating account/i })
+    expect(busy).toBeDisabled()
+    expect(busy).toHaveAttribute('aria-busy', 'true')
+  })
+
   it('shows the server refusal and stays on the form', async () => {
     const { authClient } = await import('@/lib/client/auth-client')
     vi.mocked(authClient.signUp.email).mockResolvedValueOnce({

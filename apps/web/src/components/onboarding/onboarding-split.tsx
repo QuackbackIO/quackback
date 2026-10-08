@@ -70,6 +70,14 @@ export function OnboardingHeading({
 export const SETUP_FIELD_CLASS =
   'h-12 rounded-xl px-4 text-base aria-invalid:focus-visible:ring-2 aria-invalid:focus-visible:ring-ring aria-invalid:focus-visible:ring-offset-2 aria-invalid:focus-visible:ring-offset-background'
 
+/**
+ * A setup step's main button: a 48px pill with 16px text. A button that is
+ * working (`aria-busy`) keeps its full colour beside its spinner; one that
+ * truly cannot be pressed turns muted, never a faded yellow.
+ */
+export const SETUP_CTA_CLASS =
+  'h-12 w-full rounded-full text-base disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 aria-busy:disabled:bg-primary aria-busy:disabled:text-primary-foreground'
+
 /** The lead paragraph under a setup heading. */
 export function OnboardingLead({
   children,

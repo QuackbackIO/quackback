@@ -8,6 +8,7 @@ import {
   OnboardingLead,
   OnboardingPreviewPanel,
   OnboardingSplit,
+  SETUP_CTA_CLASS,
   SETUP_FIELD_CLASS,
   SetupActions,
   useBrowserHost,
@@ -27,6 +28,7 @@ import {
 import { friendlyPlatformLabel, platformUrlSuffix } from '@/lib/shared/platform-label'
 import { isPathManagedFromBootstrap, MANAGED_PATHS } from '@/lib/client/config-file'
 import { track } from '@/lib/client/analytics'
+import { cn } from '@/lib/shared/utils'
 import { ReadyStep } from './-ready-step'
 import { SignOutButton } from './-sign-out-button'
 
@@ -86,7 +88,7 @@ function CloudIdentityUnavailable() {
       <Button
         type="button"
         onClick={() => window.location.reload()}
-        className="mt-8 h-12 w-full max-w-[440px] rounded-full text-base"
+        className={cn(SETUP_CTA_CLASS, 'mt-8 max-w-[440px]')}
       >
         Retry
       </Button>
@@ -258,7 +260,8 @@ export function CloudWorkspaceDetailsForm(props: {
         <Button
           type="submit"
           disabled={isSaving || !displayName.trim() || !platformLabel.trim()}
-          className="h-12 w-full rounded-full text-base"
+          aria-busy={isSaving || undefined}
+          className={SETUP_CTA_CLASS}
         >
           {isSaving && (
             <ArrowPathIcon className="h-4 w-4 animate-spin motion-reduce:animate-none" />
@@ -497,7 +500,12 @@ function WorkspaceNameStep({
         </div>
 
         <SetupActions>
-          <Button type="submit" disabled={isLoading} className="h-12 w-full rounded-full text-base">
+          <Button
+            type="submit"
+            disabled={isLoading}
+            aria-busy={isLoading || undefined}
+            className={SETUP_CTA_CLASS}
+          >
             {isLoading ? (
               <>
                 <ArrowPathIcon className="size-4 animate-spin motion-reduce:animate-none" />

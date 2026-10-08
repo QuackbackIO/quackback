@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { FormattedMessage } from 'react-intl'
-import { CheckCircleIcon } from '@heroicons/react/24/solid'
+import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import {
   OnboardingHeading,
   OnboardingLead,
+  SETUP_CTA_CLASS,
   SetupActions,
 } from '@/components/onboarding/onboarding-split'
 import { SetupSteps } from '@/components/onboarding/setup-steps'
@@ -121,10 +122,12 @@ export function ReadyStep({
   return (
     <div className="flex flex-col">
       <SetupSteps current="ready" finished />
-      <CheckCircleIcon
-        className="mt-8 size-12 text-primary motion-safe:animate-in motion-safe:zoom-in-50 motion-safe:duration-500"
+      <span
         aria-hidden="true"
-      />
+        className="mt-8 grid size-12 place-items-center rounded-full bg-primary text-primary-foreground motion-safe:animate-in motion-safe:zoom-in-50 motion-safe:duration-500"
+      >
+        <SetupCheckIcon className="size-7" />
+      </span>
       <div className="mt-5">
         <OnboardingHeading
           ref={heading}
@@ -174,12 +177,16 @@ export function ReadyStep({
         <Button
           type="button"
           disabled={opening}
+          aria-busy={opening || undefined}
           onClick={() => {
             setOpening(true)
             void navigate({ to: '/admin' })
           }}
-          className="h-12 w-full rounded-full text-base"
+          className={SETUP_CTA_CLASS}
         >
+          {opening ? (
+            <ArrowPathIcon className="size-4 animate-spin motion-reduce:animate-none" />
+          ) : null}
           <FormattedMessage
             id="onboarding.ready.openWorkspace"
             defaultMessage="Open your workspace"

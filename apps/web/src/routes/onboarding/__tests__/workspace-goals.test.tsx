@@ -188,6 +188,30 @@ describe('self-hosted workspace step submit', () => {
   })
 })
 
+describe('setup buttons while they work', () => {
+  // Working is not the same as unavailable: a button that is saving keeps its
+  // colour and says so, where a truly disabled one would turn muted.
+  it('marks Create workspace and Open your workspace busy while they work', async () => {
+    let finishSave: (value: unknown) => void = () => {}
+    hoisted.save.mockReturnValue(new Promise((resolve) => (finishSave = resolve)))
+    hoisted.navigate.mockReturnValue(new Promise(() => {}))
+    renderStep({ managedFieldPaths: [], goals: ['product_feedback'] })
+    const create = screen.getByRole('button', { name: 'Create workspace' })
+    expect(create).not.toHaveAttribute('aria-busy')
+
+    fireEvent.click(create)
+    const saving = await screen.findByRole('button', { name: /Setting up/ })
+    expect(saving).toBeDisabled()
+    expect(saving).toHaveAttribute('aria-busy', 'true')
+
+    finishSave({ enabledModules: [], name: 'Acme' })
+    const open = await screen.findByRole('button', { name: 'Open your workspace' })
+    fireEvent.click(open)
+    expect(open).toBeDisabled()
+    expect(open).toHaveAttribute('aria-busy', 'true')
+  })
+})
+
 describe('self-hosted ready step', () => {
   async function finishSetup(
     goals: ('product_feedback' | 'customer_support' | 'help_center' | 'status_page')[],

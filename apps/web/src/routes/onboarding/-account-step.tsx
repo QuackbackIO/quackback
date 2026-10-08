@@ -11,6 +11,7 @@ import {
   OnboardingLead,
   OnboardingPreviewPanel,
   OnboardingSplit,
+  SETUP_CTA_CLASS,
   SETUP_FIELD_CLASS,
   useBrowserHost,
   useSetupTitle,
@@ -534,7 +535,12 @@ function FirstAdminStep({ onSignIn }: { onSignIn: () => void }) {
           ) : null}
         </div>
 
-        <Button type="submit" disabled={submitting} className="h-12 w-full rounded-full text-base">
+        <Button
+          type="submit"
+          disabled={submitting}
+          aria-busy={submitting || undefined}
+          className={SETUP_CTA_CLASS}
+        >
           {submitting ? (
             <>
               <ArrowPathIcon className="size-4 animate-spin motion-reduce:animate-none" />
@@ -785,13 +791,17 @@ function SsoStep() {
       <Button
         onClick={() => void startSso()}
         disabled={ssoRedirecting}
-        className="mt-8 h-12 w-full max-w-[440px] rounded-full text-base"
+        aria-busy={ssoRedirecting || undefined}
+        className={cn(SETUP_CTA_CLASS, 'mt-8 max-w-[440px]')}
       >
         {ssoRedirecting ? (
-          <FormattedMessage
-            id="onboarding.account.redirectingShort"
-            defaultMessage="Redirecting…"
-          />
+          <>
+            <ArrowPathIcon className="size-4 animate-spin motion-reduce:animate-none" />
+            <FormattedMessage
+              id="onboarding.account.redirectingShort"
+              defaultMessage="Redirecting…"
+            />
+          </>
         ) : error ? (
           <FormattedMessage id="onboarding.account.ssoRetry" defaultMessage="Try SSO again" />
         ) : (
