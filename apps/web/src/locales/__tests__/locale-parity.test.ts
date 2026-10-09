@@ -31,6 +31,202 @@ function icuArgNames(message: string): Set<string> {
   return names
 }
 
+// English strings a locale legitimately keeps as-is: cognates ("Status" in
+// German), loanwords the catalog uses on purpose ("Roadmap" in pt-br) and
+// example emails. Anything else identical to English is a string someone
+// copied over to satisfy the key-parity check and never translated, which
+// renders English to that locale's users. Only add a string here when a native
+// UI really would show the English word.
+const SAME_AS_ENGLISH_EVERYWHERE = ['Copilot', 'PDF', 'Quinn AI']
+const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
+  de: [
+    '(optional)',
+    'Agent',
+    'Agents',
+    'Audio',
+    'Avatar',
+    'Board',
+    'Board:',
+    'Boards',
+    'Code',
+    'Connectors',
+    'Details',
+    'Feedback',
+    'Lead',
+    'Messenger',
+    'Name',
+    'Name (optional)',
+    'Performance',
+    'Portal',
+    'Powered by {brand}',
+    'Roadmap',
+    'Roadmaps',
+    'Routing',
+    'Segment',
+    'Segment:',
+    'Skills',
+    'Start',
+    'Status',
+    'Status:',
+    'Support',
+    'System',
+    'Tag',
+    'Tag:',
+    'Tags',
+    'Tags:',
+    'Team',
+    'Text',
+    'Tickets',
+    'Top',
+    'Updates',
+    'Video',
+    'Workflows',
+    'Zoom',
+  ],
+  fr: [
+    'Actions',
+    'Agent',
+    'Agents',
+    'Archive',
+    'Assistant',
+    'Audio',
+    'Avatar',
+    'Code',
+    'Conversation',
+    'Date',
+    'Document',
+    'Documents',
+    'Feedback',
+    'Image',
+    'Maintenance',
+    'Message...',
+    'Messages',
+    'Notifications',
+    'Page {number}',
+    'Pages',
+    'Performance',
+    'Segment',
+    'Source',
+    'Sources',
+    'Support',
+    'Tag',
+    'Tags',
+    'Tickets',
+    'Type',
+    'Workflows',
+    'Zoom',
+    'via {workflowName}',
+    '{count, plural, one {# article} other {# articles}}',
+    '{count, plural, one {# collection} other {# collections}}',
+    '{count, plural, one {# page} other {# pages}}',
+  ],
+  es: [
+    'Audio',
+    'Avatar',
+    'ETA',
+    'Feedback',
+    'Lead',
+    'No',
+    'Portal',
+    'Roadmap',
+    'Roadmaps',
+    'Tickets',
+    'Top',
+    'Video',
+    'Zoom',
+  ],
+  ar: ['AI', 'jane@example.com', 'you@example.com'],
+  ru: ['jane@example.com', 'you@example.com'],
+  'pt-br': [
+    'Admin',
+    'Avatar',
+    'Changelog',
+    'Feedback',
+    'Lead',
+    'Portal',
+    'Posts',
+    'Roadmap',
+    'Roadmaps',
+    'Status',
+    'Status:',
+    'Tag',
+    'Tag:',
+    'Tags',
+    'Tags:',
+    'Tickets',
+    'Workflows',
+    'Zoom',
+    'via {workflowName}',
+  ],
+  'zh-cn': ['AI', 'jane@example.com', 'you@example.com'],
+  'zh-tw': ['AI', 'jane@example.com', 'you@example.com'],
+  nl: [
+    'AI',
+    'Agent',
+    'Agents',
+    'Audio',
+    'Changelog',
+    'Code',
+    'Details',
+    'Document',
+    'Feedback',
+    'Help',
+    'Home',
+    'Lead',
+    'Messenger',
+    'Monitoring',
+    'Open',
+    'Posts',
+    'Roadmap',
+    'Roadmaps',
+    'Segment',
+    'Segment:',
+    'Spreadsheet',
+    'Start',
+    'Status',
+    'Status:',
+    'Support',
+    'Tag',
+    'Tag:',
+    'Tags',
+    'Tags:',
+    'Team',
+    'Tickets',
+    'Top',
+    'Type',
+    'Updates',
+    'Video',
+    'Warm',
+    'Workflows',
+    'Zoom',
+    'single sign-on',
+    'via {workflowName}',
+    '{pct}% uptime',
+  ],
+  pl: [
+    'AI',
+    'Agent',
+    'Audio',
+    'Lead',
+    'Messenger',
+    'Portal',
+    'Segment',
+    'Segment:',
+    'Start',
+    'Status',
+    'Status:',
+    'System',
+    'Tag',
+    'Tag:',
+  ],
+}
+
+// A message with nothing to translate once its placeholders are removed, such
+// as `{from} → {to}`.
+function hasTranslatableText(message: string): boolean {
+  return /[A-Za-z]{2,}/.test(message.replace(/\{[^{}]*\}/g, ''))
+}
+
 describe('locale catalogs', () => {
   // Catches both a supported locale with no file AND an orphan `xx.json` that
   // was never wired into SUPPORTED_LOCALES (so it would never load at runtime).
@@ -69,5 +265,25 @@ describe('locale catalogs', () => {
     expect(mismatches, `${locale}.json has ${mismatches.length} placeholder mismatch(es)`).toEqual(
       []
     )
+  })
+
+  // react-intl treats an empty message as missing and renders the English
+  // defaultMessage, so an empty value is as untranslated as a missing key.
+  it.each(localesToCheck)('%s has no empty messages', (locale) => {
+    const empty = enKeys.filter((key) => key in catalogs[locale] && !catalogs[locale][key].trim())
+    expect(empty, `${locale}.json has ${empty.length} empty message(s)`).toEqual([])
+  })
+
+  it.each(localesToCheck)('%s translates every message', (locale) => {
+    const allowed = new Set([...SAME_AS_ENGLISH_EVERYWHERE, ...(SAME_AS_ENGLISH[locale] ?? [])])
+    const untranslated = enKeys.filter(
+      (key) =>
+        catalogs[locale][key] === en[key] && hasTranslatableText(en[key]) && !allowed.has(en[key])
+    )
+    expect(
+      untranslated,
+      `${locale}.json has ${untranslated.length} message(s) identical to English. Translate them, ` +
+        `or add the English string to SAME_AS_ENGLISH if ${locale} genuinely uses it as-is.`
+    ).toEqual([])
   })
 })

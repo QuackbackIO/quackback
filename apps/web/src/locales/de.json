@@ -907,7 +907,7 @@
   "portal.status.lifecycle.inProgress": "Läuft",
   "portal.status.lifecycle.verifying": "Wird überprüft",
   "portal.status.lifecycle.completed": "Abgeschlossen",
-  "portal.status.uptime.dayTooltip": "{day} — {label}, {pct} %",
+  "portal.status.uptime.dayTooltip": "{day}: {label}, {pct} %",
   "portal.status.uptime.daysAgo": "vor {days} Tagen",
   "portal.status.uptime.pct": "{pct} % Verfügbarkeit",
   "portal.status.uptime.today": "Heute",
