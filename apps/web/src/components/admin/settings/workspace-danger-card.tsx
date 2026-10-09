@@ -70,7 +70,7 @@ export function WorkspaceDangerCard({
         open={wipeOpen}
         onOpenChange={setOpen}
         title="Delete workspace?"
-        description={`It goes offline straight away for everyone, including your portal, widget and custom domain. You can restore it from your Quackback dashboard for ${RESTORE_WINDOW_DAYS} days. After that it's permanently deleted. Your subscription won't renew.`}
+        description={`It goes offline straight away for everyone, including your portal, widget and custom domain. You can restore it from your Quackback dashboard for ${RESTORE_WINDOW_DAYS} days. After that it's permanently deleted. A paid plan won't renew.`}
         variant="destructive"
         confirmLabel={busy ? 'Deleting…' : 'Delete workspace'}
         isPending={busy}

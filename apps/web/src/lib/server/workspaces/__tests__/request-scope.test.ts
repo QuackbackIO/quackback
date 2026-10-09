@@ -264,7 +264,8 @@ describe('resolveWorkspaceAndContinue', () => {
     expect(res.status).toBe(503)
     expect(res.headers.get('retry-after')).toBe('3600')
     const body = await res.text()
-    expect(body).toBe('This workspace is paused.')
+    expect(body).toBe('This workspace is paused')
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff')
     expect(body).not.toContain('nonpayment')
   })
 

@@ -1954,5 +1954,16 @@
   "widget.messages.resumeAria": "Открыть переписку с {name}",
   "widget.tickets.progress": "Ход выполнения тикета",
   "widget.changelog.filter.all": "Все",
-  "widget.changelog.emptyFiltered": "В этой категории пока нет обновлений"
+  "widget.changelog.emptyFiltered": "В этой категории пока нет обновлений",
+  "workspaceUnavailable.deleted.title": "Это пространство недоступно",
+  "workspaceUnavailable.deleted.body": "Команда, которая вела {host}, удалила его.",
+  "workspaceUnavailable.deleted.owner": "Это ваше пространство? Войдите в Quackback, чтобы восстановить его.",
+  "workspaceUnavailable.paused.title": "Это пространство приостановлено",
+  "workspaceUnavailable.paused.body": "Команда пока приостановила его. Всё, чем вы уже поделились, сохранено.",
+  "workspaceUnavailable.paused.owner": "Это ваше пространство? Войдите в Quackback, чтобы узнать, почему оно приостановлено.",
+  "workspaceUnavailable.unknown.title": "Здесь нет пространства",
+  "workspaceUnavailable.unknown.body": "По адресу {host} ничего не настроено. Проверьте адрес или спросите того, кто прислал вам ссылку.",
+  "workspaceUnavailable.unknown.owner": "Настраиваете пространство? Войдите в Quackback.",
+  "workspaceUnavailable.signIn": "Войти в Quackback",
+  "workspaceUnavailable.poweredBy": "На базе {brand}"
 }

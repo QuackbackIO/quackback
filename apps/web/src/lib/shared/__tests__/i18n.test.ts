@@ -16,6 +16,7 @@ import {
   loadAskMessages,
   isAskMessage,
   adminSeedMessages,
+  isServerOnlyMessage,
   isTourMessage,
   loadTourMessages,
   isSheetMessage,
@@ -267,7 +268,7 @@ describe('unsubscribe page strings', () => {
       isAskMessage,
       isSheetMessage,
       isLaunchMessage,
-      (key: string) => key.startsWith('email.'),
+      isServerOnlyMessage,
       (key: string) => messageArea(key) !== null,
     ].map((scoped) => keys.filter(scoped).length)
     expect(
@@ -335,6 +336,9 @@ describe('admin seed', () => {
     expect(seeded['onboarding.workspace.title']).toBeUndefined()
     // Email copy is formatted on the server; no page renders it.
     expect(Object.keys(seeded).filter((key) => key.startsWith('email.'))).toEqual([])
+    // So is the page a hostname that is not serving answers with.
+    expect(Object.keys(seeded).filter((key) => key.startsWith('workspaceUnavailable.'))).toEqual([])
+    expect(all['workspaceUnavailable.paused.title']).toBeTruthy()
     expect(all['email.onboarding.ready.heading']).toBeTruthy()
     // The tour's entry points and the launch plan stay seeded.
     expect(seeded['onboarding.tour.replay']).toBe(all['onboarding.tour.replay'])

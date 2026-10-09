@@ -1954,5 +1954,16 @@
   "widget.messages.resumeAria": "فتح المحادثة مع {name}",
   "widget.tickets.progress": "تقدّم التذكرة",
   "widget.changelog.filter.all": "الكل",
-  "widget.changelog.emptyFiltered": "لا توجد تحديثات في هذه الفئة بعد"
+  "widget.changelog.emptyFiltered": "لا توجد تحديثات في هذه الفئة بعد",
+  "workspaceUnavailable.deleted.title": "مساحة العمل هذه غير متاحة",
+  "workspaceUnavailable.deleted.body": "حذف الفريق الذي كان يديرها مساحة العمل {host}.",
+  "workspaceUnavailable.deleted.owner": "هل تدير مساحة العمل هذه؟ سجّل الدخول إلى Quackback لاستعادتها.",
+  "workspaceUnavailable.paused.title": "مساحة العمل هذه متوقفة مؤقتًا",
+  "workspaceUnavailable.paused.body": "أوقفها فريقها مؤقتًا. كل ما شاركته من قبل محفوظ.",
+  "workspaceUnavailable.paused.owner": "هل تدير مساحة العمل هذه؟ سجّل الدخول إلى Quackback لمعرفة سبب إيقافها.",
+  "workspaceUnavailable.unknown.title": "لا توجد مساحة عمل هنا",
+  "workspaceUnavailable.unknown.body": "لا يوجد شيء مُعدّ على {host}. تحقّق من العنوان أو اسأل من أرسل إليك الرابط.",
+  "workspaceUnavailable.unknown.owner": "هل تُعدّ مساحة عمل؟ سجّل الدخول إلى Quackback.",
+  "workspaceUnavailable.signIn": "تسجيل الدخول إلى Quackback",
+  "workspaceUnavailable.poweredBy": "مدعوم بواسطة {brand}"
 }

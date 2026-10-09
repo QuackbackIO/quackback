@@ -403,19 +403,30 @@ export async function loadLaunchMessages(locale: SupportedLocale): Promise<Recor
 }
 
 /**
+ * Key prefixes formatted on the server and never rendered by a page: email copy,
+ * and the page a hostname that is not serving answers with
+ * (`lib/server/workspaces/unavailable-page.ts`). No page seeds them.
+ */
+export const SERVER_ONLY_MESSAGE_PREFIXES = ['email.', 'workspaceUnavailable.'] as const
+
+export function isServerOnlyMessage(key: string): boolean {
+  return SERVER_ONLY_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
+}
+
+/**
  * The catalog an admin page seeds: everything but the strings that load with
  * a lazy surface (the file viewer, the product tour, Copilot and search, the
  * setup sheets) or with their own page (Home and the Launch plan, the wizard,
  * the unsubscribe and Try Messenger pages), each area's strings (they load where
- * they show, see {@link AREA_MESSAGE_PREFIXES}), and email copy (formatted on
- * the server, never rendered).
+ * they show, see {@link AREA_MESSAGE_PREFIXES}), and server-only copy (see
+ * {@link SERVER_ONLY_MESSAGE_PREFIXES}).
  */
 export function adminSeedMessages(all: Record<string, string>): Record<string, string> {
   const subset: Record<string, string> = {}
   for (const [key, value] of Object.entries(all)) {
     if (isViewerMessage(key) || isTourMessage(key) || isAskMessage(key)) continue
     if (isSheetMessage(key) || isLaunchMessage(key)) continue
-    if (key.startsWith('email.') || isUnsubscribeMessage(key)) continue
+    if (isServerOnlyMessage(key) || isUnsubscribeMessage(key)) continue
     if (isSetupWizardMessage(key) || messageArea(key) !== null) continue
     subset[key] = value
   }

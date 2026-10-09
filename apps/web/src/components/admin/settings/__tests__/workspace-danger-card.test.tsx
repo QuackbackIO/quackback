@@ -43,7 +43,7 @@ describe('WorkspaceDangerCard', () => {
     expect(dialog).not.toMatch(/fleet/i)
     expect(dialog).toMatch(/offline/i)
     expect(dialog).toMatch(/permanently deleted/i)
-    expect(dialog).toMatch(/subscription won't renew/i)
+    expect(dialog).toMatch(/paid plan won't renew/i)
   })
 
   it('holds the delete back until the workspace name is typed', () => {

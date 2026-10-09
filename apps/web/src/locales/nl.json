@@ -1954,5 +1954,16 @@
   "widget.messages.resumeAria": "Gesprek met {name} openen",
   "widget.tickets.progress": "Voortgang van ticket",
   "widget.changelog.filter.all": "Alles",
-  "widget.changelog.emptyFiltered": "Nog geen updates in deze categorie"
+  "widget.changelog.emptyFiltered": "Nog geen updates in deze categorie",
+  "workspaceUnavailable.deleted.title": "Deze werkruimte is niet beschikbaar",
+  "workspaceUnavailable.deleted.body": "{host} is verwijderd door het team dat de werkruimte beheerde.",
+  "workspaceUnavailable.deleted.owner": "Beheer je deze werkruimte? Log in bij Quackback om haar te herstellen.",
+  "workspaceUnavailable.paused.title": "Deze werkruimte is gepauzeerd",
+  "workspaceUnavailable.paused.body": "Het team heeft haar voorlopig gepauzeerd. Alles wat je al hebt gedeeld, blijft bewaard.",
+  "workspaceUnavailable.paused.owner": "Beheer je deze werkruimte? Log in bij Quackback om te zien waarom ze is gepauzeerd.",
+  "workspaceUnavailable.unknown.title": "Hier is geen werkruimte",
+  "workspaceUnavailable.unknown.body": "Op {host} is niets ingesteld. Controleer het adres of vraag het aan wie je de link heeft gestuurd.",
+  "workspaceUnavailable.unknown.owner": "Ben je een werkruimte aan het opzetten? Log in bij Quackback.",
+  "workspaceUnavailable.signIn": "Inloggen bij Quackback",
+  "workspaceUnavailable.poweredBy": "Mogelijk gemaakt door {brand}"
 }
