@@ -93,6 +93,12 @@ describe('normalizeLocale', () => {
     expect(normalizeLocale('pl-PL')).toBe('pl')
     expect(normalizeLocale('PL-pl')).toBe('pl')
   })
+  it('maps every Portuguese tag to pt-br, the only Portuguese catalog', () => {
+    expect(normalizeLocale('pt-BR')).toBe('pt-br')
+    expect(normalizeLocale('pt')).toBe('pt-br')
+    expect(normalizeLocale('pt-PT')).toBe('pt-br')
+    expect(normalizeLocale('PT-ao')).toBe('pt-br')
+  })
 })
 
 describe('resolveLocale', () => {
@@ -134,6 +140,11 @@ describe('resolveLocale', () => {
     expect(resolveLocale('pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7')).toBe('pl')
     expect(resolveLocale('pl,de;q=0.8')).toBe('pl')
     expect(resolveLocale('en', 'pl')).toBe('pl')
+  })
+  it('resolves Portuguese from the header', () => {
+    expect(resolveLocale('pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7')).toBe('pt-br')
+    expect(resolveLocale('pt,en;q=0.8')).toBe('pt-br')
+    expect(resolveLocale('pt-PT,pt;q=0.9,en;q=0.8')).toBe('pt-br')
   })
   it('respects an explicit Chinese locale override', () => {
     expect(resolveLocale('en', 'zh-Hant')).toBe('zh-tw')

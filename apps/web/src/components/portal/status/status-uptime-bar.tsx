@@ -50,7 +50,7 @@ export function StatusUptimeBar({ days, className }: StatusUptimeBarProps) {
               title={intl.formatMessage(
                 {
                   id: 'portal.status.uptime.dayTooltip',
-                  defaultMessage: '{day} — {label}, {pct}%',
+                  defaultMessage: '{day}: {label}, {pct}%',
                 },
                 { day: formatDayTitle(day.date, intl.locale), label, pct: day.uptimePct }
               )}

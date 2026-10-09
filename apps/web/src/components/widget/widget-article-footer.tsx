@@ -57,7 +57,7 @@ export function WidgetArticleFooter({ articleId, onAskQuestion }: WidgetArticleF
           ) : vote === 'helpful' ? (
             <FormattedMessage
               id="widget.help.article.helpful.thanks"
-              defaultMessage="Thanks — glad it helped."
+              defaultMessage="Thanks, glad it helped."
             />
           ) : (
             <FormattedMessage

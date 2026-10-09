@@ -75,7 +75,7 @@ export function HelpCenterArticleFeedback({
       : feedback === 'helpful'
         ? intl.formatMessage({
             id: 'portal.hc.articleFeedback.thanksHelpful',
-            defaultMessage: 'Thanks — glad it landed.',
+            defaultMessage: 'Thanks, glad it landed.',
           })
         : intl.formatMessage({
             id: 'portal.hc.articleFeedback.thanksNotHelpful',
@@ -160,7 +160,7 @@ export function HelpCenterArticleFeedback({
         <div className="w-full border-t border-border/50 pt-3 text-sm text-muted-foreground">
           <FormattedMessage
             id="portal.hc.articleFeedback.reasonThanks"
-            defaultMessage="Thanks — that goes to whoever maintains this article."
+            defaultMessage="Thanks. That goes to whoever maintains this article."
           />
         </div>
       )}

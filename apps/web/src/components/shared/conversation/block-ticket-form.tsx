@@ -50,7 +50,7 @@ export function BlockTicketForm({
       <p className="mt-1.5 rounded-xl border border-border/60 bg-muted/40 px-3.5 py-2.5 text-xs text-muted-foreground">
         <FormattedMessage
           id="widget.tickets.blockCard.filed"
-          defaultMessage="Ticket filed — we'll track it from here."
+          defaultMessage="Ticket filed. We'll track it from here."
         />
       </p>
     )

@@ -50,6 +50,10 @@ export function normalizeLocale(locale: string): SupportedLocale | null {
     }
   }
 
+  // Portuguese ships a single catalog, Brazilian. Without this, a bare "pt" or a
+  // European tag ("pt-PT") strips to an unsupported "pt" and falls back to English.
+  if (parts[0] === 'pt') return 'pt-br'
+
   if (parts.length >= 2) {
     const base = parts[0]
     // Only treat as a locale if the base is a 2–3 letter code
