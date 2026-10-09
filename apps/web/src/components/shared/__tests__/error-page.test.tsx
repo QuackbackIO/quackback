@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, afterEach } from 'vitest'
-import { render, screen, cleanup } from '@testing-library/react'
+import { act, render, screen, cleanup } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import pl from '@/locales/pl.json'
+import { withoutPageScopedMessages } from '@/lib/shared/i18n'
+import { DocumentLocaleContext } from '../document-locale-context'
 
 import {
   DefaultErrorPage,
@@ -137,6 +139,39 @@ describe('error pages in the reader’s language', () => {
     expect(screen.getByText(pl['common.errorPage.error.title'])).toBeTruthy()
     expect(screen.getByText(pl['common.errorPage.tryAgain'])).toBeTruthy()
     expect(screen.getByText(pl['common.errorPage.technicalDetails'])).toBeTruthy()
+  })
+
+  // Admin's IntlProvider follows the browser, but most admin pages stay English.
+  it('stays English inside an English document whatever the IntlProvider says', () => {
+    render(
+      <DocumentLocaleContext.Provider value="en">
+        <IntlProvider locale="pl" defaultLocale="en" messages={pl}>
+          <NotFoundPage />
+        </IntlProvider>
+      </DocumentLocaleContext.Provider>
+    )
+    expect(screen.getByText('Page not found')).toBeTruthy()
+  })
+
+  // Pages seed their catalog without the error page strings, which load as it shows.
+  it('loads its strings when the page catalog leaves them out', async () => {
+    await act(async () => {
+      render(
+        <DocumentLocaleContext.Provider value="pl">
+          <IntlProvider
+            locale="pl"
+            defaultLocale="en"
+            messages={withoutPageScopedMessages(pl)}
+            onError={() => {}}
+          >
+            <NotFoundPage />
+          </IntlProvider>
+        </DocumentLocaleContext.Provider>
+      )
+    })
+    expect(
+      await screen.findByText(pl['common.errorPage.notFound.title'], {}, { timeout: 5000 })
+    ).toBeTruthy()
   })
 
   // The router's default not-found page can render above every IntlProvider.

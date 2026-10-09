@@ -44,6 +44,10 @@ const AREAS: Record<MessageArea, { users: RegExp; importers: RegExp | null }> = 
     users: /^components\/portal\/portal-access-gate\.tsx$/,
     importers: null,
   },
+  errorPage: {
+    users: /^components\/shared\/error-page\.tsx$/,
+    importers: null,
+  },
 }
 
 /** Where an area that loads as it opens is shown, and so must be mounted. */

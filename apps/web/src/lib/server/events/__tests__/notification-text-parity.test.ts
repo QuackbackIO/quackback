@@ -49,9 +49,16 @@ const post = { postId: 'post_1', postTitle: 'Dark mode', boardSlug: 'ideas', pos
 const ticket = { ticketId: 'ticket_1', conversationId: 'conv_1', title: 'Cannot log in' }
 const incident = { incidentId: 'inc_1', incidentTitle: 'API outage', incidentUrl: '/status/1' }
 
-const CASES: { name: string; event: EventData; config: Record<string, unknown> }[] = [
+// `rewordsBody`: the bell words the body again too, not only the title.
+const CASES: {
+  name: string
+  event: EventData
+  config: Record<string, unknown>
+  rewordsBody?: boolean
+}[] = [
   {
     name: 'post status changed',
+    rewordsBody: true,
     event: { ...base, type: 'post.status_changed', data: {} } as EventData,
     config: { ...post, previousStatus: 'Open', newStatus: 'Planned' },
   },
@@ -125,11 +132,13 @@ const CASES: { name: string; event: EventData; config: Record<string, unknown> }
   },
   {
     name: 'ticket stage change',
+    rewordsBody: true,
     event: { ...base, type: 'ticket.status_changed', data: {} } as EventData,
     config: { ...ticket, stageLabel: 'Resolved', previousStageLabel: 'Received' },
   },
   {
     name: 'ticket stage change with no prior stage',
+    rewordsBody: true,
     event: { ...base, type: 'ticket.status_changed', data: {} } as EventData,
     config: { ...ticket, stageLabel: 'Resolved', previousStageLabel: null },
   },
@@ -175,6 +184,8 @@ describe('notification wording matches the server', () => {
 
   it.each(CASES)('words a $name in the reader’s language', async (c) => {
     const n = await storedRow(c)
-    expect(notificationText(n, polish).title).not.toBe(n.title)
+    const worded = notificationText(n, polish)
+    expect(worded.title).not.toBe(n.title)
+    if (c.rewordsBody) expect(worded.body).not.toBe(n.body)
   })
 })

@@ -6,7 +6,10 @@ import { HelpCenterHero } from '@/components/help-center/help-center-hero'
 import { HelpCenterHeroSearch } from '@/components/help-center/help-center-search'
 import { HelpCenterCategoryGrid } from '@/components/help-center/help-center-category-grid'
 import { HelpCenterPopularArticles } from '@/components/help-center/help-center-popular-articles'
-import { getTopLevelCategories } from '@/components/help-center/help-center-utils'
+import {
+  getTopLevelCategories,
+  helpCenterHeadMessages,
+} from '@/components/help-center/help-center-utils'
 import {
   listPublicCategoriesFn,
   listPopularPublicArticlesFn,
@@ -113,13 +116,10 @@ export const Route = createFileRoute('/_portal/hc/')({
     if (!loaderData) return {}
 
     const { helpCenterConfig, workspaceName, logoUrl } = loaderData
-    // The help center layout's loader read its strings in the page's language.
-    const hcMatch = matches.find((m) => (m.routeId as string) === '/_portal/hc')
-    const messages = (hcMatch?.loaderData as { messages?: Record<string, string> } | undefined)
-      ?.messages
+    const messages = helpCenterHeadMessages(matches)
     const { title, description } = landingCopy(
       helpCenterConfig,
-      (copy) => messages?.[copy.id] ?? copy.defaultMessage
+      (copy) => messages[copy.id] ?? copy.defaultMessage
     )
 
     const pageTitle = `${title} - ${workspaceName}`

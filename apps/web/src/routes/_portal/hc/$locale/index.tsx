@@ -3,13 +3,41 @@ import { FormattedMessage, useIntl } from 'react-intl'
 import { HelpCenterHero } from '@/components/help-center/help-center-hero'
 import { HelpCenterHeroSearch } from '@/components/help-center/help-center-search'
 import { HelpCenterCategoryGrid } from '@/components/help-center/help-center-category-grid'
-import { getTopLevelCategories } from '@/components/help-center/help-center-utils'
+import {
+  getTopLevelCategories,
+  helpCenterHeadMessages,
+} from '@/components/help-center/help-center-utils'
 import { listPublicCategoriesFn } from '@/lib/server/functions/help-center'
 import { DEFAULT_HELP_CENTER_CONFIG, type HelpCenterConfig } from '@/lib/shared/types/settings'
 import { resolvePortalOgImageUrl } from '@/lib/shared/portal-og-image'
 
-const DEFAULT_TITLE = 'How can we help?'
-const DEFAULT_DESCRIPTION = 'Search our knowledge base or browse by category'
+type Copy = { id: string; defaultMessage: string }
+
+/**
+ * The landing title and description for a language: its own wording, or the
+ * defaults in the page's language. Enabling a language stores the English
+ * default title, so a stored default is worded like a missing one. `word` turns
+ * a message into the page's language (react-intl in the page, the help
+ * center's loaded strings in `head`).
+ */
+function landingCopy(
+  chromeTitle: string | null,
+  chromeDescription: string | null,
+  word: (copy: Copy) => string
+) {
+  const title =
+    chromeTitle && chromeTitle !== DEFAULT_HELP_CENTER_CONFIG.homepageTitle
+      ? chromeTitle
+      : word({ id: 'portal.hc.home.title', defaultMessage: 'How can we help?' })
+  const description =
+    chromeDescription && chromeDescription !== DEFAULT_HELP_CENTER_CONFIG.homepageDescription
+      ? chromeDescription
+      : word({
+          id: 'portal.hc.home.localeDescription',
+          defaultMessage: 'Search our knowledge base or browse by category',
+        })
+  return { title, description }
+}
 
 /**
  * Locale-prefixed help-center homepage (domains/languages §2). Mirrors
@@ -28,8 +56,8 @@ export const Route = createFileRoute('/_portal/hc/$locale/')({
 
     return {
       categories,
-      // Unset chrome falls back to the default copy: English in the page
-      // metadata below, the app's language on the page itself.
+      // Unset chrome falls back to the default copy in the app's language,
+      // on the page and in its metadata.
       title: chrome?.homepageTitle || null,
       description: chrome?.homepageDescription || null,
       searchPlaceholder: chrome?.searchPlaceholder || undefined,
@@ -40,11 +68,15 @@ export const Route = createFileRoute('/_portal/hc/$locale/')({
       ),
     }
   },
-  head: ({ loaderData }) => {
+  head: ({ loaderData, matches }) => {
     if (!loaderData) return {}
     const { workspaceName, logoUrl } = loaderData
-    const title = loaderData.title ?? DEFAULT_TITLE
-    const description = loaderData.description ?? DEFAULT_DESCRIPTION
+    const messages = helpCenterHeadMessages(matches)
+    const { title, description } = landingCopy(
+      loaderData.title,
+      loaderData.description,
+      (copy) => messages[copy.id] ?? copy.defaultMessage
+    )
     const pageTitle = `${title} - ${workspaceName}`
     return {
       meta: [
@@ -64,19 +96,9 @@ function LocaleHelpCenterLandingPage() {
   const { categories, title: chromeTitle, description: chromeDescription } = Route.useLoaderData()
   const { locale } = Route.useParams()
   const collectionCount = getTopLevelCategories(categories).length
-  // Enabling a language stores the English default title, so a stored default
-  // is worded in the app's language like a missing one.
-  const title =
-    chromeTitle && chromeTitle !== DEFAULT_HELP_CENTER_CONFIG.homepageTitle
-      ? chromeTitle
-      : intl.formatMessage({ id: 'portal.hc.home.title', defaultMessage: 'How can we help?' })
-  const description =
-    chromeDescription && chromeDescription !== DEFAULT_HELP_CENTER_CONFIG.homepageDescription
-      ? chromeDescription
-      : intl.formatMessage({
-          id: 'portal.hc.home.localeDescription',
-          defaultMessage: 'Search our knowledge base or browse by category',
-        })
+  const { title, description } = landingCopy(chromeTitle, chromeDescription, (copy) =>
+    intl.formatMessage(copy)
+  )
 
   return (
     <>
