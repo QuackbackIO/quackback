@@ -6,7 +6,10 @@ import { HelpCenterHero } from '@/components/help-center/help-center-hero'
 import { HelpCenterHeroSearch } from '@/components/help-center/help-center-search'
 import { HelpCenterCategoryGrid } from '@/components/help-center/help-center-category-grid'
 import { HelpCenterPopularArticles } from '@/components/help-center/help-center-popular-articles'
-import { getTopLevelCategories } from '@/components/help-center/help-center-utils'
+import {
+  getTopLevelCategories,
+  helpCenterHeadMessages,
+} from '@/components/help-center/help-center-utils'
 import {
   listPublicCategoriesFn,
   listPopularPublicArticlesFn,
@@ -16,9 +19,37 @@ import { DEFAULT_HELP_CENTER_CONFIG, type HelpCenterConfig } from '@/lib/shared/
 import { resolvePortalOgImageUrl } from '@/lib/shared/portal-og-image'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
-const DEFAULT_TITLE = 'How can we help?'
-const DEFAULT_DESCRIPTION =
-  'Search our guides or ask AI for an instant answer. Real answers, fast, no ticket required.'
+type Copy = { id: string; defaultMessage: string }
+
+/**
+ * The landing title and description: an admin's own wording, or the defaults
+ * in the page's language. Settings store the English defaults until an admin
+ * edits them, so a stored default is worded like a missing one. `word` turns a
+ * message into the page's language (react-intl in the page, the help center's
+ * loaded strings in `head`).
+ */
+function landingCopy(config: HelpCenterConfig | null | undefined, word: (copy: Copy) => string) {
+  const storedTitle = config?.homepageTitle
+  const title =
+    storedTitle == null || storedTitle === DEFAULT_HELP_CENTER_CONFIG.homepageTitle
+      ? word({ id: 'portal.hc.home.title', defaultMessage: 'How can we help?' })
+      : storedTitle
+  const storedDescription = config?.homepageDescription
+  const description =
+    storedDescription == null
+      ? word({
+          id: 'portal.hc.home.description',
+          defaultMessage:
+            'Search our guides or ask AI for an instant answer. Real answers, fast, no ticket required.',
+        })
+      : storedDescription === DEFAULT_HELP_CENTER_CONFIG.homepageDescription
+        ? word({
+            id: 'portal.hc.home.localeDescription',
+            defaultMessage: 'Search our knowledge base or browse by category',
+          })
+        : storedDescription
+  return { title, description }
+}
 
 /**
  * SSR-only request context for browser-locale detection. The isomorphic split
@@ -81,12 +112,15 @@ export const Route = createFileRoute('/_portal/hc/')({
       ),
     }
   },
-  head: ({ loaderData }) => {
+  head: ({ loaderData, matches }) => {
     if (!loaderData) return {}
 
     const { helpCenterConfig, workspaceName, logoUrl } = loaderData
-    const title = helpCenterConfig?.homepageTitle ?? DEFAULT_TITLE
-    const description = helpCenterConfig?.homepageDescription ?? DEFAULT_DESCRIPTION
+    const messages = helpCenterHeadMessages(matches)
+    const { title, description } = landingCopy(
+      helpCenterConfig,
+      (copy) => messages[copy.id] ?? copy.defaultMessage
+    )
 
     const pageTitle = `${title} - ${workspaceName}`
 
@@ -111,27 +145,7 @@ function HelpCenterLandingPage() {
   const settings = useWorkspaceSettings()
   const askAiEnabled = !!settings?.featureFlags?.helpCenter
 
-  // Settings store the English defaults until an admin edits them, so a stored
-  // default is worded in the app's language like a missing one.
-  const storedTitle = helpCenterConfig?.homepageTitle
-  const title =
-    storedTitle == null || storedTitle === DEFAULT_HELP_CENTER_CONFIG.homepageTitle
-      ? intl.formatMessage({ id: 'portal.hc.home.title', defaultMessage: 'How can we help?' })
-      : storedTitle
-  const storedDescription = helpCenterConfig?.homepageDescription
-  const description =
-    storedDescription == null
-      ? intl.formatMessage({
-          id: 'portal.hc.home.description',
-          defaultMessage:
-            'Search our guides or ask AI for an instant answer. Real answers, fast, no ticket required.',
-        })
-      : storedDescription === DEFAULT_HELP_CENTER_CONFIG.homepageDescription
-        ? intl.formatMessage({
-            id: 'portal.hc.home.localeDescription',
-            defaultMessage: 'Search our knowledge base or browse by category',
-          })
-        : storedDescription
+  const { title, description } = landingCopy(helpCenterConfig, (copy) => intl.formatMessage(copy))
   const collectionCount = getTopLevelCategories(categories).length
 
   return (

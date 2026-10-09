@@ -310,6 +310,7 @@ describe('area strings', () => {
     expect(messageArea('portal.settings.profile.title')).toBe('settings')
     expect(messageArea('portal.hc.home.title')).toBe('helpCenter')
     expect(messageArea('portal.auth.twoFactor.verify')).toBe('twoFactor')
+    expect(messageArea('common.errorPage.notFound.title')).toBe('errorPage')
     expect(messageArea('portal.auth.continue')).toBeNull()
     expect(messageArea('portal.header.nav.feedback')).toBeNull()
   })

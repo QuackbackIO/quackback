@@ -48,6 +48,8 @@ export function AreaMessages({
   children: ReactNode
 }) {
   const intl = useIntl()
+  // A message's defaultMessage is its English, so English needs nothing loaded.
+  if (normalizeLocale(intl.locale) === DEFAULT_LOCALE) return children
   if (Object.keys(intl.messages).some((key) => messageArea(key) === area)) return children
   if (messages) return <WithMessages extra={messages}>{children}</WithMessages>
   return (

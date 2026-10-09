@@ -3,6 +3,7 @@
  * Extracted for testability — no React dependencies.
  */
 
+import { getRouteApi } from '@tanstack/react-router'
 import { hcCollectionPath } from '@/lib/shared/help-center-url'
 import { buildAncestorChain } from '@/lib/shared/help-center-tree'
 
@@ -70,4 +71,17 @@ export function buildCategoryBreadcrumbs<T extends CategoryLikeWithSlug>(params:
   }
 
   return items
+}
+
+const helpCenterLayout = getRouteApi('/_portal/hc')
+
+/**
+ * The help center strings the layout's loader read in the page's language, for
+ * a route's `head`, which runs outside React and so can't use react-intl.
+ */
+export function helpCenterHeadMessages(
+  matches: readonly { routeId: string; loaderData?: unknown }[]
+): Record<string, string> {
+  const layout = matches.find((m) => m.routeId === helpCenterLayout.id)
+  return (layout?.loaderData as { messages?: Record<string, string> } | undefined)?.messages ?? {}
 }

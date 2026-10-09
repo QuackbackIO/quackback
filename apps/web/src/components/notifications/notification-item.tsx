@@ -10,7 +10,10 @@ import { useLocalDateFormatter } from '@/components/ui/local-date'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { getNotificationTypeConfig } from './notification-type-config'
 import { getNotificationTarget } from './notification-target'
-import { notificationText, type NotificationText } from './notification-text'
+import {
+  notificationText,
+  type NotificationText,
+} from '@/lib/shared/notifications/notification-text'
 import type { SerializedNotification } from '@/lib/client/hooks/use-notifications-queries'
 
 interface NotificationItemProps {

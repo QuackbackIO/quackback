@@ -17,3 +17,33 @@ export interface NotificationTextParams {
   previousStageLabel?: string
   isTeamMember?: boolean
 }
+
+const TEXT_PARAM_KEYS = [
+  'postTitle',
+  'previousStatus',
+  'newStatus',
+  'changelogTitle',
+  'incidentTitle',
+  'kind',
+  'ticketTitle',
+  'stageLabel',
+  'previousStageLabel',
+] as const
+
+/**
+ * The metadata values a notification's title and body were worded from, so
+ * the bell can word them again in the reader's language. Only strings pass;
+ * `isTeamMember` is the one flag a title depends on.
+ */
+export function notificationTextParams(
+  metadata: Record<string, unknown> | null | undefined
+): NotificationTextParams {
+  const params: NotificationTextParams = {}
+  if (!metadata) return params
+  for (const key of TEXT_PARAM_KEYS) {
+    const value = metadata[key]
+    if (typeof value === 'string') params[key] = value
+  }
+  if (metadata.isTeamMember === true) params.isTeamMember = true
+  return params
+}

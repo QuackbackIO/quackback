@@ -13,12 +13,13 @@ export const Route = createFileRoute('/admin/settings/notifications')({
   // The viewer's preferences load with the page so the matrix is in the
   // document; on a miss the form fetches them itself.
   // The matrix's strings stay out of the catalog every admin page seeds; this
-  // page reads them with the page.
-  loader: async ({ context }) => {
+  // page reads them with the page. It reads the English ones: the portal shares
+  // the matrix, but admin settings render in English.
+  loader: async () => {
     const { getNotificationPreferencesFn } = await import('@/lib/server/functions/user')
     const [preferences, messages] = await Promise.all([
       getNotificationPreferencesFn().catch(() => null),
-      loadAreaMessages(context.acceptLanguageLocale ?? DEFAULT_LOCALE, 'notificationPreferences'),
+      loadAreaMessages(DEFAULT_LOCALE, 'notificationPreferences'),
     ])
     return { preferences, messages }
   },

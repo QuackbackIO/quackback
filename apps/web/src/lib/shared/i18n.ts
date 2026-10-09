@@ -202,8 +202,9 @@ export function isSetupWizardMessage(key: string): boolean {
  * out of the catalog they seed. An area its routes render on the server loads
  * its strings in the route loader (portal settings and help center, the admin
  * notification preferences); one that opens on a click loads them as it opens
- * (the two-factor sign-in steps, the notification lists). The private portal's
- * gate loads the whole catalog itself, so its strings need no seed at all.
+ * (the two-factor sign-in steps, the notification lists) or, for the not-found
+ * and error pages, as they show. The private portal's gate loads the whole
+ * catalog itself, so its strings need no seed at all.
  * See `AreaMessages`.
  *
  * A key belongs to the first area whose prefix it has, so the notification
@@ -216,6 +217,7 @@ export const AREA_MESSAGE_PREFIXES = {
   twoFactor: ['portal.auth.twoFactor.'],
   notificationText: ['portal.notifications.text.'],
   accessGate: ['portal.accessGate.'],
+  errorPage: ['common.errorPage.'],
 } as const satisfies Record<string, readonly string[]>
 
 export type MessageArea = keyof typeof AREA_MESSAGE_PREFIXES
@@ -307,7 +309,7 @@ export async function loadWidgetMessages(locale: SupportedLocale): Promise<Recor
   const all = await loadMessages(locale)
   const subset: Record<string, string> = {}
   for (const [key, value] of Object.entries(all)) {
-    if (isViewerMessage(key)) continue
+    if (isPageScopedMessage(key)) continue
     if (WIDGET_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))) subset[key] = value
   }
   return subset

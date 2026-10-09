@@ -24,6 +24,7 @@ import { OttHandler } from '@/components/shared/ott-handler'
 import { VisitorBeacon } from '@/components/shared/visitor-beacon'
 import { ProductAnalytics } from '@/components/shared/product-analytics'
 import { documentLocale, htmlLangDir } from '@/lib/shared/document-locale'
+import { DocumentLocaleContext } from '@/components/shared/document-locale-context'
 import { normalizeLocale, DEFAULT_LOCALE, type SupportedLocale } from '@/lib/shared/i18n'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
@@ -303,7 +304,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
           // otherwise flip the admin's own theme.
           syncCookie={!isWidgetRoute && !searchForcedTheme}
         >
-          {children}
+          <DocumentLocaleContext.Provider value={locale}>{children}</DocumentLocaleContext.Provider>
           <Suspense fallback={null}>
             <Toaster />
           </Suspense>
