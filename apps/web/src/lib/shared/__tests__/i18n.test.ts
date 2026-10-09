@@ -93,6 +93,11 @@ describe('normalizeLocale', () => {
     expect(normalizeLocale('pl-PL')).toBe('pl')
     expect(normalizeLocale('PL-pl')).toBe('pl')
   })
+  it('maps Thai tags to th', () => {
+    expect(normalizeLocale('th')).toBe('th')
+    expect(normalizeLocale('th-TH')).toBe('th')
+    expect(normalizeLocale('TH-th')).toBe('th')
+  })
   it('maps every Portuguese tag to pt-br, the only Portuguese catalog', () => {
     expect(normalizeLocale('pt-BR')).toBe('pt-br')
     expect(normalizeLocale('pt')).toBe('pt-br')
@@ -140,6 +145,11 @@ describe('resolveLocale', () => {
     expect(resolveLocale('pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7')).toBe('pl')
     expect(resolveLocale('pl,de;q=0.8')).toBe('pl')
     expect(resolveLocale('en', 'pl')).toBe('pl')
+  })
+  it('resolves Thai from the header and explicit override', () => {
+    expect(resolveLocale('th-TH,th;q=0.9,en;q=0.8')).toBe('th')
+    expect(resolveLocale('en', 'th-TH')).toBe('th')
+    expect(resolveLocale('th;q=0,en;q=0.5')).toBe('en')
   })
   it('resolves Portuguese from the header', () => {
     expect(resolveLocale('pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7')).toBe('pt-br')

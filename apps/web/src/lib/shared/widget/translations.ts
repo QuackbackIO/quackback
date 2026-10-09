@@ -24,6 +24,7 @@ export const WIDGET_LOCALE_LABELS: Record<string, string> = {
   'zh-tw': 'Chinese (Traditional)',
   nl: 'Dutch',
   pl: 'Polish',
+  th: 'ภาษาไทย',
 }
 
 /**

@@ -176,6 +176,7 @@ export const TRANSLATE_LANGUAGES = [
   { value: 'Portuguese (Brazilian)', label: 'Português (Brasil)' },
   { value: 'Russian', label: 'Русский' },
   { value: 'Spanish', label: 'Español' },
+  { value: 'Thai', label: 'ภาษาไทย' },
 ] as const
 
 /** The completed rewrite (RUN_FINISHED.result). */

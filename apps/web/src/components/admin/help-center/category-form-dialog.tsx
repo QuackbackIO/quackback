@@ -58,6 +58,7 @@ const LOCALE_LABELS: Record<string, string> = {
   'zh-tw': '繁體中文',
   nl: 'Nederlands',
   pl: 'Polski',
+  th: 'ภาษาไทย',
 }
 
 /** Compact per-locale name/description editor (domains/languages §2). No
