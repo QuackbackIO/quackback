@@ -177,9 +177,21 @@ for (const surface of ['admin', 'widget'] as const) {
 }
 
 describe('citation rendering safety', () => {
+  // AssistantAnswer words its citation labels through react-intl.
+  const renderAnswer = (ui: React.ReactElement) =>
+    renderRTL(ui, {
+      wrapper: ({ children }) => (
+        <IntlProvider locale="en" messages={{}}>
+          {children}
+        </IntlProvider>
+      ),
+    })
+
   it('keeps paragraphs, links and focused source triggers mounted when citations refresh', () => {
     const text = 'Read [the guide](https://example.com/guide) [1].'
-    const { container, rerender } = render(<AssistantAnswer text={text} citations={[citation]} />)
+    const { container, rerender } = renderAnswer(
+      <AssistantAnswer text={text} citations={[citation]} />
+    )
     const paragraph = container.querySelector('p')
     const link = screen.getByRole('link', { name: 'the guide' })
     const source = screen.getByRole('link', { name: 'Source 1: AI features' })
@@ -202,14 +214,16 @@ describe('citation rendering safety', () => {
   })
 
   it('keeps the answer paragraph mounted when streaming completes', () => {
-    const { container, rerender } = render(<AssistantAnswer text="Summary." citations={[]} caret />)
+    const { container, rerender } = renderAnswer(
+      <AssistantAnswer text="Summary." citations={[]} caret />
+    )
     const paragraph = container.querySelector('p')
     rerender(<AssistantAnswer text="Summary." citations={[]} />)
     expect(container.querySelector('p')).toBe(paragraph)
   })
 
   it('keeps footnote references and backlinks within the conversation document', () => {
-    const { container } = render(
+    const { container } = renderAnswer(
       <AssistantAnswer text={'A footnote[^note].\n\n[^note]: Supporting detail.'} citations={[]} />
     )
     const links = container.querySelectorAll('a')
@@ -225,7 +239,7 @@ describe('citation rendering safety', () => {
 
   it('gives repeated footnote labels distinct targets in each message', () => {
     const text = 'A footnote[^note].\n\n[^note]: Supporting detail.'
-    const { container } = render(
+    const { container } = renderAnswer(
       <>
         <AssistantAnswer text={text} citations={[]} />
         <AssistantAnswer text={text} citations={[]} />
@@ -247,7 +261,7 @@ describe('citation rendering safety', () => {
   })
 
   it('formats Markdown-only internal notes in the admin thread', () => {
-    render(
+    renderAnswer(
       <AgentMessageBubble
         message={{
           ...message('Read **this** [guide](https://example.com/guide)', false, null),
@@ -262,7 +276,7 @@ describe('citation rendering safety', () => {
     expect(screen.getByText('this').tagName).toBe('STRONG')
   })
   it('keeps numeric Markdown link labels as links, without nesting citation anchors', () => {
-    const { container } = render(
+    const { container } = renderAnswer(
       <AssistantAnswer
         text="[1](https://example.com) and [guide [1]](https://example.com/guide)"
         citations={[citation]}
@@ -274,12 +288,12 @@ describe('citation rendering safety', () => {
   })
 
   it('preserves unresolved numeric brackets in a completed answer', () => {
-    const { container } = render(<AssistantAnswer text="array[9] and [1]" citations={[]} />)
+    const { container } = renderAnswer(<AssistantAnswer text="array[9] and [1]" citations={[]} />)
     expect(container).toHaveTextContent('array[9] and [1]')
   })
 
   it('keeps array indices literal even when the citation number exists', () => {
-    const { container } = render(
+    const { container } = renderAnswer(
       <AssistantAnswer text="array[1] and read [1]." citations={[citation]} />
     )
     expect(container.textContent).toContain('array[1]')
@@ -287,13 +301,15 @@ describe('citation rendering safety', () => {
   })
 
   it('suppresses unresolved citation markers only while streaming', () => {
-    const { container } = render(<AssistantAnswer text="Read this [1]." citations={[]} caret />)
+    const { container } = renderAnswer(
+      <AssistantAnswer text="Read this [1]." citations={[]} caret />
+    )
     expect(container.textContent).toBe('Read this .')
   })
 
   it('refuses unsafe citation URLs in inline dots and the expanded source trace', () => {
     const unsafe = { ...citation, url: 'javascript:alert(1)' }
-    const { container } = render(
+    const { container } = renderAnswer(
       <IntlProvider locale="en" messages={{}}>
         <AssistantAnswer text="Read [1]." citations={[unsafe]} />
         <AssistantSourcesTrace citations={[unsafe]} />

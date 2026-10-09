@@ -95,7 +95,7 @@ describe('HelpCenterArticleFeedback', () => {
   it('thanks a helpful vote without an em dash', async () => {
     renderFeedback()
     fireEvent.click(screen.getByRole('button', { name: /yes/i }))
-    expect(await screen.findByText('Thanks, glad it helped.')).toBeTruthy()
+    expect(await screen.findByText('Thanks, glad it landed.')).toBeTruthy()
   })
 
   it('speaks the reader language', async () => {
@@ -104,10 +104,10 @@ describe('HelpCenterArticleFeedback', () => {
         <HelpCenterArticleFeedback articleId="article_1" />
       </IntlProvider>
     )
-    expect(screen.getByText(de['portal.hc.articleFeedback.title'])).toBeTruthy()
-    expect(screen.getByText(de['portal.hc.articleFeedback.prompt'])).toBeTruthy()
+    expect(screen.getByText(de['portal.hc.articleFeedback.question'])).toBeTruthy()
+    expect(screen.getByText(de['portal.hc.articleFeedback.subtitle'])).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /Ja/ }))
-    expect(await screen.findByText(de['portal.hc.articleFeedback.helpfulThanks'])).toBeTruthy()
+    expect(await screen.findByText(de['portal.hc.articleFeedback.thanksHelpful'])).toBeTruthy()
     expect(document.body.textContent).not.toMatch(/Was this helpful|Yes|Thanks/)
   })
 })

@@ -1,32 +1,56 @@
 import { useEffect, useState } from 'react'
+import { FormattedMessage, useIntl } from 'react-intl'
 import QRCode from 'qrcode'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { InputOTP, InputOTPSixSlots } from '@/components/ui/input-otp'
 import { authClient } from '@/lib/client/auth-client'
+import { Spinner } from '@/components/shared/spinner'
+import { AreaMessages } from '@/components/shared/area-messages'
+
+interface TwoFactorEnrollStepsProps {
+  password: string
+  onComplete: () => void
+  onCancel: () => void
+  onStepChange?: (step: 'qr' | 'backup') => void
+}
 
 /**
  * Authenticator enrollment steps (QR → verify → backup codes), shared by the
  * settings page and the inline auth dialog. The caller supplies the already-
  * confirmed password (settings re-prompts; the auth dialog reuses the sign-in
- * password) and is notified on completion / cancellation.
+ * password) and is notified on completion / cancellation. Its strings load
+ * with it, since pages leave them out of the catalog they seed.
  */
-export function TwoFactorEnrollSteps({
+export function TwoFactorEnrollSteps(props: TwoFactorEnrollStepsProps): React.ReactElement {
+  return (
+    <AreaMessages
+      area="twoFactor"
+      fallback={
+        <div className="flex justify-center py-10">
+          <Spinner />
+        </div>
+      }
+    >
+      <EnrollSteps {...props} />
+    </AreaMessages>
+  )
+}
+
+function EnrollSteps({
   password,
   onComplete,
   onCancel,
   onStepChange,
-}: {
-  password: string
-  onComplete: () => void
-  onCancel: () => void
-  onStepChange?: (step: 'qr' | 'backup') => void
-}): React.ReactElement {
+}: TwoFactorEnrollStepsProps): React.ReactElement {
+  const intl = useIntl()
   const [step, setStep] = useState<'loading' | 'qr' | 'backup'>('loading')
   const [code, setCode] = useState('')
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
   const [backupCodes, setBackupCodes] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
+  // Setup couldn't start; `reason` is better-auth's message when it gave one.
+  const [startError, setStartError] = useState<{ reason: string | null } | null>(null)
   const [pending, setPending] = useState(false)
 
   useEffect(() => {
@@ -38,7 +62,7 @@ export function TwoFactorEnrollSteps({
       })
       if (cancelled) return
       if (betterErr || !data || !('totpURI' in data) || !data.totpURI) {
-        setError(betterErr?.message ?? 'Could not start 2FA setup.')
+        setStartError({ reason: betterErr?.message ?? null })
         return
       }
       // Re-check after the second await — without this, a QR render that
@@ -64,11 +88,26 @@ export function TwoFactorEnrollSteps({
     setPending(true)
     try {
       const { error: betterErr } = await authClient.twoFactor.verifyTotp({ code: value })
-      if (betterErr) throw new Error(betterErr.message ?? 'Code rejected.')
+      if (betterErr) {
+        throw new Error(
+          betterErr.message ??
+            intl.formatMessage({
+              id: 'portal.auth.twoFactor.codeRejected',
+              defaultMessage: 'Code rejected.',
+            })
+        )
+      }
       setStep('backup')
       onStepChange?.('backup')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Code rejected.')
+      setError(
+        err instanceof Error
+          ? err.message
+          : intl.formatMessage({
+              id: 'portal.auth.twoFactor.codeRejected',
+              defaultMessage: 'Code rejected.',
+            })
+      )
     } finally {
       setPending(false)
     }
@@ -77,17 +116,28 @@ export function TwoFactorEnrollSteps({
   if (step === 'loading') {
     return (
       <div className="space-y-3">
-        {error ? (
+        {startError ? (
           <>
             <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
+              <AlertDescription>
+                {startError.reason ??
+                  intl.formatMessage({
+                    id: 'portal.auth.twoFactor.setupFailed',
+                    defaultMessage: 'Could not start 2FA setup.',
+                  })}
+              </AlertDescription>
             </Alert>
             <Button type="button" variant="ghost" onClick={onCancel}>
-              Cancel
+              <FormattedMessage id="portal.auth.twoFactor.cancel" defaultMessage="Cancel" />
             </Button>
           </>
         ) : (
-          <p className="text-sm text-muted-foreground">Starting setup…</p>
+          <p className="text-sm text-muted-foreground">
+            <FormattedMessage
+              id="portal.auth.twoFactor.startingSetup"
+              defaultMessage="Starting setup…"
+            />
+          </p>
         )}
       </div>
     )
@@ -98,8 +148,10 @@ export function TwoFactorEnrollSteps({
       <div className="space-y-3">
         <Alert>
           <AlertDescription className="text-xs">
-            Save these one-time codes somewhere safe. Each can be used once if you lose access to
-            your authenticator.
+            <FormattedMessage
+              id="portal.auth.twoFactor.backupCodesHint"
+              defaultMessage="Save these one-time codes somewhere safe. Each can be used once if you lose access to your authenticator."
+            />
           </AlertDescription>
         </Alert>
         <pre className="rounded-md border border-border/50 bg-muted/30 p-3 text-xs font-mono columns-2">
@@ -110,10 +162,13 @@ export function TwoFactorEnrollSteps({
           size="sm"
           onClick={() => navigator.clipboard.writeText(backupCodes.join('\n'))}
         >
-          Copy all codes
+          <FormattedMessage id="portal.auth.twoFactor.copyCodes" defaultMessage="Copy all codes" />
         </Button>
         <Button className="w-full" onClick={onComplete}>
-          I have saved the codes
+          <FormattedMessage
+            id="portal.auth.twoFactor.savedCodes"
+            defaultMessage="I have saved the codes"
+          />
         </Button>
       </div>
     )
@@ -130,13 +185,18 @@ export function TwoFactorEnrollSteps({
       {qrDataUrl && (
         <img
           src={qrDataUrl}
-          alt="TOTP QR code"
+          alt={intl.formatMessage({
+            id: 'portal.auth.twoFactor.qrAlt',
+            defaultMessage: 'TOTP QR code',
+          })}
           className="mx-auto h-44 w-44 bg-white p-2 rounded"
         />
       )}
       <p className="text-xs text-muted-foreground text-center">
-        Scan with Google Authenticator, 1Password, Authy, or any TOTP app, then enter the 6-digit
-        code.
+        <FormattedMessage
+          id="portal.auth.twoFactor.scanHint"
+          defaultMessage="Scan with Google Authenticator, 1Password, Authy, or any TOTP app, then enter the 6-digit code."
+        />
       </p>
       <div className="flex justify-center">
         <InputOTP
@@ -148,7 +208,10 @@ export function TwoFactorEnrollSteps({
           disabled={pending}
           autoFocus
           autoComplete="one-time-code"
-          aria-label="Authenticator code"
+          aria-label={intl.formatMessage({
+            id: 'portal.auth.twoFactor.authenticatorCode',
+            defaultMessage: 'Authenticator code',
+          })}
           aria-invalid={!!error || undefined}
         >
           <InputOTPSixSlots />
@@ -161,10 +224,14 @@ export function TwoFactorEnrollSteps({
       )}
       <div className="flex gap-2">
         <Button type="button" variant="ghost" onClick={onCancel} disabled={pending}>
-          Cancel
+          <FormattedMessage id="portal.auth.twoFactor.cancel" defaultMessage="Cancel" />
         </Button>
         <Button type="submit" disabled={pending || code.length !== 6}>
-          {pending ? 'Verifying…' : 'Verify'}
+          {pending ? (
+            <FormattedMessage id="portal.auth.twoFactor.verifying" defaultMessage="Verifying…" />
+          ) : (
+            <FormattedMessage id="portal.auth.twoFactor.verify" defaultMessage="Verify" />
+          )}
         </Button>
       </div>
     </form>

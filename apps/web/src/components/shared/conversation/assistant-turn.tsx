@@ -49,7 +49,7 @@ export function CitationFreshness({
   return (
     <span className={cn('block text-[11px] text-muted-foreground', className)}>
       <FormattedMessage
-        id="common.citation.updated"
+        id="widget.messenger.assistant.citationUpdated"
         defaultMessage="Updated {time}"
         values={{ time: label }}
       />
@@ -137,15 +137,18 @@ function CitationDot({
   const url = sanitizeUrl(citation.url)
   const hasUrl = !!url
   const source = citationHost(citation.url) || citation.title
-  const label = intl.formatMessage(
-    isInternal
-      ? {
-          id: 'common.citation.internalSourceLabel',
-          defaultMessage: 'Internal source {number}: {title}',
-        }
-      : { id: 'common.citation.sourceLabel', defaultMessage: 'Source {number}: {title}' },
-    { number: n, title: citation.title }
-  )
+  const label = isInternal
+    ? intl.formatMessage(
+        {
+          id: 'widget.messenger.assistant.citationInternalLabel',
+          defaultMessage: 'Internal source {n}: {title}',
+        },
+        { n, title: citation.title }
+      )
+    : intl.formatMessage(
+        { id: 'widget.messenger.assistant.citationLabel', defaultMessage: 'Source {n}: {title}' },
+        { n, title: citation.title }
+      )
   const dotClass = cn(CITATION_DOT_CLASS, isInternal && CITATION_DOT_INTERNAL_CLASS)
   return (
     <span className="relative inline-block align-[1px]">
@@ -186,7 +189,10 @@ function CitationDot({
           {isInternal && !hasUrl ? (
             <span className="flex items-center gap-1.5 text-[12px] text-amber-700 dark:text-amber-300">
               <LockClosedIcon className="h-3 w-3 shrink-0" />
-              <FormattedMessage id="common.citation.internal" defaultMessage="Internal" />
+              <FormattedMessage
+                id="widget.messenger.assistant.citationInternal"
+                defaultMessage="Internal"
+              />
             </span>
           ) : (
             <span className="flex items-center gap-1.5 text-[12px] text-muted-foreground">

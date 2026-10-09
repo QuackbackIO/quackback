@@ -9,6 +9,7 @@ import { queryOptions, useQuery, useInfiniteQuery } from '@tanstack/react-query'
 import type { NotificationId } from '@quackback/ids'
 import type { NotificationType } from '@/lib/shared/types'
 import { getNotificationsFn, getUnreadCountFn } from '@/lib/server/functions/notifications'
+import type { NotificationTextParams } from '@/lib/shared/notifications/text-params'
 
 /** Page size for the infinite-scrolling notification pages (admin + portal). */
 const NOTIFICATIONS_PAGE_SIZE = 30
@@ -59,6 +60,8 @@ export interface SerializedNotification {
   /** Which app this row's deep link belongs to (from metadata, ticket bells only):
    *  'portal' for the requester, 'admin' for agent watchers; null on older rows. */
   audience: 'admin' | 'portal' | null
+  /** Lets the bell word the title and body in the reader's language. */
+  params?: NotificationTextParams
   readAt: string | null
   archivedAt: string | null
   createdAt: string

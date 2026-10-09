@@ -63,17 +63,13 @@ export function NotificationBell({
               ),
           className
         )}
-        aria-label={
-          unreadCount > 0
-            ? intl.formatMessage(
-                {
-                  id: 'notifications.bell.unreadLabel',
-                  defaultMessage: 'Notifications ({count} unread)',
-                },
-                { count: unreadCount }
-              )
-            : title
-        }
+        aria-label={intl.formatMessage(
+          {
+            id: 'portal.notifications.bell.ariaLabel',
+            defaultMessage: 'Notifications{count, plural, =0 {} other { (# unread)}}',
+          },
+          { count: unreadCount }
+        )}
       >
         <BellIcon className="h-5 w-5 shrink-0" />
         {labeled ? <span className="min-w-0 flex-1 truncate text-left">{title}</span> : null}

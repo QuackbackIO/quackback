@@ -1,4 +1,5 @@
 import { type ReactNode } from 'react'
+import { FormattedMessage } from 'react-intl'
 import { useQuery } from '@tanstack/react-query'
 import { LocalDate } from '@/components/ui/local-date'
 import { ChevronUpIcon } from '@heroicons/react/24/solid'
@@ -197,17 +198,29 @@ export function QuackbackEmbedCard({
   }
 
   if ('unavailable' in data) {
-    const label =
-      kind === 'post'
-        ? 'post'
-        : kind === 'article'
-          ? 'article'
-          : kind === 'ticket'
-            ? 'ticket'
-            : 'update'
     return (
       <div className={`${shellCls} px-3 py-2.5 text-xs text-muted-foreground`}>
-        This {label} is unavailable
+        {kind === 'post' ? (
+          <FormattedMessage
+            id="ui.embedCard.unavailable.post"
+            defaultMessage="This post is unavailable"
+          />
+        ) : kind === 'article' ? (
+          <FormattedMessage
+            id="ui.embedCard.unavailable.article"
+            defaultMessage="This article is unavailable"
+          />
+        ) : kind === 'ticket' ? (
+          <FormattedMessage
+            id="ui.embedCard.unavailable.ticket"
+            defaultMessage="This ticket is unavailable"
+          />
+        ) : (
+          <FormattedMessage
+            id="ui.embedCard.unavailable.update"
+            defaultMessage="This update is unavailable"
+          />
+        )}
       </div>
     )
   }
@@ -260,7 +273,11 @@ export function QuackbackEmbedCard({
               name={data.authorName}
               fallbackClassName="bg-muted text-xs"
             />
-            <span className="truncate">{data.authorName ?? 'Anonymous'}</span>
+            <span className="truncate">
+              {data.authorName ?? (
+                <FormattedMessage id="ui.embedCard.anonymous" defaultMessage="Anonymous" />
+              )}
+            </span>
             {data.createdAt && (
               <>
                 <span className="text-muted-foreground/40">·</span>
@@ -289,7 +306,7 @@ export function QuackbackEmbedCard({
     const articleInner = (
       <div className="p-3">
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
-          Help article
+          <FormattedMessage id="ui.embedCard.article" defaultMessage="Help article" />
         </p>
         <h3 className="mt-0.5 line-clamp-1 text-sm font-semibold text-foreground">{data.title}</h3>
         {data.excerpt && (
@@ -314,7 +331,9 @@ export function QuackbackEmbedCard({
     const ticketInner = (
       <div className="p-3">
         <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
-          <span>Support ticket</span>
+          <span>
+            <FormattedMessage id="ui.embedCard.ticket" defaultMessage="Support ticket" />
+          </span>
           <span className="text-muted-foreground/40">·</span>
           <span className="font-mono normal-case tracking-normal">{data.reference}</span>
         </div>
@@ -357,7 +376,7 @@ export function QuackbackEmbedCard({
   const changelogInner = (
     <div className="p-3">
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
-        Changelog
+        <FormattedMessage id="ui.embedCard.changelog" defaultMessage="Changelog" />
       </p>
       <h3 className="mt-0.5 line-clamp-1 text-sm font-semibold text-foreground">{data.title}</h3>
       {data.publishedAt && (

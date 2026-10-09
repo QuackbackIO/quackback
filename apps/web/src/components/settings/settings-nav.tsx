@@ -1,10 +1,19 @@
 import { Link, useRouterState } from '@tanstack/react-router'
+import { FormattedMessage } from 'react-intl'
 import { UserIcon, Cog6ToothIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 
 const navItems = [
-  { label: 'Profile', to: '/settings/profile', icon: UserIcon },
-  { label: 'Preferences', to: '/settings/preferences', icon: Cog6ToothIcon },
+  {
+    label: { id: 'portal.settings.profile.title', defaultMessage: 'Profile' },
+    to: '/settings/profile',
+    icon: UserIcon,
+  },
+  {
+    label: { id: 'portal.settings.preferences.title', defaultMessage: 'Preferences' },
+    to: '/settings/preferences',
+    icon: Cog6ToothIcon,
+  },
 ]
 
 export function SettingsNav() {
@@ -14,7 +23,7 @@ export function SettingsNav() {
     <nav className="w-full md:w-56 md:shrink-0">
       <div className="sticky top-6 bg-card border border-border/50 rounded-lg p-4 shadow-sm">
         <h3 className="font-semibold text-xs uppercase tracking-wider text-muted-foreground mb-2 px-3">
-          Personal
+          <FormattedMessage id="portal.settings.nav.personal" defaultMessage="Personal" />
         </h3>
         <ul className="space-y-0.5">
           {navItems.map((item) => {
@@ -33,7 +42,9 @@ export function SettingsNav() {
                   )}
                 >
                   <Icon className={cn('h-4 w-4 shrink-0', isActive && 'text-primary')} />
-                  <span className="truncate">{item.label}</span>
+                  <span className="truncate">
+                    <FormattedMessage {...item.label} />
+                  </span>
                 </Link>
               </li>
             )

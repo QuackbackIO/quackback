@@ -2,6 +2,8 @@
  * The admin notifications page loads the viewer's own preferences with the
  * page, so the matrix is in the document rather than behind a spinner and a
  * fetch after hydration. A failed read leaves the form to fetch them itself.
+ * The matrix's strings, which admin pages leave out of their catalog, load
+ * with the page too.
  */
 import { describe, expect, it, vi } from 'vitest'
 
@@ -27,11 +29,31 @@ describe('notifications settings loader', () => {
     })
     expect(await loader({ context: {} })).toEqual({
       preferences: expect.objectContaining({ emailMuted: false }),
+      messages: expect.objectContaining({
+        'portal.settings.notifications.pauseAll.label': 'Pause all email',
+      }),
+    })
+  })
+
+  // Admin settings render in English, so the matrix does too, whatever the
+  // browser's language.
+  it("reads the matrix's English strings for a Polish browser", async () => {
+    getNotificationPreferencesFn.mockResolvedValueOnce(null)
+    expect(await loader({ context: { acceptLanguageLocale: 'pl' } })).toEqual({
+      preferences: null,
+      messages: expect.objectContaining({
+        'portal.settings.notifications.pauseAll.label': 'Pause all email',
+      }),
     })
   })
 
   it('leaves the preferences to the form when the read fails', async () => {
     getNotificationPreferencesFn.mockRejectedValueOnce(new Error('unavailable'))
-    expect(await loader({ context: {} })).toEqual({ preferences: null })
+    expect(await loader({ context: {} })).toEqual({
+      preferences: null,
+      messages: expect.objectContaining({
+        'portal.settings.notifications.pauseAll.label': 'Pause all email',
+      }),
+    })
   })
 })

@@ -1,5 +1,5 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { useIntl } from 'react-intl'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import type { UserId } from '@quackback/ids'
 import { settingsQueries } from '@/lib/client/queries/settings'
@@ -94,10 +94,17 @@ function ProfilePage() {
           className="animate-in fade-in duration-200 fill-mode-backwards rounded-xl border border-border/50 bg-muted/20 p-6"
           style={{ animationDelay: '100ms' }}
         >
-          <h2 className="font-medium">Managed by your identity provider</h2>
+          <h2 className="font-medium">
+            <FormattedMessage
+              id="portal.settings.profile.sso.title"
+              defaultMessage="Managed by your identity provider"
+            />
+          </h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Your password and two-factor authentication are handled by your organization&apos;s
-            single sign-on. Change them where you normally sign in.
+            <FormattedMessage
+              id="portal.settings.profile.sso.description"
+              defaultMessage="Your password and two-factor authentication are handled by your organization's single sign-on. Change them where you normally sign in."
+            />
           </p>
         </div>
       )}

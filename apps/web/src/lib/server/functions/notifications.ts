@@ -15,6 +15,7 @@ import {
   archiveAllNotifications,
 } from '@/lib/server/domains/notifications/notification.service'
 import { logger } from '@/lib/server/logger'
+import { notificationTextParams } from '@/lib/shared/notifications/text-params'
 
 const log = logger.child({ component: 'notifications' })
 
@@ -93,6 +94,7 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
           actorName: typeof actorName === 'string' ? actorName : null,
           actorAvatarUrl: typeof actorAvatarUrl === 'string' ? actorAvatarUrl : null,
           audience: audience === 'admin' || audience === 'portal' ? audience : null,
+          params: notificationTextParams(n.metadata),
           readAt: n.readAt?.toISOString() ?? null,
           archivedAt: n.archivedAt?.toISOString() ?? null,
           createdAt: n.createdAt.toISOString(),

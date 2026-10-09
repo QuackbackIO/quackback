@@ -69,16 +69,16 @@ export function HelpCenterArticleFeedback({
   const subtitle =
     feedback === null
       ? intl.formatMessage({
-          id: 'portal.hc.articleFeedback.prompt',
+          id: 'portal.hc.articleFeedback.subtitle',
           defaultMessage: 'Your feedback shapes what we write next.',
         })
       : feedback === 'helpful'
         ? intl.formatMessage({
-            id: 'portal.hc.articleFeedback.helpfulThanks',
-            defaultMessage: 'Thanks, glad it helped.',
+            id: 'portal.hc.articleFeedback.thanksHelpful',
+            defaultMessage: 'Thanks, glad it landed.',
           })
         : intl.formatMessage({
-            id: 'portal.hc.articleFeedback.notHelpfulThanks',
+            id: 'portal.hc.articleFeedback.thanksNotHelpful',
             defaultMessage: "Noted. We'll revisit this article.",
           })
 
@@ -89,7 +89,7 @@ export function HelpCenterArticleFeedback({
       <div>
         <p className="text-sm font-semibold text-foreground">
           <FormattedMessage
-            id="portal.hc.articleFeedback.title"
+            id="portal.hc.articleFeedback.question"
             defaultMessage="Was this helpful?"
           />
         </p>

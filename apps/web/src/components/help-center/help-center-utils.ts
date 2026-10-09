@@ -3,6 +3,7 @@
  * Extracted for testability — no React dependencies.
  */
 
+import { getRouteApi } from '@tanstack/react-router'
 import { hcCollectionPath } from '@/lib/shared/help-center-url'
 import { buildAncestorChain } from '@/lib/shared/help-center-tree'
 
@@ -36,10 +37,14 @@ export function buildCategoryBreadcrumbs<T extends CategoryLikeWithSlug>(params:
   articleTitle?: string
   /** Locale for collection URLs. Defaults to `en`. */
   locale?: string
+  /** Label of the root crumb, in the app's language. Defaults to `Help Center`. */
+  rootLabel?: string
 }): Array<{ label: string; href?: string }> {
   const locale = params.locale ?? 'en'
   const chain = buildAncestorChain(params.allCategories, params.categoryId)
-  const items: Array<{ label: string; href?: string }> = [{ label: 'Help Center', href: '/hc' }]
+  const items: Array<{ label: string; href?: string }> = [
+    { label: params.rootLabel ?? 'Help Center', href: '/hc' },
+  ]
 
   if (chain.length === 0) {
     // Unknown id — return just Help Center. The article fallback is
@@ -66,4 +71,17 @@ export function buildCategoryBreadcrumbs<T extends CategoryLikeWithSlug>(params:
   }
 
   return items
+}
+
+const helpCenterLayout = getRouteApi('/_portal/hc')
+
+/**
+ * The help center strings the layout's loader read in the page's language, for
+ * a route's `head`, which runs outside React and so can't use react-intl.
+ */
+export function helpCenterHeadMessages(
+  matches: readonly { routeId: string; loaderData?: unknown }[]
+): Record<string, string> {
+  const layout = matches.find((m) => m.routeId === helpCenterLayout.id)
+  return (layout?.loaderData as { messages?: Record<string, string> } | undefined)?.messages ?? {}
 }

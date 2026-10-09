@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import '@testing-library/jest-dom/vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render as baseRender, screen } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
+import en from '@/locales/en.json'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const navigate = vi.fn()
@@ -61,6 +63,16 @@ beforeEach(() => {
   search = {}
   pageData = page
 })
+
+// Admin renders the page under its IntlProvider; the whole catalog holds the
+// notification text, so the list renders at once instead of loading it.
+function render(ui: React.ReactElement) {
+  return baseRender(
+    <IntlProvider locale="en" defaultLocale="en" messages={en}>
+      {ui}
+    </IntlProvider>
+  )
+}
 
 describe('notifications page', () => {
   it('uses the standard page header with a labelled Mark all as read button', () => {

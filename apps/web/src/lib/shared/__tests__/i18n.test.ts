@@ -8,6 +8,7 @@ import {
   SUPPORTED_LOCALES,
   DEFAULT_LOCALE,
   isViewerMessage,
+  loadAreaMessages,
   loadMessages,
   loadPortalMessages,
   loadViewerMessages,
@@ -23,6 +24,8 @@ import {
   loadLaunchMessages,
   isUnsubscribeMessage,
   loadUnsubscribeMessages,
+  messageArea,
+  withoutPageScopedMessages,
   isSetupWizardMessage,
   loadOnboardingMessages,
   SETUP_WIZARD_MESSAGE_PREFIXES,
@@ -99,6 +102,17 @@ describe('normalizeLocale', () => {
     expect(normalizeLocale('pl-PL')).toBe('pl')
     expect(normalizeLocale('PL-pl')).toBe('pl')
   })
+  it('maps Thai tags to th', () => {
+    expect(normalizeLocale('th')).toBe('th')
+    expect(normalizeLocale('th-TH')).toBe('th')
+    expect(normalizeLocale('TH-th')).toBe('th')
+  })
+  it('maps every Portuguese tag to pt-br, the only Portuguese catalog', () => {
+    expect(normalizeLocale('pt-BR')).toBe('pt-br')
+    expect(normalizeLocale('pt')).toBe('pt-br')
+    expect(normalizeLocale('pt-PT')).toBe('pt-br')
+    expect(normalizeLocale('PT-ao')).toBe('pt-br')
+  })
 })
 
 describe('resolveLocale', () => {
@@ -140,6 +154,16 @@ describe('resolveLocale', () => {
     expect(resolveLocale('pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7')).toBe('pl')
     expect(resolveLocale('pl,de;q=0.8')).toBe('pl')
     expect(resolveLocale('en', 'pl')).toBe('pl')
+  })
+  it('resolves Thai from the header and explicit override', () => {
+    expect(resolveLocale('th-TH,th;q=0.9,en;q=0.8')).toBe('th')
+    expect(resolveLocale('en', 'th-TH')).toBe('th')
+    expect(resolveLocale('th;q=0,en;q=0.5')).toBe('en')
+  })
+  it('resolves Portuguese from the header', () => {
+    expect(resolveLocale('pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7')).toBe('pt-br')
+    expect(resolveLocale('pt,en;q=0.8')).toBe('pt-br')
+    expect(resolveLocale('pt-PT,pt;q=0.9,en;q=0.8')).toBe('pt-br')
   })
   it('respects an explicit Chinese locale override', () => {
     expect(resolveLocale('en', 'zh-Hant')).toBe('zh-tw')
@@ -244,6 +268,7 @@ describe('unsubscribe page strings', () => {
       isSheetMessage,
       isLaunchMessage,
       (key: string) => key.startsWith('email.'),
+      (key: string) => messageArea(key) !== null,
     ].map((scoped) => keys.filter(scoped).length)
     expect(
       pageScoped.reduce((sum, count) => sum + count, 0) + Object.keys(adminSeedMessages(all)).length
@@ -373,5 +398,37 @@ describe('launch plan strings', () => {
     expect(seeded['onboarding.goalAction.installMessenger']).toBe(
       all['onboarding.goalAction.installMessenger']
     )
+  })
+})
+
+describe('area strings', () => {
+  it('are left out of the catalogs pages seed and load for their area', async () => {
+    const [all, widget, portal, settings] = await Promise.all([
+      loadMessages('pl'),
+      loadWidgetMessages('pl'),
+      loadPortalMessages('pl'),
+      loadAreaMessages('pl', 'settings', 'notificationPreferences'),
+    ])
+    for (const seeded of [widget, portal, withoutPageScopedMessages(all)]) {
+      expect(Object.keys(seeded).filter((key) => messageArea(key) !== null)).toEqual([])
+    }
+    expect(portal['portal.header.nav.feedback']).toBe(all['portal.header.nav.feedback'])
+    expect(settings['portal.settings.profile.avatar.title']).toBe('Awatar')
+    expect(settings['portal.settings.notifications.channel.inApp']).toBe('W aplikacji')
+    expect(
+      Object.keys(settings).every((key) =>
+        ['settings', 'notificationPreferences'].includes(messageArea(key) ?? '')
+      )
+    ).toBe(true)
+  })
+
+  it('puts a key in the first area whose prefix it has', () => {
+    expect(messageArea('portal.settings.notifications.saving')).toBe('notificationPreferences')
+    expect(messageArea('portal.settings.profile.title')).toBe('settings')
+    expect(messageArea('portal.hc.home.title')).toBe('helpCenter')
+    expect(messageArea('portal.auth.twoFactor.verify')).toBe('twoFactor')
+    expect(messageArea('common.errorPage.notFound.title')).toBe('errorPage')
+    expect(messageArea('portal.auth.continue')).toBeNull()
+    expect(messageArea('portal.header.nav.feedback')).toBeNull()
   })
 })

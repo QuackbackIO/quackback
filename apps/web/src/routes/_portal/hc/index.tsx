@@ -1,23 +1,55 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { createIsomorphicFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { HelpCenterHero } from '@/components/help-center/help-center-hero'
 import { HelpCenterHeroSearch } from '@/components/help-center/help-center-search'
 import { HelpCenterCategoryGrid } from '@/components/help-center/help-center-category-grid'
 import { HelpCenterPopularArticles } from '@/components/help-center/help-center-popular-articles'
-import { getTopLevelCategories } from '@/components/help-center/help-center-utils'
+import {
+  getTopLevelCategories,
+  helpCenterHeadMessages,
+} from '@/components/help-center/help-center-utils'
 import {
   listPublicCategoriesFn,
   listPopularPublicArticlesFn,
 } from '@/lib/server/functions/help-center'
 import { HC_LOCALE_COOKIE, resolveHcLandingLocale } from '@/lib/shared/help-center-url'
-import type { HelpCenterConfig } from '@/lib/shared/types/settings'
+import { DEFAULT_HELP_CENTER_CONFIG, type HelpCenterConfig } from '@/lib/shared/types/settings'
 import { resolvePortalOgImageUrl } from '@/lib/shared/portal-og-image'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 
-const DEFAULT_TITLE = 'How can we help?'
-const DEFAULT_DESCRIPTION =
-  'Search our guides or ask AI for an instant answer. Real answers, fast, no ticket required.'
+type Copy = { id: string; defaultMessage: string }
+
+/**
+ * The landing title and description: an admin's own wording, or the defaults
+ * in the page's language. Settings store the English defaults until an admin
+ * edits them, so a stored default is worded like a missing one. `word` turns a
+ * message into the page's language (react-intl in the page, the help center's
+ * loaded strings in `head`).
+ */
+function landingCopy(config: HelpCenterConfig | null | undefined, word: (copy: Copy) => string) {
+  const storedTitle = config?.homepageTitle
+  const title =
+    storedTitle == null || storedTitle === DEFAULT_HELP_CENTER_CONFIG.homepageTitle
+      ? word({ id: 'portal.hc.home.title', defaultMessage: 'How can we help?' })
+      : storedTitle
+  const storedDescription = config?.homepageDescription
+  const description =
+    storedDescription == null
+      ? word({
+          id: 'portal.hc.home.description',
+          defaultMessage:
+            'Search our guides or ask AI for an instant answer. Real answers, fast, no ticket required.',
+        })
+      : storedDescription === DEFAULT_HELP_CENTER_CONFIG.homepageDescription
+        ? word({
+            id: 'portal.hc.home.localeDescription',
+            defaultMessage: 'Search our knowledge base or browse by category',
+          })
+        : storedDescription
+  return { title, description }
+}
 
 /**
  * SSR-only request context for browser-locale detection. The isomorphic split
@@ -80,12 +112,15 @@ export const Route = createFileRoute('/_portal/hc/')({
       ),
     }
   },
-  head: ({ loaderData }) => {
+  head: ({ loaderData, matches }) => {
     if (!loaderData) return {}
 
     const { helpCenterConfig, workspaceName, logoUrl } = loaderData
-    const title = helpCenterConfig?.homepageTitle ?? DEFAULT_TITLE
-    const description = helpCenterConfig?.homepageDescription ?? DEFAULT_DESCRIPTION
+    const messages = helpCenterHeadMessages(matches)
+    const { title, description } = landingCopy(
+      helpCenterConfig,
+      (copy) => messages[copy.id] ?? copy.defaultMessage
+    )
 
     const pageTitle = `${title} - ${workspaceName}`
 
@@ -105,12 +140,12 @@ export const Route = createFileRoute('/_portal/hc/')({
 })
 
 function HelpCenterLandingPage() {
+  const intl = useIntl()
   const { categories, popularArticles, helpCenterConfig } = Route.useLoaderData()
   const settings = useWorkspaceSettings()
   const askAiEnabled = !!settings?.featureFlags?.helpCenter
 
-  const title = helpCenterConfig?.homepageTitle ?? DEFAULT_TITLE
-  const description = helpCenterConfig?.homepageDescription ?? DEFAULT_DESCRIPTION
+  const { title, description } = landingCopy(helpCenterConfig, (copy) => intl.formatMessage(copy))
   const collectionCount = getTopLevelCategories(categories).length
 
   return (
@@ -126,11 +161,15 @@ function HelpCenterLandingPage() {
       >
         <div className="mb-6 flex items-baseline justify-between gap-4">
           <h2 id="hc-topics" className="text-2xl font-semibold tracking-tight text-foreground">
-            Browse by topic
+            <FormattedMessage id="portal.hc.home.browseByTopic" defaultMessage="Browse by topic" />
           </h2>
           {collectionCount > 0 && (
             <span className="shrink-0 text-sm text-muted-foreground">
-              {collectionCount} {collectionCount === 1 ? 'collection' : 'collections'}
+              <FormattedMessage
+                id="portal.hc.home.collectionCount"
+                defaultMessage="{count, plural, one {# collection} other {# collections}}"
+                values={{ count: collectionCount }}
+              />
             </span>
           )}
         </div>

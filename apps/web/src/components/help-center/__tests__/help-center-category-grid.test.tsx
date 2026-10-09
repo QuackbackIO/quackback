@@ -8,6 +8,7 @@ vi.mock('@tanstack/react-router', () => ({
   Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
     <a href={to}>{children}</a>
   ),
+  getRouteApi: (id: string) => ({ id }),
 }))
 
 import { HelpCenterCategoryGrid } from '../help-center-category-grid'
@@ -30,7 +31,7 @@ it('speaks the visitor language when the help center has nothing to show', () =>
       <HelpCenterCategoryGrid categories={[]} />
     </IntlProvider>
   )
-  expect(screen.getByText('Noch keine Artikel. Schau bald wieder vorbei.')).toBeInTheDocument()
+  expect(screen.getByText(de['portal.hc.categoryGrid.empty'])).toBeInTheDocument()
 })
 
 it('counts articles with the plural rules of the language', () => {

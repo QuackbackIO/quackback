@@ -29,8 +29,8 @@ export function HelpCenterCategoryGrid({ categories, locale }: HelpCenterCategor
     return (
       <div className="flex items-center justify-center py-16 text-muted-foreground">
         <FormattedMessage
-          id="portal.hc.categories.empty"
-          defaultMessage="No articles yet. Check back soon."
+          id="portal.hc.categoryGrid.empty"
+          defaultMessage="No categories yet. Check back soon."
         />
       </div>
     )
@@ -63,7 +63,7 @@ export function HelpCenterCategoryGrid({ categories, locale }: HelpCenterCategor
             )}
             <span className="mt-3 block text-xs font-medium text-muted-foreground">
               <FormattedMessage
-                id="widget.help.articleCount"
+                id="portal.hc.articleCount"
                 defaultMessage="{count, plural, one {# article} other {# articles}}"
                 values={{ count: cat.articleCount }}
               />
