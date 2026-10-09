@@ -74,10 +74,10 @@ export function NewSignInEmail({
                 <Link href={settingsUrl} style={utils.link}>
                   set or change your password
                 </Link>{' '}
-                from your profile settings — this signs out other sessions.
+                from your profile settings. This signs out other sessions.
               </>
             ) : (
-              'set or change your password from your profile settings — this signs out other sessions.'
+              'set or change your password from your profile settings. This signs out other sessions.'
             )}
           </>
         )}

@@ -57,6 +57,7 @@ import {
   type ParsedInboundEmail,
 } from './conversation.email-inbound'
 import type { ConversationAuthorInput } from './conversation.types'
+import { activeTestOwnerOf, isTestCustomer } from '@/lib/server/test-data'
 import { emitConversationCreated, emitMessageCreated } from './conversation.webhooks'
 
 export interface ColdInboundResolution {
@@ -203,10 +204,15 @@ export async function createEmailConversation(input: {
   })
   const now = new Date()
   const { conversation, message } = await db.transaction(async (tx) => {
+    // A test customer's thread goes to the teammate trying it out, and keeps
+    // no sender address: replies reach only that teammate.
+    const testOwner = await activeTestOwnerOf(principalId, tx)
+    const isTest = testOwner !== null || (await isTestCustomer(principalId, tx))
     const [created] = await tx
       .insert(conversations)
       .values({
         visitorPrincipalId: principalId,
+        ...(testOwner ? { assignedAgentPrincipalId: testOwner } : {}),
         channel: 'email',
         source: 'email',
         channelAccountId,
@@ -229,7 +235,7 @@ export async function createEmailConversation(input: {
               spamReason: quarantine.cause,
             }
           : {}),
-        visitorEmail: normalizeSenderAddress(parsed.from),
+        visitorEmail: isTest ? null : normalizeSenderAddress(parsed.from),
         customAttributes: unverified ? { unverifiedSender: true } : {},
       })
       .returning()

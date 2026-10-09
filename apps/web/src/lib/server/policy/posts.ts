@@ -20,6 +20,7 @@ import { canViewBoard, boardViewFilter } from './boards'
 import { tierAllows } from './access'
 import { resolveWorkspaceModeration, type ModerationAxis } from '@/lib/shared/moderation-policy'
 import { normalizeBoardAccess } from '@/lib/shared/schemas/boards'
+import { notTestPrincipal } from '@/lib/server/test-data'
 
 /** The workspace moderation policy — the fallback that per-board
  *  `moderation` rules resolve against when set to `'inherit'`. */
@@ -58,6 +59,8 @@ export function resolveModerationRule(
 interface PostShape {
   moderationState: ModerationState
   principalId?: PrincipalId | null
+  /** The author is a test customer (callers that load the row select `isTestPrincipalSql`). */
+  authorIsTest?: boolean
 }
 
 interface BoardShape {
@@ -71,6 +74,15 @@ function accessOf(board: BoardShape): BoardAccess {
 const isTeam = isTeamActor
 
 export function canViewPost(actor: Actor, post: PostShape, board: BoardShape): Decision {
+  // A test customer sees only its own ideas, which are test by identity, and
+  // nothing once its owner has left the team.
+  if (actor.testFeedback) {
+    if (!actor.testFeedback.active || !post.principalId || post.principalId !== actor.principalId) {
+      return denyDecision('Post is not visible')
+    }
+  } else if (post.authorIsTest && !isTeam(actor) && post.principalId !== actor.principalId) {
+    return denyDecision('Post is not visible')
+  }
   const boardDecision = canViewBoard(actor, board)
   if (!boardDecision.allowed) return boardDecision
 
@@ -90,26 +102,33 @@ export function canViewPost(actor: Actor, post: PostShape, board: BoardShape): D
   return denyDecision('Post is not yet visible')
 }
 
-/**
- * SQL predicate for post list queries. Caller must join `boards` so
- * that boards.access is resolvable. The predicate composes WITH
- * `isNull(posts.deletedAt)` from existing list queries — never replaces it.
- */
+/** Test visibility depends on the author's identity, independent of the post's board. */
+export function postTestViewFilter(actor: Actor): SQL {
+  const ownPost = actor.principalId ? eq(posts.principalId, actor.principalId) : sql`false`
+  if (actor.testFeedback) return actor.testFeedback.active ? ownPost : sql`false`
+  return isTeam(actor) ? sql`true` : or(notTestPrincipal(posts.principalId), ownPost)!
+}
+
+/** Caller joins boards before applying the complete view predicate. */
 export function postViewFilter(actor: Actor): SQL {
+  const testVisibility = postTestViewFilter(actor)
   if (can(actor, PERMISSIONS.POST_VIEW_PRIVATE)) {
-    return sql`${posts.moderationState} <> 'deleted'`
+    return and(sql`${posts.moderationState} <> 'deleted'`, testVisibility)!
   }
   const principalIdParam: string | null = actor.principalId ?? null
   const ownPending =
     principalIdParam !== null
       ? and(eq(posts.moderationState, 'pending'), eq(posts.principalId, principalIdParam as never))
       : sql`false`
-  return and(boardViewFilter(actor), or(eq(posts.moderationState, 'published'), ownPending))!
+  return and(
+    boardViewFilter(actor),
+    or(eq(posts.moderationState, 'published'), ownPending),
+    testVisibility
+  )!
 }
 
 export type CommentCreateDecision =
-  | { allowed: true; requiresApproval: boolean }
-  | { allowed: false; reason: string }
+  { allowed: true; requiresApproval: boolean } | { allowed: false; reason: string }
 
 /** Action-specific copy for the (unreachable) anonymous deny branch. */
 const ANON_DENY_MESSAGE: Record<'comment' | 'vote' | 'submit', string> = {
@@ -200,8 +219,7 @@ export function canVotePost(actor: Actor, post: PostShape, board: BoardShape): V
 }
 
 export type CreateDecision =
-  | { allowed: true; requiresApproval: boolean }
-  | { allowed: false; reason: string }
+  { allowed: true; requiresApproval: boolean } | { allowed: false; reason: string }
 
 export function canCreatePost(
   actor: Actor,
@@ -216,12 +234,15 @@ export function canCreatePost(
   // on a board they cannot see.
   const view = canViewBoard(actor, board)
   if (!view.allowed) return { allowed: false, reason: view.reason }
+  if (actor.testFeedback && !actor.testFeedback.active) {
+    return { allowed: false, reason: 'insufficient_permission:post.create' }
+  }
 
   // Submit is then its own decision on top of view — a board can be public to
   // view but team-only to submit (admin-curated roadmap pattern), so the tier
   // check stays independent rather than collapsing into canViewBoard.
   const access = accessOf(board)
-  if (!tierAllows(actor, access.submit, access.segments.submit)) {
+  if (!actor.testFeedback?.canSubmit && !tierAllows(actor, access.submit, access.segments.submit)) {
     return { allowed: false, reason: tierDenyMessage('submit', access.submit) }
   }
 
@@ -291,7 +312,7 @@ export function boardCapabilitiesForActor(
   // (e.g. a service principal carrying a team role) must stay ungated.
   if (!isTeam(actor) && actor.principalType !== 'user') {
     return {
-      canSubmit: canSubmit && allowAnonymous,
+      canSubmit: canSubmit && (allowAnonymous || actor.testFeedback?.canSubmit === true),
       canVote: canVote && allowAnonymous,
       canComment: canComment && allowAnonymous,
     }

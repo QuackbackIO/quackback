@@ -2,10 +2,8 @@ import { nameInitial } from '@/lib/shared/utils/initial'
 import { memo, useEffect, useState } from 'react'
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
 import { useTheme } from 'next-themes'
-import { resolvePortalNavItems, type PortalNavItem } from './portal-header-nav'
-import { usePreviewNav } from './preview-draft-context'
-import { isProductEnabled } from '@/lib/shared/types/settings'
-import { isStatusPagePublished } from '@/lib/shared/status-settings'
+import type { PortalNavItem } from './portal-header-nav'
+import { usePortalNavItems } from './use-portal-nav-items'
 import { isPortalSupportSurfaceEnabled } from '@/lib/shared/support-surfaces'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { cn } from '@/lib/shared/utils'
@@ -82,34 +80,10 @@ export function PortalHeader({
     select: (context) => context.registeredAuthProviders,
   })
 
-  const flags = settings?.featureFlags
-  const feedbackEnabled = isProductEnabled(flags, 'feedback')
-  const helpCenterEnabled = isProductEnabled(flags, 'helpCenter')
-  const supportEnabled = isPortalSupportSurfaceEnabled(flags, settings?.portalConfig)
-  const changelogEnabled = isProductEnabled(flags, 'changelog')
-  // Status tab: product flag + published. A non-public audience still needs
-  // a signed-in viewer to bother showing the tab; the route enforces the
-  // real per-viewer segment gate (settings here are workspace-global, not
-  // per-viewer). Hide or reorder the tab in Portal → Navigation.
-  const statusAudience = settings?.statusConfig?.audience ?? 'public'
-  const statusLoggedIn = !!session?.user && session.user.principalType !== 'anonymous'
-  const statusEnabled =
-    isStatusPagePublished(flags, settings?.statusConfig) &&
-    (statusAudience === 'public' || statusLoggedIn)
-  // The unsaved navigation from the admin branding preview (undefined outside
-  // preview mode). Only that draft: a stylesheet or welcome-card edit leaves the
-  // header alone.
-  const previewNav = usePreviewNav()
-  const navItems = resolvePortalNavItems(
-    {
-      feedback: feedbackEnabled,
-      roadmap: feedbackEnabled,
-      changelog: changelogEnabled,
-      help: helpCenterEnabled,
-      support: supportEnabled,
-      status: statusEnabled,
-    },
-    previewNav ?? settings?.portalConfig?.nav
+  const navItems = usePortalNavItems()
+  const supportEnabled = isPortalSupportSurfaceEnabled(
+    settings?.featureFlags,
+    settings?.portalConfig
   )
 
   // Hide Log in / Sign up when no portal sign-in surface is usable.

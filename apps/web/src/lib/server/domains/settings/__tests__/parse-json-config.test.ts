@@ -125,6 +125,19 @@ describe('parseJsonConfig', () => {
   })
 })
 
+describe('parsePortalConfig anonymous switch', () => {
+  it('reads the switch as the gates do: on only when stored as on', () => {
+    expect(parsePortalConfig(JSON.stringify({ openSignup: true })).features.allowAnonymous).toBe(
+      false
+    )
+    expect(parsePortalConfig(null).features.allowAnonymous).toBe(false)
+    expect(
+      parsePortalConfig(JSON.stringify({ features: { allowAnonymous: true } })).features
+        .allowAnonymous
+    ).toBe(true)
+  })
+})
+
 describe('workspaceAllowsAnonymous', () => {
   it('allows anonymous only when the flag is explicitly true (string config)', () => {
     expect(workspaceAllowsAnonymous(JSON.stringify({ features: { allowAnonymous: true } }))).toBe(

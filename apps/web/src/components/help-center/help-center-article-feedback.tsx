@@ -106,7 +106,8 @@ export function HelpCenterArticleFeedback({
               : 'bg-muted/60 border border-border/60 text-foreground hover:bg-muted'
           }`}
         >
-          👍 <FormattedMessage id="portal.hc.articleFeedback.yes" defaultMessage="Yes" />
+          <span aria-hidden>👍</span>{' '}
+          <FormattedMessage id="portal.hc.articleFeedback.yes" defaultMessage="Yes" />
         </button>
         <button
           type="button"
@@ -118,7 +119,8 @@ export function HelpCenterArticleFeedback({
               : 'bg-muted/60 border border-border/60 text-foreground hover:bg-muted'
           }`}
         >
-          👎 <FormattedMessage id="portal.hc.articleFeedback.no" defaultMessage="No" />
+          <span aria-hidden>👎</span>{' '}
+          <FormattedMessage id="portal.hc.articleFeedback.no" defaultMessage="No" />
         </button>
       </div>
       {showReasonBox && (

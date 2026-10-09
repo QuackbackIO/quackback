@@ -25,6 +25,7 @@ import type { PrincipalId, RoleId, UserId } from '@quackback/ids'
 import type { SsoRoleMatch } from '@/lib/shared/resolve-sso-role'
 import { SYSTEM_ROLES } from '@/lib/shared/permissions'
 import { toSessionScope, type Role } from '@/lib/shared/roles'
+import { TEST_CUSTOMER_SESSION_PREFIX } from '@/lib/shared/test-customer'
 import {
   findProviderForDomainEmail,
   isRegisteredOidcProvider,
@@ -463,9 +464,12 @@ export async function handleWidgetAccountMutationGate(ctx: {
     }
   }
 }): Promise<void> {
-  if (WIDGET_AUTH_ALLOWLIST.has(ctx.path ?? '')) return
   const headers = ctx.headers ?? ctx.request?.headers
   const token = sessionTokenFromAuthHeaders(headers)
+  if (token?.startsWith(TEST_CUSTOMER_SESSION_PREFIX)) {
+    throw new APIError('FORBIDDEN', { message: 'A test session only works in the test widget' })
+  }
+  if (WIDGET_AUTH_ALLOWLIST.has(ctx.path ?? '')) return
   if (!token) return
   const found = await ctx.context?.internalAdapter?.findSession?.(token)
   const session =

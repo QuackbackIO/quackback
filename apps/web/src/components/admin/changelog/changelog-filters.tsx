@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { defineMessages, useIntl } from 'react-intl'
 import { MegaphoneIcon } from '@heroicons/react/16/solid'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { MENU_ROW } from '@/components/ui/menu'
@@ -13,19 +14,41 @@ interface ChangelogFiltersProps {
   onStatusChange: (status: ChangelogStatusFilter) => void
 }
 
-const CHANGELOG_STATUSES: Array<{ id: ChangelogStatusFilter; name: string; color?: string }> = [
-  { id: 'all', name: 'All' },
-  { id: 'draft', name: 'Draft', color: '#6b7280' },
-  { id: 'scheduled', name: 'Scheduled', color: '#3b82f6' },
-  { id: 'published', name: 'Published', color: '#22c55e' },
+const messages = defineMessages({
+  all: { id: 'admin.changelog.status.all', defaultMessage: 'All' },
+  draft: { id: 'admin.changelog.status.draft', defaultMessage: 'Draft' },
+  scheduled: { id: 'admin.changelog.status.scheduled', defaultMessage: 'Scheduled' },
+  published: { id: 'admin.changelog.status.published', defaultMessage: 'Published' },
+  status: { id: 'admin.changelog.filters.status', defaultMessage: 'Status' },
+  filter: { id: 'admin.changelog.filters.add', defaultMessage: 'Filter' },
+  newest: { id: 'admin.changelog.sort.newest', defaultMessage: 'Newest' },
+  oldest: { id: 'admin.changelog.sort.oldest', defaultMessage: 'Oldest' },
+})
+
+const STATUS_COLORS: Array<{ id: ChangelogStatusFilter; color?: string }> = [
+  { id: 'all' },
+  { id: 'draft', color: '#6b7280' },
+  { id: 'scheduled', color: '#3b82f6' },
+  { id: 'published', color: '#22c55e' },
 ]
 
+/** The entry statuses to filter by, named in the viewer's language. */
+function useChangelogStatuses() {
+  const intl = useIntl()
+  return useMemo(
+    () => STATUS_COLORS.map((item) => ({ ...item, name: intl.formatMessage(messages[item.id]) })),
+    [intl]
+  )
+}
+
 export function ChangelogFiltersPanel({ status, onStatusChange }: ChangelogFiltersProps) {
+  const intl = useIntl()
+  const statuses = useChangelogStatuses()
   return (
     <div className="space-y-0">
-      <FilterSection title="Status">
+      <FilterSection title={intl.formatMessage(messages.status)}>
         <FilterList
-          items={CHANGELOG_STATUSES}
+          items={statuses}
           selectedIds={[status]}
           onSelect={(id) => onStatusChange(id as ChangelogStatusFilter)}
           renderItem={(item) => (
@@ -48,21 +71,30 @@ export function ChangelogFiltersPanel({ status, onStatusChange }: ChangelogFilte
 
 export type ChangelogSort = 'newest' | 'oldest'
 
-export const CHANGELOG_SORT_OPTIONS: Array<{ value: ChangelogSort; label: string }> = [
-  { value: 'newest', label: 'Newest' },
-  { value: 'oldest', label: 'Oldest' },
-]
+/** The list's sort choices, named in the viewer's language. */
+export function useChangelogSortOptions(): Array<{ value: ChangelogSort; label: string }> {
+  const intl = useIntl()
+  return useMemo(
+    () => [
+      { value: 'newest', label: intl.formatMessage(messages.newest) },
+      { value: 'oldest', label: intl.formatMessage(messages.oldest) },
+    ],
+    [intl]
+  )
+}
 
 /** The Filter control for the list toolbar: picks an entry status. */
 export function ChangelogFilterButton({ status, onStatusChange }: ChangelogFiltersProps) {
+  const intl = useIntl()
+  const statuses = useChangelogStatuses()
   const [open, setOpen] = useState(false)
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <FilterAddButton />
+        <FilterAddButton>{intl.formatMessage(messages.filter)}</FilterAddButton>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-44 p-1">
-        {CHANGELOG_STATUSES.map((item) => (
+        {statuses.map((item) => (
           <button
             key={item.id}
             type="button"

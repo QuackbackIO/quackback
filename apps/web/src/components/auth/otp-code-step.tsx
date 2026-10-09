@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { Button } from '@/components/ui/button'
 import { FormError } from '@/components/shared/form-error'
@@ -54,6 +55,12 @@ export function OtpCodeStep({
   signupClosed = false,
 }: OtpCodeStepProps) {
   const intl = useIntl()
+  // The field is disabled while a code is checked, which drops focus to the
+  // page. When the check comes back wrong, put the cursor back in the field.
+  const inputRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (error && !loading) inputRef.current?.focus()
+  }, [error, loading])
   return (
     <form
       onSubmit={onSubmit}
@@ -95,6 +102,7 @@ export function OtpCodeStep({
 
       <div className="flex justify-center">
         <InputOTP
+          ref={inputRef}
           maxLength={6}
           value={code}
           onChange={onCodeChange}

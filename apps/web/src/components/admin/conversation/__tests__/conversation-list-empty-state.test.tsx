@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 /**
- * The first-run "Connect Messenger" call to action shows only in an empty
+ * The first-run test-message action shows only in an empty
  * main queue, and deciding it reads the workspace's launch status (a server
  * call). A list with conversations in it shows no call to action, so it does
  * not ask for the status.
@@ -28,12 +28,21 @@ vi.mock('@/lib/server/functions/admin', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   fetchOnboardingStatus,
 }))
+const inboxHistory = vi.hoisted(() => ({ hasConversations: true }))
+vi.mock('@/lib/server/functions/onboarding-progress', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  hasConversationsFn: async () => ({ hasConversations: inboxHistory.hasConversations }),
+}))
 vi.mock('@/components/admin/conversation/new-conversation-dialog', () => ({
   NewConversationDialog: () => null,
 }))
 vi.mock('@tanstack/react-router', () => ({
   useRouteContext: (opts?: { select?: (context: unknown) => unknown }) => {
-    const context = { userRole: 'admin', settings: { featureFlags: {} } }
+    const context = {
+      userRole: 'admin',
+      principal: { id: 'principal_admin', role: 'admin' },
+      settings: { featureFlags: { supportInbox: true } },
+    }
     return opts?.select ? opts.select(context) : context
   },
   Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
@@ -118,7 +127,35 @@ describe('ConversationListColumn launch status', () => {
     fetchOnboardingStatus.mockClear()
     renderColumn([])
 
-    expect(await screen.findByText('Connect Messenger')).toBeTruthy()
+    expect(await screen.findByRole('link', { name: 'Connect Messenger' })).toHaveAttribute(
+      'href',
+      '/admin/settings/widget/install'
+    )
+    // Title and one action: no explanatory paragraph under the title.
+    expect(screen.queryByText(/When customers message you/)).toBeNull()
     expect(fetchOnboardingStatus).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('first-run empty inbox', () => {
+  it('shows the first-run state on a workspace that has never had a conversation', async () => {
+    fetchOnboardingStatus.mockImplementation(async () => ({
+      useCase: 'product_feedback',
+      hasFirstWin: false,
+      hasWidgetInstalled: false,
+      permissions: { settingsManage: true },
+    }))
+    inboxHistory.hasConversations = false
+    renderColumn([])
+    expect(await screen.findByText('No conversations yet')).toBeTruthy()
+    // A feedback workspace has no Messenger step to offer here.
+    expect(screen.queryByRole('link', { name: 'Connect Messenger' })).toBeNull()
+    expect(screen.queryByText('Nothing to review')).toBeNull()
+  })
+
+  it('keeps Nothing to review once conversations exist', async () => {
+    inboxHistory.hasConversations = true
+    renderColumn([])
+    expect(await screen.findByText('Nothing to review')).toBeTruthy()
   })
 })

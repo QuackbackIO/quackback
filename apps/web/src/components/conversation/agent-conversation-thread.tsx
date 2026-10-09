@@ -420,6 +420,8 @@ export function AgentConversationThread({
   openCopilotToken,
   composerRef,
   detailPanelShown = false,
+  replyFirst = false,
+  markRead = true,
 }: {
   /** The open item, discriminated by kind — drives both the data adapter and
    *  the derived `ThreadCapabilities`. */
@@ -457,6 +459,13 @@ export function AgentConversationThread({
    *  the header's copies of the panel's triage controls, hidden there by CSS,
    *  are not rendered, and the panel loads its own reads. */
   detailPanelShown?: boolean
+  /** A first reply is the point (the Try Messenger sheet): the send button
+   *  carries a label and the primary fill, and Close steps back to outline. */
+  replyFirst?: boolean
+  /** Whether the thread is in view, so arriving messages are read. A host
+   *  that keeps it mounted but hidden (a tab on a narrow screen) passes false
+   *  until it shows it, and the thread is read then. */
+  markRead?: boolean
 }) {
   const queryClient = useQueryClient()
   const isTicket = item.kind === 'ticket'
@@ -906,7 +915,7 @@ export function AgentConversationThread({
     conversationId: isTicket ? null : conversationId,
     messages,
     whenLastFrom: 'visitor',
-    enabled: !isLoading,
+    enabled: !isLoading && markRead,
     readThrough: conversation?.agentLastReadAt ?? null,
     onMarked: onConversationRead,
   })
@@ -2068,7 +2077,13 @@ export function AgentConversationThread({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <Button type="button" size="sm" onClick={runPrimaryAction} disabled={primaryActionPending}>
+      <Button
+        type="button"
+        size="sm"
+        variant={replyFirst ? 'outline' : 'default'}
+        onClick={runPrimaryAction}
+        disabled={primaryActionPending}
+      >
         <CheckIcon className="h-4 w-4" />
         {isTicket
           ? 'Resolve'
@@ -2400,13 +2415,18 @@ export function AgentConversationThread({
                 onClick={onSend}
                 disabled={sendDisabled}
                 className={cn(
-                  'flex size-8 shrink-0 items-center justify-center rounded-md text-primary-foreground disabled:opacity-40 transition-opacity',
-                  noteMode || !capabilities.reply ? 'bg-amber-500 text-white' : 'bg-primary'
+                  'flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md text-primary-foreground disabled:opacity-40 transition-opacity',
+                  noteMode || !capabilities.reply ? 'bg-amber-500 text-white' : 'bg-primary',
+                  replyFirst && !noteMode && capabilities.reply
+                    ? 'rounded-full px-4 text-[13px] font-medium'
+                    : 'w-8'
                 )}
                 aria-label={noteMode || !capabilities.reply ? 'Add note' : 'Send reply'}
               >
                 {noteMode || !capabilities.reply ? (
                   <PencilSquareIcon className="h-4 w-4" />
+                ) : replyFirst ? (
+                  'Send'
                 ) : (
                   <PaperAirplaneIcon className="h-4 w-4" />
                 )}

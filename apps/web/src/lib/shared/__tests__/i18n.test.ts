@@ -13,6 +13,15 @@ import {
   loadPortalMessages,
   loadViewerMessages,
   loadWidgetMessages,
+  loadAskMessages,
+  isAskMessage,
+  adminSeedMessages,
+  isTourMessage,
+  loadTourMessages,
+  isSheetMessage,
+  loadSheetMessages,
+  isLaunchMessage,
+  loadLaunchMessages,
   isUnsubscribeMessage,
   loadUnsubscribeMessages,
   messageArea,
@@ -206,7 +215,7 @@ describe('viewer strings', () => {
       loadPortalMessages('de'),
       loadViewerMessages('de'),
     ])
-    for (const seeded of [widget, portal, withoutPageScopedMessages(all)]) {
+    for (const seeded of [widget, portal, adminSeedMessages(all)]) {
       expect(Object.keys(seeded).filter(isViewerMessage)).toEqual([])
       expect(seeded['files.download']).toBe(all['files.download'])
     }
@@ -224,35 +233,53 @@ describe('unsubscribe page strings', () => {
       loadPortalMessages('de'),
       loadUnsubscribeMessages('de'),
     ])
-    for (const seeded of [widget, portal, withoutPageScopedMessages(all)]) {
+    for (const seeded of [widget, portal, adminSeedMessages(all)]) {
       expect(Object.keys(seeded).filter(isUnsubscribeMessage)).toEqual([])
     }
-    expect(unsubscribe['unsubscribe.confirm.button']).toBe('Abmelden')
+    expect(unsubscribe['unsubscribe.button']).toBe('Abmelden')
     expect(Object.keys(unsubscribe).every(isUnsubscribeMessage)).toBe(true)
   })
 
-  it('leaves nothing out of the admin catalog but the page-scoped strings', async () => {
-    const [all, viewer, unsubscribe] = await Promise.all([
+  it('are seeded by that page alone', async () => {
+    const [all, portal, page] = await Promise.all([
       loadMessages('de'),
-      loadViewerMessages('de'),
+      loadPortalMessages('de'),
       loadUnsubscribeMessages('de'),
     ])
-    const wizard = Object.keys(all).filter(isSetupWizardMessage)
-    const areas = Object.keys(all).filter((key) => messageArea(key) !== null)
+    const isUnsubscribe = (key: string) => key.startsWith('unsubscribe.')
+    expect(Object.keys(page).length).toBeGreaterThan(30)
+    expect(Object.keys(page).every(isUnsubscribe)).toBe(true)
+    expect(page['unsubscribe.button']).toBe(all['unsubscribe.button'])
+    expect(Object.keys(portal).filter(isUnsubscribe)).toEqual([])
+    expect(Object.keys(adminSeedMessages(all)).filter(isUnsubscribe)).toEqual([])
+    // The post page's resubscribe banner is portal copy.
+    expect(portal['portal.unsubscribeBanner.dismiss']).toBe(all['portal.unsubscribeBanner.dismiss'])
+  })
+
+  it('leaves nothing out of the admin catalog but the page-scoped strings', async () => {
+    const all = await loadMessages('de')
+    const keys = Object.keys(all)
+    const pageScoped = [
+      isViewerMessage,
+      isUnsubscribeMessage,
+      isSetupWizardMessage,
+      isTourMessage,
+      isAskMessage,
+      isSheetMessage,
+      isLaunchMessage,
+      (key: string) => key.startsWith('email.'),
+      (key: string) => messageArea(key) !== null,
+    ].map((scoped) => keys.filter(scoped).length)
     expect(
-      Object.keys(viewer).length +
-        Object.keys(unsubscribe).length +
-        wizard.length +
-        areas.length +
-        Object.keys(withoutPageScopedMessages(all)).length
-    ).toBe(Object.keys(all).length)
+      pageScoped.reduce((sum, count) => sum + count, 0) + Object.keys(adminSeedMessages(all)).length
+    ).toBe(keys.length)
   })
 })
 
 describe('setup wizard strings', () => {
   it('are seeded by the wizard and left out of the admin catalog', async () => {
     const [all, onboarding] = await Promise.all([loadMessages('de'), loadOnboardingMessages('de')])
-    expect(Object.keys(withoutPageScopedMessages(all)).filter(isSetupWizardMessage)).toEqual([])
+    expect(Object.keys(adminSeedMessages(all)).filter(isSetupWizardMessage)).toEqual([])
     const wizard = Object.keys(all).filter(isSetupWizardMessage)
     expect(wizard.length).toBeGreaterThan(0)
     for (const key of wizard) expect(onboarding[key]).toBe(all[key])
@@ -262,7 +289,7 @@ describe('setup wizard strings', () => {
   // the wizard renders them.
   it('are rendered by the wizard alone', () => {
     const src = join(__dirname, '../../..')
-    const wizardDirs = ['routes/onboarding', 'components/onboarding']
+    const wizardDirs = ['routes/onboarding', 'components/onboarding/goal-selector']
     const offenders: string[] = []
     const walk = (dir: string) => {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -281,6 +308,96 @@ describe('setup wizard strings', () => {
     }
     walk(src)
     expect(offenders).toEqual([])
+  })
+})
+
+describe('Copilot and search strings', () => {
+  it('leaves Copilot and search strings to the chunks that render them', async () => {
+    const all = await loadMessages('fr')
+    const seeded = adminSeedMessages(all)
+    const ask = await loadAskMessages('fr')
+    expect(Object.keys(seeded).filter(isAskMessage)).toEqual([])
+    // The sidebar Search row renders on every admin page.
+    expect(seeded['ask.search.row']).toBe(all['ask.search.row'])
+    expect(ask['ask.chat.newChat']).toBe(all['ask.chat.newChat'])
+    expect(ask['ask.destination.settings_portal']).toBe(all['ask.destination.settings_portal'])
+    expect(Object.keys(ask).every(isAskMessage)).toBe(true)
+  })
+})
+
+describe('admin seed', () => {
+  it('leaves out the viewer, tour overlay and wizard strings and keeps the rest', async () => {
+    const [all, tour] = await Promise.all([loadMessages('de'), loadTourMessages('de')])
+    const seeded = adminSeedMessages(all)
+    expect(Object.keys(seeded).filter(isViewerMessage)).toEqual([])
+    expect(Object.keys(seeded).filter(isTourMessage)).toEqual([])
+    expect(seeded['onboarding.goals.title']).toBeUndefined()
+    expect(seeded['onboarding.workspace.title']).toBeUndefined()
+    // Email copy is formatted on the server; no page renders it.
+    expect(Object.keys(seeded).filter((key) => key.startsWith('email.'))).toEqual([])
+    expect(all['email.onboarding.ready.heading']).toBeTruthy()
+    // The tour's entry points and the launch plan stay seeded.
+    expect(seeded['onboarding.tour.replay']).toBe(all['onboarding.tour.replay'])
+    expect(seeded['onboarding.launch.title']).toBe(all['onboarding.launch.title'])
+    expect(seeded['files.download']).toBe(all['files.download'])
+    expect(tour['onboarding.tour.next']).toBe(all['onboarding.tour.next'])
+    expect(Object.keys(tour).every(isTourMessage)).toBe(true)
+    expect(Object.keys(tour).length).toBeGreaterThan(20)
+  })
+})
+
+describe('setup sheet strings', () => {
+  it('load with the sheet, and no page seeds them', async () => {
+    const [all, sheets] = await Promise.all([loadMessages('de'), loadSheetMessages('de')])
+    const seeded = adminSeedMessages(all)
+    expect(Object.keys(seeded).filter(isSheetMessage)).toEqual([])
+    expect(seeded['onboarding.live.invite.title']).toBeUndefined()
+    expect(sheets['onboarding.live.invite.title']).toBe(all['onboarding.live.invite.title'])
+    expect(Object.keys(sheets).length).toBeGreaterThan(20)
+    expect(Object.keys(sheets).every(isSheetMessage)).toBe(true)
+  })
+})
+
+describe('launch plan strings', () => {
+  it('are left to Home and the Launch plan page, while the dock keeps its own', async () => {
+    const [all, launch] = await Promise.all([loadMessages('de'), loadLaunchMessages('de')])
+    const seeded = adminSeedMessages(all)
+    expect(Object.keys(seeded).filter(isLaunchMessage)).toEqual([])
+    expect(seeded['onboarding.win.generic']).toBeUndefined()
+    expect(seeded['onboarding.home.greeting']).toBeUndefined()
+    // The sidebar dock and the tour's end card render on every page.
+    for (const key of [
+      'onboarding.launch.name',
+      'onboarding.launch.stepOf',
+      'onboarding.launch.done',
+      'onboarding.launch.error',
+    ]) {
+      expect(seeded[key]).toBe(all[key])
+    }
+    expect(launch['onboarding.win.generic']).toBe(all['onboarding.win.generic'])
+    expect(Object.keys(launch).length).toBeGreaterThan(60)
+    expect(Object.keys(launch).every(isLaunchMessage)).toBe(true)
+  })
+
+  it("keep Home's counts and the first win's copy-link buttons out of other pages", async () => {
+    const [all, launch] = await Promise.all([loadMessages('de'), loadLaunchMessages('de')])
+    const seeded = adminSeedMessages(all)
+    expect(Object.keys(seeded).filter((key) => key.startsWith('admin.overview.'))).toEqual([])
+    for (const key of [
+      'admin.overview.metric.waiting',
+      'admin.overview.empty.feedback',
+      'onboarding.launch.copyHelpCenterLink',
+      'onboarding.launch.helpCenterLinkCopied',
+      'onboarding.launch.copyStatusLink',
+      'onboarding.launch.copyFailed',
+    ]) {
+      expect(seeded[key]).toBeUndefined()
+      expect(launch[key]).toBe(all[key])
+    }
+    // The tour's end card offers it on any page.
+    expect(seeded['onboarding.goalAction.installMessenger']).toBe(
+      all['onboarding.goalAction.installMessenger']
+    )
   })
 })
 

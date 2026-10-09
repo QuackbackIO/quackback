@@ -65,66 +65,53 @@ function ipv4InRange(ip: number, baseCidr: string): boolean {
 }
 
 /**
- * Extract the embedded IPv4 address from an IPv4-mapped IPv6 address.
- * Handles both dotted-decimal (`::ffff:127.0.0.1`) and hextet
- * (`::ffff:7f00:1`) representations. Returns the IPv4 as a dotted string
- * or null if the input isn't IPv4-mapped.
+ * Parse an IPv6 address (compressed or not, with an optional zone and an
+ * optional dotted IPv4 tail) into its eight hextets, or null.
  */
-function extractMappedIpv4(lowerAddr: string): string | null {
-  if (!lowerAddr.startsWith('::ffff:')) return null
-  const suffix = lowerAddr.slice('::ffff:'.length)
-  // Dotted-decimal form: ::ffff:127.0.0.1
-  if (parseIpv4(suffix) !== null) {
-    return suffix
+function parseIpv6(addr: string): number[] | null {
+  let text = addr.toLowerCase()
+  const zone = text.indexOf('%')
+  if (zone !== -1) text = text.slice(0, zone)
+  const lastColon = text.lastIndexOf(':')
+  if (lastColon === -1) return null
+  const tail = text.slice(lastColon + 1)
+  if (tail.includes('.')) {
+    const v4 = parseIpv4(tail)
+    if (v4 === null) return null
+    text = `${text.slice(0, lastColon + 1)}${(v4 >>> 16).toString(16)}:${(v4 & 0xffff).toString(16)}`
   }
-  // Hextet form: ::ffff:7f00:1 (= ::ffff:127.0.0.1)
-  const hextets = /^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(suffix)
-  if (hextets) {
-    const hi = parseInt(hextets[1], 16)
-    const lo = parseInt(hextets[2], 16)
-    if (hi > 0xffff || lo > 0xffff) return null
-    const ip = ((hi << 16) | lo) >>> 0
-    const a = (ip >>> 24) & 0xff
-    const b = (ip >>> 16) & 0xff
-    const c = (ip >>> 8) & 0xff
-    const d = ip & 0xff
-    return `${a}.${b}.${c}.${d}`
-  }
-  return null
+  const halves = text.split('::')
+  if (halves.length > 2) return null
+  const head = halves[0] ? halves[0].split(':') : []
+  const rest = halves.length === 2 && halves[1] ? halves[1].split(':') : []
+  const gap = 8 - head.length - rest.length
+  if (halves.length === 1 ? gap !== 0 : gap < 1) return null
+  const parts = [...head, ...new Array<string>(halves.length === 2 ? gap : 0).fill('0'), ...rest]
+  if (!parts.every((part) => /^[0-9a-f]{1,4}$/.test(part))) return null
+  return parts.map((part) => parseInt(part, 16))
 }
 
 /**
- * IPv6 handling: we normalize to lowercase and check leading-segment prefixes.
- * This is a pragmatic approximation — we don't need full RFC 4291 parsing for
- * the small set of ranges we block.
+ * IPv6 ranges a server-side fetch never legitimately targets. Anything that
+ * does not parse as IPv6 fails closed.
  */
 function isPrivateIpv6(addr: string): boolean {
-  const lower = addr.toLowerCase()
-  // IPv4-mapped IPv6 — covers both ::ffff:127.0.0.1 (dotted) and ::ffff:7f00:1 (hextet)
-  const mappedV4 = extractMappedIpv4(lower)
-  if (mappedV4 !== null) {
-    return isPrivateIpv4(mappedV4)
-  }
-  // Documentation (RFC 3849) 2001:db8::/32 — non-routable
-  if (/^2001:0?db8:/.test(lower)) return true
-  // Loopback
-  if (lower === '::1') return true
-  // Unspecified
-  if (lower === '::' || lower === '0:0:0:0:0:0:0:0') return true
-  // Unique local fc00::/7 — first byte 0xfc or 0xfd
-  if (/^(fc|fd)[0-9a-f]{2}:/.test(lower)) return true
-  // Link-local fe80::/10 — fe8x, fe9x, feax, febx
-  if (/^fe[89ab][0-9a-f]:/.test(lower)) return true
-  // Transition/tunneling ranges that embed an attacker-controllable IPv4 (or
-  // tunnel arbitrary traffic): a server-side fetch never legitimately targets
-  // one, and each is a private-IPv4-embedding SSRF bypass around the v4 check.
-  // NAT64 64:ff9b::/96
-  if (/^0*64:0*ff9b:/.test(lower)) return true
-  // 6to4 2002::/16 (the whole range is 6to4-mapped IPv4)
-  if (/^2002:/.test(lower)) return true
-  // Teredo 2001:0000::/32 (second hextet all-zero; distinct from 2001:db8 above
-  // and from routable 2001:xxxx globals)
-  if (/^2001:0{1,4}:/.test(lower)) return true
+  const h = parseIpv6(addr)
+  if (!h) return true
+  const embeddedV4 = () => `${h[6] >> 8}.${h[6] & 0xff}.${h[7] >> 8}.${h[7] & 0xff}`
+  // IPv4-mapped ::ffff:0:0/96: judge the embedded IPv4 address.
+  if (h.slice(0, 5).every((x) => x === 0) && h[5] === 0xffff) return isPrivateIpv4(embeddedV4())
+  // ::/96: unspecified, loopback and the deprecated IPv4-compatible form.
+  if (h.slice(0, 6).every((x) => x === 0)) return true
+  // NAT64 64:ff9b::/32, 6to4 2002::/16 and Teredo 2001:0::/32 embed or
+  // tunnel an attacker-chosen IPv4 address.
+  if (h[0] === 0x64 && h[1] === 0xff9b) return true
+  if (h[0] === 0x2002) return true
+  if (h[0] === 0x2001 && (h[1] === 0 || h[1] === 0x0db8)) return true // Teredo, documentation
+  if ((h[0] & 0xfe00) === 0xfc00) return true // unique local fc00::/7
+  if ((h[0] & 0xffc0) === 0xfe80) return true // link-local fe80::/10
+  if ((h[0] & 0xffc0) === 0xfec0) return true // site-local fec0::/10
+  if ((h[0] & 0xff00) === 0xff00) return true // multicast ff00::/8
   return false
 }
 
@@ -136,9 +123,14 @@ function isPrivateIpv4(addr: string): boolean {
     '10.0.0.0/8', // RFC 1918
     '100.64.0.0/10', // CGNAT
     '127.0.0.0/8', // loopback
+    '168.63.129.16/32', // cloud host endpoint
     '169.254.0.0/16', // link-local (includes cloud metadata 169.254.169.254)
     '172.16.0.0/12', // RFC 1918
+    '192.0.0.0/24', // IETF protocol assignments
     '192.168.0.0/16', // RFC 1918
+    '198.18.0.0/15', // benchmarking
+    '224.0.0.0/4', // multicast
+    '240.0.0.0/4', // reserved, including 255.255.255.255
   ]
   return blocklist.some((cidr) => ipv4InRange(ip, cidr))
 }

@@ -28,6 +28,13 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
         postStatuses: {
           findFirst: (...args: unknown[]) => hoisted.mockedFindFirstStatuses(...args),
         },
+        principal: {
+          findFirst: vi.fn(async () => ({
+            testOwnerPrincipalId: null,
+            type: 'user',
+            role: 'user',
+          })),
+        },
       },
       select: hoisted.mockedSelect,
     },

@@ -15,6 +15,8 @@ import {
   VisitorSurfaceRpcProvider,
   type VisitorSurfaceRpc,
 } from '@/lib/client/visitor-surface-rpc'
+import { HOST_SHOWN_MESSAGE } from '@/lib/client/hooks/use-host-shown'
+import { act } from '@testing-library/react'
 import { useMarkReadOnIncoming } from '../thread'
 
 afterEach(cleanup)
@@ -99,5 +101,55 @@ describe('useMarkReadOnIncoming', () => {
     })
     await new Promise((r) => setTimeout(r, 20))
     expect(markConversationRead).not.toHaveBeenCalled()
+  })
+
+  it('marks read again when the host shows the thread, with no new message', async () => {
+    const markConversationRead = vi.fn().mockResolvedValue({ ok: true })
+    const rpc = { ...portalVisitorRpc, markConversationRead } as unknown as VisitorSurfaceRpc
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <VisitorSurfaceRpcProvider value={rpc}>{children}</VisitorSurfaceRpcProvider>
+    )
+    const messages = [message('m1', '2026-07-02T10:00:00.000Z')]
+    const hook = renderHook(
+      (props: { recheck: number }) =>
+        useMarkReadOnIncoming({
+          conversationId: CONVERSATION,
+          messages,
+          whenLastFrom: 'visitor',
+          recheck: props.recheck,
+        }),
+      { wrapper, initialProps: { recheck: 0 } }
+    )
+    await waitFor(() => expect(markConversationRead).toHaveBeenCalledTimes(1))
+    hook.rerender({ recheck: 0 })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(markConversationRead).toHaveBeenCalledTimes(1)
+    hook.rerender({ recheck: 1 })
+    await waitFor(() => expect(markConversationRead).toHaveBeenCalledTimes(2))
+  })
+})
+
+describe('useMarkReadOnIncoming in a frame its host hides', () => {
+  const host = (shown: boolean) =>
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: HOST_SHOWN_MESSAGE, shown },
+          source: window.parent,
+        })
+      )
+    })
+  afterEach(() => host(true))
+
+  it('leaves the reply unread while hidden and reads it once the host shows the frame', async () => {
+    host(false)
+    const { markConversationRead } = setup({
+      messages: [message('m1', '2026-07-02T10:00:00.000Z')],
+      readThrough: null,
+    })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(markConversationRead).not.toHaveBeenCalled()
+    host(true)
+    await waitFor(() => expect(markConversationRead).toHaveBeenCalledTimes(1))
   })
 })

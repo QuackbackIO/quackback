@@ -5,13 +5,11 @@ import {
   needsCloudOnboardingWizard,
 } from '@/lib/shared/db-types'
 import { mayForwardCompletedSetup } from './-onboarding-step'
-import { SignOutButton } from './-sign-out-button'
-import { useSessionContext } from '@/lib/client/hooks/use-root-context'
 
 /**
- * Shared layout for all onboarding steps.
- * Redirects to root if setup is already complete (except for the complete page,
- * which is shown once after finishing onboarding).
+ * Shared layout for all onboarding steps. Sends an admin whose setup is
+ * already complete on to /admin. The ready step needs no exception: it shows
+ * in place on the workspace route, after that route has loaded.
  */
 export const Route = createFileRoute('/onboarding/_layout')({
   beforeLoad: ({ context, location }) => {
@@ -30,45 +28,12 @@ export const Route = createFileRoute('/onboarding/_layout')({
   component: OnboardingLayout,
 })
 
-function OnboardingHeader() {
-  return (
-    <div className="flex flex-col items-center">
-      <div className="mb-8 flex items-center justify-center gap-2">
-        <img src="/logo.png" alt="Quackback" width={32} height={32} />
-        <span className="text-xl font-bold">Quackback</span>
-      </div>
-    </div>
-  )
-}
-
+/**
+ * Each step draws the full-page setup split itself, because the preview panel
+ * on its right belongs to the step: the whole portal on the account screens,
+ * the portal as it is being named on the workspace step. Steps a signed-in
+ * visitor can reach carry the sign-out control in their footer.
+ */
 function OnboardingLayout() {
-  // Which step the wizard shows is decided by whoever the browser is signed in
-  // as, so every signed-in step carries the one control that changes that
-  // answer. Without it a visitor signed in as the wrong account has nothing to
-  // press anywhere in the flow.
-  const session = useSessionContext()
-
-  return (
-    <div className="min-h-screen bg-background">
-      <main className="relative flex min-h-screen flex-col px-4 sm:px-6">
-        {/* Zone 1: Header — pinned near top */}
-        <div className="shrink-0 pt-10 sm:pt-16">
-          <OnboardingHeader />
-        </div>
-
-        {/* Zone 2: Content — flows below header, top-aligned */}
-        <div className="flex flex-1 items-start justify-center pb-16 pt-10">
-          <div className="w-full animate-in fade-in slide-in-from-bottom-2 duration-300 motion-reduce:animate-none">
-            <Outlet />
-          </div>
-        </div>
-
-        {session?.user && (
-          <div className="shrink-0 pb-8 text-center">
-            <SignOutButton size="sm" />
-          </div>
-        )}
-      </main>
-    </div>
-  )
+  return <Outlet />
 }

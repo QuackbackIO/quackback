@@ -1,5 +1,7 @@
 import { DEFAULT_WORKSPACE_ASSISTANT } from '@/lib/shared/assistant/config'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { toolDefinition } from '@tanstack/ai'
+import { z } from 'zod'
 import { makeKbArticle } from './kb-fixtures'
 
 const mockConfig = vi.hoisted(() => ({
@@ -102,6 +104,20 @@ vi.mock('../documents-retrieval', () => ({
     sourceType: 'document',
     retrieve: (...args: unknown[]) => mockDocumentsRetrieve(...args),
   },
+}))
+
+const mockCountAssignedSkills = vi.fn()
+const mockCompileSkillCatalogue = vi.fn()
+const mockGetSkillBody = vi.fn()
+vi.mock('../skills.service', () => ({
+  countAssignedSkills: (...args: unknown[]) => mockCountAssignedSkills(...args),
+  compileSkillCatalogue: (...args: unknown[]) => mockCompileSkillCatalogue(...args),
+  getSkillBody: (...args: unknown[]) => mockGetSkillBody(...args),
+}))
+const mockListConnectorToolSpecs = vi.fn()
+vi.mock('../connectors/connector-tools', async (original) => ({
+  ...(await original<typeof import('../connectors/connector-tools')>()),
+  listConnectorToolSpecsForAgent: (...args: unknown[]) => mockListConnectorToolSpecs(...args),
 }))
 
 // `listMessages` backs get_conversation_context (never triggered here);
@@ -287,7 +303,11 @@ import {
   type AssistantThreadMessage,
   type AssistantTurnResult,
 } from '../assistant.runtime'
-import type { AssistantCitation } from '../assistant.toolspec'
+import type {
+  AssistantCitation,
+  AssistantToolContext,
+  AssistantToolSpec,
+} from '../assistant.toolspec'
 
 /** Async-iterable of scripted chunks. */
 function chunkStream(chunks: unknown[]) {
@@ -335,6 +355,10 @@ beforeEach(() => {
   mockTicketsRetrieve.mockResolvedValue([])
   mockChangelogRetrieve.mockResolvedValue([])
   mockDocumentsRetrieve.mockResolvedValue([])
+  mockCountAssignedSkills.mockResolvedValue(0)
+  mockCompileSkillCatalogue.mockResolvedValue([])
+  mockGetSkillBody.mockResolvedValue(null)
+  mockListConnectorToolSpecs.mockResolvedValue([])
   mockGetAssistantRuntimeConfig.mockResolvedValue(structuredClone(DEFAULT_RUNTIME_CONFIG))
   mockListEnabledGuidanceCandidates.mockResolvedValue([])
   mockSelectApplicableGuidance.mockResolvedValue([])
@@ -672,7 +696,7 @@ describe('runAssistantTurn', () => {
       proposedActions: [],
       identity: DEFAULT_RUNTIME_CONFIG.config.identity,
       trace: {
-        promptVersion: 'support-agent-v6',
+        promptVersion: 'support-agent-v7',
         configRevision: 1,
         role: 'customer_support',
         tone: 'balanced',
@@ -695,6 +719,131 @@ describe('runAssistantTurn', () => {
       } as unknown as Parameters<typeof runAssistantTurn>[0])
     ).rejects.toThrow('cannot run with public content')
     expect(mockChat).not.toHaveBeenCalled()
+  })
+
+  it('uses configured Copilot knowledge, skills, guidance and connector reads in workspace chat', async () => {
+    const query = 'Acme setup guide'
+    const copilot = structuredClone(DEFAULT_RUNTIME_CONFIG.config.agents.copilot)
+    copilot.knowledge = {
+      helpCenter: true,
+      posts: false,
+      pastConversations: false,
+      internalNotes: false,
+      tickets: false,
+      changelog: false,
+      documents: false,
+      status: false,
+    }
+    mockRuntimeConfig({ config: { agents: { copilot } } })
+    mockRetrieve.mockImplementation(async (actualQuery, options) => {
+      expect(actualQuery).toBe(query)
+      expect(options).toEqual({ audience: 'team' })
+      return [makeKbArticle('article_setup')]
+    })
+    mockCountAssignedSkills.mockImplementation(async (agent) => (agent === 'copilot' ? 1 : 0))
+    mockCompileSkillCatalogue.mockImplementation(async (agent) =>
+      agent === 'copilot' ? [{ name: 'Acme setup', whenToUse: 'Answer setup questions.' }] : []
+    )
+    mockGetSkillBody.mockImplementation(async (name, agent) => {
+      expect(name).toBe('Acme setup')
+      return agent === 'copilot' ? 'Use the published setup guide.' : null
+    })
+    const connectorSpec: AssistantToolSpec = {
+      name: 'connector_acme_lookup',
+      label: 'Lookup',
+      description: 'Lookup',
+      promptGuidance: 'Read the configured external source.',
+      risk: 'read',
+      permissions: [],
+      parents: ['conversation', 'ticket'],
+      approvalPolicy: 'always',
+      definition: toolDefinition({
+        name: 'connector_acme_lookup',
+        description: 'Lookup',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.unknown(),
+      }),
+      execute: async (args) => {
+        expect(args).toEqual({ query })
+        return { data: 'Acme setup reference' }
+      },
+      summarize: () => 'Lookup',
+    }
+    mockListConnectorToolSpecs.mockImplementation(async (agent) =>
+      agent === 'copilot' ? [connectorSpec] : []
+    )
+    mockListEnabledGuidanceCandidates.mockImplementation(async ({ agent }) =>
+      agent === 'copilot'
+        ? [
+            {
+              id: 'assistant_guidance_setup',
+              name: 'Setup',
+              appliesWhen: null,
+              instruction: 'Link to the published setup guide.',
+              priority: 0,
+            },
+          ]
+        : []
+    )
+    const actor = {
+      principalId: 'principal_member' as never,
+      principalType: 'user' as const,
+      role: 'member' as const,
+      // Team-only articles are read only by a teammate who can manage them.
+      permissions: new Set(['help_center.manage']) as never,
+      segmentIds: new Set<never>(),
+    }
+    mockChat.mockImplementation(
+      (opts: {
+        tools: { name: string; execute: (args: unknown) => Promise<unknown> }[]
+        context: AssistantToolContext
+        systemPrompts: string[]
+      }) =>
+        (async function* () {
+          const tool = (name: string) => opts.tools.find((tool) => tool.name === name)!
+          expect(opts.context.actor).toBe(actor)
+          expect([...opts.context.knowledge.sources].sort()).toEqual([
+            'article',
+            'snippet',
+            'webpage',
+          ])
+          expect(opts.tools.map((tool) => tool.name)).not.toContain('get_status')
+          expect(opts.systemPrompts.join('\n')).toContain('Link to the published setup guide.')
+          expect(opts.systemPrompts.join('\n')).toContain('Acme setup')
+          await tool('search_knowledge').execute({ query })
+          expect(await tool('use_skill').execute({ name: 'Acme setup' })).toMatchObject({
+            instructions: 'Use the published setup guide.',
+          })
+          expect(await tool('connector_acme_lookup').execute({ query })).toMatchObject({
+            data: 'Acme setup reference',
+            note: expect.any(String),
+          })
+          yield* completeRun({
+            text: 'Read the setup guide. [1]',
+            citations: [{ type: 'article', id: 'article_setup' }],
+            answerType: 'analysis',
+          })
+        })()
+    )
+    const result = await runAssistantTurn({
+      ...copilotQaInput,
+      role: 'workspace_assistant',
+      surface: 'workspace',
+      actor,
+      workspaceThreadKey: 'workspace:owned',
+      messages: customerAsks(query),
+    })
+    expect(result).toMatchObject({
+      status: 'answered',
+      answerType: 'analysis',
+      citations: [{ type: 'article', id: 'article_setup', title: 'Title article_setup' }],
+    })
+    expect(mockCountAssignedSkills).toHaveBeenCalledWith('copilot', expect.anything())
+    expect(mockCompileSkillCatalogue).toHaveBeenCalledWith('copilot', expect.anything())
+    expect(mockGetSkillBody).toHaveBeenCalledWith('Acme setup', 'copilot', expect.anything())
+    expect(mockListConnectorToolSpecs).toHaveBeenCalledWith('copilot', expect.anything())
+    expect(mockListEnabledGuidanceCandidates).toHaveBeenCalledWith({ agent: 'copilot' })
+    expect(mockDocumentsRetrieve).not.toHaveBeenCalled()
   })
 
   it('requires a requesting actor for workspace turns instead of falling back to Quinn', async () => {
@@ -1517,7 +1666,7 @@ describe('runAssistantTurn', () => {
       ticketId: null,
       surface: 'widget',
       role: 'customer_support',
-      promptVersion: 'support-agent-v6',
+      promptVersion: 'support-agent-v7',
       configRevision: 1,
       tone: 'balanced',
       responseLength: 'balanced',
@@ -1606,7 +1755,7 @@ describe('runAssistantTurn', () => {
       internalSourced: false,
       proposedActions: [],
       identity: DEFAULT_RUNTIME_CONFIG.config.identity,
-      trace: expect.objectContaining({ promptVersion: 'support-agent-v6', configRevision: 1 }),
+      trace: expect.objectContaining({ promptVersion: 'support-agent-v7', configRevision: 1 }),
     })
     // Salvaged on the first attempt; no retry needed.
     expect(mockChat).toHaveBeenCalledTimes(1)
@@ -2229,7 +2378,7 @@ describe('runAssistantTurn: V2 prompt and config snapshot', () => {
     expect(result).toMatchObject({
       identity,
       trace: {
-        promptVersion: 'support-agent-v6',
+        promptVersion: 'support-agent-v7',
         configRevision: 12,
         role: 'customer_support',
         tone: 'warm',
@@ -2238,7 +2387,7 @@ describe('runAssistantTurn: V2 prompt and config snapshot', () => {
       },
     })
     expect(lastLoggedMetadata).toMatchObject({
-      promptVersion: 'support-agent-v6',
+      promptVersion: 'support-agent-v7',
       configRevision: 12,
       role: 'customer_support',
       tone: 'warm',

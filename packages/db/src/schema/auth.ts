@@ -911,6 +911,7 @@ export const principal = pgTable(
     companyId: typeIdColumnNullable('company')('company_id').references(() => companies.id, {
       onDelete: 'set null',
     }),
+    testOwnerPrincipalId: typeIdColumnNullable('principal')('test_owner_principal_id'),
     // Blocking (support platform §4.6). `blocked_at` = when the person was
     // blocked (null = not blocked, the enforcement flag); `blocked_by_principal_id`
     // = the team actor who blocked them. The FK is self-referential and set-null
@@ -920,6 +921,14 @@ export const principal = pgTable(
     blockedByPrincipalId: typeIdColumnNullable('principal')('blocked_by_principal_id'),
   },
   (table) => [
+    foreignKey({
+      name: 'principal_test_owner_principal_id_principal_id_fk',
+      columns: [table.testOwnerPrincipalId],
+      foreignColumns: [table.id],
+    }).onDelete('cascade'),
+    uniqueIndex('principal_test_owner_idx')
+      .on(table.testOwnerPrincipalId)
+      .where(sql`test_owner_principal_id IS NOT NULL`),
     // Self-referential blocking actor FK; named to match the SQL migration.
     foreignKey({
       name: 'principal_blocked_by_principal_id_principal_id_fk',

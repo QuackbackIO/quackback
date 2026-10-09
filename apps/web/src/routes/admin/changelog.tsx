@@ -24,8 +24,8 @@ export const Route = createFileRoute('/admin/changelog')({
 
 function ChangelogPage() {
   return (
-    <main className="h-full">
+    <div className="h-full">
       <ChangelogList />
-    </main>
+    </div>
   )
 }

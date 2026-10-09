@@ -3,10 +3,8 @@ import { FormattedMessage, useIntl } from 'react-intl'
 import { HelpCenterHero } from '@/components/help-center/help-center-hero'
 import { HelpCenterHeroSearch } from '@/components/help-center/help-center-search'
 import { HelpCenterCategoryGrid } from '@/components/help-center/help-center-category-grid'
-import {
-  getTopLevelCategories,
-  helpCenterHeadMessages,
-} from '@/components/help-center/help-center-utils'
+import { getTopLevelCategories } from '@/components/help-center/help-center-utils'
+import { helpCenterHeadMessages } from '@/components/help-center/help-center-head'
 import { listPublicCategoriesFn } from '@/lib/server/functions/help-center'
 import { DEFAULT_HELP_CENTER_CONFIG, type HelpCenterConfig } from '@/lib/shared/types/settings'
 import { resolvePortalOgImageUrl } from '@/lib/shared/portal-og-image'

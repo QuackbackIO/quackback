@@ -88,7 +88,7 @@ export function unbrandedTheme(mode: 'light' | 'dark'): MinimalThemeVariables {
 }
 
 /** Every variable a theme may carry. Anything else on the object is derived. */
-const MINIMAL_KEYS = [
+export const MINIMAL_THEME_VARIABLE_KEYS = [
   'primary',
   'background',
   'foreground',
@@ -120,7 +120,7 @@ function resolveMinimal(
   mode: 'light' | 'dark'
 ): MinimalThemeVariables {
   const resolved: MinimalThemeVariables = { ...basePalette(mode) }
-  for (const key of MINIMAL_KEYS) {
+  for (const key of MINIMAL_THEME_VARIABLE_KEYS) {
     const value = minimal[key]
     if (typeof value === 'string' && value.trim() !== '') resolved[key] = value
   }

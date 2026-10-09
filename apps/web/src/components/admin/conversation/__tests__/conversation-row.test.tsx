@@ -9,6 +9,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
 import type { ConversationDTO } from '@/lib/shared/conversation/types'
 import type { InboxItemDTO } from '@/lib/shared/inbox/items'
@@ -95,5 +96,22 @@ describe('ConversationRow spam filing reason', () => {
     renderRow(conversation({}))
     expect(screen.queryByText('Auto-responder')).not.toBeInTheDocument()
     expect(screen.queryByText('Manually filed')).not.toBeInTheDocument()
+  })
+})
+
+describe('ConversationRow test chip', () => {
+  it('marks a test thread', () => {
+    const c = conversation({ isTest: true })
+    render(
+      <IntlProvider locale="en">
+        <ConversationRow item={item(c)} id={c.id} selected={false} onSelect={() => {}} />
+      </IntlProvider>
+    )
+    expect(screen.getByText('Test')).toBeInTheDocument()
+  })
+
+  it('leaves a real thread unmarked', () => {
+    renderRow(conversation({}))
+    expect(screen.queryByText('Test')).not.toBeInTheDocument()
   })
 })

@@ -20,7 +20,12 @@ import {
   officeHoursScheduleFromLegacyDays,
 } from '@/lib/shared/office-hours'
 import type { OfficeHoursSchedule, OfficeHoursScheduleInput } from '@/lib/shared/office-hours'
-import { wrapDbError, writeMetadataKey, requireSettingsCached } from './settings.helpers'
+import {
+  wrapDbError,
+  writeMetadataKey,
+  requireSettingsCached,
+  type SettingsWriteOptions,
+} from './settings.helpers'
 
 export { DEFAULT_OFFICE_HOURS_SCHEDULE, officeHoursIntervalSchema, officeHoursScheduleSchema }
 export type { OfficeHoursSchedule, OfficeHoursScheduleInput }
@@ -93,12 +98,13 @@ export async function getOfficeHoursSchedule(): Promise<OfficeHoursSchedule> {
  * e.g. the telemetry instance id — survive the read-modify-write).
  */
 export async function updateOfficeHoursSchedule(
-  input: OfficeHoursScheduleInput
+  input: OfficeHoursScheduleInput,
+  options: SettingsWriteOptions = {}
 ): Promise<OfficeHoursSchedule> {
   log.info('update office hours')
   try {
     const validated = officeHoursScheduleSchema.parse(input)
-    await writeMetadataKey(METADATA_KEY, validated)
+    await writeMetadataKey(METADATA_KEY, validated, options)
     return validated
   } catch (error) {
     log.error({ err: error }, 'update office hours failed')

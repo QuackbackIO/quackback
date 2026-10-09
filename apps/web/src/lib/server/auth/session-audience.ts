@@ -6,6 +6,8 @@
  * inline hook body is reachable only by standing up a whole auth instance.
  */
 import { and, db, eq, session } from '@/lib/server/db'
+import { getRequestHeaders } from '@tanstack/react-start/server'
+import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import { logger } from '@/lib/server/logger'
 import { SESSION_AUDIENCE_HEADER, toSessionScope, type SessionScope } from '@/lib/shared/roles'
 
@@ -38,16 +40,20 @@ export function anonymousSessionScope(headers: HeaderBag | undefined): SessionSc
 }
 
 /**
- * Only the anonymous mint is tagged; every other session-creating path is a
- * sign-in and keeps the column default (dashboard).
+ * Only the anonymous mint is tagged (with its scope and the caller's resolved
+ * address); every other session-creating path is a sign-in and keeps the
+ * column default (dashboard).
  */
 export async function assignSessionScope<T extends Record<string, unknown>>(
   sessionData: T,
   context: SessionCreateContext | null | undefined
-): Promise<{ data: T & { scope: SessionScope } } | undefined> {
+): Promise<{ data: T & { scope: SessionScope; ipAddress: string } } | undefined> {
   if (context?.path !== '/sign-in/anonymous') return undefined
   const scope = anonymousSessionScope(context.headers ?? context.request?.headers)
-  return { data: { ...sessionData, scope } }
+  // The address through getClientIp, which honours only trusted proxy hops,
+  // rather than the first forwarding header a client could set. The anonymous
+  // vote limit counts these sessions by that address.
+  return { data: { ...sessionData, scope, ipAddress: getClientIp(getRequestHeaders()) } }
 }
 
 /** The anonymous plugin's `isAnonymous` user field is not in the inferred type. */

@@ -24,6 +24,7 @@ import type { GenericOAuthConfig } from './build-oauth-configs'
 import { guardBetterAuthUserCreation } from './signup-policy'
 import { assignSessionScope } from './session-audience'
 import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
+import { accountDisplayName } from '@/lib/shared/greeting-name'
 import { workspaceAuthTrustedOrigins } from './trusted-origins'
 import { ensureMcpOauthResource } from './ensure-mcp-oauth-resource'
 import { HTTP_DISABLED_AUTH_PATHS } from './http-disabled-paths'
@@ -600,7 +601,7 @@ async function createAuth() {
                   const { generateAnonymousName } = await import('@/lib/shared/anonymous-names')
                   return generateAnonymousName(user.id)
                 })()
-              : user.name
+              : (accountDisplayName(user.name, user.email) ?? user.name)
             // Race-safe lazy create (the factory's onConflictDoNothing subsumes
             // the prior explicit findFirst guard). Always 'user' — team access is
             // via invitations only.
@@ -809,7 +810,11 @@ async function createAuth() {
               name: newUser.user.name,
               email: newUser.user.email,
               image: newImage,
-              displayName: newUser.user.name || anonymousUser.user.name,
+              // A sign-in by email alone gives no name: show one from the
+              // address before the visitor's generated name, never "Anonymous".
+              displayName:
+                accountDisplayName(newUser.user.name, newUser.user.email) ??
+                (anonPrincipal?.displayName || anonymousUser.user.name),
             })
 
             // The principal's `type` flipped from 'anonymous' → 'user'; drop

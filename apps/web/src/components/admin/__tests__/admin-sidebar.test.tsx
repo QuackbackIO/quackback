@@ -1,9 +1,14 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { render, cleanup, screen } from '@testing-library/react'
+import { render, cleanup, screen, fireEvent, within } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
+import userEvent from '@testing-library/user-event'
 
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { SearchPaletteContext } from '../ask/search-palette'
+
+const openPalette = vi.fn()
+const searchContext = { open: openPalette }
 
 // Injected by Vite at build time (see vite.config.ts `define`); absent in vitest.
 vi.stubGlobal('__APP_VERSION__', '0.0.0-test')
@@ -45,6 +50,11 @@ vi.mock('@tanstack/react-query', () => ({
     if (Array.isArray(queryKey) && queryKey.includes('owner-workspaces')) {
       return { data: mockBillingEnabled.current ? mockSiblings.current : undefined }
     }
+    if (Array.isArray(queryKey) && queryKey[0] === 'admin' && queryKey[1] === 'onboarding') {
+      // What a page that loads the launch status left in the cache.
+      if (enabled !== false) launchQueryEnabled.current = true
+      return { data: mockLaunchStatus.current }
+    }
     if (Array.isArray(queryKey) && queryKey.includes('moderationStatus')) {
       moderationQueryEnabled.current = enabled !== false
       if (enabled === false) return { data: undefined }
@@ -62,16 +72,23 @@ vi.mock('@/components/notifications', () => ({ NotificationBell: () => null }))
 
 vi.mock('@/lib/server/functions/conversation', () => ({ setAgentAvailabilityFn: vi.fn() }))
 
-const { mockSiblings, mockBillingEnabled, mockPending, moderationQueryEnabled } = vi.hoisted(
-  () => ({
-    mockPending: { current: 0 },
-    moderationQueryEnabled: { current: null as boolean | null },
-    mockSiblings: {
-      current: [] as Array<{ instanceId: string; displayName: string; url: string | null }>,
-    },
-    mockBillingEnabled: { current: false },
-  })
-)
+const {
+  mockSiblings,
+  mockBillingEnabled,
+  mockPending,
+  moderationQueryEnabled,
+  mockLaunchStatus,
+  launchQueryEnabled,
+} = vi.hoisted(() => ({
+  mockLaunchStatus: { current: undefined as unknown },
+  launchQueryEnabled: { current: false },
+  mockPending: { current: 0 },
+  moderationQueryEnabled: { current: null as boolean | null },
+  mockSiblings: {
+    current: [] as Array<{ instanceId: string; displayName: string; url: string | null }>,
+  },
+  mockBillingEnabled: { current: false },
+}))
 
 vi.mock('@/lib/server/functions/owner-workspaces', () => ({
   listOwnerWorkspacesFn: vi.fn(async () => mockSiblings.current),
@@ -84,12 +101,21 @@ import { ALL_PERMISSIONS, PERMISSIONS, SYSTEM_ROLE_PERMISSIONS } from '@/lib/sha
 
 function renderSidebar(
   userRole: 'admin' | 'member',
-  opts: { flags?: Record<string, boolean>; name?: string; permissions?: string[] } = {}
+  opts: {
+    flags?: Record<string, boolean>
+    name?: string
+    permissions?: string[]
+    cloudEnabled?: boolean
+    planNotice?: import('@/lib/server/domains/settings/tier-limits.types').PlanNotice
+    locale?: string
+    messages?: Record<string, string>
+  } = {}
 ) {
   mockRole.current = userRole
   mockGetRouteContext.mockReturnValue({
     permissions: opts.permissions ?? (userRole === 'admin' ? ALL_PERMISSIONS : []),
-    session: { user: { name: 'Test', email: 'test@example.com', image: null } },
+    session: { user: { id: 'user_1', name: 'Test', email: 'test@example.com', image: null } },
+    cloudEnabled: opts.cloudEnabled ?? false,
     settings: {
       featureFlags: opts.flags ?? {},
       brandingData: opts.name ? { name: opts.name } : undefined,
@@ -98,9 +124,11 @@ function renderSidebar(
     billingEnabled: mockBillingEnabled.current,
   })
   return render(
-    <IntlProvider locale="en" messages={{}}>
+    <IntlProvider locale={opts.locale ?? 'en'} messages={opts.messages ?? {}}>
       <TooltipProvider>
-        <AdminSidebar />
+        <SearchPaletteContext.Provider value={searchContext}>
+          <AdminSidebar planNotice={opts.planNotice ?? null} />
+        </SearchPaletteContext.Provider>
       </TooltipProvider>
     </IntlProvider>
   )
@@ -163,7 +191,7 @@ const ALL_ON = {
 }
 
 describe('buildRailItems', () => {
-  it('orders Home, Feedback, Roadmap, Changelog, Support, Help Center, Status, Analytics, Users', () => {
+  it('orders Home, Feedback, Roadmap, Changelog, Support, Help center, Status, Analytics, Users', () => {
     const items = buildRailItems(ALL_ON)
     expect(items.map((i) => [i.label, i.href])).toEqual([
       ['Home', '/admin'],
@@ -171,7 +199,7 @@ describe('buildRailItems', () => {
       ['Roadmap', '/admin/roadmap'],
       ['Changelog', '/admin/changelog'],
       ['Support', '/admin/inbox'],
-      ['Help Center', '/admin/help-center'],
+      ['Help center', '/admin/help-center'],
       ['Status', '/admin/status'],
       ['Analytics', '/admin/analytics'],
       ['Users', '/admin/users'],
@@ -266,7 +294,9 @@ describe('AdminSidebar: labeled rail', () => {
       const { container } = render(
         <IntlProvider locale="en" messages={{}}>
           <TooltipProvider>
-            <AdminSidebar />
+            <SearchPaletteContext.Provider value={searchContext}>
+              <AdminSidebar />
+            </SearchPaletteContext.Provider>
           </TooltipProvider>
         </IntlProvider>
       )
@@ -357,5 +387,130 @@ describe('AdminSidebar rail', () => {
     const dialog = await screen.findByRole('dialog')
     const links = [...dialog.querySelectorAll('nav a')].map((a) => a.getAttribute('href'))
     expect(links.slice(0, 3)).toEqual(['/admin', '/admin/feedback', '/admin/roadmap'])
+  })
+})
+
+it('shows a running trial quietly in the footer, and nothing there without a notice', () => {
+  renderSidebar('admin', {
+    planNotice: {
+      label: 'Pro trial',
+      expiresAt: new Date(Date.now() + 14 * 86_400_000 - 60_000).toISOString(),
+      actionUrl: '/admin/settings/billing',
+    },
+  })
+  expect(screen.getByRole('link', { name: 'Pro trial · 14 days' })).toBeTruthy()
+  cleanup()
+  renderSidebar('admin')
+  expect(screen.queryByText(/Pro trial/)).toBeNull()
+  cleanup()
+})
+
+it('opens the shared palette from the sidebar search button, the one tour stop', () => {
+  const { container } = renderSidebar('admin')
+  fireEvent.click(screen.getAllByRole('button', { name: 'Search' })[0]!)
+  expect(openPalette).toHaveBeenCalledOnce()
+  expect(container.ownerDocument.querySelectorAll('[data-tour="search"]')).toHaveLength(1)
+  cleanup()
+})
+
+describe('AdminSidebar: help and the phone menu', () => {
+  afterEach(() => {
+    localStorage.clear()
+    cleanup()
+  })
+
+  it('offers Contact us in Help on cloud, opening the help launcher it hides', async () => {
+    const calls: unknown[][] = []
+    window.Quackback = ((...args: unknown[]) => calls.push(args)) as never
+    renderSidebar('admin', { cloudEnabled: true })
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Help' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Contact us' }))
+    expect(calls).toContainEqual(['open'])
+    delete window.Quackback
+  })
+
+  it('has no Contact us where there is no help launcher', async () => {
+    renderSidebar('admin', { cloudEnabled: false })
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Help' }))
+    expect(await screen.findByRole('menuitem', { name: 'Documentation' })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: 'Contact us' })).toBeNull()
+  })
+
+  it('offers the Launch plan beside the tour while a step is open, and only then', async () => {
+    const now = Date.now()
+    mockLaunchStatus.current = {
+      hasBoards: true,
+      hasPublicBoard: true,
+      memberCount: 1,
+      hasBranding: false,
+      goals: ['product_feedback'],
+      launchWindow: {
+        startsAt: new Date(now - 86_400_000).toISOString(),
+        endsAt: new Date(now + 13 * 86_400_000).toISOString(),
+      },
+      inLaunchWindow: true,
+    }
+    launchQueryEnabled.current = false
+    renderSidebar('admin')
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Help' }))
+    const plan = await screen.findByRole('menuitem', { name: 'Launch plan' })
+    expect(plan).toHaveAttribute('href', '/admin/getting-started')
+    const items = screen.getAllByRole('menuitem').map((item) => item.textContent)
+    expect(items.indexOf('Launch plan')).toBe(items.indexOf('Replay the tour') + 1)
+    // The sidebar is on every admin page: it reads the status, never loads it.
+    expect(launchQueryEnabled.current).toBe(false)
+    cleanup()
+
+    mockLaunchStatus.current = { ...(mockLaunchStatus.current as object), launchWindow: null }
+    renderSidebar('admin')
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Help' }))
+    await screen.findByRole('menuitem', { name: 'Documentation' })
+    expect(screen.queryByRole('menuitem', { name: 'Launch plan' })).toBeNull()
+    mockLaunchStatus.current = undefined
+  })
+
+  it('carries the launch plan and the trial in the phone menu, and names Changelog once', () => {
+    localStorage.setItem(
+      'quackback:launch-plan-dock:user_1',
+      JSON.stringify({ step: 2, total: 3, resolved: false })
+    )
+    renderSidebar('admin', {
+      flags: { feedback: true, changelog: true },
+      planNotice: {
+        label: 'Pro trial',
+        expiresAt: new Date(Date.now() + 10 * 86_400_000).toISOString(),
+        actionUrl: '/admin/settings/billing',
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }))
+    const menu = screen.getByRole('dialog')
+    expect(within(menu).getByRole('link', { name: /Step 2 of 3/ })).toHaveAttribute(
+      'href',
+      '/admin/getting-started'
+    )
+    expect(within(menu).getByRole('link', { name: 'Launch plan' })).toHaveAttribute(
+      'href',
+      '/admin/getting-started'
+    )
+    expect(within(menu).getByText(/Pro trial/)).toBeTruthy()
+    expect(within(menu).getAllByText('Changelog')).toHaveLength(1)
+  })
+})
+
+describe('AdminSidebar: language', () => {
+  afterEach(() => cleanup())
+
+  it('names the rail items in the workspace language', async () => {
+    const de = (await import('@/locales/de.json')).default as Record<string, string>
+    renderSidebar('admin', { flags: ALL_ON, locale: 'de', messages: de })
+    const rail = document.querySelector('aside nav[data-tour="products"]') as HTMLElement
+    expect(rail.textContent).toContain(de['admin.nav.home'])
+    expect(rail.textContent).toContain(de['admin.nav.helpCenter'])
+    expect(rail.textContent).not.toContain('Help center')
+    expect(document.querySelector('aside')?.textContent).toContain(de['admin.nav.settings'])
+    expect(document.querySelector('aside')?.textContent).not.toContain('View portal')
+    expect(document.querySelector('aside')?.getAttribute('lang')).toBe('de')
   })
 })

@@ -30,7 +30,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
-import { EmptyState } from '@/components/shared/empty-state'
 import { cn } from '@/lib/shared/utils'
 import { useRoadmaps } from '@/lib/client/hooks/use-roadmaps-query'
 import { useCreateRoadmap, useUpdateRoadmap, useDeleteRoadmap } from '@/lib/client/mutations'
@@ -42,10 +41,20 @@ import { RoadmapBuilderForm, type RoadmapBuilderValue } from './roadmap-builder-
 interface RoadmapSidebarProps {
   selectedRoadmapId: string | null
   onSelectRoadmap: (roadmapId: string | null) => void
+  /** The create dialog, when the page also opens it (from its empty state). */
+  createOpen?: boolean
+  onCreateOpenChange?: (open: boolean) => void
 }
 
-export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSidebarProps) {
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+export function RoadmapSidebar({
+  selectedRoadmapId,
+  onSelectRoadmap,
+  createOpen,
+  onCreateOpenChange,
+}: RoadmapSidebarProps) {
+  const [ownCreateOpen, setOwnCreateOpen] = useState(false)
+  const isCreateDialogOpen = createOpen ?? ownCreateOpen
+  const setIsCreateDialogOpen = onCreateOpenChange ?? setOwnCreateOpen
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [editingRoadmap, setEditingRoadmap] = useState<RoadmapView | null>(null)
@@ -140,14 +149,7 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
               <div className="flex items-center justify-center py-8">
                 <ArrowPathIcon className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
-            ) : roadmaps?.length === 0 ? (
-              <EmptyState
-                icon={MapIcon}
-                title="No roadmaps yet"
-                description="Create your first roadmap to get started"
-                className="py-12"
-              />
-            ) : (
+            ) : roadmaps?.length === 0 ? null : (
               <div className="space-y-1">
                 {roadmaps?.map((roadmap) => (
                   <div

@@ -293,6 +293,7 @@ export const USE_CASE_TYPES = [
   'product_feedback',
   'customer_support',
   'help_center',
+  'status_page',
   'internal',
   // Legacy — do not show in the picker
   'saas',
@@ -306,6 +307,7 @@ export const ONBOARDING_OUTCOMES = [
   'product_feedback',
   'customer_support',
   'help_center',
+  'status_page',
   'internal',
 ] as const
 export type OnboardingOutcome = (typeof ONBOARDING_OUTCOMES)[number]
@@ -349,6 +351,8 @@ export type OutcomeTaskResolutions = Partial<
 export interface ActivationMilestones {
   /** A workspace admin copied a publicly viewable board's distribution link. */
   publicBoardLinkCopiedAt?: string
+  /** A workspace admin copied the status page link. */
+  statusLinkCopiedAt?: string
 }
 
 export type SetupCompletionSource = 'wizard' | 'managed' | 'legacy'
@@ -361,8 +365,16 @@ export interface SetupState {
     startingPoint: StartingPointState | null
   }
   completedAt?: string
+  /**
+   * The principal who set the workspace up. Recorded once and never moved, so
+   * the owner stays the owner whatever role they hold later.
+   */
+  ownerPrincipalId?: string
   /** ICP outcome for setup and activation personalization. */
   useCase?: OnboardingOutcome
+  /** Ordered products selected during setup; the first is the activation goal. */
+  goals?: OnboardingOutcome[]
+  feedbackPrivate?: boolean
   /** Cloud owner saved or skipped the optional post-handoff identity polish. */
   workspaceDetailsSeenAt?: string
   completionSource?: SetupCompletionSource
@@ -468,9 +480,33 @@ function normalizeTaskResolutions(value: unknown): OutcomeTaskResolutions | unde
 export function normalizeSetupStateV2(value: unknown): SetupState | null {
   if (!isRecord(value)) return null
   const steps = isRecord(value.steps) ? value.steps : {}
-  const useCase = normalizeOnboardingOutcome(
+  const legacyUseCase = normalizeOnboardingOutcome(
     typeof value.useCase === 'string' ? value.useCase : undefined
   )
+
+  const selected = Array.isArray(value.goals)
+    ? value.goals.filter(
+        (goal): goal is OnboardingOutcome =>
+          typeof goal === 'string' && (ONBOARDING_OUTCOMES as readonly string[]).includes(goal)
+      )
+    : []
+  const legacyInternal = legacyUseCase === 'internal' || selected.includes('internal')
+  const goals = [
+    ...new Set(
+      (selected.length ? selected : legacyUseCase ? [legacyUseCase] : []).map((goal) =>
+        goal === 'internal' ? ('product_feedback' as const) : goal
+      )
+    ),
+  ]
+  const useCase = goals[0]
+  const intent = {
+    ...(goals.length ? { goals } : {}),
+    ...(legacyInternal
+      ? { feedbackPrivate: true }
+      : typeof value.feedbackPrivate === 'boolean'
+        ? { feedbackPrivate: value.feedbackPrivate }
+        : {}),
+  }
 
   if (value.version === 2) {
     const startingPoint = normalizeStartingPoint(steps.startingPoint)
@@ -485,6 +521,11 @@ export function normalizeSetupStateV2(value: unknown): SetupState | null {
       ? value.activationMilestones
       : undefined
     const publicBoardLinkCopiedAt = asIsoString(storedMilestones?.publicBoardLinkCopiedAt)
+    const statusLinkCopiedAt = asIsoString(storedMilestones?.statusLinkCopiedAt)
+    const activationMilestones = {
+      ...(publicBoardLinkCopiedAt ? { publicBoardLinkCopiedAt } : {}),
+      ...(statusLinkCopiedAt ? { statusLinkCopiedAt } : {}),
+    }
     return {
       version: 2,
       steps: {
@@ -493,7 +534,12 @@ export function normalizeSetupStateV2(value: unknown): SetupState | null {
         startingPoint,
       },
       ...(asIsoString(value.completedAt) ? { completedAt: value.completedAt as string } : {}),
+      ...(typeof value.ownerPrincipalId === 'string' &&
+      value.ownerPrincipalId.startsWith('principal_')
+        ? { ownerPrincipalId: value.ownerPrincipalId }
+        : {}),
       ...(useCase ? { useCase } : {}),
+      ...intent,
       ...(asIsoString(value.workspaceDetailsSeenAt)
         ? { workspaceDetailsSeenAt: value.workspaceDetailsSeenAt as string }
         : {}),
@@ -502,7 +548,7 @@ export function normalizeSetupStateV2(value: unknown): SetupState | null {
         ? { activationHandoffSeenAt: value.activationHandoffSeenAt as string }
         : {}),
       ...(taskResolutions ? { taskResolutions } : {}),
-      ...(publicBoardLinkCopiedAt ? { activationMilestones: { publicBoardLinkCopiedAt } } : {}),
+      ...(Object.keys(activationMilestones).length > 0 ? { activationMilestones } : {}),
     }
   }
 
@@ -542,6 +588,7 @@ export function normalizeSetupStateV2(value: unknown): SetupState | null {
     },
     ...(completedAt ? { completedAt } : {}),
     ...(useCase ? { useCase } : {}),
+    ...intent,
     ...(legacyComplete ? { completionSource: knownCompletionSource } : {}),
     ...(legacyComplete ? { activationHandoffSeenAt: migrationTime } : {}),
     ...(Object.keys(migratedTasks).length > 0
@@ -1023,6 +1070,9 @@ export interface ChannelDelivery {
 }
 
 export interface ConversationMessageMetadata {
+  /** Private workspace turn identity and its server-authored final payload. */
+  workspaceTurn?: { runId: string; payload?: Record<string, unknown> }
+
   /** The channel this message arrived through, when not the in-app messenger. */
   source?: 'email' | 'github'
   /** GitHub issue comment REST id, used to dedupe webhook retries. */

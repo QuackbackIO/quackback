@@ -24,6 +24,7 @@ import type {
   UpdateArticleInput,
 } from './help-center.types'
 import { generateArticleEmbedding } from './help-center-embedding.service'
+import { ensureDefaultHelpCategory } from './help-center.default-category'
 import { helpCenterVisibilityConditions } from './help-center-search.service'
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 import { logger } from '@/lib/server/logger'
@@ -219,11 +220,15 @@ export async function createArticle(
     contentType: 'help-center',
     principalId,
   })
+  // No category picked (a first article in an empty help center): file it
+  // under General rather than refusing the save.
+  const categoryId =
+    (input.categoryId?.trim() as KbCategoryId) || (await ensureDefaultHelpCategory())
 
   const [article] = await db
     .insert(helpCenterArticles)
     .values({
-      categoryId: input.categoryId as KbCategoryId,
+      categoryId,
       title,
       // Store the markdown projection of the canonical contentJson so the
       // article list endpoint (which omits contentJson) still serves images.

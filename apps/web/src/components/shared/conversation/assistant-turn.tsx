@@ -268,6 +268,7 @@ export function AssistantSourcesTrace({ citations }: { citations: RenderableCita
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
         className="flex items-center gap-1.5 text-[12px] text-muted-foreground/70 transition-colors hover:text-muted-foreground"
       >
         <MagnifyingGlassIcon className="h-3 w-3" />

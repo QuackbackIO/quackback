@@ -131,12 +131,13 @@ describe('buildOverviewMetrics', () => {
         completeLink: feedback,
       },
       help: { draftCount: 0, draftLink: help },
+      changelog: true,
     })
 
     expect(metrics.map((metric) => [metric.count, metric.label, metric.detail])).toEqual([
       [3, 'conversations', 'waiting for reply'],
-      [30, 'feedback posts', 'to review'],
-      [6, 'feedback posts', 'with no changelog'],
+      [30, 'ideas', 'to review'],
+      [6, 'ideas', 'shipped, not announced'],
       [0, 'help center articles', 'in draft'],
     ])
     for (const metric of metrics) {
@@ -157,6 +158,38 @@ describe('buildOverviewMetrics', () => {
   it('omits sections that are off', () => {
     expect(buildOverviewMetrics({})).toEqual([])
   })
+
+  it('counts shipped ideas waiting for an announcement only while Changelog is on', () => {
+    const shipped = {
+      reviewCount: 2,
+      completeCount: 1,
+      reviewLink: feedback,
+      completeLink: feedback,
+    }
+    expect(
+      buildOverviewMetrics({ feedback: shipped, changelog: false }).map((metric) => metric.key)
+    ).toEqual(['feedback'])
+    expect(
+      buildOverviewMetrics({ feedback: shipped, changelog: true }).map((metric) => metric.key)
+    ).toEqual(['feedback', 'complete'])
+  })
+
+  it('gives a status page its subscribers and open incidents', () => {
+    const metrics = buildOverviewMetrics({
+      status: {
+        subscriberCount: 4,
+        openIncidentCount: 1,
+        subscribersLink: { to: '/admin/status', search: { view: 'subscribers' } },
+        incidentsLink: { to: '/admin/status', search: { view: 'open' } },
+      },
+    })
+    expect(
+      metrics.map((metric) => [metric.key, metric.count, metric.label, metric.detail])
+    ).toEqual([
+      ['subscribers', 4, 'subscribers', 'to your status page'],
+      ['incidents', 1, 'incident', 'still open'],
+    ])
+  })
 })
 
 describe('overviewMetricGridClass', () => {
@@ -165,5 +198,14 @@ describe('overviewMetricGridClass', () => {
     expect(overviewMetricGridClass(2)).toBe('grid-cols-2')
     expect(overviewMetricGridClass(3)).toBe('grid-cols-1 sm:grid-cols-3')
     expect(overviewMetricGridClass(4)).toBe('grid-cols-2 lg:grid-cols-4')
+  })
+
+  it('fills every row with five or six counts, leaving no empty cell', () => {
+    // Six: three rows of two on a phone, two rows of three above it.
+    expect(overviewMetricGridClass(6)).toBe('grid-cols-2 sm:grid-cols-3')
+    // Five: the last count takes the rest of its row, two of three columns or both of two.
+    expect(overviewMetricGridClass(5)).toBe(
+      'grid-cols-2 sm:grid-cols-3 [&>*:last-child]:col-span-2'
+    )
   })
 })

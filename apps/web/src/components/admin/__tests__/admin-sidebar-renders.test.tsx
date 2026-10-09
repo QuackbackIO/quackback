@@ -22,6 +22,9 @@ import {
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { DEFAULT_FEATURE_FLAGS, getProductFlagUpdate } from '@/lib/shared/types/settings'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { SearchPaletteContext } from '../ask/search-palette'
+
+const searchContext = { open: vi.fn() }
 
 vi.stubGlobal('__APP_VERSION__', '0.0.0-test')
 
@@ -129,7 +132,9 @@ async function mount() {
     <QueryClientProvider client={new QueryClient()}>
       <IntlProvider locale="en" messages={{}}>
         <TooltipProvider>
-          <RouterProvider router={router} />
+          <SearchPaletteContext.Provider value={searchContext}>
+            <RouterProvider router={router} />
+          </SearchPaletteContext.Provider>
         </TooltipProvider>
       </IntlProvider>
     </QueryClientProvider>

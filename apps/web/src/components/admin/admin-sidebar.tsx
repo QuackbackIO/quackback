@@ -1,9 +1,19 @@
+import { LaunchPlanDock, LaunchPlanInHelp } from '@/components/onboarding/launch-plan-dock'
+import { openHelpLauncher } from '@/components/shared/cloud-quackback-widget'
+import { PlanNoticeQuiet } from '@/components/admin/plan-notice-banner'
+import type { PlanNotice } from '@/lib/server/domains/settings/tier-limits.types'
+import { SearchTrigger } from '@/components/admin/ask/search-palette'
+import { useProductTour } from '@/components/onboarding/product-tour'
+import { FormattedMessage, useIntl } from 'react-intl'
+import { htmlLangDir } from '@/lib/shared/document-locale'
+import type { SupportedLocale } from '@/lib/shared/i18n'
 import { railControlClass } from '@/components/admin/rail-item'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link, useRouter, useRouterState } from '@tanstack/react-router'
 import {
   ChatBubbleLeftIcon,
+  ChatBubbleLeftRightIcon,
   MapIcon,
   UsersIcon,
   Cog6ToothIcon,
@@ -15,6 +25,7 @@ import {
   QuestionMarkCircleIcon,
   HomeIcon,
   SignalIcon,
+  FlagIcon,
 } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
@@ -81,6 +92,8 @@ interface AdminSidebarProps {
     chatAvailability?: 'online' | 'away'
   }
   latestVersion?: LatestVersionResult | null
+  /** A running trial shows here quietly until its last days. */
+  planNotice?: PlanNotice | null
 }
 
 interface RailItem {
@@ -89,34 +102,75 @@ interface RailItem {
   icon: typeof ChatBubbleLeftIcon
   /** Active on this path only, not on the pages under it. */
   exact?: boolean
+  /** The catalogue id of the label, so the rail reads in the workspace language. */
+  labelId: string
   /** The workspace product this item belongs to; hidden while it is off. */
   product?: ProductId
+  /** The guided tour's `data-tour` name for this item. */
+  tour?: string
 }
 
 // One product reads as one run: Feedback, Roadmap and Changelog sit together,
 // then Support, Help Center and Status.
 const RAIL_ITEMS: RailItem[] = [
-  { label: 'Home', href: '/admin', icon: HomeIcon, exact: true },
-  { label: 'Feedback', href: '/admin/feedback', icon: ENTITY_ICONS.post, product: 'feedback' },
-  { label: 'Roadmap', href: '/admin/roadmap', icon: MapIcon, product: 'feedback' },
+  { label: 'Home', labelId: 'admin.nav.home', href: '/admin', icon: HomeIcon, exact: true },
+  {
+    label: 'Feedback',
+    labelId: 'admin.nav.feedback',
+    href: '/admin/feedback',
+    icon: ENTITY_ICONS.post,
+    product: 'feedback',
+    tour: 'nav-feedback',
+  },
+  {
+    label: 'Roadmap',
+    labelId: 'admin.nav.roadmap',
+    href: '/admin/roadmap',
+    icon: MapIcon,
+    product: 'feedback',
+    tour: 'nav-roadmap',
+  },
   {
     label: 'Changelog',
+    labelId: 'admin.nav.changelog',
     href: '/admin/changelog',
     icon: ENTITY_ICONS.changelog,
     product: 'changelog',
+    tour: 'nav-changelog',
   },
   // One Support entry covers conversations and tickets: the unified inbox
   // shell serves both (gated on either flag being on).
-  { label: 'Support', href: '/admin/inbox', icon: ENTITY_ICONS.conversation, product: 'support' },
   {
-    label: 'Help Center',
+    label: 'Support',
+    labelId: 'admin.nav.support',
+    href: '/admin/inbox',
+    icon: ENTITY_ICONS.conversation,
+    product: 'support',
+    tour: 'nav-support',
+  },
+  {
+    label: 'Help center',
+    labelId: 'admin.nav.helpCenter',
     href: '/admin/help-center',
     icon: ENTITY_ICONS.article,
     product: 'helpCenter',
+    tour: 'nav-help-center',
   },
-  { label: 'Status', href: '/admin/status', icon: SignalIcon, product: 'status' },
-  { label: 'Analytics', href: '/admin/analytics', icon: ChartBarIcon },
-  { label: 'Users', href: '/admin/users', icon: UsersIcon },
+  {
+    label: 'Status',
+    labelId: 'admin.nav.status',
+    href: '/admin/status',
+    icon: SignalIcon,
+    product: 'status',
+    tour: 'nav-status',
+  },
+  {
+    label: 'Analytics',
+    labelId: 'admin.nav.analytics',
+    href: '/admin/analytics',
+    icon: ChartBarIcon,
+  },
+  { label: 'Users', labelId: 'admin.nav.users', href: '/admin/users', icon: UsersIcon },
 ]
 
 /** The rail items a viewer sees: the products that are on. */
@@ -151,10 +205,13 @@ function NavItem({
   badgeLabel,
   dot,
   exact = false,
+  tour,
 }: {
   href: string
   icon: typeof ChatBubbleLeftIcon
   label: string
+  /** The guided tour's name for this item. */
+  tour?: string
   onClick?: () => void
   /** Optional count or short mark (e.g. remaining launch steps) */
   badge?: string | number | null
@@ -170,6 +227,7 @@ function NavItem({
       to={href}
       onClick={onClick}
       data-admin-rail-item=""
+      data-tour={tour}
       data-labeled=""
       {...railLinkProps(exact)}
     >
@@ -225,13 +283,15 @@ function MobileNavLink({
   )
 }
 
-export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarProps) {
+export function AdminSidebar({ initialUserData, latestVersion, planNotice }: AdminSidebarProps) {
+  const intl = useIntl()
   const router = useRouter()
   const onNotificationsPage = useRouterState({
     select: (s) => s.location.pathname.startsWith('/admin/notifications'),
   })
   // Each part is selected: the route context is a new object after every
   // navigation, while these stay the same until the viewer or workspace changes.
+  const tour = useProductTour()
   const session = useSessionContext()
   const settings = useWorkspaceSettings()
   const billingEnabled = useBillingEnabled()
@@ -314,6 +374,9 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
       <aside
         data-admin-rail=""
         data-labeled=""
+        // The rail speaks the workspace language while the page around it may
+        // not, so it says which language it is in for screen readers.
+        lang={htmlLangDir(intl.locale as SupportedLocale).lang}
         className="hidden w-56 shrink-0 flex-col border-chrome-hairline bg-chrome [--card:var(--chrome-background)] sm:flex"
       >
         <ScrollArea className="h-full" scrollBarClassName="w-2" type="auto">
@@ -334,16 +397,20 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
             </Link>
 
             {/* Main Navigation */}
-            <nav className="flex flex-col gap-0.5 px-2">
+            <div className="mb-2 px-2">
+              <SearchTrigger tour className={railControlClass()} />
+            </div>
+            <nav data-tour="products" className="flex flex-col gap-0.5 px-2">
               {railItems.map((item) => (
                 <NavItem
                   key={item.href}
                   href={item.href}
                   icon={item.icon}
-                  label={item.label}
+                  label={intl.formatMessage({ id: item.labelId, defaultMessage: item.label })}
                   exact={item.exact}
                   badge={itemBadge(item)}
                   badgeLabel={itemBadgeLabel(item)}
+                  tour={item.tour}
                 />
               ))}
             </nav>
@@ -353,9 +420,19 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
 
             {/* Bottom Section */}
             <div className="flex flex-col gap-0.5 px-2">
+              {/* Mounted only for a notice, so a page without one renders nothing here. */}
+              {planNotice && <PlanNoticeQuiet notice={planNotice} />}
+              <LaunchPlanDock />
               {/* Settings (admin-only) */}
               {showSettings && (
-                <NavItem href="/admin/settings" icon={Cog6ToothIcon} label="Settings" />
+                <NavItem
+                  href="/admin/settings"
+                  icon={Cog6ToothIcon}
+                  label={intl.formatMessage({
+                    id: 'admin.nav.settings',
+                    defaultMessage: 'Settings',
+                  })}
+                />
               )}
 
               {billingEnabled && siblings.length > 0 ? (
@@ -366,9 +443,19 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
               <NotificationBell labeled active={onNotificationsPage} />
 
               {/* Portal Link */}
-              <Link to="/" data-admin-rail-item="" className={railControlClass()}>
+              <Link
+                to="/"
+                data-tour="view-portal"
+                data-admin-rail-item=""
+                className={railControlClass()}
+              >
                 <GlobeAltIcon className="size-5 shrink-0" />
-                <span className="min-w-0 flex-1 truncate">View portal</span>
+                <span className="min-w-0 flex-1 truncate">
+                  {intl.formatMessage({
+                    id: 'admin.nav.viewPortal',
+                    defaultMessage: 'View portal',
+                  })}
+                </span>
               </Link>
 
               {/* Help Menu */}
@@ -376,13 +463,37 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                 <DropdownMenuTrigger asChild>
                   <button data-admin-rail-item="" className={railControlClass()}>
                     <QuestionMarkCircleIcon className="size-5 shrink-0" />
-                    <span className="min-w-0 flex-1 truncate text-left">Help</span>
+                    <span className="min-w-0 flex-1 truncate text-left">
+                      {intl.formatMessage({ id: 'admin.help.label', defaultMessage: 'Help' })}
+                    </span>
                     {latestVersion && (
                       <span className="size-2 rounded-full bg-primary" aria-hidden="true" />
                     )}
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-52">
+                  <DropdownMenuItem onClick={() => tour?.start()}>
+                    <FormattedMessage
+                      id="onboarding.tour.replay"
+                      defaultMessage="Replay the tour"
+                    />
+                  </DropdownMenuItem>
+                  <LaunchPlanInHelp>
+                    <DropdownMenuItem asChild>
+                      <Link to="/admin/getting-started">
+                        <FormattedMessage
+                          id="onboarding.launch.name"
+                          defaultMessage="Launch plan"
+                        />
+                      </Link>
+                    </DropdownMenuItem>
+                  </LaunchPlanInHelp>
+                  {cloudEnabled && (
+                    <DropdownMenuItem onClick={openHelpLauncher}>
+                      <ChatBubbleLeftRightIcon className="mr-2 h-4 w-4" />
+                      <FormattedMessage id="admin.help.contact" defaultMessage="Contact us" />
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem asChild>
                     <a
                       href="https://www.quackback.io/docs/"
@@ -390,7 +501,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                       rel="noopener noreferrer"
                     >
                       <BookOpenIcon className="mr-2 h-4 w-4" />
-                      Documentation
+                      <FormattedMessage id="admin.help.docs" defaultMessage="Documentation" />
                     </a>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
@@ -400,7 +511,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                       rel="noopener noreferrer"
                     >
                       <DocumentTextIcon className="mr-2 h-4 w-4" />
-                      Changelog
+                      <FormattedMessage id="admin.help.whatsNew" defaultMessage="What's new" />
                     </a>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
@@ -456,10 +567,17 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                     <AvailabilityMenuItems availability={availability} onSet={setAvail} />
                   )}
                   <DropdownMenuItem asChild>
-                    <Link to="/settings">Settings</Link>
+                    <Link to="/settings">
+                      <FormattedMessage
+                        id="portal.header.auth.settings"
+                        defaultMessage="Settings"
+                      />
+                    </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleSignOut}>Sign out</DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleSignOut}>
+                    <FormattedMessage id="portal.header.auth.signOut" defaultMessage="Sign out" />
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -471,11 +589,23 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
       <header className="sm:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between h-14 px-4 border-b border-border/60 bg-card/95 backdrop-blur-sm">
         <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
           <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="Open menu">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9"
+              aria-label={intl.formatMessage({
+                id: 'admin.nav.openMenu',
+                defaultMessage: 'Open menu',
+              })}
+            >
               <Bars3Icon className="h-5 w-5" />
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="w-72 p-0">
+          <SheetContent
+            side="left"
+            className="w-72 p-0"
+            lang={htmlLangDir(intl.locale as SupportedLocale).lang}
+          >
             <SheetHeader className="px-5 pt-6 pb-4">
               <SheetTitle className="flex items-center gap-3">
                 <Link to="/admin" onClick={() => setMobileMenuOpen(false)}>
@@ -496,7 +626,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                   key={item.href}
                   href={item.href}
                   icon={item.icon}
-                  label={item.label}
+                  label={intl.formatMessage({ id: item.labelId, defaultMessage: item.label })}
                   exact={item.exact}
                   badge={itemBadge(item)}
                   badgeLabel={itemBadgeLabel(item)}
@@ -504,11 +634,18 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                 />
               ))}
               <div className="h-px bg-border/40 my-4" />
+              <PlanNoticeQuiet notice={planNotice ?? null} />
+              <div onClickCapture={() => setMobileMenuOpen(false)}>
+                <LaunchPlanDock />
+              </div>
               {showSettings && (
                 <MobileNavLink
                   href="/admin/settings"
                   icon={Cog6ToothIcon}
-                  label="Settings"
+                  label={intl.formatMessage({
+                    id: 'admin.nav.settings',
+                    defaultMessage: 'Settings',
+                  })}
                   onClick={() => setMobileMenuOpen(false)}
                 />
               )}
@@ -536,8 +673,29 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                 className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-muted-foreground/80 hover:text-foreground hover:bg-muted/50 transition-colors"
               >
                 <GlobeAltIcon className="h-5 w-5" />
-                View portal
+                <FormattedMessage id="admin.nav.viewPortal" defaultMessage="View portal" />
               </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false)
+                  tour?.start()
+                }}
+                className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-muted-foreground hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-muted-foreground"
+              >
+                <QuestionMarkCircleIcon className="h-5 w-5" />
+                <FormattedMessage id="onboarding.tour.replay" defaultMessage="Replay the tour" />
+              </button>
+              <LaunchPlanInHelp>
+                <Link
+                  to="/admin/getting-started"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-muted-foreground hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground"
+                >
+                  <FlagIcon className="h-5 w-5" />
+                  <FormattedMessage id="onboarding.launch.name" defaultMessage="Launch plan" />
+                </Link>
+              </LaunchPlanInHelp>
               <div className="h-px bg-border/40 my-4" />
               <a
                 href="https://www.quackback.io/docs/"
@@ -546,7 +704,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                 className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-muted-foreground/80 hover:text-foreground hover:bg-muted/50 transition-colors"
               >
                 <BookOpenIcon className="h-5 w-5" />
-                Documentation
+                <FormattedMessage id="admin.help.docs" defaultMessage="Documentation" />
               </a>
               <a
                 href="https://feedback.quackback.io/changelog"
@@ -555,8 +713,21 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                 className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-muted-foreground/80 hover:text-foreground hover:bg-muted/50 transition-colors"
               >
                 <DocumentTextIcon className="h-5 w-5" />
-                Changelog
+                <FormattedMessage id="admin.help.whatsNew" defaultMessage="What's new" />
               </a>
+              {cloudEnabled && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false)
+                    openHelpLauncher()
+                  }}
+                  className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-muted-foreground/80 hover:text-foreground hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground"
+                >
+                  <ChatBubbleLeftRightIcon className="h-5 w-5" />
+                  <FormattedMessage id="admin.help.contact" defaultMessage="Contact us" />
+                </button>
+              )}
               <div className="px-4 py-2 flex flex-col gap-1">
                 <span className="text-xs text-muted-foreground/50">v{__APP_VERSION__}</span>
                 {latestVersion && (
@@ -585,6 +756,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
         </Link>
 
         <div className="flex items-center gap-1">
+          <SearchTrigger className="flex size-9 items-center justify-center rounded-md hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/25 [&>span]:hidden [&>kbd]:hidden" />
           <NotificationBell className="h-9 w-9" />
 
           <DropdownMenu>
@@ -619,10 +791,14 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                 <AvailabilityMenuItems availability={availability} onSet={setAvail} />
               )}
               <DropdownMenuItem asChild>
-                <Link to="/settings">Settings</Link>
+                <Link to="/settings">
+                  <FormattedMessage id="portal.header.auth.settings" defaultMessage="Settings" />
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleSignOut}>Sign out</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleSignOut}>
+                <FormattedMessage id="portal.header.auth.signOut" defaultMessage="Sign out" />
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

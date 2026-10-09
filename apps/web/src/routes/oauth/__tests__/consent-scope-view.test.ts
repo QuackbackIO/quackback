@@ -12,14 +12,15 @@ import {
 import { defaultSelectedScopes } from '@/lib/shared/mcp-consent-scopes'
 
 describe('MCP consent catalogue', () => {
-  it('defaults first-connect to three Reads with changelog off', () => {
+  it('defaults first-connect to four Reads with changelog off', () => {
     const selected = defaultSelectedScopes([...MCP_FIRST_CONNECT_SCOPES])
-    expect(ACCESS_DOMAINS).toHaveLength(4)
+    expect(ACCESS_DOMAINS).toHaveLength(5)
     expect(domainAccessLevels(selected)).toEqual({
       feedback: 'read',
       changelog: 'off',
       article: 'read',
       chat: 'read',
+      settings: 'read',
     })
   })
 })

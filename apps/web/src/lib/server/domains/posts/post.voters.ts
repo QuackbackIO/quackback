@@ -15,6 +15,7 @@ import {
 import { toUuid, type PostId, type PostVoteId, type PrincipalId } from '@quackback/ids'
 import { relatedPostIdsSql } from './post.merge-ids'
 import { realEmail } from '@/lib/shared/anonymous-email'
+import { notTestPrincipal } from '@/lib/server/test-data'
 import { resolveUserAvatarUrl } from '@/lib/server/domains/principals/principal-display'
 import {
   levelFromFlags,
@@ -54,6 +55,7 @@ export async function listPostVoters(
   // person who voted on both the canonical and a source does not consume two
   // page slots or reappear on the next cursor page.
   const conditions = [
+    notTestPrincipal(postVotes.principalId),
     sql`${postVotes.id} IN (
       SELECT DISTINCT ON (v.principal_id) v.id
       FROM ${postVotes} v

@@ -31,6 +31,8 @@ vi.mock('@/lib/server/domains/ai/usage-log', () => ({
   embeddingUsage: vi.fn(),
   withUsageLogging: (_ctx: unknown, fn: () => unknown) => fn(),
 }))
+// A real post, not a test customer's: test posts are never embedded.
+vi.mock('@/lib/server/test-data', () => ({ isTestPost: async () => false }))
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {

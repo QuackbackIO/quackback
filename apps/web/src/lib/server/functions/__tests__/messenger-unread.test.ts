@@ -55,6 +55,7 @@ vi.mock('@/lib/server/functions/auth-helpers', () => ({
 vi.mock('@/lib/shared/roles', () => ({ isTeamMember: hoisted.isTeamMember }))
 vi.mock('@/lib/server/domains/settings/settings.support', () => ({
   isConversationsEnabled: hoisted.isConversationsEnabled,
+  isConversationsEnabledFor: () => hoisted.isConversationsEnabled(),
 }))
 vi.mock('@/lib/server/functions/portal-access', () => ({
   resolvePortalAccessForRequest: hoisted.resolvePortalAccess,

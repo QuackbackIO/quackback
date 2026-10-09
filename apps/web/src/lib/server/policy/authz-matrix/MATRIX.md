@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 720 surfaces
+### Server functions (`requireAuth`) — 743 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -160,8 +160,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/activation.ts`::getStartingPointContextFn | settings.manage |
 | `lib/server/functions/activation.ts`::getActivationBridgeContextFn | settings.manage |
 | `lib/server/functions/activation.ts`::markPublicBoardLinkCopiedFn | board.manage |
-| `lib/server/functions/activation.ts`::setActivationGoalFn | settings.manage |
-| `lib/server/functions/activation.ts`::completeStartingPointFn | settings.manage |
+| `lib/server/functions/activation.ts`::markStatusLinkCopiedFn | settings.manage |
 | `lib/server/functions/activation.ts`::acknowledgeActivationHandoffFn | settings.manage |
 | `lib/server/functions/activity.ts`::fetchActivityForPost | post.view_private |
 | `lib/server/functions/admin-overview.ts`::fetchAdminOverviewFn | END_USER (any authenticated) |
@@ -208,8 +207,9 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/api-keys.ts`::updateApiKeyFn | api_key.manage |
 | `lib/server/functions/api-keys.ts`::rotateApiKeyFn | api_key.manage |
 | `lib/server/functions/api-keys.ts`::revokeApiKeyFn | api_key.manage |
-| `lib/server/functions/assistant-actions.ts`::approveAssistantActionFn | DYNAMIC (conversation.view | ticket.view | conversation.set_attributes | conversation.set_status | ticket.create | post.create | post.vote_on_behalf) |
-| `lib/server/functions/assistant-actions.ts`::rejectAssistantActionFn | DYNAMIC (conversation.view | ticket.view) |
+| `lib/server/functions/ask-search.ts`::searchAskEntitiesFn | DYNAMIC (post.view_private | help_center.manage | changelog.view_draft | changelog.manage | conversation.view | ticket.view) |
+| `lib/server/functions/assistant-actions.ts`::approveAssistantActionFn | DYNAMIC (conversation.view | ticket.view | copilot.use | settings.manage | settings.branding | office_hours.manage | changelog.manage | conversation.set_attributes | conversation.set_status | ticket.create | post.create | post.vote_on_behalf) |
+| `lib/server/functions/assistant-actions.ts`::rejectAssistantActionFn | DYNAMIC (conversation.view | ticket.view | copilot.use) |
 | `lib/server/functions/assistant-analytics.ts`::getQuinnPerformanceFn | analytics.view |
 | `lib/server/functions/assistant-connectors.ts`::listConnectorsFn | assistant.manage |
 | `lib/server/functions/assistant-connectors.ts`::getConnectorFn | assistant.manage |
@@ -230,7 +230,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/assistant-guidance.ts`::deleteGuidanceRuleFn | assistant.manage |
 | `lib/server/functions/assistant-guidance.ts`::listAssistantToolsFn | assistant.manage |
 | `lib/server/functions/assistant-improve-answer.ts`::improveAssistantAnswerFn | conversation.reply |
-| `lib/server/functions/assistant-pending-actions.ts`::getAssistantPendingActionFn | DYNAMIC (conversation.view | ticket.view) |
+| `lib/server/functions/assistant-pending-actions.ts`::getAssistantPendingActionFn | DYNAMIC (conversation.view | ticket.view | copilot.use) |
 | `lib/server/functions/assistant-settings.ts`::getAssistantSettingsFn | assistant.manage |
 | `lib/server/functions/assistant-settings.ts`::updateAssistantIdentityFn | assistant.manage |
 | `lib/server/functions/assistant-settings.ts`::updateAssistantVoiceFn | assistant.manage |
@@ -421,6 +421,9 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/feature-flags.ts`::updateFeatureFlagsFn | settings.manage |
 | `lib/server/functions/feedback.ts`::acceptSuggestionFn | suggestion.manage |
 | `lib/server/functions/feedback.ts`::dismissSuggestionFn | suggestion.manage |
+| `lib/server/functions/going-live.ts`::getMessengerInstallStatusFn | settings.manage |
+| `lib/server/functions/going-live.ts`::readyMessengerInstallFn | settings.manage |
+| `lib/server/functions/going-live.ts`::sendMessengerInstallInstructionsFn | settings.manage |
 | `lib/server/functions/help-center-domain.ts`::updateHelpCenterDomainFn | help_center.manage |
 | `lib/server/functions/help-center-domain.ts`::verifyHelpCenterDomainFn | help_center.manage |
 | `lib/server/functions/help-center-domain.ts`::getHelpCenterDomainStatusFn | help_center.manage |
@@ -496,9 +499,17 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/notifications.ts`::markAllNotificationsAsReadFn | END_USER (any authenticated) |
 | `lib/server/functions/notifications.ts`::archiveNotificationFn | END_USER (any authenticated) |
 | `lib/server/functions/notifications.ts`::archiveAllReadNotificationsFn | END_USER (any authenticated) |
+| `lib/server/functions/onboarding-progress.ts`::getOnboardingProgressFn | member.view |
+| `lib/server/functions/onboarding-progress.ts`::markTourSeenFn | member.view |
+| `lib/server/functions/onboarding-progress.ts`::dismissTourOfferFn | member.view |
+| `lib/server/functions/onboarding-progress.ts`::getFirstWinCardFn | member.view |
+| `lib/server/functions/onboarding-progress.ts`::getLaunchWindowOpenFn | member.view |
+| `lib/server/functions/onboarding-progress.ts`::dismissFirstWinFn | member.view |
+| `lib/server/functions/onboarding-progress.ts`::getTourContextFn | member.view |
+| `lib/server/functions/onboarding-progress.ts`::hasConversationsFn | conversation.view |
 | `lib/server/functions/onboarding.ts`::saveWorkspaceAndGoalFn | ADMIN-ONLY |
-| `lib/server/functions/onboarding.ts`::saveCloudOnboardingGoalFn | ADMIN-ONLY |
 | `lib/server/functions/onboarding.ts`::ensureOnboardingHomeReadyFn | ADMIN-ONLY |
+| `lib/server/functions/onboarding.ts`::getInstallChecksFn | settings.manage |
 | `lib/server/functions/owner-workspaces.ts`::listOwnerWorkspacesFn | settings.manage |
 | `lib/server/functions/owner-workspaces.ts`::openOwnerWorkspaceFn | settings.manage |
 | `lib/server/functions/ownership.ts`::getCloudOwnerEmailFn | END_USER (any authenticated) |
@@ -711,6 +722,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/teams.ts`::deleteTeamFn | team.manage |
 | `lib/server/functions/teams.ts`::setTeamMembersFn | team.manage |
 | `lib/server/functions/teams.ts`::assignConversationTeamFn | conversation.assign |
+| `lib/server/functions/test-customer.ts`::deleteTestConversationsFn | conversation.manage |
 | `lib/server/functions/ticket-types.ts`::listTicketTypesFn | ticket.manage_types |
 | `lib/server/functions/ticket-types.ts`::listTicketTypesFn | ticket.view |
 | `lib/server/functions/ticket-types.ts`::createTicketTypeFn | ticket.manage_types |
@@ -788,6 +800,11 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/webhooks.ts`::updateWebhookFn | webhook.manage |
 | `lib/server/functions/webhooks.ts`::deleteWebhookFn | webhook.manage |
 | `lib/server/functions/webhooks.ts`::rotateWebhookSecretFn | webhook.manage |
+| `lib/server/functions/website-branding.ts`::startAutomaticWebsiteBrandingFn | DYNAMIC (settings.manage) |
+| `lib/server/functions/website-branding.ts`::getAutomaticWebsiteBrandingStatusFn | DYNAMIC (settings.manage) |
+| `lib/server/functions/website-branding.ts`::acceptWebsiteBrandingOfferFn | DYNAMIC (settings.manage) |
+| `lib/server/functions/website-branding.ts`::declineWebsiteBrandingOfferFn | DYNAMIC (settings.manage) |
+| `lib/server/functions/website-branding.ts`::undoAutomaticWebsiteBrandingFn | DYNAMIC (settings.manage) |
 | `lib/server/functions/widget/comments.ts`::widgetCreateCommentFn | END_USER (any authenticated) |
 | `lib/server/functions/widget/comments.ts`::widgetAddReactionFn | END_USER (any authenticated) |
 | `lib/server/functions/widget/comments.ts`::widgetRemoveReactionFn | END_USER (any authenticated) |
@@ -823,6 +840,12 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/workflows.ts`::previewWorkflowFn | routing.manage |
 | `lib/server/functions/workflows.ts`::listRunnableWorkflowsFn | conversation.reply |
 | `lib/server/functions/workflows.ts`::runWorkflowManuallyFn | conversation.reply |
+| `lib/server/functions/workspace-copilot.ts`::getWorkspaceCopilotAvailabilityFn | END_USER (any authenticated) |
+| `lib/server/functions/workspace-copilot.ts`::listWorkspaceCopilotThreadsFn | DYNAMIC (copilot.use) |
+| `lib/server/functions/workspace-copilot.ts`::createWorkspaceCopilotThreadFn | DYNAMIC (copilot.use) |
+| `lib/server/functions/workspace-copilot.ts`::getWorkspaceCopilotThreadFn | DYNAMIC (copilot.use) |
+| `lib/server/functions/workspace-copilot.ts`::applyWorkspaceSettingsProposalFn | DYNAMIC (copilot.use | settings.manage | settings.branding | office_hours.manage | changelog.manage) |
+| `lib/server/functions/workspace-copilot.ts`::undoWorkspaceSettingsProposalFn | DYNAMIC (copilot.use | settings.manage | settings.branding | office_hours.manage | changelog.manage) |
 | `lib/server/functions/workspace-wipe.ts`::wipeCloudWorkspaceFn | END_USER (any authenticated) |
 
 ### Public REST API (`withApiKeyAuth`) — 127 surfaces
@@ -957,10 +980,11 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `routes/api/v1/webhooks/index.ts`::GET | webhook.view |
 | `routes/api/v1/webhooks/index.ts`::POST | webhook.manage |
 
-### Session-authenticated routes (`requireAuth`) — 1 surface
+### Session-authenticated routes (`requireAuth`) — 2 surfaces
 
 | Surface | Enforces |
 | --- | --- |
+| `routes/api/admin/assistant/workspace.ts`::handleWorkspaceCopilot | copilot.use |
 | `routes/api/plg-events.ts`::handlePlgEvent | END_USER (any authenticated) |
 
 ### SSE stream (inline gate) — 1 surface
@@ -977,7 +1001,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 3. MCP tools
 
-40 tools. "Team" = requires an admin/member role in addition to the scope.
+43 tools. "Team" = requires an admin/member role in addition to the scope.
 
 | Tool | Scope(s) | Team |
 | --- | --- | :---: |
@@ -996,12 +1020,15 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | get_conversation | read:chat | ✓ |
 | get_details | read:article, read:feedback | ✓ |
 | get_post_activity | read:feedback | ✓ |
+| get_settings | read:settings | ✓ |
 | get_ticket | read:chat | ✓ |
 | link_ticket | write:chat | ✓ |
 | list_conversations | read:chat | ✓ |
 | list_tickets | read:chat | ✓ |
 | manage_category | write:article | ✓ |
 | merge_post | write:feedback | ✓ |
+| navigate_workspace | read:article, read:chat, read:feedback, read:settings | ✓ |
+| propose_settings_change | write:settings | ✓ |
 | proxy_vote | write:feedback | ✓ |
 | react_to_comment | write:feedback | · |
 | reply_to_conversation | write:chat | ✓ |
@@ -1026,15 +1053,15 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 Key scopes are enforced: an API key holds exactly its stored scopes (owner permissions ∩ key scopes on REST, per-tool scope guards on MCP). A key with NULL stored scopes (legacy, pre-scope-selection) holds every scope. OAuth grants carry their own enforced scopes.
 
-| Class | read:article | read:chat | read:feedback | write:article | write:changelog | write:chat | write:feedback |
-| --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| Scoped API key (admin-owned, read-only scopes) | ✓ | ✓ | ✓ | · | · | · | · |
-| Full API key (admin-owned) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| OAuth client (member, read-only grant) | ✓ | ✓ | ✓ | · | · | · | · |
+| Class | read:article | read:chat | read:feedback | read:settings | write:article | write:changelog | write:chat | write:feedback | write:settings |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| Scoped API key (admin-owned, read-only scopes) | ✓ | ✓ | ✓ | ✓ | · | · | · | · | · |
+| Full API key (admin-owned) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| OAuth client (member, read-only grant) | ✓ | ✓ | ✓ | ✓ | · | · | · | · | · |
 
 ## 4. Entry points without a requireAuth/key gate
 
-227 of 1057 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+226 of 1081 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1086,7 +1113,6 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/locale.ts`::getPortalLocaleFn | server-fn |
 | `lib/server/functions/onboarding.ts`::ensureOnboardingHomeReadyFn | server-fn |
 | `lib/server/functions/onboarding.ts`::getWorkspaceClaimFn | server-fn |
-| `lib/server/functions/onboarding.ts`::saveCloudOnboardingGoalFn | server-fn |
 | `lib/server/functions/onboarding.ts`::saveUserNameFn | server-fn |
 | `lib/server/functions/onboarding.ts`::saveWorkspaceAndGoalFn | server-fn |
 | `lib/server/functions/portal-access.ts`::evaluateMyPortalAccessFn | server-fn |

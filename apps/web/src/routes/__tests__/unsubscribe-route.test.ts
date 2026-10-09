@@ -64,17 +64,17 @@ beforeEach(() => {
 })
 
 describe('/unsubscribe loader', () => {
-  it('shows the invalid view for a token that only looks like a UUID', async () => {
+  it('shows the malformed view for a token that only looks like a UUID', async () => {
     await expect(loader({ deps: { token: NOT_A_UUID } })).resolves.toMatchObject({
       status: 'error',
-      error: 'invalid',
+      error: 'malformed',
     })
     expect(hoisted.processUnsubscribeToken).not.toHaveBeenCalled()
     expect(hoisted.previewUnsubscribeToken).not.toHaveBeenCalled()
   })
 
-  it('shows the invalid view for garbage and the missing view for no token', async () => {
-    await expect(loader({ deps: { token: 'abc' } })).resolves.toMatchObject({ error: 'invalid' })
+  it('shows the malformed view for garbage and the missing view for no token', async () => {
+    await expect(loader({ deps: { token: 'abc' } })).resolves.toMatchObject({ error: 'malformed' })
     await expect(loader({ deps: {} })).resolves.toMatchObject({ error: 'missing' })
   })
 

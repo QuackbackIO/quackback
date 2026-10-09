@@ -209,7 +209,8 @@ export function WidgetShell({
           // focused. Otherwise ProseMirror swallows Escape (preventDefault)
           // without doing anything visible, so the composer would trap the
           // key: blur it and let the next press close.
-          if (!suggestionWasOpen) target.blur()
+          if (suggestionWasOpen) return
+          target.blur()
           return
         }
         if (e.defaultPrevented) return

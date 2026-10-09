@@ -5,38 +5,37 @@
  * Opening the link never writes: mail scanners prefetch every link in a
  * message, so the page only looks the token up and asks first. The unsubscribe
  * happens on the confirm button, or on a mail provider's one-click `POST` to
- * this URL (see one-click-unsubscribe.ts). A malformed token is an invalid
- * link to show, never an error.
+ * this URL (see one-click-unsubscribe.ts).
  */
+import { useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { useState, type ReactNode } from 'react'
-import { FormattedMessage, useIntl, type IntlShape } from 'react-intl'
 import { z } from 'zod'
-import { CheckCircleIcon, EnvelopeIcon, XCircleIcon } from '@heroicons/react/24/solid'
+import { FormattedMessage, useIntl, type MessageDescriptor } from 'react-intl'
+import { CheckCircleIcon, XCircleIcon, EnvelopeIcon } from '@heroicons/react/24/solid'
+import { Button } from '@/components/ui/button'
+import { PortalIntlProvider } from '@/components/portal-intl-provider'
+import { loadUnsubscribeIntl } from '@/lib/server/functions/locale'
 import {
   previewUnsubscribeTokenFn,
   processUnsubscribeTokenFn,
   type UnsubscribePreview,
   type UnsubscribeResult,
 } from '@/lib/server/functions/subscriptions'
-import { loadUnsubscribeIntl } from '@/lib/server/functions/locale'
 import { isUnsubscribeToken } from '@/lib/shared/unsubscribe-token'
-import { PortalIntlProvider } from '@/components/portal-intl-provider'
-import { Button } from '@/components/ui/button'
 
 const searchSchema = z.object({
   token: z.string().optional(),
 })
 
-type ErrorKind = 'missing' | 'invalid' | 'expired' | 'used' | 'failed'
-type UnsubscribeView = UnsubscribePreview | { status: 'error'; error: 'missing' }
+type PageError = 'missing' | 'malformed' | 'invalid' | 'failed'
+type UnsubscribeView = UnsubscribePreview | { status: 'error'; error: 'missing' | 'malformed' }
 
 export const Route = createFileRoute('/unsubscribe')({
   validateSearch: searchSchema,
   loaderDeps: ({ search }) => ({ token: search.token }),
   loader: async ({ deps }) => {
     const [intl, view] = await Promise.all([loadUnsubscribeIntl(), lookUp(deps.token)])
-    return { ...intl, ...view }
+    return { ...intl, ...view, token: deps.token ?? null }
   },
   server: {
     handlers: {
@@ -47,348 +46,348 @@ export const Route = createFileRoute('/unsubscribe')({
       },
     },
   },
-  component: UnsubscribePage,
+  head: () => ({ meta: [{ name: 'robots', content: 'noindex' }] }),
+  component: UnsubscribeRoute,
 })
 
-/** Read-only: the token is looked up, never spent. */
+/** Read-only: the token is looked up, never spent. A malformed one never reaches the server. */
 async function lookUp(token: string | undefined): Promise<UnsubscribeView> {
   if (!token) return { status: 'error', error: 'missing' }
-  if (!isUnsubscribeToken(token)) return { status: 'error', error: 'invalid' }
+  if (!isUnsubscribeToken(token)) return { status: 'error', error: 'malformed' }
   return previewUnsubscribeTokenFn({ data: { token } })
 }
 
-function UnsubscribePage() {
+function UnsubscribeRoute() {
   const data = Route.useLoaderData()
-  const { token } = Route.useSearch()
-
   return (
     <PortalIntlProvider locale={data.locale} messages={data.messages}>
-      {data.status === 'confirm' && token ? (
-        <ConfirmFlow token={token} action={data.action} postTitle={data.postTitle} />
-      ) : (
-        <ErrorView error={data.status === 'error' ? data.error : 'invalid'} />
-      )}
+      <main className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
+        <div className="w-full max-w-md space-y-6 text-center">
+          {data.status === 'confirm' && data.token ? (
+            <ConfirmFlow
+              token={data.token}
+              preview={{ action: data.action, postTitle: data.postTitle }}
+            />
+          ) : (
+            <ErrorView error={data.status === 'error' ? data.error : 'invalid'} />
+          )}
+        </div>
+      </main>
     </PortalIntlProvider>
   )
 }
 
 function ConfirmFlow({
   token,
-  action,
-  postTitle,
+  preview,
 }: {
   token: string
-  action: string
-  postTitle?: string
+  preview: { action: string; postTitle?: string }
 }) {
   const intl = useIntl()
+  const [state, setState] = useState<'confirm' | 'working' | 'failed'>('confirm')
   const [result, setResult] = useState<UnsubscribeResult | null>(null)
-  const [submitting, setSubmitting] = useState(false)
+  const copy = actionCopy(preview.action)
 
-  const confirm = async () => {
-    if (submitting) return
-    setSubmitting(true)
+  if (result?.success) return <DoneView result={result} />
+  if (result) return <ErrorView error={result.error === 'failed' ? 'failed' : 'invalid'} />
+
+  async function confirm() {
+    setState('working')
     try {
       setResult(await processUnsubscribeTokenFn({ data: { token } }))
     } catch {
-      setResult({ success: false, error: 'failed' })
-    } finally {
-      setSubmitting(false)
+      setState('failed')
     }
   }
 
-  if (result?.success) return <SuccessView result={result} />
-  if (result) return <ErrorView error={result.error ?? 'invalid'} />
-
-  const { title, message } = confirmText(intl, action)
   return (
-    <Shell
-      icon={
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-          <EnvelopeIcon className="h-8 w-8 text-muted-foreground" />
-        </div>
-      }
-      title={title}
-      message={message}
-      postTitle={postTitle}
-    >
-      <Button onClick={confirm} disabled={submitting}>
-        {submitting ? (
-          <FormattedMessage id="unsubscribe.confirm.pending" defaultMessage="Unsubscribing…" />
+    <>
+      <StatusIcon tone="neutral" />
+      <div className="space-y-2">
+        <h1 className="text-xl font-semibold text-foreground">
+          {intl.formatMessage(copy.confirmTitle)}
+        </h1>
+        <p className="text-sm text-muted-foreground">{intl.formatMessage(copy.confirmBody)}</p>
+        {preview.postTitle ? (
+          <p className="text-sm text-muted-foreground">
+            <FormattedMessage
+              id="unsubscribe.postLabel"
+              defaultMessage="Post: {title}"
+              values={{ title: <span className="font-medium">{preview.postTitle}</span> }}
+            />
+          </p>
+        ) : null}
+      </div>
+      {state === 'failed' ? (
+        <p role="alert" className="text-sm text-destructive">
+          {intl.formatMessage(ERROR_COPY.failed.body)}
+        </p>
+      ) : null}
+      <div className="flex justify-center">
+        <Button onClick={confirm} disabled={state === 'working'}>
+          {intl.formatMessage(copy.button)}
+        </Button>
+      </div>
+    </>
+  )
+}
+
+function DoneView({ result }: { result: UnsubscribeResult }) {
+  const intl = useIntl()
+  const copy = actionCopy(result.action)
+  return (
+    <>
+      <StatusIcon tone="success" />
+      <div className="space-y-2">
+        <h1 className="text-xl font-semibold text-foreground">
+          <FormattedMessage id="unsubscribe.doneTitle" defaultMessage="Done" />
+        </h1>
+        <p role="status" className="text-sm text-muted-foreground">
+          {intl.formatMessage(copy.doneBody)}
+        </p>
+        {result.action === 'unsubscribe_onboarding' ? (
+          <p className="text-sm text-muted-foreground">
+            <FormattedMessage
+              id="unsubscribe.onboarding.turnBackOn"
+              defaultMessage="Changed your mind? <link>Turn them back on</link> in your preferences."
+              values={{
+                link: (chunks) => (
+                  <Link
+                    to="/settings/preferences"
+                    className="font-medium text-foreground underline underline-offset-4"
+                  >
+                    {chunks}
+                  </Link>
+                ),
+              }}
+            />
+          </p>
+        ) : null}
+      </div>
+      <div className="flex justify-center">
+        {result.boardSlug && result.postId ? (
+          <Button asChild>
+            <Link
+              to="/b/$slug/posts/$postId"
+              params={{ slug: result.boardSlug, postId: result.postId }}
+            >
+              <FormattedMessage id="unsubscribe.viewPost" defaultMessage="View post" />
+            </Link>
+          </Button>
         ) : (
-          <FormattedMessage id="unsubscribe.confirm.button" defaultMessage="Unsubscribe" />
+          <HomeButton />
         )}
-      </Button>
-    </Shell>
+      </div>
+    </>
   )
 }
 
-function SuccessView({ result }: { result: UnsubscribeResult }) {
+function ErrorView({ error }: { error: PageError }) {
   const intl = useIntl()
-  const { title, message } = successText(intl, result.action)
-
+  const copy = ERROR_COPY[error]
   return (
-    <Shell
-      icon={
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
-          <CheckCircleIcon className="h-8 w-8 text-green-600 dark:text-green-400" />
-        </div>
-      }
-      title={title}
-      message={message}
-      postTitle={result.postTitle}
-    >
-      {result.boardSlug && result.postId ? (
-        <Link
-          to="/b/$slug/posts/$postId"
-          params={{ slug: result.boardSlug, postId: result.postId }}
-          className={LINK_BUTTON}
-        >
-          <FormattedMessage id="unsubscribe.viewPost" defaultMessage="View Post" />
-        </Link>
-      ) : (
-        <HomeLink />
-      )}
-    </Shell>
+    <>
+      <StatusIcon tone="error" />
+      <div className="space-y-2">
+        <h1 className="text-xl font-semibold text-foreground">{intl.formatMessage(copy.title)}</h1>
+        <p className="text-sm text-muted-foreground">{intl.formatMessage(copy.body)}</p>
+      </div>
+      <div className="flex justify-center">
+        <HomeButton />
+      </div>
+    </>
   )
 }
 
-function ErrorView({ error }: { error: ErrorKind }) {
-  const intl = useIntl()
-  const { title, message } = errorText(intl, error)
-
+function HomeButton() {
   return (
-    <Shell
-      icon={
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
-          <XCircleIcon className="h-8 w-8 text-red-600 dark:text-red-400" />
-        </div>
-      }
-      title={title}
-      message={message}
-    >
-      <HomeLink />
-    </Shell>
+    <Button asChild variant="outline">
+      <Link to="/">
+        <FormattedMessage id="unsubscribe.goHome" defaultMessage="Go to home" />
+      </Link>
+    </Button>
   )
 }
 
-const LINK_BUTTON =
-  'inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors'
-
-function HomeLink() {
+function StatusIcon({ tone }: { tone: 'neutral' | 'success' | 'error' }) {
+  const Icon = tone === 'success' ? CheckCircleIcon : tone === 'error' ? XCircleIcon : EnvelopeIcon
+  const toneClass =
+    tone === 'success'
+      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+      : tone === 'error'
+        ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+        : 'bg-muted text-muted-foreground'
   return (
-    <Link to="/" className={LINK_BUTTON}>
-      <FormattedMessage id="unsubscribe.goHome" defaultMessage="Go to Home" />
-    </Link>
-  )
-}
-
-function Shell({
-  icon,
-  title,
-  message,
-  postTitle,
-  children,
-}: {
-  icon: ReactNode
-  title: string
-  message: string
-  postTitle?: string
-  children: ReactNode
-}) {
-  return (
-    <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-background">
-      <div className="w-full max-w-md space-y-6">
-        <div className="flex justify-center">{icon}</div>
-
-        <div className="text-center space-y-2">
-          <h1 className="text-xl font-semibold text-foreground">{title}</h1>
-          <p className="text-sm text-muted-foreground">{message}</p>
-          {postTitle && (
-            <p className="text-sm text-muted-foreground mt-2">
-              <FormattedMessage
-                id="unsubscribe.postLabel"
-                defaultMessage="Post: {title}"
-                values={{ title: <span className="font-medium">{postTitle}</span> }}
-              />
-            </p>
-          )}
-        </div>
-
-        <div className="flex justify-center pt-4">{children}</div>
+    <div className="flex justify-center" aria-hidden="true">
+      <div className={`flex h-16 w-16 items-center justify-center rounded-full ${toneClass}`}>
+        <Icon className="h-8 w-8" />
       </div>
     </div>
   )
 }
 
-type Copy = { title: string; message: string }
-
-function confirmText(intl: IntlShape, action: string): Copy {
-  switch (action) {
-    case 'unsubscribe_post':
-      return {
-        title: intl.formatMessage({
-          id: 'unsubscribe.confirm.post.title',
-          defaultMessage: 'Unsubscribe from this post?',
-        }),
-        message: intl.formatMessage({
-          id: 'unsubscribe.confirm.post.message',
-          defaultMessage: "You'll stop getting email updates about this post.",
-        }),
-      }
-    case 'unsubscribe_all':
-      return {
-        title: intl.formatMessage({
-          id: 'unsubscribe.confirm.all.title',
-          defaultMessage: 'Turn off all emails?',
-        }),
-        message: intl.formatMessage({
-          id: 'unsubscribe.confirm.all.message',
-          defaultMessage:
-            "You'll stop getting all email notifications. You can turn them back on in your settings.",
-        }),
-      }
-    case 'unsubscribe_changelog':
-      return {
-        title: intl.formatMessage({
-          id: 'unsubscribe.confirm.changelog.title',
-          defaultMessage: 'Unsubscribe from changelog emails?',
-        }),
-        message: intl.formatMessage({
-          id: 'unsubscribe.confirm.changelog.message',
-          defaultMessage: "You'll stop getting changelog emails. You can resubscribe any time.",
-        }),
-      }
-    case 'unsubscribe_status':
-      return {
-        title: intl.formatMessage({
-          id: 'unsubscribe.confirm.status.title',
-          defaultMessage: 'Unsubscribe from status page emails?',
-        }),
-        message: intl.formatMessage({
-          id: 'unsubscribe.confirm.status.message',
-          defaultMessage: "You'll stop getting status page emails. You can resubscribe any time.",
-        }),
-      }
-    default:
-      return {
-        title: intl.formatMessage({
-          id: 'unsubscribe.confirm.default.title',
-          defaultMessage: 'Unsubscribe from these emails?',
-        }),
-        message: intl.formatMessage({
-          id: 'unsubscribe.confirm.default.message',
-          defaultMessage: "You'll stop getting these emails.",
-        }),
-      }
-  }
+interface ActionCopy {
+  confirmTitle: MessageDescriptor
+  confirmBody: MessageDescriptor
+  button: MessageDescriptor
+  doneBody: MessageDescriptor
 }
 
-function successText(intl: IntlShape, action?: string): Copy {
-  const unsubscribed = () =>
-    intl.formatMessage({ id: 'unsubscribe.success.title', defaultMessage: 'Unsubscribed' })
-  switch (action) {
-    case 'unsubscribe_post':
-      return {
-        title: unsubscribed(),
-        message: intl.formatMessage({
-          id: 'unsubscribe.success.post.message',
-          defaultMessage:
-            "You've been unsubscribed from this post. You won't receive any more email updates about it.",
-        }),
-      }
-    case 'mute_post':
-      return {
-        title: intl.formatMessage({
-          id: 'unsubscribe.success.mute.title',
-          defaultMessage: 'Notifications Muted',
-        }),
-        message: intl.formatMessage({
-          id: 'unsubscribe.success.mute.message',
-          defaultMessage:
-            "You've muted notifications for this post. You can unmute anytime from the post page.",
-        }),
-      }
-    case 'unsubscribe_all':
-      return {
-        title: intl.formatMessage({
-          id: 'unsubscribe.success.all.title',
-          defaultMessage: 'All Emails Disabled',
-        }),
-        message: intl.formatMessage({
-          id: 'unsubscribe.success.all.message',
-          defaultMessage:
-            "You've disabled all email notifications. You can re-enable them from your settings.",
-        }),
-      }
-    case 'unsubscribe_changelog':
-      return {
-        title: unsubscribed(),
-        message: intl.formatMessage({
-          id: 'unsubscribe.success.changelog.message',
-          defaultMessage:
-            "You won't receive any more changelog emails. You can resubscribe any time.",
-        }),
-      }
-    case 'unsubscribe_status':
-      return {
-        title: unsubscribed(),
-        message: intl.formatMessage({
-          id: 'unsubscribe.success.status.message',
-          defaultMessage:
-            "You won't receive any more status page emails. You can resubscribe any time.",
-        }),
-      }
-    default:
-      return {
-        title: intl.formatMessage({
-          id: 'unsubscribe.success.default.title',
-          defaultMessage: 'Success',
-        }),
-        message: intl.formatMessage({
-          id: 'unsubscribe.success.default.message',
-          defaultMessage: 'Your preferences have been updated.',
-        }),
-      }
-  }
+const UNSUBSCRIBE_BUTTON: MessageDescriptor = {
+  id: 'unsubscribe.button',
+  defaultMessage: 'Unsubscribe',
 }
 
-function errorText(intl: IntlShape, error: ErrorKind): Copy {
-  switch (error) {
-    case 'missing':
-      return {
-        title: intl.formatMessage({
-          id: 'unsubscribe.error.missing.title',
-          defaultMessage: 'Missing Token',
-        }),
-        message: intl.formatMessage({
-          id: 'unsubscribe.error.missing.message',
-          defaultMessage: 'No unsubscribe token was provided. Please use the link from your email.',
-        }),
-      }
-    case 'failed':
-      return {
-        title: intl.formatMessage({
-          id: 'unsubscribe.error.failed.title',
-          defaultMessage: 'Something Went Wrong',
-        }),
-        message: intl.formatMessage({
-          id: 'unsubscribe.error.failed.message',
-          defaultMessage: "We couldn't process your request. Please try again later.",
-        }),
-      }
-    case 'invalid':
-    case 'expired':
-    case 'used':
-      return {
-        title: intl.formatMessage({
-          id: 'unsubscribe.error.expired.title',
-          defaultMessage: 'Link Expired',
-        }),
-        message: intl.formatMessage({
-          id: 'unsubscribe.error.expired.message',
-          defaultMessage: 'This unsubscribe link has already been used or has expired.',
-        }),
-      }
-  }
+const ACTION_COPY: Record<string, ActionCopy> = {
+  unsubscribe_post: {
+    confirmTitle: {
+      id: 'unsubscribe.post.confirmTitle',
+      defaultMessage: 'Unsubscribe from this post?',
+    },
+    confirmBody: {
+      id: 'unsubscribe.post.confirmBody',
+      defaultMessage: 'You will stop getting email updates about it.',
+    },
+    button: UNSUBSCRIBE_BUTTON,
+    doneBody: {
+      id: 'unsubscribe.post.doneBody',
+      defaultMessage: 'You will not get more email updates about this post.',
+    },
+  },
+  mute_post: {
+    confirmTitle: { id: 'unsubscribe.mute.confirmTitle', defaultMessage: 'Mute this post?' },
+    confirmBody: {
+      id: 'unsubscribe.mute.confirmBody',
+      defaultMessage: 'You will stop getting notifications about it.',
+    },
+    button: { id: 'unsubscribe.mute.button', defaultMessage: 'Mute' },
+    doneBody: {
+      id: 'unsubscribe.mute.doneBody',
+      defaultMessage: 'This post is muted. You can unmute it from the post.',
+    },
+  },
+  unsubscribe_all: {
+    confirmTitle: {
+      id: 'unsubscribe.all.confirmTitle',
+      defaultMessage: 'Turn off all email?',
+    },
+    confirmBody: {
+      id: 'unsubscribe.all.confirmBody',
+      defaultMessage: 'You will stop getting every email notification.',
+    },
+    button: { id: 'unsubscribe.all.button', defaultMessage: 'Turn off all email' },
+    doneBody: {
+      id: 'unsubscribe.all.doneBody',
+      defaultMessage: 'All email is off. You can turn it back on in your preferences.',
+    },
+  },
+  unsubscribe_changelog: {
+    confirmTitle: {
+      id: 'unsubscribe.changelog.confirmTitle',
+      defaultMessage: 'Unsubscribe from changelog emails?',
+    },
+    confirmBody: {
+      id: 'unsubscribe.changelog.confirmBody',
+      defaultMessage: 'You will stop getting an email when an update is published.',
+    },
+    button: UNSUBSCRIBE_BUTTON,
+    doneBody: {
+      id: 'unsubscribe.changelog.doneBody',
+      defaultMessage: 'You will not get more changelog emails. You can subscribe again any time.',
+    },
+  },
+  unsubscribe_onboarding: {
+    confirmTitle: {
+      id: 'unsubscribe.onboarding.confirmTitle',
+      defaultMessage: 'Stop setup tips?',
+    },
+    confirmBody: {
+      id: 'unsubscribe.onboarding.confirmBody',
+      defaultMessage: 'You will stop getting setup tips by email. Nothing else changes.',
+    },
+    button: { id: 'unsubscribe.onboarding.button', defaultMessage: 'Stop setup tips' },
+    doneBody: {
+      id: 'unsubscribe.onboarding.doneBody',
+      defaultMessage: 'Setup tips are off.',
+    },
+  },
+  unsubscribe_status: {
+    confirmTitle: {
+      id: 'unsubscribe.status.confirmTitle',
+      defaultMessage: 'Unsubscribe from status updates?',
+    },
+    confirmBody: {
+      id: 'unsubscribe.status.confirmBody',
+      defaultMessage: 'You will stop getting status page emails.',
+    },
+    button: UNSUBSCRIBE_BUTTON,
+    doneBody: {
+      id: 'unsubscribe.status.doneBody',
+      defaultMessage: 'You will not get more status page emails. You can subscribe again any time.',
+    },
+  },
+}
+
+const GENERIC_COPY: ActionCopy = {
+  confirmTitle: {
+    id: 'unsubscribe.generic.confirmTitle',
+    defaultMessage: 'Stop these emails?',
+  },
+  confirmBody: {
+    id: 'unsubscribe.generic.confirmBody',
+    defaultMessage: 'You will stop getting emails like this one.',
+  },
+  button: UNSUBSCRIBE_BUTTON,
+  doneBody: {
+    id: 'unsubscribe.generic.doneBody',
+    defaultMessage: 'Your preferences are updated.',
+  },
+}
+
+function actionCopy(action: string | undefined): ActionCopy {
+  return (action && ACTION_COPY[action]) || GENERIC_COPY
+}
+
+const ERROR_COPY: Record<PageError, { title: MessageDescriptor; body: MessageDescriptor }> = {
+  missing: {
+    title: {
+      id: 'unsubscribe.error.missing.title',
+      defaultMessage: 'This link is incomplete',
+    },
+    body: {
+      id: 'unsubscribe.error.missing.body',
+      defaultMessage: 'Use the link from your email.',
+    },
+  },
+  malformed: {
+    title: {
+      id: 'unsubscribe.error.malformed.title',
+      defaultMessage: 'This link is not valid',
+    },
+    body: {
+      id: 'unsubscribe.error.missing.body',
+      defaultMessage: 'Use the link from your email.',
+    },
+  },
+  invalid: {
+    title: {
+      id: 'unsubscribe.error.invalid.title',
+      defaultMessage: 'This link has expired',
+    },
+    body: {
+      id: 'unsubscribe.error.invalid.body',
+      defaultMessage: 'It was already used or is too old. Use the link in a newer email.',
+    },
+  },
+  failed: {
+    title: {
+      id: 'unsubscribe.error.failed.title',
+      defaultMessage: 'Something went wrong',
+    },
+    body: {
+      id: 'unsubscribe.error.failed.body',
+      defaultMessage: 'We could not update your preferences. Try again in a moment.',
+    },
+  },
 }

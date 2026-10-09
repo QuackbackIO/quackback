@@ -58,8 +58,8 @@ Edges (28):
 
 ## 3. Server domains (lib/server/domains)
 
-Nodes (52): activity, admin-overview, ai, analytics, api, api-keys, assistant, attribute-definitions, billing, boards, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, embeddings, export, files, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
-Edges (127):
+Nodes (53): activity, admin-overview, ai, analytics, api, api-keys, assistant, attribute-definitions, billing, boards, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, embeddings, export, files, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, onboarding, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
+Edges (131):
 
 - admin-overview -> changelog
 - ai -> settings
@@ -74,6 +74,7 @@ Edges (127):
 - assistant -> ai
 - assistant -> api
 - assistant -> boards
+- assistant -> changelog
 - assistant -> conversation
 - assistant -> conversation-attributes
 - assistant -> embeddings
@@ -145,6 +146,9 @@ Edges (127):
 - merge-suggestions -> settings
 - moderation -> comments
 - moderation -> posts
+- onboarding -> assistant
+- onboarding -> principals
+- onboarding -> settings
 - posts -> activity
 - posts -> ai
 - posts -> embeddings

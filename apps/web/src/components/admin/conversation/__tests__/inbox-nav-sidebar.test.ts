@@ -5,7 +5,12 @@
  * clicking "Saved messages" fell back to the conversation list.
  */
 import { describe, expect, it } from 'vitest'
-import { CONVERSATION_VIEWS, TICKET_INBOX_VIEWS, isInboxView } from '../inbox-nav-sidebar'
+import {
+  CONVERSATION_VIEWS,
+  TICKET_INBOX_VIEWS,
+  isInboxView,
+  showsTestView,
+} from '../inbox-nav-sidebar'
 
 describe('isInboxView', () => {
   it('orders the broad conversation queue before personal queues', () => {
@@ -50,5 +55,15 @@ describe('isInboxView', () => {
     expect(isInboxView('bogus')).toBe(false)
     expect(isInboxView(undefined)).toBe(false)
     expect(isInboxView(42)).toBe(false)
+  })
+})
+
+describe('showsTestView', () => {
+  it('shows the Test view only while test conversations exist or it is open', () => {
+    expect(isInboxView('test')).toBe(true)
+    expect(showsTestView(undefined, false)).toBe(false)
+    expect(showsTestView({ test: 0 }, false)).toBe(false)
+    expect(showsTestView({ test: 2 }, false)).toBe(true)
+    expect(showsTestView({ test: 0 }, true)).toBe(true)
   })
 })

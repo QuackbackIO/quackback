@@ -72,3 +72,6 @@ export * from './labs'
 export * from './slack'
 export * from './integration-deliveries'
 export * from './integration-sync'
+
+export * from './workspace-assistant'
+export * from './onboarding-emails'

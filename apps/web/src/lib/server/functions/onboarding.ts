@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import type { UserId, PostStatusId } from '@quackback/ids'
+import type { UserId, PostStatusId, PrincipalId } from '@quackback/ids'
 import { generateId } from '@quackback/ids'
 import {
   ONBOARDING_OUTCOMES,
@@ -30,10 +30,10 @@ import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.
 import { DEFAULT_ASSISTANT_CONFIG } from '@/lib/shared/assistant/config'
 import {
   DEFAULT_AUTH_CONFIG,
-  DEFAULT_FEATURE_FLAGS,
+  newWorkspaceBaseFlags,
   DEFAULT_PORTAL_CONFIG,
   DEFAULT_WIDGET_CONFIG,
-  flagsForGoal,
+  flagsForGoals,
   resolveFeatureFlags,
 } from '@/lib/server/domains/settings/settings.types'
 import { isPathManaged } from '@/lib/server/config-file/managed-paths'
@@ -45,7 +45,11 @@ import {
   finishIdentityOnboarding,
   mutateSetupStateAtomic,
 } from '@/lib/server/setup-state'
+import { applyOnboardingGoals, setupGoals } from '@/lib/server/onboarding-board'
 import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/identity-projection'
+import type { InstallChecks } from '@/lib/server/install-checks'
+import { requireAuth } from './auth-helpers'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 const log = logger.child({ component: 'onboarding' })
 
@@ -269,6 +273,8 @@ const saveWorkspaceAndGoalSchema = z.object({
     .max(100, 'Name must be 100 characters or less')
     .optional(),
   useCase: z.enum(ONBOARDING_OUTCOMES).optional(),
+  goals: z.array(z.enum(ONBOARDING_OUTCOMES)).min(1).max(4).optional(),
+  feedbackPrivate: z.boolean().optional(),
 })
 
 // ============================================
@@ -318,7 +324,8 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
 
       const workspaceName = data.workspaceName
       const slug = workspaceSlugFor(workspaceName)
-      const useCase = data.useCase ?? 'product_feedback'
+      const goals = [...new Set(data.goals ?? [data.useCase ?? 'product_feedback'])]
+      const useCase = goals[0]
 
       // Setup is final. Once it is finished, the name and goal belong to
       // Settings, and a form left open in another tab must not run setup
@@ -348,14 +355,34 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
         const refusal = await ensureBootstrapAdmin(session.user.id as UserId)
         if (refusal) return refuse(refusal)
       }
+      // Whoever sets the workspace up is its owner, recorded once.
+      const setupBy = await db.query.principal.findFirst({
+        where: eq(principal.userId, session.user.id as UserId),
+        columns: { id: true },
+      })
 
       let result: SaveWorkspaceAndGoalResult
+      // Finishing setup stamps the activation handoff, which is also what
+      // Home's first landing waits for before it queues the welcome emails.
+      // So the save that makes the first stamp queues them, in the same
+      // transaction: a stamp that committed without its jobs would never be
+      // retried, because every later pass sees the handoff already made.
+      const { scheduleOnboardingEmails } =
+        await import('@/lib/server/domains/onboarding/onboarding-emails')
+      const locale = await requestLocale()
       if (!existingSettings) {
+        // Setup no longer offers a private board: a new workspace's board is public.
         const initialState: SetupState = finishIdentityOnboarding(
-          { ...DEFAULT_SETUP_STATE, steps: { ...DEFAULT_SETUP_STATE.steps, workspace: true } },
+          {
+            ...DEFAULT_SETUP_STATE,
+            goals,
+            ...(setupBy && { ownerPrincipalId: setupBy.id }),
+            steps: { ...DEFAULT_SETUP_STATE.steps, workspace: true },
+          },
           useCase
         )
-        const { flags, enabledModules } = flagsForGoal(DEFAULT_FEATURE_FLAGS, useCase)
+        const baseFlags = newWorkspaceBaseFlags(goals)
+        const { enabledModules } = flagsForGoals(baseFlags, goals)
         const created = await db
           .transaction(async (tx) => {
             // Two saves can both read "no settings yet". The first to take the
@@ -376,10 +403,16 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
                 assistantConfig: DEFAULT_ASSISTANT_CONFIG,
                 authConfig: JSON.stringify({ ...DEFAULT_AUTH_CONFIG, openSignup: true }),
                 setupState: JSON.stringify(initialState),
-                featureFlags: JSON.stringify(flags),
+                featureFlags: JSON.stringify(baseFlags),
               })
               .returning()
             if (!row) throw new Error('Failed to create workspace settings')
+            // The goals' modules turn on through the one flag write, with what
+            // turning each on does (publishing the status page, for one).
+            await applyOnboardingGoals(tx, row, initialState)
+            if (setupBy) {
+              await scheduleOnboardingEmails(setupBy.id as PrincipalId, new Date(), locale, tx)
+            }
             return row
           })
           .catch(finishedMeanwhile)
@@ -404,19 +437,29 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
           if (nameManaged && workspaceName !== row.name) {
             throw new Error('Workspace name is managed by your workspace admin')
           }
-          if (useCaseManaged && data.useCase && data.useCase !== current.useCase) {
+          if (
+            useCaseManaged &&
+            ((data.useCase && data.useCase !== current.useCase) ||
+              (data.goals &&
+                JSON.stringify(goals) !== JSON.stringify(current.goals ?? [current.useCase])) ||
+              (data.feedbackPrivate !== undefined &&
+                data.feedbackPrivate !== (current.feedbackPrivate ?? false)))
+          ) {
             throw new Error('Workspace goal is managed by your workspace admin')
           }
           const goal = useCaseManaged ? (current.useCase ?? useCase) : useCase
-          const { flags, enabledModules } = flagsForGoal(
+          const selectedGoals = useCaseManaged ? (current.goals ?? [goal]) : goals
+          // Setup no longer offers a private board; a workspace that chose one
+          // before keeps it.
+          const privateFeedback = current.feedbackPrivate
+          const { enabledModules } = flagsForGoals(
             resolveFeatureFlags(row.featureFlags),
-            goal
+            selectedGoals
           )
           const updatePayload: Record<string, unknown> = {
             portalConfig: row.portalConfig ?? JSON.stringify(DEFAULT_PORTAL_CONFIG),
             authConfig:
               row.authConfig ?? JSON.stringify({ ...DEFAULT_AUTH_CONFIG, openSignup: true }),
-            featureFlags: JSON.stringify(flags),
           }
           if (!nameManaged) updatePayload.name = workspaceName
           if (!slugManaged) updatePayload.slug = slug
@@ -425,8 +468,22 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
             .set(updatePayload)
             .where(eq(settings.id, row.id))
             .returning()
+          const ownerPrincipalId = current.ownerPrincipalId ?? setupBy?.id
+          const next = finishIdentityOnboarding(
+            {
+              ...current,
+              goals: selectedGoals,
+              feedbackPrivate: privateFeedback,
+              ...(ownerPrincipalId && { ownerPrincipalId }),
+            },
+            goal
+          )
+          await applyOnboardingGoals(tx, updated!, next)
+          if (!current.activationHandoffSeenAt && ownerPrincipalId) {
+            await scheduleOnboardingEmails(ownerPrincipalId as PrincipalId, new Date(), locale, tx)
+          }
           return {
-            state: finishIdentityOnboarding(current, goal),
+            state: next,
             value: {
               updated,
               goal,
@@ -471,92 +528,67 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
     }
   )
 
-const saveCloudOnboardingGoalSchema = z.object({ useCase: z.enum(ONBOARDING_OUTCOMES) }).strict()
-
-/** Save only the outcome for a control-plane-provisioned workspace. */
-export const saveCloudOnboardingGoalFn = createServerFn({ method: 'POST' })
-  .validator(saveCloudOnboardingGoalSchema)
-  .handler(async ({ data }) => {
-    const session = await getSession()
-    if (!session?.user) throw new Error('Authentication required')
-    if (session.session.scope !== 'dashboard') throw new Error('Only admin can change setup')
-    const caller = await db.query.principal.findFirst({
-      where: eq(principal.userId, session.user.id as UserId),
-    })
-    if (!caller || !isAdmin(caller.role)) throw new Error('Only admin can change setup')
-
-    const { state, value } = await mutateSetupStateAtomic(async (current, row, tx) => {
-      if (!parseIdentityProjection(row.cloudIdentity)) {
-        throw new Error('Cloud workspace identity is not enabled')
-      }
-      if (!current.workspaceDetailsSeenAt) {
-        throw new Error('Set your workspace name and URL first')
-      }
-      const { flags, enabledModules } = flagsForGoal(
-        resolveFeatureFlags(row.featureFlags),
-        data.useCase
-      )
-      await tx
-        .update(settings)
-        .set({ featureFlags: JSON.stringify(flags) })
-        .where(eq(settings.id, row.id))
-      return {
-        state: applyDeferredLaunchStartingPoint(current, data.useCase),
-        value: { enabledModules },
-      }
-    })
-
-    const existingStatuses = await db.query.postStatuses.findFirst()
-    if (!existingStatuses) {
-      await db.insert(postStatuses).values(
-        DEFAULT_STATUSES.map((status) => ({
-          id: generateId('post_status') as PostStatusId,
-          ...status,
-          createdAt: new Date(),
-        }))
-      )
-    }
-    return { useCase: state.useCase!, enabledModules: value.enabledModules }
-  })
+/** The language this request's browser asked for, or undefined outside a request. */
+async function requestLocale() {
+  try {
+    const { getRequestHeaders } = await import('@tanstack/react-start/server')
+    const { resolveLocale } = await import('@/lib/shared/i18n')
+    return resolveLocale(getRequestHeaders().get('accept-language'))
+  } catch {
+    return undefined
+  }
+}
 
 /** Stamp default outcome, friendly-host details, and handoff so Home can open. */
 export const ensureOnboardingHomeReadyFn = createServerFn({ method: 'POST' }).handler(async () => {
   const session = await getSession()
-  if (!session?.user) return { ok: false as const }
-  if (session.session.scope !== 'dashboard') return { ok: false as const }
+  if (!session?.user) return { ok: false as const, modulesChanged: false }
+  if (session.session.scope !== 'dashboard') return { ok: false as const, modulesChanged: false }
   const existingSettings = await getSettings()
-  if (!existingSettings) return { ok: false as const }
+  if (!existingSettings) return { ok: false as const, modulesChanged: false }
   const caller = await db.query.principal.findFirst({
     where: eq(principal.userId, session.user.id as UserId),
   })
-  if (!caller || !isAdmin(caller.role)) return { ok: false as const }
+  if (!caller || !isAdmin(caller.role)) return { ok: false as const, modulesChanged: false }
 
   const identity = parseIdentityProjection(existingSettings.cloudIdentity)
   const { friendlyPlatformLabel } = await import('@/lib/shared/platform-label')
   const hasFriendlyHost = Boolean(friendlyPlatformLabel(identity?.platformHostname))
 
-  await mutateSetupStateAtomic(async (current, row, tx) => {
+  const { value } = await mutateSetupStateAtomic(async (current, row, tx) => {
     const now = new Date().toISOString()
-    const goal =
-      current.useCase && current.useCase !== 'internal' ? current.useCase : 'product_feedback'
-    let next = current
+    const goals = setupGoals(current)
+    let next: SetupState = { ...current, goals }
+    let modulesChanged = false
     if (hasFriendlyHost && !current.workspaceDetailsSeenAt) {
       next = { ...next, workspaceDetailsSeenAt: now }
     }
     if (!next.steps.startingPoint || next.steps.startingPoint.source === 'managed') {
-      const { flags } = flagsForGoal(resolveFeatureFlags(row.featureFlags), goal)
-      await tx
-        .update(settings)
-        .set({ featureFlags: JSON.stringify(flags) })
-        .where(eq(settings.id, row.id))
-      next = applyDeferredLaunchStartingPoint(next, goal, now)
+      ;({ modulesChanged } = await applyOnboardingGoals(tx, row, next))
+      next = applyDeferredLaunchStartingPoint(next, goals[0], now)
     }
-    if (!next.activationHandoffSeenAt) {
-      next = { ...next, activationHandoffSeenAt: now }
+    const firstLanding = !next.activationHandoffSeenAt
+    if (firstLanding) {
+      // A provisioned workspace has no setup step; its owner is whoever lands first.
+      next = {
+        ...next,
+        activationHandoffSeenAt: now,
+        ownerPrincipalId: next.ownerPrincipalId ?? caller.id,
+      }
     }
-    return { state: next, value: undefined }
+    return { state: next, value: { modulesChanged, firstLanding } }
   })
-  return { ok: true as const }
+  // The owner's first landing queues the welcome and the day-two nudge, in
+  // the language their browser asked for unless they choose one later.
+  if (value.firstLanding) {
+    const { scheduleOnboardingEmails } =
+      await import('@/lib/server/domains/onboarding/onboarding-emails')
+    const locale = await requestLocale()
+    await scheduleOnboardingEmails(caller.id as PrincipalId, new Date(), locale).catch((error) =>
+      log.warn({ err: error }, 'onboarding emails not scheduled')
+    )
+  }
+  return { ok: true as const, modulesChanged: value.modulesChanged }
 })
 
 /**
@@ -590,3 +622,31 @@ export const saveUserNameFn = createServerFn({ method: 'POST' })
 
     log.info({ user_id: session.user.id }, 'save user name: saved')
   })
+
+/**
+ * What this install still needs before people outside the admin's browser can
+ * use it: email, file storage, and a BASE_URL that names the address in use.
+ * Shown once, at the end of setup. Null on a hosted workspace, where the
+ * operator is not the admin and nothing here is theirs to change.
+ */
+export const getInstallChecksFn = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<InstallChecks | null> => {
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    const { config } = await import('@/lib/server/config')
+    if (config.isPooledTenancy) return null
+    const { isEmailConfigured } = await import('@quackback/email')
+    const { isS3Usable } = await import('@/lib/server/storage/s3')
+    const { getRequestHeaders } = await import('@tanstack/react-start/server')
+    const { checkAddress } = await import('@/lib/server/install-checks')
+    const headers = getRequestHeaders()
+    return {
+      email: isEmailConfigured(),
+      storage: isS3Usable(),
+      address: checkAddress(
+        config.baseUrl,
+        headers.get('x-forwarded-host') ?? headers.get('host'),
+        headers.get('x-forwarded-proto')
+      ),
+    }
+  }
+)

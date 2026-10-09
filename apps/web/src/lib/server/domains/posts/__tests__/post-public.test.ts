@@ -85,7 +85,8 @@ const mockDbSelectDistinct = vi.fn().mockImplementation(() => ({
   }),
 }))
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: { select: mockDbSelect, selectDistinct: mockDbSelectDistinct },
   eq: mockEq,
   and: mockAnd,

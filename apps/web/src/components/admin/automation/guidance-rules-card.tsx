@@ -316,7 +316,7 @@ export function GuidanceRulesCard({ agent }: { agent: AssistantAgentKind }) {
                 {intl.formatMessage({
                   id: 'automation.agent.guidance.emptyDescription',
                   defaultMessage:
-                    'For example, when a customer asks about refunds, explain the 30-day policy before sharing the relevant Help Center article.',
+                    'For example, when a customer asks about refunds, explain the 30-day policy before sharing the relevant help center article.',
                 })}
               </p>
               <NewButton noun="guidance" onClick={openNew} className="mt-4 min-h-11 sm:min-h-8">
@@ -878,7 +878,7 @@ function GuidanceRuleDialog({
               placeholder={intl.formatMessage({
                 id: 'automation.agent.guidance.instructionPlaceholder',
                 defaultMessage:
-                  'For example: Explain the 30-day refund policy before sharing the relevant Help Center article.',
+                  'For example: Explain the 30-day refund policy before sharing the relevant help center article.',
               })}
               onChange={(event) => setInstruction(event.target.value)}
             />

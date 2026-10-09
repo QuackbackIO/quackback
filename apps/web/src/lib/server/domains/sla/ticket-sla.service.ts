@@ -37,6 +37,7 @@
  * is measured to first close.
  */
 import { db, and, eq, isNull, sql, tickets, ticketStatuses, slaEvents } from '@/lib/server/db'
+import { notTestTicket } from '@/lib/server/test-data'
 import type { SlaPolicyId, TicketId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { getSlaPolicy } from './sla-policy.service'
@@ -124,7 +125,7 @@ export async function loadTicketSlaApplied(ticketId: TicketId): Promise<TicketSl
   const [row] = await db
     .select({ slaApplied: tickets.slaApplied })
     .from(tickets)
-    .where(eq(tickets.id, ticketId))
+    .where(and(eq(tickets.id, ticketId), notTestTicket(tickets.id)))
     .limit(1)
   return (row?.slaApplied as TicketSlaApplied | undefined) ?? null
 }
@@ -149,6 +150,7 @@ export function ticketSlaStampGuard(
 ) {
   return and(
     eq(tickets.id, ticketId),
+    notTestTicket(tickets.id),
     sql`${tickets.slaApplied} ->> 'appliedAt' = ${appliedAt}`,
     pausedAt === null
       ? sql`${tickets.slaApplied} ->> 'pausedAt' IS NULL`
@@ -290,7 +292,7 @@ export async function applySlaToTicket(
     .select({ id: tickets.id, type: tickets.type, statusCategory: ticketStatuses.category })
     .from(tickets)
     .innerJoin(ticketStatuses, eq(tickets.statusId, ticketStatuses.id))
-    .where(and(eq(tickets.id, ticketId), isNull(tickets.deletedAt)))
+    .where(and(eq(tickets.id, ticketId), isNull(tickets.deletedAt), notTestTicket(tickets.id)))
     .limit(1)
   if (!ticket) throw new NotFoundError('TICKET_NOT_FOUND', `Ticket ${ticketId} not found`)
   if (ticket.type === 'tracker') {

@@ -40,7 +40,7 @@ import {
 } from '@/lib/server/domains/posts/post.public.utils'
 import { createPost } from '@/lib/server/domains/posts/post.service'
 import { voteOnPost } from '@/lib/server/domains/posts/post.voting'
-import { checkAnonVoteRateLimit } from '@/lib/server/utils/anon-rate-limit'
+import { checkAnonVoteRateLimit, reserveAnonPostSlot } from '@/lib/server/utils/anon-rate-limit'
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import { getPostPermissions } from '@/lib/server/domains/posts/post.permissions'
 import { userEditPost, softDeletePost } from '@/lib/server/domains/posts/post.user-actions'
@@ -319,6 +319,12 @@ export const userDeletePostFn = createServerFn({ method: 'POST' })
     return { id: postId }
   })
 
+/** The caller's address, resolved through the trusted-proxy rules, as the
+ *  anonymous rate limits key on it. */
+function clientIp(): string {
+  return getClientIp(getRequestHeaders())
+}
+
 /**
  * Toggle vote on a post. Requires authentication (including anonymous sessions).
  * Anonymous users sign in via Better Auth's anonymous plugin on the client side
@@ -355,8 +361,7 @@ export const runToggleVote = createServerOnlyFn(async function runToggleVote(
 
     // Rate limit anonymous voters by IP. Resolved the same way as the
     // `ipAddress` Better Auth records on the anonymous sessions it counts.
-    const ip = getClientIp(getRequestHeaders())
-    if (!(await checkAnonVoteRateLimit(ip))) {
+    if (!(await checkAnonVoteRateLimit(clientIp()))) {
       throw new Error('Too many votes, please try again later')
     }
   }
@@ -414,6 +419,9 @@ export const runCreatePublicPost = createServerOnlyFn(async function runCreatePu
   if (!settings) {
     throw new Error('Organization settings not found')
   }
+  if (actor.testFeedback && !actor.testFeedback.active) {
+    throw new Error('insufficient_permission:post.create')
+  }
 
   // Block anonymous users unless the workspace master switch allows
   // anonymous interaction. Per-board submit tiers are checked
@@ -423,8 +431,13 @@ export const runCreatePublicPost = createServerOnlyFn(async function runCreatePu
     // Fail closed on a missing flag (single source of truth; the per-board
     // submit tier is the inner gate, existing workspaces carry an explicit
     // value from migration 0084).
-    if (!workspaceAllowsAnonymous(settings.portalConfig)) {
+    if (!actor.testFeedback?.canSubmit && !workspaceAllowsAnonymous(settings.portalConfig)) {
       throw new Error('Anonymous interaction is not enabled')
+    }
+    // Boards can take ideas without an account, so cap how many one address
+    // can post in an hour, across every anonymous identity it mints.
+    if (!actor.testFeedback?.canSubmit && !(await reserveAnonPostSlot(clientIp()))) {
+      throw new Error('Too many ideas, please try again later')
     }
   } else if (!principalRecord) {
     throw new Error('You must be a member to submit feedback.')

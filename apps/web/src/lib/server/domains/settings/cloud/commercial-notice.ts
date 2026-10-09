@@ -19,6 +19,7 @@ export function trialNotice(config: CloudConfig, now: Date = new Date()): PlanNo
   const urgent = daysLeft !== null && daysLeft <= 3
   return {
     label: `${planLabel(config)} trial`,
+    trialPlan: planLabel(config),
     message: 'When this ends, pick a paid plan or switch to Free from billing.',
     expiresAt: config.trialExpiresAt,
     ...(actionUrl

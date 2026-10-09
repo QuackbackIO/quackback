@@ -17,6 +17,7 @@ import type { ConversationId } from '@quackback/ids'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { installInMemoryLocalStorage } from '@/test/local-storage'
 import { aguiRun, structuredDeltas, mockStreamingResponse } from '@/test/agui'
+import en from '@/locales/en.json'
 
 // Radix Popover/DropdownMenu rely on pointer/layout APIs happy-dom lacks.
 beforeAll(() => {
@@ -87,15 +88,15 @@ function renderPanel(
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const onInsert = props.onInsert ?? vi.fn()
   render(
-    <QueryClientProvider client={client}>
-      <IntlProvider locale="en" defaultLocale="en">
+    <IntlProvider locale="en" messages={en}>
+      <QueryClientProvider client={client}>
         <CopilotPanel
           item={{ kind: 'conversation', id: CONVERSATION_ID }}
           flags={props.flags ?? ALL_FLAGS_ON}
           onInsert={onInsert}
         />
-      </IntlProvider>
-    </QueryClientProvider>
+      </QueryClientProvider>
+    </IntlProvider>
   )
   return { onInsert }
 }

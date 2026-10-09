@@ -127,6 +127,14 @@ export function requireTeamRole(auth: McpAuthContext): CallToolResult | null {
   }
 }
 
+/** Feature flags a tool can require before its scope/role guards run. */
+type ToolFeature = 'helpCenter' | 'copilotHome'
+
+const FEATURE_DENIALS: Record<ToolFeature, string> = {
+  helpCenter: 'Error: Help center is not enabled. Enable it in Settings → General.',
+  copilotHome: 'Error: Settings tools follow Copilot on Home. Turn it on in Settings → Labs.',
+}
+
 /** Return an error if the help center feature is disabled. */
 export async function requireHelpCenter(): Promise<CallToolResult | null> {
   if (await isFeatureEnabled('helpCenter')) return null
@@ -135,7 +143,7 @@ export async function requireHelpCenter(): Promise<CallToolResult | null> {
     content: [
       {
         type: 'text',
-        text: 'Error: Help center is not enabled. Enable it in Settings → General.',
+        text: FEATURE_DENIALS.helpCenter,
       },
     ],
   }
@@ -145,8 +153,11 @@ export async function requireHelpCenter(): Promise<CallToolResult | null> {
 // Tool registration
 // ============================================================================
 
-/** Feature flags a tool can require before its scope/role guards run. */
-type ToolFeature = 'helpCenter'
+async function requireFeature(feature: ToolFeature): Promise<CallToolResult | null> {
+  if (feature === 'helpCenter') return requireHelpCenter()
+  if (await isFeatureEnabled(feature)) return null
+  return { isError: true, content: [{ type: 'text', text: FEATURE_DENIALS[feature] }] }
+}
 
 export interface ToolDef<TArgs> {
   name: string
@@ -181,8 +192,7 @@ export function registerTool<TArgs>(
 ): void {
   const wrapped = (async (args: TArgs): Promise<CallToolResult> => {
     if (def.feature) {
-      // Single-value ToolFeature union today; every flagged tool is helpCenter.
-      const denied = await requireHelpCenter()
+      const denied = await requireFeature(def.feature)
       if (denied) return denied
     }
     if (def.scope) {

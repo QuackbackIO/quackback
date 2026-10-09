@@ -12,6 +12,7 @@ import {
   productsFromFlags,
   toAgeBracket,
   toScaleBracket,
+  TELEMETRY_OUTCOMES,
   type AgeBracket,
   type AiFeature,
   type AiProvider,
@@ -24,7 +25,7 @@ import {
   DEFAULT_FEATURE_FLAGS,
   resolveFeatureFlags,
 } from '@/lib/server/domains/settings/settings.types'
-import { getSetupState, type OnboardingOutcome } from '@/lib/shared/db-types'
+import { getSetupState, type SetupState } from '@/lib/shared/db-types'
 import { analyticsWorkspaceKey } from '@/lib/shared/analytics-identity'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 
@@ -127,16 +128,13 @@ function detectDeployMethod(): string {
   return 'unknown'
 }
 
-function asOutcome(value: OnboardingOutcome | string | null | undefined): TelemetryOutcome | null {
-  if (
-    value === 'product_feedback' ||
-    value === 'customer_support' ||
-    value === 'help_center' ||
-    value === 'internal'
-  ) {
-    return value
-  }
-  return null
+/** The primary goal, with feedback kept to the team reported as internal feedback. */
+export function telemetryOutcome(state: SetupState | null): TelemetryOutcome | null {
+  const goal = state?.goals?.[0] ?? state?.useCase
+  if (goal === 'product_feedback' && state?.feedbackPrivate) return 'internal'
+  return goal && (TELEMETRY_OUTCOMES as readonly string[]).includes(goal)
+    ? (goal as TelemetryOutcome)
+    : null
 }
 
 async function getCapabilityFeatures(): Promise<TelemetryPayload['features']> {
@@ -209,7 +207,7 @@ async function getWorkspaceSnapshot(): Promise<{
     })
     const flags = resolveFeatureFlags(org?.featureFlags)
     const state = getSetupState(org?.setupState ?? null)
-    const outcome = asOutcome(state?.useCase)
+    const outcome = telemetryOutcome(state)
     const starter = state?.steps.startingPoint?.resolution ?? null
     const starterResolution =
       starter === 'created' ||
@@ -464,10 +462,10 @@ async function getScale(): Promise<TelemetryPayload['scale']> {
       incidents: number
     }>(
       sql`SELECT
-        (SELECT count(*)::int FROM "user") as users,
-        (SELECT count(*)::int FROM "posts" WHERE "deleted_at" IS NULL) as posts,
+        (SELECT count(*)::int FROM "user" u WHERE NOT EXISTS (SELECT 1 FROM "principal" p WHERE p.user_id = u.id AND p.test_owner_principal_id IS NOT NULL)) as users,
+        (SELECT count(*)::int FROM "posts" po WHERE po."deleted_at" IS NULL AND NOT EXISTS (SELECT 1 FROM "principal" p WHERE p.id = po.principal_id AND p.test_owner_principal_id IS NOT NULL)) as posts,
         (SELECT count(*)::int FROM "boards" WHERE "deleted_at" IS NULL) as boards,
-        (SELECT count(*)::int FROM "conversations") as conversations,
+        (SELECT count(*)::int FROM "conversations" c WHERE NOT EXISTS (SELECT 1 FROM "principal" p WHERE p.id = c.visitor_principal_id AND p.test_owner_principal_id IS NOT NULL)) as conversations,
         (SELECT count(*)::int FROM "kb_articles" WHERE "deleted_at" IS NULL AND "published_at" IS NOT NULL) as published_articles,
         (SELECT count(*)::int FROM "changelog_entries" WHERE "deleted_at" IS NULL AND "published_at" IS NOT NULL) as changelog_entries,
         (SELECT count(*)::int FROM "status_incidents" WHERE "deleted_at" IS NULL) as incidents`

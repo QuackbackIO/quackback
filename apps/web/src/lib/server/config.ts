@@ -280,6 +280,9 @@ const configSchema = z
     // Telemetry (optional)
     disableTelemetry: envBoolean,
 
+    // Automatic website branding for new workspaces (optional)
+    disableAutomaticBranding: envBoolean,
+
     // Product analytics for the admin app (optional, off unless a key is set)
     posthogKey: z.preprocess(emptyToUndefined, z.string().optional()),
     posthogHost: z.preprocess(emptyToUndefined, z.string().url().optional()),
@@ -438,6 +441,9 @@ function buildConfigFromEnv(): unknown {
 
     // Telemetry
     disableTelemetry: env('DISABLE_TELEMETRY'),
+
+    // Automatic website branding
+    disableAutomaticBranding: env('DISABLE_AUTOMATIC_BRANDING'),
 
     // Product analytics
     posthogKey: env('POSTHOG_KEY'),
@@ -740,6 +746,12 @@ export const config = {
   // Telemetry
   get disableTelemetry() {
     return loadConfig().disableTelemetry
+  },
+
+  // Automatic website branding: true stops the first-run lookup of the
+  // administrator's company website.
+  get disableAutomaticBranding() {
+    return loadConfig().disableAutomaticBranding
   },
 
   /**

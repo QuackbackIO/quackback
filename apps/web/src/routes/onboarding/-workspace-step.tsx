@@ -3,6 +3,21 @@ import { useNavigate } from '@tanstack/react-router'
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { toast } from 'sonner'
+import { GoalSelector } from '@/components/onboarding/goal-selector'
+import {
+  OnboardingHeading,
+  OnboardingLead,
+  OnboardingPreviewPanel,
+  OnboardingSplit,
+  SETUP_CTA_CLASS,
+  SETUP_FIELD_CLASS,
+  SetupActions,
+  useBrowserHost,
+  useSetupTitle,
+} from '@/components/onboarding/onboarding-split'
+import { PortalPreview } from '@/components/onboarding/portal-preview'
+import { SetupSteps } from '@/components/onboarding/setup-steps'
+import { getSetupState, type OnboardingOutcome } from '@/lib/shared/db-types'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { saveWorkspaceAndGoalFn } from '@/lib/server/functions/onboarding'
@@ -12,19 +27,29 @@ import {
   updateCloudIdentityFn,
 } from '@/lib/server/functions/cloud-identity'
 import { friendlyPlatformLabel, platformUrlSuffix } from '@/lib/shared/platform-label'
-import { toastEnabledModules } from '@/lib/client/enabled-modules-toast'
 import { isPathManagedFromBootstrap, MANAGED_PATHS } from '@/lib/client/config-file'
 import { track } from '@/lib/client/analytics'
+import { cn } from '@/lib/shared/utils'
+import { ReadyStep } from './-ready-step'
+import { SignOutButton } from './-sign-out-button'
 
 const DRAFT_KEY = 'quackback:onboarding:workspace-name'
 
 type CloudIdentity = NonNullable<Awaited<ReturnType<typeof getCloudIdentityFn>>>
+
+/** The goals already in setup state: a config file's, or an earlier save's. */
+export interface WorkspaceSetupGoals {
+  goals?: OnboardingOutcome[]
+}
 
 export interface WorkspaceStepProps {
   isCloudProvisioned: boolean
   cloudIdentity: CloudIdentity | null
   existingWorkspaceName: string
   managedFieldPaths: string[]
+  setupGoals?: WorkspaceSetupGoals
+  /** The signed-in admin's name, for the ready step. */
+  adminName?: string | null
 }
 
 export function WorkspaceStep({
@@ -32,34 +57,74 @@ export function WorkspaceStep({
   cloudIdentity,
   existingWorkspaceName,
   managedFieldPaths,
+  setupGoals,
+  adminName,
 }: WorkspaceStepProps) {
   if (!isCloudProvisioned) {
     return (
       <WorkspaceNameStep
         existingWorkspaceName={existingWorkspaceName}
         managedFieldPaths={managedFieldPaths}
+        setupGoals={setupGoals}
+        adminName={adminName}
       />
     )
   }
   if (!cloudIdentity) return <CloudIdentityUnavailable />
-  return <CloudWorkspaceDetailsStep identity={cloudIdentity} />
+  return <CloudWorkspaceDetailsStep identity={cloudIdentity} goals={setupGoals?.goals} />
 }
 
 function CloudIdentityUnavailable() {
   return (
-    <div className="mx-auto max-w-lg space-y-5 text-center">
-      <h1 className="text-2xl font-bold">Workspace details are temporarily unavailable</h1>
-      <p className="text-sm text-muted-foreground">
+    <OnboardingSplit
+      panel={<CloudPreviewPanel name="" hostname="" />}
+      footer={<SignOutButton size="sm" className="-ms-3" />}
+    >
+      <OnboardingHeading className="text-[30px] leading-[1.12] tracking-[-0.02em]! sm:text-[34px]">
+        Workspace details are temporarily unavailable
+      </OnboardingHeading>
+      <OnboardingLead>
         Your workspace is ready, but its verified cloud identity has not arrived yet.
-      </p>
-      <Button type="button" onClick={() => window.location.reload()}>
+      </OnboardingLead>
+      <Button
+        type="button"
+        onClick={() => window.location.reload()}
+        className={cn(SETUP_CTA_CLASS, 'mt-8 max-w-[440px]')}
+      >
         Retry
       </Button>
-    </div>
+    </OnboardingSplit>
   )
 }
 
-export function CloudWorkspaceDetailsStep(props: { identity: CloudIdentity }) {
+/** The cloud form's panel: the portal at the name and address being typed. */
+function CloudPreviewPanel({
+  name,
+  hostname,
+  goals,
+}: {
+  name: string
+  hostname: string
+  goals?: OnboardingOutcome[]
+}) {
+  return (
+    <OnboardingPreviewPanel
+      caption={
+        <FormattedMessage
+          id="onboarding.workspace.previewCaption"
+          defaultMessage="Your portal. It updates as you type and choose."
+        />
+      }
+    >
+      <PortalPreview name={name} hostname={hostname} goals={goals?.length ? goals : undefined} />
+    </OnboardingPreviewPanel>
+  )
+}
+
+export function CloudWorkspaceDetailsStep(props: {
+  identity: CloudIdentity
+  goals?: OnboardingOutcome[]
+}) {
   const navigate = useNavigate()
 
   async function continueToHome(transfer?: {
@@ -87,11 +152,12 @@ export function CloudWorkspaceDetailsStep(props: { identity: CloudIdentity }) {
     )
   }
 
-  return <CloudWorkspaceDetailsForm identity={props.identity} onSave={save} />
+  return <CloudWorkspaceDetailsForm identity={props.identity} goals={props.goals} onSave={save} />
 }
 
 export function CloudWorkspaceDetailsForm(props: {
   identity: CloudIdentity
+  goals?: OnboardingOutcome[]
   onSave: (input: { displayName: string; platformLabel: string }) => Promise<void>
 }) {
   const [displayName, setDisplayName] = useState(props.identity.displayName)
@@ -125,127 +191,187 @@ export function CloudWorkspaceDetailsForm(props: {
   }
 
   return (
-    <form onSubmit={submit} className="mx-auto flex w-full max-w-xl flex-col gap-7 pb-24 sm:pb-0">
-      <header className="text-center">
-        <h1 className="text-2xl font-bold">Make this workspace yours</h1>
-        <p className="mx-auto mt-2 max-w-lg text-sm text-muted-foreground">
-          Choose a name and the address customers will use. You can change these later in Admin
-          Settings.
-        </p>
-      </header>
-
-      <div className="space-y-2">
-        <label htmlFor="cloud-workspace-name" className="text-sm font-medium">
-          Workspace name
-        </label>
-        <Input
-          id="cloud-workspace-name"
-          value={displayName}
-          onChange={(event) => setDisplayName(event.target.value)}
-          maxLength={80}
-          disabled={isSaving}
-          autoComplete="organization"
-          autoFocus
+    <OnboardingSplit
+      panel={
+        <CloudPreviewPanel
+          goals={props.goals}
+          name={displayName.trim()}
+          hostname={platformLabel.trim() ? `${platformLabel.trim()}.${domainSuffix}` : ''}
         />
-      </div>
+      }
+      footer={<SignOutButton size="sm" className="-ms-3" />}
+    >
+      <form
+        onSubmit={submit}
+        className="flex w-full max-w-[440px] flex-col gap-7 [--ring:var(--muted-foreground)]"
+      >
+        <header>
+          <OnboardingHeading>
+            Make this <br />
+            workspace yours
+          </OnboardingHeading>
+          <OnboardingLead>
+            Choose a name and the address customers will use. You can change these later in Admin
+            Settings.
+          </OnboardingLead>
+        </header>
 
-      <div className="space-y-2">
-        <label htmlFor="cloud-platform-label" className="text-sm font-medium">
-          Workspace URL
-        </label>
-        <div className="flex items-center rounded-md border bg-background focus-within:ring-2 focus-within:ring-ring">
+        <div className="space-y-2">
+          <label htmlFor="cloud-workspace-name" className="text-sm font-medium">
+            Workspace name
+          </label>
           <Input
-            id="cloud-platform-label"
-            value={platformLabel}
-            onChange={(event) => setPlatformLabel(event.target.value)}
-            className="border-0 focus-visible:ring-0"
-            maxLength={63}
-            autoCapitalize="none"
-            autoCorrect="off"
+            id="cloud-workspace-name"
+            value={displayName}
+            onChange={(event) => setDisplayName(event.target.value)}
+            maxLength={80}
             disabled={isSaving}
-            placeholder="your-team"
-            required
+            autoComplete="organization"
+            autoFocus
           />
-          <span className="shrink-0 pe-3 text-sm text-muted-foreground">.{domainSuffix}</span>
         </div>
-      </div>
 
-      {error && (
-        <p
-          role="alert"
-          className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-        >
-          {error}
-        </p>
-      )}
+        <div className="space-y-2">
+          <label htmlFor="cloud-platform-label" className="text-sm font-medium">
+            Workspace URL
+          </label>
+          <div className="flex items-center rounded-md border bg-background focus-within:ring-2 focus-within:ring-ring">
+            <Input
+              id="cloud-platform-label"
+              value={platformLabel}
+              onChange={(event) => setPlatformLabel(event.target.value)}
+              className="border-0 focus-visible:ring-0"
+              maxLength={63}
+              autoCapitalize="none"
+              autoCorrect="off"
+              disabled={isSaving}
+              placeholder="your-team"
+              required
+            />
+            <span className="shrink-0 pe-3 text-sm text-muted-foreground">.{domainSuffix}</span>
+          </div>
+        </div>
 
-      <div className="flex flex-col items-center gap-2">
+        {error && (
+          <p
+            role="alert"
+            className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+          >
+            {error}
+          </p>
+        )}
+
         <Button
           type="submit"
           disabled={isSaving || !displayName.trim() || !platformLabel.trim()}
-          className="h-11 w-full max-w-sm"
+          aria-busy={isSaving || undefined}
+          className={SETUP_CTA_CLASS}
         >
           {isSaving && (
             <ArrowPathIcon className="h-4 w-4 animate-spin motion-reduce:animate-none" />
           )}
           Continue
         </Button>
-      </div>
-    </form>
+      </form>
+    </OnboardingSplit>
   )
 }
 
 function WorkspaceNameStep({
   existingWorkspaceName,
   managedFieldPaths,
+  setupGoals,
+  adminName,
 }: {
   existingWorkspaceName: string
   managedFieldPaths: string[]
+  setupGoals?: WorkspaceSetupGoals
+  adminName?: string | null
 }) {
   const intl = useIntl()
   const navigate = useNavigate()
+  const host = useBrowserHost()
+  const goalsManaged = isPathManagedFromBootstrap('workspace.useCase', managedFieldPaths)
+  // Nothing is picked for the admin: the first goal they choose is the one the
+  // launch plan starts with, so a preselected goal would choose it for them.
+  const [goals, setGoals] = useState<OnboardingOutcome[]>(setupGoals?.goals ?? [])
   const nameManaged = isPathManagedFromBootstrap(MANAGED_PATHS.WORKSPACE_NAME, managedFieldPaths)
 
   const [workspaceName, setWorkspaceName] = useState(existingWorkspaceName)
   const [isLoading, setIsLoading] = useState(false)
+  /** What the server said, which is about the form rather than one field. */
   const [error, setError] = useState('')
+  const [nameError, setNameError] = useState('')
+  /** Set once the admin tries to continue, so an empty pick is then said. */
+  const [goalsRequired, setGoalsRequired] = useState(false)
+  const [ready, setReady] = useState<{ name: string; goals: OnboardingOutcome[] } | null>(null)
   const [signedOut, setSignedOut] = useState(false)
   const nameValid = workspaceName.trim().length >= 2
+  useSetupTitle(
+    ready
+      ? intl.formatMessage(
+          { id: 'onboarding.title.ready', defaultMessage: '{name} is ready · Quackback' },
+          { name: ready.name }
+        )
+      : intl.formatMessage({
+          id: 'onboarding.title.workspace',
+          defaultMessage: 'Name your workspace · Quackback',
+        })
+  )
 
   useEffect(() => {
     try {
       const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) ?? 'null') as {
         workspaceName?: string
+        goals?: OnboardingOutcome[]
       } | null
+      if (!goalsManaged && draft?.goals) {
+        const normalized = getSetupState(JSON.stringify({ version: 2, goals: draft.goals }))
+        if (normalized?.goals?.length) setGoals(normalized.goals)
+      }
       if (!nameManaged && typeof draft?.workspaceName === 'string') {
         setWorkspaceName(draft.workspaceName)
       }
     } catch {
       localStorage.removeItem(DRAFT_KEY)
     }
-  }, [nameManaged])
+  }, [nameManaged, goalsManaged])
 
   useEffect(() => {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify({ workspaceName }))
-  }, [workspaceName])
+    if (ready) return
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ workspaceName, goals }))
+  }, [workspaceName, goals, ready])
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
+    const goalsMissing = !goalsManaged && goals.length === 0
+    setGoalsRequired(goalsMissing)
+    setNameError(
+      nameValid
+        ? ''
+        : intl.formatMessage({
+            id: 'onboarding.workspace.error.name',
+            defaultMessage: 'Enter a workspace name with at least 2 characters.',
+          })
+    )
     if (!nameValid) {
-      setError(
-        intl.formatMessage({
-          id: 'onboarding.workspace.error.name',
-          defaultMessage: 'Enter a workspace name with at least 2 characters.',
-        })
-      )
+      setError('')
+      document.getElementById('workspaceName')?.focus()
+      return
+    }
+    if (goalsMissing) {
+      setError('')
       return
     }
     setIsLoading(true)
     setError('')
     setSignedOut(false)
     try {
+      // A config file owns managed goals: sending them would only be refused.
       const result = await saveWorkspaceAndGoalFn({
-        data: { workspaceName: workspaceName.trim() },
+        data: goalsManaged
+          ? { workspaceName: workspaceName.trim() }
+          : { workspaceName: workspaceName.trim(), goals },
       })
       if (!result.ok) {
         if (result.refusal === 'signed_out') {
@@ -269,10 +395,9 @@ function WorkspaceNameStep({
         await navigate({ to: '/admin' })
         return
       }
-      toastEnabledModules(result.enabledModules)
       void track('onboarding_workspace_saved', { enabledModules: result.enabledModules })
       localStorage.removeItem(DRAFT_KEY)
-      await navigate({ to: '/admin' })
+      setReady({ name: result.name ?? workspaceName.trim(), goals })
     } catch (err) {
       setError(
         err instanceof Error
@@ -287,99 +412,162 @@ function WorkspaceNameStep({
     }
   }
 
-  return (
-    <form
-      onSubmit={handleSubmit}
-      className="mx-auto flex w-full max-w-2xl flex-col gap-8 pb-24 sm:pb-0"
+  const panel = (
+    <OnboardingPreviewPanel
+      caption={
+        ready ? (
+          <FormattedMessage
+            id="onboarding.workspace.previewLive"
+            defaultMessage="Your portal is live at {host}."
+            values={{ host: <span className="font-mono text-[13px]">{host}</span> }}
+          />
+        ) : (
+          <FormattedMessage
+            id="onboarding.workspace.previewCaption"
+            defaultMessage="Your portal. It updates as you type and choose."
+          />
+        )
+      }
     >
-      <header className="text-center">
-        <h1 className="text-2xl font-bold">
-          <FormattedMessage
-            id="onboarding.workspace.title"
-            defaultMessage="Create your workspace"
-          />
-        </h1>
-        <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
-          <FormattedMessage
-            id="onboarding.workspace.description"
-            defaultMessage="Give your team a home in Quackback."
-          />
-        </p>
-      </header>
+      {ready ? (
+        <PortalPreview variant="live" name={ready.name} goals={ready.goals} hostname={host} />
+      ) : (
+        <PortalPreview name={workspaceName.trim()} goals={goals} hostname={host} />
+      )}
+    </OnboardingPreviewPanel>
+  )
 
-      <div className="space-y-3">
-        <label htmlFor="workspaceName" className="text-sm font-medium">
-          <FormattedMessage id="onboarding.workspace.name" defaultMessage="Workspace name" />
-        </label>
-        <Input
-          id="workspaceName"
-          value={workspaceName}
-          onChange={(event) => setWorkspaceName(event.target.value)}
-          placeholder="Acme"
-          autoFocus
-          autoComplete="organization"
-          disabled={isLoading || nameManaged}
-          className="h-11"
-          aria-describedby={nameManaged ? 'workspace-name-hint' : undefined}
-        />
-        {nameManaged ? (
-          <p id="workspace-name-hint" className="text-xs text-muted-foreground">
+  if (ready) {
+    return (
+      <OnboardingSplit panel={panel}>
+        <ReadyStep workspaceName={ready.name} goals={ready.goals} adminName={adminName} />
+      </OnboardingSplit>
+    )
+  }
+
+  return (
+    <OnboardingSplit panel={panel} footer={<SignOutButton size="sm" className="-ms-3" />}>
+      <SetupSteps current="workspace" />
+      {/* Budgeted to show Create workspace without scrolling on a 1280x800
+          screen: a one-line heading and lead, and one-line goal tiles. */}
+      <form onSubmit={handleSubmit} className="mt-6 flex max-w-[480px] flex-1 flex-col gap-6">
+        <header>
+          <OnboardingHeading className="text-[34px] leading-[1.05] sm:text-[36px]">
             <FormattedMessage
-              id="onboarding.workspace.nameManaged"
-              defaultMessage="Your workspace admin manages this name."
+              id="onboarding.workspace.heading"
+              defaultMessage="Name your workspace"
             />
-          </p>
-        ) : null}
-      </div>
+          </OnboardingHeading>
+          <OnboardingLead className="mt-3">
+            <FormattedMessage
+              id="onboarding.workspace.lead"
+              defaultMessage="Most teams use their company or product name."
+            />
+          </OnboardingLead>
+        </header>
 
-      <div aria-live="polite" aria-atomic="true">
-        {error && (
-          <p
-            role="alert"
-            className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-          >
-            {error}
-          </p>
-        )}
-        {signedOut && (
-          <div
-            role="alert"
-            className="flex flex-col items-center gap-3 rounded-lg border bg-muted/40 px-4 py-3 text-center text-sm sm:flex-row sm:justify-between sm:text-start"
-          >
-            <span>
-              <FormattedMessage
-                id="onboarding.workspace.signedOut"
-                defaultMessage="You were signed out. Sign in to finish setting up."
-              />
-            </span>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void navigate({ to: '/onboarding/account' })}
-            >
-              <FormattedMessage id="onboarding.workspace.signIn" defaultMessage="Sign in" />
-            </Button>
-          </div>
-        )}
-      </div>
-
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 p-4 sm:static sm:border-0 sm:bg-transparent sm:p-0">
-        <Button
-          type="submit"
-          disabled={isLoading || !nameValid}
-          className="mx-auto h-11 w-full max-w-sm"
-        >
-          {isLoading ? (
-            <>
-              <ArrowPathIcon className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-              <FormattedMessage id="onboarding.workspace.saving" defaultMessage="Saving…" />
-            </>
+        <div data-field className="flex flex-col gap-2">
+          <label htmlFor="workspaceName" className="text-sm font-medium">
+            <FormattedMessage id="onboarding.workspace.name" defaultMessage="Workspace name" />
+          </label>
+          <Input
+            id="workspaceName"
+            value={workspaceName}
+            onChange={(event) => {
+              setWorkspaceName(event.target.value)
+              setNameError('')
+            }}
+            placeholder="Acme"
+            autoFocus
+            autoComplete="organization"
+            disabled={isLoading || nameManaged}
+            className={SETUP_FIELD_CLASS}
+            aria-invalid={nameError ? true : undefined}
+            aria-describedby={nameError ? 'workspace-name-error' : 'workspace-name-hint'}
+          />
+          {/* The problem takes the hint's place, so the field says one thing. */}
+          {nameError ? (
+            <p id="workspace-name-error" role="alert" className="text-xs text-destructive">
+              {nameError}
+            </p>
           ) : (
-            <FormattedMessage id="onboarding.workspace.open" defaultMessage="Open workspace" />
+            <p id="workspace-name-hint" className="text-xs text-muted-foreground">
+              {nameManaged ? (
+                <FormattedMessage
+                  id="onboarding.workspace.nameManaged"
+                  defaultMessage="Your workspace admin manages this name."
+                />
+              ) : (
+                <FormattedMessage
+                  id="onboarding.workspace.nameHint"
+                  defaultMessage="You can change it any time in Settings."
+                />
+              )}
+            </p>
           )}
-        </Button>
-      </div>
-    </form>
+        </div>
+
+        <GoalSelector
+          goals={goals}
+          onGoalsChange={setGoals}
+          disabled={isLoading}
+          managed={goalsManaged}
+          required={goalsRequired}
+        />
+
+        <SetupActions>
+          {/* Inside the pinned bar, so a refusal is never below the fold or under it. */}
+          <div aria-live="polite" aria-atomic="true" className="mb-3 empty:hidden">
+            {error && (
+              <p
+                role="alert"
+                className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+              >
+                {error}
+              </p>
+            )}
+            {signedOut && (
+              <div
+                role="alert"
+                className="flex flex-col items-center gap-3 rounded-lg border bg-muted/40 px-4 py-3 text-center text-sm sm:flex-row sm:justify-between sm:text-start"
+              >
+                <span>
+                  <FormattedMessage
+                    id="onboarding.workspace.signedOut"
+                    defaultMessage="You were signed out. Sign in to finish setting up."
+                  />
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void navigate({ to: '/onboarding/account' })}
+                >
+                  <FormattedMessage id="onboarding.workspace.signIn" defaultMessage="Sign in" />
+                </Button>
+              </div>
+            )}
+          </div>
+          <Button
+            type="submit"
+            disabled={isLoading}
+            aria-busy={isLoading || undefined}
+            className={SETUP_CTA_CLASS}
+          >
+            {isLoading ? (
+              <>
+                <ArrowPathIcon className="size-4 animate-spin motion-reduce:animate-none" />
+                <FormattedMessage id="onboarding.workspace.creating" defaultMessage="Setting up…" />
+              </>
+            ) : (
+              <FormattedMessage
+                id="onboarding.workspace.create"
+                defaultMessage="Create workspace"
+              />
+            )}
+          </Button>
+        </SetupActions>
+      </form>
+    </OnboardingSplit>
   )
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseOpenGraph } from '../og-parse'
+import { parseIconLinks, parseOpenGraph } from '../og-parse'
 
 const BASE = 'https://example.com/page'
 
@@ -17,6 +17,7 @@ describe('parseOpenGraph', () => {
       siteName: 'My Site',
       imageUrl: 'https://example.com/img.jpg',
       faviconUrl: 'https://example.com/favicon.ico',
+      themeColor: null,
     })
   })
 
@@ -102,6 +103,7 @@ describe('parseOpenGraph', () => {
       siteName: null,
       imageUrl: null,
       faviconUrl: 'https://example.com/favicon.ico',
+      themeColor: null,
     })
   })
 
@@ -179,5 +181,97 @@ describe('faviconUrl parsing', () => {
   it('matches rel tokens regardless of order (e.g. rel="icon shortcut")', () => {
     const html = `<html><head><link rel="icon shortcut" href="/fav.ico" /></head></html>`
     expect(parseOpenGraph(html, BASE).faviconUrl).toBe('https://example.com/fav.ico')
+  })
+})
+
+describe('theme-color parsing', () => {
+  it('normalizes opaque hex, attribute order, case and entities', () => {
+    expect(
+      parseOpenGraph('<head><META CONTENT="&#35;aBc" NAME="THEME-COLOR"></head>', BASE).themeColor
+    ).toBe('#AABBCC')
+  })
+  it('prefers an unqualified color to light-specific and never takes dark-only', () => {
+    expect(
+      parseOpenGraph(
+        '<head><meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="#eeeeee" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#abcdef"></head>',
+        BASE
+      ).themeColor
+    ).toBe('#ABCDEF')
+    expect(
+      parseOpenGraph(
+        '<meta name="theme-color" content="#eeeeee" media="(prefers-color-scheme: light)">',
+        BASE
+      ).themeColor
+    ).toBe('#EEEEEE')
+    expect(
+      parseOpenGraph(
+        '<meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)">',
+        BASE
+      ).themeColor
+    ).toBeNull()
+  })
+  it('skips invalid declarations and attributes that only contain the name', () => {
+    for (const color of [
+      'transparent',
+      '#fff0',
+      '#ffffff80',
+      'var(--primary)',
+      'url(https://example.com)',
+      'red',
+    ])
+      expect(
+        parseOpenGraph('<meta name="theme-color" content="' + color + '">', BASE).themeColor
+      ).toBeNull()
+    expect(
+      parseOpenGraph('<meta data-name="theme-color" content="#ffffff">', BASE).themeColor
+    ).toBeNull()
+    expect(
+      parseOpenGraph(
+        '<meta name="theme-color" content="bad"><meta name="theme-color" content="#fff">',
+        BASE
+      ).themeColor
+    ).toBe('#FFFFFF')
+  })
+  it('ignores color after the head and after its existing scan budget', () => {
+    expect(
+      parseOpenGraph('</head><meta name="theme-color" content="#ffffff">', BASE).themeColor
+    ).toBeNull()
+    expect(
+      parseOpenGraph(' '.repeat(205000) + '<meta name="theme-color" content="#ffffff">', BASE)
+        .themeColor
+    ).toBeNull()
+  })
+})
+
+describe('parseIconLinks', () => {
+  it('lists touch and regular icons with their largest declared size and type', () => {
+    expect(
+      parseIconLinks(
+        `<head>
+          <link rel="icon" href="/favicon-32.png" sizes="16x16 32x32" type="image/png">
+          <link rel="apple-touch-icon" href="/touch.png">
+          <link rel="shortcut icon" href="/favicon.ico">
+          <link rel="icon" href="/brand.svg" sizes="any" type="image/svg+xml">
+          <link rel="stylesheet" href="/site.css">
+        </head>`,
+        BASE
+      )
+    ).toEqual([
+      { url: 'https://example.com/favicon-32.png', touch: false, size: 32, type: 'image/png' },
+      { url: 'https://example.com/touch.png', touch: true, size: null, type: null },
+      { url: 'https://example.com/favicon.ico', touch: false, size: null, type: null },
+      { url: 'https://example.com/brand.svg', touch: false, size: null, type: 'image/svg+xml' },
+    ])
+  })
+  it('drops unsafe hrefs, stops at the head and caps the list', () => {
+    expect(
+      parseIconLinks(
+        '<link rel="icon" href="javascript:alert(1)"><link rel="icon" href="data:,x">',
+        BASE
+      )
+    ).toEqual([])
+    expect(parseIconLinks('</head><link rel="icon" href="/late.png">', BASE)).toEqual([])
+    const many = Array.from({ length: 30 }, (_, i) => `<link rel="icon" href="/${i}.png">`).join('')
+    expect(parseIconLinks(many, BASE)).toHaveLength(12)
   })
 })

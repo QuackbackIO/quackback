@@ -270,6 +270,16 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       import('@/lib/server/email/email-log.retention').then((m) => m.runEmailLogRetention),
   },
   {
+    // The welcome and day-two setup emails, queued when a new workspace's
+    // owner first lands. Each decides at run time whether it is still due.
+    name: 'onboarding-email',
+    maxAttempts: 3,
+    handler: () =>
+      import('@/lib/server/domains/onboarding/onboarding-emails').then(
+        (m) => m.runOnboardingEmailJob
+      ),
+  },
+  {
     name: 'spam-retention',
     cron: '0 5 * * *',
     maxAttempts: 3,

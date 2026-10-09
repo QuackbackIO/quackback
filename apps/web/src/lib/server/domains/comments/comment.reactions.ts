@@ -11,6 +11,7 @@ import { type Actor } from '@/lib/server/policy'
 import { assertCommentViewable } from '@/lib/server/domains/posts/post.access'
 import type { CommentReactionCount, ReactionResult } from './comment.types'
 import { logger } from '@/lib/server/logger'
+import { notTestPrincipal } from '@/lib/server/test-data'
 
 const log = logger.child({ component: 'comment-reactions' })
 
@@ -28,7 +29,12 @@ async function aggregatedReactionsFor(
     })
     .from(postCommentReactions)
     .leftJoin(principal, eq(principal.id, postCommentReactions.principalId))
-    .where(eq(postCommentReactions.commentId, commentId))
+    .where(
+      and(
+        eq(postCommentReactions.commentId, commentId),
+        notTestPrincipal(postCommentReactions.principalId)
+      )
+    )
   return aggregateReactions(rows, viewerPrincipalId)
 }
 

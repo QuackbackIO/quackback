@@ -31,6 +31,16 @@ export interface Actor {
    * function of role) is equivalent.
    */
   permissions?: ReadonlySet<PermissionKey>
+  /** Server-resolved authority for a customer's own test ideas, never team authority. */
+  testFeedback?: {
+    ownerPrincipalId: PrincipalId
+    /** The owner is still a teammate; an orphaned test customer can do nothing. */
+    active: boolean
+    /** Delegated from the owner's private-post access: every board, for its own ideas. */
+    canView: boolean
+    /** Delegated submit on any board it can view, past the anonymous ceiling. */
+    canSubmit: boolean
+  }
 }
 
 export type Decision = { allowed: true } | { allowed: false; reason: string }

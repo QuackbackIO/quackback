@@ -58,6 +58,7 @@ import {
   shouldReapplyComposeBoard,
   type WidgetComposeRequest,
 } from './widget-compose'
+import { shownName } from '@/lib/shared/greeting-name'
 
 interface WidgetPost {
   id: string
@@ -1016,7 +1017,7 @@ export function WidgetHomeAnimated({
                             values={{
                               name: (
                                 <span className="font-medium text-foreground">
-                                  {user.name || user.email}
+                                  {shownName(user.name, user.email)}
                                 </span>
                               ),
                             }}

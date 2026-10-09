@@ -34,6 +34,7 @@ import {
 } from '../office-hours/office-hours.service'
 import { getOfficeHoursSchedule } from '../settings/settings.office-hours'
 import { logger } from '@/lib/server/logger'
+import { notTestConversation } from '@/lib/server/test-data'
 import {
   earliestHumanReplyAfter,
   latestOpenersBetween,
@@ -227,8 +228,10 @@ export async function applySlaToConversation(
   const [convo] = await db
     .select({ status: conversations.status })
     .from(conversations)
-    .where(eq(conversations.id, conversationId))
+    .where(and(eq(conversations.id, conversationId), notTestConversation(conversations.id)))
     .limit(1)
+
+  if (!convo) throw new Error('Conversation is unavailable for SLA policies')
 
   const applied: SlaApplied = {
     policyId: policy.id,
@@ -281,7 +284,7 @@ export async function loadSlaApplied(conversationId: ConversationId): Promise<Sl
   const [row] = await db
     .select({ slaApplied: conversations.slaApplied })
     .from(conversations)
-    .where(eq(conversations.id, conversationId))
+    .where(and(eq(conversations.id, conversationId), notTestConversation(conversations.id)))
     .limit(1)
   return (row?.slaApplied as SlaApplied | undefined) ?? null
 }
@@ -306,6 +309,7 @@ export function slaStampGuard(
 ) {
   return and(
     eq(conversations.id, conversationId),
+    notTestConversation(conversations.id),
     sql`${conversations.slaApplied} ->> 'appliedAt' = ${appliedAt}`,
     pausedAt === null
       ? sql`${conversations.slaApplied} ->> 'pausedAt' IS NULL`

@@ -13,6 +13,7 @@
 
 import {
   db,
+  and,
   eq,
   isNull,
   sql,
@@ -27,6 +28,7 @@ import { countSeatUsage } from '@/lib/server/domains/principals/seat-usage'
 import { emailsSentThisMonth } from '@/lib/server/email/email-budget'
 import { apiRequestsThisMonth } from '@/lib/server/domains/api/monthly-usage'
 import { planDowngradeIssues } from '@/lib/shared/billing/plan-downgrade'
+import { notTestPrincipal } from '@/lib/server/test-data'
 import {
   canonicalPlanId,
   isPlanId,
@@ -52,7 +54,7 @@ export async function loadUsageCounts(): Promise<Record<string, number>> {
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(posts)
-      .where(isNull(posts.deletedAt)),
+      .where(and(isNull(posts.deletedAt), notTestPrincipal(posts.principalId))),
     countSeatUsage(),
     db
       .select({ count: sql<number>`count(*)::int` })

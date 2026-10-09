@@ -12,6 +12,14 @@ import {
 // branches. Row movement, SQL validity, and constraint semantics live in
 // merge-anonymous.db.test.ts (real DB); per-step registry behavior lives in
 // principals/__tests__/principal-repoint.test.ts.
+const testCustomers = vi.hoisted(() => new Set<string>())
+vi.mock('@/lib/server/test-data', () => ({
+  isTestCustomer: async (id: string) => testCustomers.has(id),
+  isTestConversation: async () => false,
+  testOwnerOf: async (id: string) => (testCustomers.has(id) ? 'principal_owner' : null),
+  activeTestOwnerOf: async () => null,
+  notTestPrincipal: () => ({}),
+}))
 vi.mock('@/lib/server/db', async () =>
   (await import('@/lib/server/__tests__/principal-merge-db-mock')).mockDbModule()
 )
@@ -39,6 +47,17 @@ describe('mergeAnonymousToIdentified', () => {
     anonDisplayName: 'Curious Penguin',
     targetDisplayName: 'Jane Doe',
   }
+
+  it("never folds a teammate's test customer into a real identity", async () => {
+    testCustomers.add(defaultParams.anonPrincipalId)
+    try {
+      await mergeAnonymousToIdentified(defaultParams)
+      expect(mockTransaction).not.toHaveBeenCalled()
+      expect(operations).toEqual([])
+    } finally {
+      testCustomers.clear()
+    }
+  })
 
   it('runs the merge inside a single database transaction', async () => {
     await mergeAnonymousToIdentified(defaultParams)

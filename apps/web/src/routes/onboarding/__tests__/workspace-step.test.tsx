@@ -15,9 +15,18 @@ const navigate = vi.fn(async () => {})
 const save = vi.hoisted(() => vi.fn())
 const toast = vi.hoisted(() => ({ success: vi.fn(), info: vi.fn() }))
 
-vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate }))
+vi.mock('@tanstack/react-router', () => ({
+  useNavigate: () => navigate,
+  useRouter: () => ({ invalidate: vi.fn() }),
+}))
 vi.mock('sonner', () => ({ toast }))
-vi.mock('@/lib/server/functions/onboarding', () => ({ saveWorkspaceAndGoalFn: save }))
+vi.mock('@/lib/server/functions/onboarding', () => ({
+  saveWorkspaceAndGoalFn: save,
+  getInstallChecksFn: vi.fn(async () => null),
+}))
+vi.mock('@/lib/client/hooks/use-root-context', () => ({
+  useWorkspaceSettings: () => ({ name: 'Fernhill', settings: {} }),
+}))
 vi.mock('@/lib/server/functions/cloud-identity', () => ({
   getCloudIdentityFn: vi.fn(),
   markCloudWorkspaceDetailsSeenFn: vi.fn(),
@@ -37,6 +46,7 @@ function renderStep() {
         cloudIdentity={null}
         existingWorkspaceName=""
         managedFieldPaths={[]}
+        setupGoals={{ goals: ['product_feedback'] }}
       />
     </IntlProvider>
   )
@@ -44,7 +54,7 @@ function renderStep() {
 
 function submit(name = 'Fernhill') {
   fireEvent.change(screen.getByLabelText(/workspace name/i), { target: { value: name } })
-  fireEvent.click(screen.getByRole('button', { name: /open workspace/i }))
+  fireEvent.click(screen.getByRole('button', { name: /create workspace/i }))
 }
 
 beforeEach(() => {
@@ -68,6 +78,8 @@ describe('workspace step', () => {
 
     submit()
 
+    // Setup ends on the ready step, and the workspace is one click away.
+    fireEvent.click(await screen.findByRole('button', { name: /open your workspace/i }))
     await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/admin' }))
   })
 
@@ -98,7 +110,7 @@ describe('workspace step', () => {
     expect(alert).toHaveTextContent('You were signed out. Sign in to finish setting up.')
     expect(screen.queryByText(/authentication required/i)).toBeNull()
     expect(navigate).not.toHaveBeenCalled()
-    expect(JSON.parse(localStorage.getItem(DRAFT_KEY) ?? 'null')).toEqual({
+    expect(JSON.parse(localStorage.getItem(DRAFT_KEY) ?? 'null')).toMatchObject({
       workspaceName: 'Fernhill',
     })
 

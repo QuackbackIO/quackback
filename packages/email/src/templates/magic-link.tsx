@@ -6,6 +6,8 @@ interface MagicLinkEmailProps {
   signInUrl: string
   code: string
   logoUrl?: string
+  /** The workspace being signed in to. */
+  workspaceName?: string
 }
 
 /**
@@ -17,10 +19,13 @@ interface MagicLinkEmailProps {
  * verification record on the server, so the user can pick whichever is
  * convenient.
  */
-export function MagicLinkEmail({ signInUrl, code, logoUrl }: MagicLinkEmailProps) {
+export function MagicLinkEmail({ signInUrl, code, logoUrl, workspaceName }: MagicLinkEmailProps) {
+  const name = workspaceName?.trim()
   return (
     <EmailLayout preview="Your sign-in link" logoUrl={logoUrl}>
-      <Heading style={{ ...typography.h1, textAlign: 'center' }}>Sign in to Quackback</Heading>
+      <Heading style={{ ...typography.h1, textAlign: 'center' }}>
+        {name ? `Sign in to ${name}` : 'Sign in'}
+      </Heading>
       <Text style={{ ...typography.text, textAlign: 'center' }}>
         Click the button below to finish signing in.
       </Text>

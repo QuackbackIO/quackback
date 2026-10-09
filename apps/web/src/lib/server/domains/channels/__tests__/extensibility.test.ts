@@ -102,11 +102,24 @@ import {
 
 const conversationId = 'conversation_01kw8qxn1eeh4t2rek7varh032' as ConversationId
 const visitorPrincipalId = 'principal_01kw8qxn1eeh4t2rek7varh033' as PrincipalId
+let testDelivery:
+  { test: false } | { test: true; ownerPrincipalId: PrincipalId; recipient: string } = {
+  test: false,
+}
+vi.mock('@/lib/server/domains/conversation/conversation.test-delivery', () => ({
+  conversationTestDelivery: async (id: ConversationId) => {
+    const threads = new Map([[conversationId, testDelivery]])
+    const delivery = threads.get(id)
+    if (!delivery) throw new Error('Unknown channel fixture conversation')
+    return delivery
+  },
+}))
 
 describe('channel extensibility exit test', () => {
   beforeEach(() => {
     visitorRows = []
     limitQueue = []
+    testDelivery = { test: false }
     vi.clearAllMocks()
     registerChannelDescriptor(testChannelDescriptor)
     registerChannelAdapter(fixtureAdapter())
@@ -175,13 +188,13 @@ describe('channel extensibility exit test', () => {
   })
 
   it('notify delivers through the fixture adapter without a new channel arm', async () => {
-    visitorRows = [{ type: 'user', email: 'priya@example.com', contactEmail: null }]
+    visitorRows = [{ type: 'user', email: 'you@example.com', contactEmail: null }]
 
     await notifyAgentReply({
       conversationId,
       visitorPrincipalId,
       content: 'reply',
-      agentName: 'Alex',
+      agentName: 'Acme',
       channel: TEST_CHANNEL_ID,
     })
 
@@ -189,20 +202,20 @@ describe('channel extensibility exit test', () => {
     expect(hoisted.deliverAgentMessage.mock.calls[0][0]).toMatchObject({
       conversationId,
       visitorPrincipalId,
-      recipient: 'priya@example.com',
+      recipient: 'you@example.com',
       direction: 'agent_reply',
     })
 
     limitQueue = [
       [{ channel: TEST_CHANNEL_ID, visitorPrincipalId }],
-      [{ type: 'user', email: 'priya@example.com', contactEmail: null }],
+      [{ type: 'user', email: 'you@example.com', contactEmail: null }],
     ]
     await notifyCsatRequestEmail(conversationId, 'How did we do?')
     expect(hoisted.deliverCsatRequest).toHaveBeenCalledTimes(1)
     expect(hoisted.deliverCsatRequest.mock.calls[0][0]).toMatchObject({
       conversationId,
       visitorPrincipalId,
-      recipient: 'priya@example.com',
+      recipient: 'you@example.com',
     })
 
     await requireChannelAdapter(TEST_CHANNEL_ID).deliverLifecycleEvent('closed', {
@@ -218,7 +231,7 @@ describe('channel extensibility exit test', () => {
       conversationId,
       visitorPrincipalId,
       content: 'reply',
-      agentName: 'Alex',
+      agentName: 'Acme',
       channel: TEST_CHANNEL_ID,
       capturedEmail: null,
     })
@@ -242,5 +255,22 @@ describe('channel extensibility exit test', () => {
       visitorPrincipalId,
       recipient: '',
     })
+  })
+
+  it('keeps a test conversation off external channel adapters', async () => {
+    testDelivery = {
+      test: true,
+      ownerPrincipalId: visitorPrincipalId,
+      recipient: 'you@example.com',
+    }
+    visitorRows = [{ type: 'user', email: 'you@example.com', contactEmail: null }]
+    await notifyAgentReply({
+      conversationId,
+      visitorPrincipalId,
+      content: 'Acme reply',
+      agentName: 'Acme',
+      channel: TEST_CHANNEL_ID,
+    })
+    expect(hoisted.deliverAgentMessage).not.toHaveBeenCalled()
   })
 })

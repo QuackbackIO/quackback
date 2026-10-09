@@ -40,6 +40,15 @@ const assistantMock = vi.hoisted(() => ({
         : 'reviewing_conversation'
   ),
 }))
+const testCustomers = vi.hoisted(() => new Set<string>())
+const testConversations = vi.hoisted(() => new Set<string>())
+vi.mock('@/lib/server/test-data', () => ({
+  isTestCustomer: async (id: string) => testCustomers.has(id),
+  isTestConversation: async (id: string) => testConversations.has(id),
+  testOwnerOf: async (id: string) => (testCustomers.has(id) ? 'principal_owner' : null),
+  activeTestOwnerOf: async () => null,
+  notTestPrincipal: () => ({}),
+}))
 vi.mock('@/lib/server/domains/assistant', () => assistantMock)
 
 const getMessengerConfig = vi.hoisted(() => vi.fn())
@@ -238,7 +247,7 @@ const V2_IDENTITY: DeliveredFields['identity'] = {
 // Durable trace fixtures contain only bounded config metadata and tool names/outcomes,
 // never prompts, customer text, tool arguments, or tool results.
 const PRIVACY_SAFE_TRACE: DeliveredFields['trace'] = {
-  promptVersion: 'support-agent-v6',
+  promptVersion: 'support-agent-v7',
   configRevision: 12,
   role: 'customer_support',
   tone: 'balanced',
@@ -608,6 +617,43 @@ describe('runAssistantTurnForConversation preview retraction (invalidated attemp
     const deltas = (await publishedEvents()).filter((e) => e.kind === 'assistant_delta')
     expect(deltas.length).toBeGreaterThan(0)
     expect(deltas.every((e) => (e.text as string).length > 0)).toBe(true)
+  })
+})
+
+describe("runAssistantTurnForConversation on a teammate's test thread", () => {
+  async function inboxEvents(): Promise<Array<Record<string, unknown>>> {
+    const { publishAgentConversationEvent } =
+      await import('@/lib/server/realtime/conversation-channels')
+    return vi.mocked(publishAgentConversationEvent).mock.calls.map(([e]) => e as never)
+  }
+  const streamOnce = async (input: {
+    onActivity: (a: unknown) => void
+    onTextDelta: (d: string) => void
+  }) => {
+    input.onActivity({ kind: 'thinking' })
+    input.onTextDelta('Hi! I am here.')
+    return answered({ text: 'Hi! I am here.' })
+  }
+
+  it('mirrors the live turn to the inbox so the Try Messenger pane streams it too', async () => {
+    testConversations.add(CONV)
+    try {
+      assistantMock.runAssistantTurn.mockImplementation(streamOnce)
+      await runAssistantTurnForConversation(CONV)
+    } finally {
+      testConversations.clear()
+    }
+    const kinds = (await inboxEvents()).map((e) => e.kind)
+    expect(kinds).toContain('assistant_activity')
+    expect(kinds).toContain('assistant_delta')
+  })
+
+  it("keeps a real customer's live turn off the inbox channel", async () => {
+    assistantMock.runAssistantTurn.mockImplementation(streamOnce)
+    await runAssistantTurnForConversation(CONV)
+    const kinds = (await inboxEvents()).map((e) => e.kind)
+    expect(kinds).not.toContain('assistant_delta')
+    expect(kinds).not.toContain('assistant_activity')
   })
 })
 

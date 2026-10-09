@@ -11,6 +11,7 @@ import {
   userSegments,
   conversations,
   conversationMessages,
+  sql,
 } from '@/lib/server/db'
 import type {
   IntegrationId,
@@ -19,6 +20,7 @@ import type {
   PrincipalId,
   PostCommentId,
   ChangelogId,
+  UserId,
 } from '@quackback/ids'
 import { installationIdentity, syncHash } from './identity'
 import { permissionsForPrincipal } from '@/lib/server/policy/permissions'
@@ -29,10 +31,42 @@ import { conversationFilter } from '@/lib/server/policy/conversations'
 import { and } from '@/lib/server/db'
 import type { Actor } from '@/lib/server/policy/types'
 import type { SyncOperation, SyncOutcome } from './types'
+import { isTestEvent } from '@/lib/server/events/test-event'
+import { notTestPrincipal, notTestTicket } from '@/lib/server/test-data'
 import {
   getCategoriesForEntries,
   categoryGateAllows,
 } from '@/lib/server/domains/changelog/changelog-category.service'
+
+/** Manual actions and queued retries share the same test-source boundary. */
+async function isTestSyncSource(
+  operation: Pick<SyncOperation, 'sourceType' | 'sourceId'>
+): Promise<boolean> {
+  if (operation.sourceType === 'ticket') {
+    const [test] = await db
+      .select({ id: tickets.id })
+      .from(tickets)
+      .where(
+        and(eq(tickets.id, operation.sourceId as TicketId), sql`not (${notTestTicket(tickets.id)})`)
+      )
+      .limit(1)
+    return !!test
+  }
+  if (operation.sourceType === 'user') {
+    const [test] = await db
+      .select({ id: principal.id })
+      .from(principal)
+      .where(
+        and(
+          eq(principal.userId, operation.sourceId as UserId),
+          sql`not (${notTestPrincipal(principal.id)})`
+        )
+      )
+      .limit(1)
+    return !!test
+  }
+  return isTestEvent({ entityId: operation.sourceId, payload: {} })
+}
 
 export async function currentSyncIntegration(operation: SyncOperation) {
   const integration = await db.query.integrations.findFirst({
@@ -74,6 +108,7 @@ export async function syncSourceForActor(
   operation: Pick<SyncOperation, 'sourceType' | 'sourceId'> & Partial<Pick<SyncOperation, 'kind'>>,
   actor: Actor
 ): Promise<{ id: string; title: string } | null> {
+  if (await isTestSyncSource(operation)) return null
   if (operation.sourceType === 'message') {
     const message = await db.query.conversationMessages.findFirst({
       where: eq(conversationMessages.id, operation.sourceId as never),
@@ -135,6 +170,8 @@ export async function syncSourceForActor(
 }
 
 export async function validateSyncSource(operation: SyncOperation): Promise<SyncOutcome | null> {
+  if (await isTestSyncSource(operation))
+    return { state: 'cancelled', errorCode: 'source_unavailable' }
   if (operation.requestedBy) {
     const person = await db.query.principal.findFirst({
       where: eq(principal.id, operation.requestedBy as PrincipalId),

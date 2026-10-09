@@ -6,10 +6,8 @@ import { HelpCenterHero } from '@/components/help-center/help-center-hero'
 import { HelpCenterHeroSearch } from '@/components/help-center/help-center-search'
 import { HelpCenterCategoryGrid } from '@/components/help-center/help-center-category-grid'
 import { HelpCenterPopularArticles } from '@/components/help-center/help-center-popular-articles'
-import {
-  getTopLevelCategories,
-  helpCenterHeadMessages,
-} from '@/components/help-center/help-center-utils'
+import { getTopLevelCategories } from '@/components/help-center/help-center-utils'
+import { helpCenterHeadMessages } from '@/components/help-center/help-center-head'
 import {
   listPublicCategoriesFn,
   listPopularPublicArticlesFn,

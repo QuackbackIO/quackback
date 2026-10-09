@@ -1,8 +1,26 @@
 // @vitest-environment happy-dom
 import '@testing-library/jest-dom/vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { ReactElement } from 'react'
+import { fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import { describe, expect, it, vi } from 'vitest'
-import { CloudWorkspaceDetailsForm } from '../-workspace-step'
+
+// The form sits in the setup split, whose footer carries the sign-out control.
+vi.mock('@tanstack/react-router', () => ({
+  useNavigate: () => vi.fn(),
+  useRouter: () => ({ invalidate: vi.fn() }),
+}))
+
+import { CloudWorkspaceDetailsForm, WorkspaceStep } from '../-workspace-step'
+
+/** The wizard always renders under the onboarding IntlProvider. */
+function render(ui: ReactElement) {
+  return rtlRender(
+    <IntlProvider locale="en" defaultLocale="en" messages={{}}>
+      {ui}
+    </IntlProvider>
+  )
+}
 
 const IDENTITY = {
   version: 1,
@@ -78,5 +96,34 @@ describe('cloud post-handoff onboarding', () => {
 
     expect(screen.getByText('.quackback.co.uk')).toBeInTheDocument()
     expect(screen.queryByText('.example.com')).not.toBeInTheDocument()
+  })
+
+  it('previews the portal the workspace was provisioned for', () => {
+    render(
+      <WorkspaceStep
+        isCloudProvisioned
+        cloudIdentity={IDENTITY}
+        existingWorkspaceName=""
+        managedFieldPaths={[]}
+        setupGoals={{ goals: ['customer_support'] }}
+      />
+    )
+
+    expect(screen.getByText('Support')).toBeInTheDocument()
+    expect(screen.queryByText('Changelog')).not.toBeInTheDocument()
+  })
+
+  it('previews a feedback portal when no goals were provisioned', () => {
+    render(
+      <WorkspaceStep
+        isCloudProvisioned
+        cloudIdentity={IDENTITY}
+        existingWorkspaceName=""
+        managedFieldPaths={[]}
+      />
+    )
+
+    expect(screen.getByText('Roadmap')).toBeInTheDocument()
+    expect(screen.getByText('Changelog')).toBeInTheDocument()
   })
 })

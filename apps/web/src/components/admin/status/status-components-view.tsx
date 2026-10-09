@@ -87,6 +87,7 @@ import {
   COMPONENT_STATUS_OPTIONS,
   type StatusComponentStatus,
 } from './status-admin-colors'
+import { FormattedMessage, useIntl } from 'react-intl'
 import type { StatusUptimeDay } from '@/lib/client/queries/status'
 
 interface ComponentFormValues {
@@ -106,6 +107,7 @@ const EMPTY_FORM: ComponentFormValues = {
 }
 
 export function StatusComponentsView() {
+  const intl = useIntl()
   const { data, isLoading } = useQuery(statusComponentQueries.list())
   const [groups, setGroups] = useState<StatusComponentGroupAdmin[]>([])
   const [ungrouped, setUngrouped] = useState<StatusComponentAdmin[]>([])
@@ -503,13 +505,24 @@ export function StatusComponentsView() {
           </DndContext>
 
           {groups.length === 0 && ungrouped.length === 0 && (
-            <EmptyState
-              icon={ServerStackIcon}
-              title="No services yet"
-              description="Track a service so you can publish incidents, maintenance, and uptime."
-              action={<NewButton noun="service" onClick={() => setCreateGroupId(null)} />}
-              size="compact"
-            />
+            <div data-tour="status-empty">
+              <EmptyState
+                icon={ServerStackIcon}
+                title={intl.formatMessage({
+                  id: 'admin.empty.status.title',
+                  defaultMessage: 'No services yet',
+                })}
+                action={
+                  <NewButton noun="service" onClick={() => setCreateGroupId(null)}>
+                    <FormattedMessage
+                      id="admin.empty.status.action"
+                      defaultMessage="Add a service"
+                    />
+                  </NewButton>
+                }
+                size="compact"
+              />
+            </div>
           )}
 
           <ComponentFormDialog

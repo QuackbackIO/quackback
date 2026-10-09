@@ -28,6 +28,7 @@ import {
   classifyInviteEmails,
   deliverTeamInvite,
   insertTeamInvites,
+  type TeamInviteCopy,
   mintTeamInvites,
   type InviteEmailStatus,
   type InviteWorkspace,
@@ -170,7 +171,13 @@ function assertEmailsInvitable(
 export async function addTeamMembers(
   input: AddTeamMembersInput,
   granter: TeamGranter,
-  ctx: { workspace: InviteWorkspace; actor: AuditActor | null; headers?: Headers }
+  ctx: {
+    workspace: InviteWorkspace
+    actor: AuditActor | null
+    headers?: Headers
+    /** The invitation's wording in the team's language, made once per batch. */
+    invitationCopy?: TeamInviteCopy
+  }
 ): Promise<AddTeamMembersResult> {
   const principalIds = input.principalIds as PrincipalId[]
   const emails = input.emails.map((e) => e.trim().toLowerCase())
@@ -266,7 +273,11 @@ export async function addTeamMembers(
     let sent = false
     try {
       sent = (
-        await deliverTeamInvite(invite, { inviterName: granter.name, workspace: ctx.workspace })
+        await deliverTeamInvite(invite, {
+          inviterName: granter.name,
+          workspace: ctx.workspace,
+          copy: ctx.invitationCopy,
+        })
       ).sent
     } catch (error) {
       log.error({ err: error, invitation_id: invite.invitationId }, 'invitation email failed')

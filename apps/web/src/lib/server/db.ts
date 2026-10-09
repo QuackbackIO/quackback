@@ -299,6 +299,7 @@ export {
   conversations,
   conversationsRelations,
   conversationMessages,
+  workspaceAssistantThreads,
   conversationMessagesRelations,
   conversationTags,
   conversationTagsRelations,
@@ -342,6 +343,7 @@ export {
   postSubscriptions,
   postSubscriptionsRelations,
   unsubscribeTokens,
+  onboardingEmails,
   unsubscribeTokensRelations,
   // Schema tables - sentiment
   postSentiment,
@@ -509,6 +511,11 @@ export {
   // Types/constants
   REACTION_EMOJIS,
   USE_CASE_TYPES,
+  // Test-customer identity kept out of every metric
+  isTestPrincipalSql,
+  notTestPrincipal,
+  notTestConversation,
+  notTestTicket,
 } from '@quackback/db'
 
 // Re-export schema types not covered by @quackback/db/types

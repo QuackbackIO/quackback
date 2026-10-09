@@ -37,7 +37,7 @@ function occurrences(value: string, needle: string): number {
 
 describe('assistant production system prompt', () => {
   it('uses the production prompt version', () => {
-    expect(ASSISTANT_PROMPT_VERSION).toBe('support-agent-v6')
+    expect(ASSISTANT_PROMPT_VERSION).toBe('support-agent-v7')
   })
 
   it('returns every optional block in the normative order', () => {
@@ -411,5 +411,48 @@ describe('assistant production system prompt', () => {
     // Board names are workspace data on a trusted structural line: escaped.
     expect(withTool).toContain('General &lt;Feedback&gt;')
     expect(occurrences(withTool, '</workspace_board_catalogue>')).toBe(1)
+  })
+})
+
+describe('knowledge search guidance per role', () => {
+  const GENERIC = 'Search for product, pricing, policy, capability, or procedure questions'
+  it('keys the generic search line to Home knowledge search, not the entity search', () => {
+    const home = joined({
+      role: 'workspace_assistant',
+      surface: 'workspace',
+      agentKind: 'copilot',
+      tools: [
+        { name: 'search', promptGuidance: 'Find workspace entities by name.' },
+        { name: 'search_knowledge', promptGuidance: 'Search knowledge.' },
+      ],
+    })
+    expect(home).toContain(`- search_knowledge: ${GENERIC}`)
+    expect(home).not.toContain(`- search: ${GENERIC}`)
+  })
+  it('keeps the line on search for Slack and Quinn', () => {
+    for (const overrides of [
+      { role: 'workspace_assistant' as const, surface: 'slack' as const },
+      { role: 'customer_support' as const },
+    ]) {
+      const text = joined({
+        ...overrides,
+        tools: [{ name: 'search', promptGuidance: 'Search knowledge.' }],
+      })
+      expect(text).toContain(`- search: ${GENERIC}`)
+    }
+  })
+})
+
+describe('dash-free replies', () => {
+  it('tells Quinn and Copilot never to write em dashes', () => {
+    for (const overrides of [
+      {},
+      { role: 'workspace_assistant' as const, agentKind: 'copilot' as const },
+      { role: 'copilot_qa' as const },
+    ]) {
+      expect(joined(overrides)).toContain(
+        'Never use em dashes or en dashes as punctuation in a reply'
+      )
+    }
   })
 })

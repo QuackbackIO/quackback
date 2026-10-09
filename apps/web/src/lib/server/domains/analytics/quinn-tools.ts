@@ -1,6 +1,7 @@
 /** Action metrics for the Quinn performance area. */
 import { db, and, gte, lt, sql, assistantToolCalls } from '@/lib/server/db'
 import { ratePctOrNull } from '@/lib/shared/percent'
+import { notTestConversation } from '@/lib/server/test-data'
 
 export interface QuinnToolMetric {
   toolName: string
@@ -55,7 +56,13 @@ export async function getQuinnToolMetrics(from: Date, to: Date): Promise<QuinnTo
       >`avg(${assistantToolCalls.latencyMs}) filter (where ${assistantToolCalls.status} = 'succeeded')`,
     })
     .from(assistantToolCalls)
-    .where(and(gte(assistantToolCalls.createdAt, from), lt(assistantToolCalls.createdAt, to)))
+    .where(
+      and(
+        gte(assistantToolCalls.createdAt, from),
+        lt(assistantToolCalls.createdAt, to),
+        notTestConversation(assistantToolCalls.conversationId)
+      )
+    )
     .groupBy(assistantToolCalls.toolName)
 
   return rows.map(toMetric).sort((a, b) => {

@@ -172,10 +172,19 @@ export function isViewerMessage(key: string): boolean {
 }
 
 /**
+ * Copilot and search strings. Their chunks (the Home chat and the search
+ * dialog) load them as they open (see `AskMessages`); only the sidebar Search
+ * row renders on every page, so its strings stay in the seed.
+ */
+export function isAskMessage(key: string): boolean {
+  return key.startsWith('ask.') && !key.startsWith('ask.search.')
+}
+
+/**
  * Key prefix for the standalone /unsubscribe page. That page seeds only these
  * (see {@link loadUnsubscribeMessages}), and no other surface renders them, so
  * the portal slice leaves them out by prefix and the admin catalog drops them
- * with {@link withoutPageScopedMessages}.
+ * (see {@link adminSeedMessages}).
  */
 export const UNSUBSCRIBE_MESSAGE_PREFIX = 'unsubscribe.'
 
@@ -191,6 +200,8 @@ export function isUnsubscribeMessage(key: string): boolean {
 export const SETUP_WIZARD_MESSAGE_PREFIXES = [
   'onboarding.account.',
   'onboarding.workspace.',
+  'onboarding.goals.',
+  'onboarding.error.',
 ] as const
 
 export function isSetupWizardMessage(key: string): boolean {
@@ -266,6 +277,16 @@ export async function loadUnsubscribeMessages(
   return subset
 }
 
+/** The Copilot and search strings in a locale. */
+export async function loadAskMessages(locale: SupportedLocale): Promise<Record<string, string>> {
+  const all = await loadMessages(locale)
+  const subset: Record<string, string> = {}
+  for (const [key, value] of Object.entries(all)) {
+    if (isAskMessage(key)) subset[key] = value
+  }
+  return subset
+}
+
 /** The strings of one or more areas in a locale. */
 export async function loadAreaMessages(
   locale: SupportedLocale,
@@ -286,6 +307,117 @@ export async function loadViewerMessages(locale: SupportedLocale): Promise<Recor
   const subset: Record<string, string> = {}
   for (const [key, value] of Object.entries(all)) {
     if (isViewerMessage(key)) subset[key] = value
+  }
+  return subset
+}
+
+/**
+ * Key prefixes only the product tour's overlay renders. The tour opens on a
+ * click, so admin pages leave these out of the catalog they seed and the tour
+ * loads them as it starts (see `ProductTourProvider`). The tour's entry points
+ * (`onboarding.tour.replay`, `.offer`, `.notNow`) stay seeded.
+ */
+export const TOUR_MESSAGE_PREFIXES = [
+  'onboarding.tour.stop.',
+  'onboarding.tour.end.',
+  'onboarding.tour.count',
+  'onboarding.tour.skipTour',
+  'onboarding.tour.back',
+  'onboarding.tour.next',
+  'onboarding.tour.finish',
+] as const
+
+export function isTourMessage(key: string): boolean {
+  return TOUR_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
+}
+
+/** The product tour overlay's strings in a locale. */
+export async function loadTourMessages(locale: SupportedLocale): Promise<Record<string, string>> {
+  const all = await loadMessages(locale)
+  const subset: Record<string, string> = {}
+  for (const [key, value] of Object.entries(all)) {
+    if (isTourMessage(key)) subset[key] = value
+  }
+  return subset
+}
+
+/**
+ * Strings only the invite-the-team sheet renders. The sheet is a lazy chunk
+ * opened on a click, so admin pages leave these out of the catalog they seed
+ * and the sheet loads them as it opens (see `SheetMessages`).
+ */
+const SHEET_MESSAGE_PREFIXES = ['onboarding.live.'] as const
+
+export function isSheetMessage(key: string): boolean {
+  return SHEET_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
+}
+
+/** The setup sheets' strings in a locale. */
+export async function loadSheetMessages(locale: SupportedLocale): Promise<Record<string, string>> {
+  const all = await loadMessages(locale)
+  const subset: Record<string, string> = {}
+  for (const [key, value] of Object.entries(all)) {
+    if (isSheetMessage(key)) subset[key] = value
+  }
+  return subset
+}
+
+/**
+ * Strings only Home and the Launch plan page render: the plan and its steps,
+ * the next step and first win cards, the greeting, Home's counts. Those two
+ * routes load them as they load (see `LaunchMessages`), so every other admin
+ * page leaves them out of its seed. The sidebar dock and the tour's end card,
+ * on every page, keep the few they render.
+ */
+const LAUNCH_MESSAGE_PREFIXES = [
+  'onboarding.task.',
+  'onboarding.win.',
+  'onboarding.home.',
+  'onboarding.path.',
+  'onboarding.launch.',
+  'onboarding.branding.',
+  'admin.overview.',
+] as const
+const SEEDED_LAUNCH_MESSAGES: ReadonlySet<string> = new Set([
+  'onboarding.launch.name',
+  'onboarding.launch.stepOf',
+  'onboarding.launch.done',
+  'onboarding.launch.error',
+])
+
+export function isLaunchMessage(key: string): boolean {
+  return (
+    LAUNCH_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix)) &&
+    !SEEDED_LAUNCH_MESSAGES.has(key)
+  )
+}
+
+/** Home's and the Launch plan page's strings in a locale. */
+export async function loadLaunchMessages(locale: SupportedLocale): Promise<Record<string, string>> {
+  const all = await loadMessages(locale)
+  const subset: Record<string, string> = {}
+  for (const [key, value] of Object.entries(all)) {
+    if (isLaunchMessage(key)) subset[key] = value
+  }
+  return subset
+}
+
+/**
+ * The catalog an admin page seeds: everything but the strings that load with
+ * a lazy surface (the file viewer, the product tour, Copilot and search, the
+ * setup sheets) or with their own page (Home and the Launch plan, the wizard,
+ * the unsubscribe and Try Messenger pages), each area's strings (they load where
+ * they show, see {@link AREA_MESSAGE_PREFIXES}), and email copy (formatted on
+ * the server, never rendered).
+ */
+export function adminSeedMessages(all: Record<string, string>): Record<string, string> {
+  const subset: Record<string, string> = {}
+  for (const [key, value] of Object.entries(all)) {
+    if (isViewerMessage(key) || isTourMessage(key) || isAskMessage(key)) continue
+    if (isSheetMessage(key) || isLaunchMessage(key)) continue
+    if (key.startsWith('email.') || isUnsubscribeMessage(key)) continue
+    if (isSetupWizardMessage(key) || messageArea(key) !== null) continue
+    subset[key] = value
   }
   return subset
 }

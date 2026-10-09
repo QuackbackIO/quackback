@@ -1,6 +1,7 @@
 import { nameInitial } from '@/lib/shared/utils/initial'
 import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { hasConversationsFn } from '@/lib/server/functions/onboarding-progress'
 import { conversationInboxQueries } from '@/lib/client/queries/conversation-inbox'
 import { inboxQueries } from '@/lib/client/queries/inbox'
 import type {
@@ -25,6 +26,7 @@ import {
 } from '@/components/admin/conversation/inbox-nav-sidebar'
 import { TicketStatusChip, TICKET_TYPE_CLASS } from '@/components/admin/inbox/ticket-chips'
 import { NewButton } from '@/components/shared/new-button'
+import { ActivationActionButton } from '@/components/admin/activation-action-button'
 import { SearchInput } from '@/components/shared/search-input'
 import {
   ConversationListToolbar,
@@ -38,9 +40,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
 import { useActivationAction } from '@/lib/client/hooks/use-activation-action'
-import { ActivationActionButton } from '@/components/admin/activation-action-button'
 import { FormattedMessage, useIntl } from 'react-intl'
-import { useUserRole } from '@/lib/client/hooks/use-root-context'
 
 /** Ignore scroll-by hovers; only warm a thread the pointer actually rests on. */
 const PREFETCH_DELAY_MS = 120
@@ -400,7 +400,6 @@ function EmptyList({
   'nav' | 'facet' | 'scopeLabel' | 'searchInput' | 'priorityFilter' | 'channelFilter'
 >) {
   const intl = useIntl()
-  const userRole = useUserRole()
   const activationAction = useActivationAction('conversation_empty')
 
   const isMainConversationQueue =
@@ -410,22 +409,40 @@ function EmptyList({
     priorityFilter !== 'all' ||
     !!channelFilter ||
     (facet !== 'all' && facet !== 'open')
-  const isAllClear = isMainConversationQueue && facet === 'open' && !isFiltered && !activationAction
+  // A workspace that has never had a conversation gets the first-run state in
+  // every main queue, whatever its launch plan says.
+  const { data: history } = useQuery({
+    queryKey: ['inbox', 'has-conversations'],
+    queryFn: () => hasConversationsFn(),
+    enabled: isMainConversationQueue && !isFiltered,
+    staleTime: 60_000,
+  })
+  const firstRun = isMainConversationQueue && !isFiltered && history?.hasConversations === false
+  const isAllClear =
+    isMainConversationQueue && facet === 'open' && !isFiltered && !activationAction && !firstRun
   const emptyMsg = isFiltered
     ? intl.formatMessage({
         id: 'inbox.empty.filtered.title',
         defaultMessage: 'No conversations match these filters',
       })
-    : isAllClear
+    : (activationAction || firstRun) && isMainConversationQueue
       ? intl.formatMessage({
-          id: 'inbox.empty.allClear.title',
-          defaultMessage: 'Nothing to review',
+          id: 'inbox.empty.firstRun.title',
+          defaultMessage: 'No conversations yet',
         })
-      : emptyStateMessage(nav, facet, scopeLabel)
+      : isAllClear
+        ? intl.formatMessage({
+            id: 'inbox.empty.allClear.title',
+            defaultMessage: 'Nothing to review',
+          })
+        : emptyStateMessage(nav, facet, scopeLabel)
   // First-run CTA on the unfiltered main queues (not tickets/labels).
   const showMessengerCta = isMainConversationQueue && !isFiltered && !isAllClear
   return (
-    <div className="px-4 py-10 text-center space-y-3">
+    <div
+      className="px-4 py-10 text-center space-y-3"
+      data-tour={isMainConversationQueue && !isFiltered ? 'support-empty' : undefined}
+    >
       <p className="text-sm font-medium text-foreground">{emptyMsg}</p>
       {isFiltered && (
         <p className="mx-auto max-w-[16rem] text-xs text-muted-foreground">
@@ -443,21 +460,13 @@ function EmptyList({
           />
         </p>
       )}
-      {showMessengerCta && (
-        <>
-          <p className="text-xs text-muted-foreground max-w-[16rem] mx-auto">
-            When customers message you, conversations show up here.
-          </p>
-          {/* Widget settings are admin-only; members get the message
-              without a button they can't use. */}
-          {userRole === 'admin' && activationAction && (
-            <ActivationActionButton
-              action={activationAction}
-              surface="conversation_empty"
-              className="h-11 sm:h-9"
-            />
-          )}
-        </>
+      {showMessengerCta && activationAction && (
+        <ActivationActionButton
+          action={activationAction}
+          surface="conversation_empty"
+          variant="outline"
+          className="h-11 sm:h-9"
+        />
       )}
     </div>
   )
@@ -629,6 +638,11 @@ export const ConversationRow = memo(function ConversationRow({
                 {c.endReason === 'spam' && c.spamReason && (
                   <Badge size="sm" variant="outline">
                     {CONVERSATION_SPAM_FILED_BY_LABELS[c.spamReason]}
+                  </Badge>
+                )}
+                {c.isTest && (
+                  <Badge size="sm" variant="outline">
+                    <FormattedMessage id="inbox.row.test" defaultMessage="Test" />
                   </Badge>
                 )}
                 <TimeAgo date={c.lastMessageAt} short className="text-xs text-muted-foreground" />

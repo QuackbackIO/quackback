@@ -140,3 +140,35 @@ describe('NotificationMatrixForm', () => {
     expect(screen.queryByRole('status', { name: 'Saving' })).toBeNull()
   })
 })
+
+describe('NotificationMatrixForm: setup tips', () => {
+  const tipsOff = { ...preferences, matrix: { onboarding_tips: { email: false } } }
+
+  it('stays quiet while setup tips are on', () => {
+    render(<NotificationMatrixForm surface="portal" initialPreferences={preferences} />)
+
+    expect(screen.queryByLabelText('Setup tips by email')).toBeNull()
+  })
+
+  it('offers the way back after "Stop setup tips", and turns them back on', async () => {
+    updateNotificationPreferencesFn.mockImplementation(async ({ data }) => ({
+      ...tipsOff,
+      ...data,
+    }))
+    render(<NotificationMatrixForm surface="portal" initialPreferences={tipsOff} />)
+
+    const toggle = screen.getByLabelText('Setup tips by email')
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(toggle)
+
+    await waitFor(() =>
+      expect(updateNotificationPreferencesFn).toHaveBeenCalledWith({
+        data: { matrix: { onboarding_tips: { email: true } } },
+      })
+    )
+    // The row stays put once it is back on, so the change can be seen.
+    await waitFor(() =>
+      expect(screen.getByLabelText('Setup tips by email').getAttribute('aria-checked')).toBe('true')
+    )
+  })
+})

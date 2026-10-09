@@ -10,6 +10,7 @@ import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
 import type { PostCommentId, PostId, PrincipalId } from '@quackback/ids'
 import { resolveCommentingState } from '@/components/public/comment-permission'
 import { useSessionContext, useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
+import { shownName } from '@/lib/shared/greeting-name'
 
 interface AuthCommentsSectionProps {
   postId: PostId
@@ -115,7 +116,11 @@ export function AuthCommentsSection({
 
   // User info from session, falling back to server-provided user
   const userData = user
-    ? { name: user.name ?? null, email: user.email ?? '', principalId: serverUser?.principalId }
+    ? {
+        name: shownName(user.name, user.email),
+        email: user.email ?? '',
+        principalId: serverUser?.principalId,
+      }
     : serverUser
 
   const ensureAnonSession = useEnsureAnonSession()

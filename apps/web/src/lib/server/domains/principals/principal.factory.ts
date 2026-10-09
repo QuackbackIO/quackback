@@ -80,6 +80,7 @@ export interface CreatePrincipalInput extends ProfileFields {
   type?: PrincipalType
   userId?: UserId | null
   id?: PrincipalId
+  testOwnerPrincipalId?: PrincipalId | null
 }
 
 /** The one place principal column defaults live. createdAt is always stamped
@@ -89,6 +90,7 @@ function toRow(input: CreatePrincipalInput): typeof principal.$inferInsert {
     id: input.id ?? generateId('principal'),
     userId: input.userId ?? null,
     role: input.role,
+    testOwnerPrincipalId: input.testOwnerPrincipalId ?? null,
     type: input.type ?? 'user',
     displayName: input.displayName ?? null,
     avatarUrl: input.avatarUrl ?? null,
@@ -160,6 +162,18 @@ export async function ensurePrincipalForUser(
     where: eq(principal.userId, input.userId),
   })
   if (existing) return { principal: existing, created: false }
+
+  const profile = await exec.query.user.findFirst({
+    where: eq(user.id, input.userId),
+    columns: { metadata: true },
+  })
+  let testOwner: unknown
+  try {
+    testOwner = JSON.parse(profile?.metadata ?? '{}')?.onboarding?.testOwnerPrincipalId
+  } catch {
+    /* Invalid profile metadata has no test identity. */
+  }
+  if (testOwner) throw new Error('A deleted test customer cannot become an ordinary customer')
 
   const [inserted] = await exec
     .insert(principal)

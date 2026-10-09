@@ -46,9 +46,11 @@ import type { SendingIdentity } from './sender'
 export type { SendingIdentity } from './sender'
 import { MagicLinkEmail } from './templates/magic-link'
 import { SignupNotAllowedEmail } from './templates/signup-not-allowed'
-import { InvitationEmail } from './templates/invitation'
+import { InvitationEmail, type InvitationEmailCopy } from './templates/invitation'
 import { PortalInviteEmail } from './templates/portal-invite'
 import { WelcomeEmail } from './templates/welcome'
+import { MessengerInstallEmail } from './templates/messenger-install'
+import { OnboardingEmail, type OnboardingEmailContent } from './templates/onboarding-email'
 import { StatusChangeEmail } from './templates/status-change'
 import { NewCommentEmail } from './templates/new-comment'
 import { ConversationMessageEmail } from './templates/conversation-message'
@@ -614,6 +616,8 @@ export async function sendRawEmail(options: RawEmailOptions): Promise<EmailResul
 // Invitation Email
 // ============================================================================
 
+export type { InvitationEmailCopy }
+
 interface SendInvitationParams {
   to: SecureRecipient
   invitedByName: string
@@ -621,20 +625,23 @@ interface SendInvitationParams {
   workspaceName: string
   inviteLink: string
   logoUrl?: string
+  /** The invitation in the team's language, subject included. English without it. */
+  copy?: InvitationEmailCopy & { subject: string }
 }
 
 export async function sendInvitationEmail(params: SendInvitationParams): Promise<EmailResult> {
-  const { to, invitedByName, inviteeName, workspaceName, inviteLink, logoUrl } = params
+  const { to, invitedByName, inviteeName, workspaceName, inviteLink, logoUrl, copy } = params
 
   return sendEmail({
     to,
-    subject: `You've been invited to join ${workspaceName} on Quackback`,
+    subject: copy?.subject ?? `${invitedByName} invited you to ${workspaceName}`,
     react: InvitationEmail({
       invitedByName,
       inviteeName,
       organizationName: workspaceName,
       inviteLink,
       logoUrl,
+      copy,
     }),
     emailType: 'InvitationEmail',
     preview: { inviteLink },
@@ -690,6 +697,66 @@ export async function sendWelcomeEmail(params: SendWelcomeParams): Promise<Email
 }
 
 // ============================================================================
+// Going live: install instructions and the onboarding welcome / nudge
+// ============================================================================
+
+export async function sendMessengerInstallEmail(params: {
+  to: string
+  senderName: string
+  workspaceName: string
+  snippet: string
+  logoUrl?: string
+}): Promise<EmailResult> {
+  const { to, senderName, workspaceName, snippet, logoUrl } = params
+  return sendEmail({
+    to,
+    subject: `Add ${workspaceName} Messenger to the website`,
+    react: MessengerInstallEmail({ senderName, workspaceName, snippet, logoUrl }),
+    emailType: 'MessengerInstallEmail',
+    preview: { workspaceName },
+  })
+}
+
+export type { OnboardingEmailContent }
+
+interface SendOnboardingEmailParams extends OnboardingEmailContent {
+  to: string
+  subject: string
+  workspaceName: string
+  unsubscribeUrl: string
+  logoUrl?: string
+}
+
+function sendOnboardingEmail(
+  params: SendOnboardingEmailParams,
+  emailType: 'OnboardingWelcomeEmail' | 'OnboardingNudgeEmail'
+): Promise<EmailResult> {
+  const { to, subject, ...content } = params
+  return sendEmail({
+    to,
+    subject,
+    react: OnboardingEmail(content),
+    extraHeaders: listUnsubscribeHeaders(params.unsubscribeUrl),
+    emailType,
+    preview: { cta: params.cta.url, lang: params.lang },
+  })
+}
+
+/** The one "workspace is ready" email, sent when a new workspace's owner first lands. */
+export async function sendOnboardingWelcomeEmail(
+  params: SendOnboardingEmailParams
+): Promise<EmailResult> {
+  return sendOnboardingEmail(params, 'OnboardingWelcomeEmail')
+}
+
+/** The day-two nudge, sent at most once while no customer has acted yet. */
+export async function sendOnboardingNudgeEmail(
+  params: SendOnboardingEmailParams
+): Promise<EmailResult> {
+  return sendOnboardingEmail(params, 'OnboardingNudgeEmail')
+}
+
+// ============================================================================
 // Sign-in Email (magic link + 6-digit code combined)
 // ============================================================================
 
@@ -698,16 +765,24 @@ interface SendMagicLinkParams {
   signInUrl: string
   code: string
   logoUrl?: string
+  /** The workspace being signed in to, named in the subject beside the code. */
+  workspaceName?: string
+}
+
+/** The code first, so the inbox list alone is enough to sign in. */
+export function magicLinkSubject(code: string, workspaceName?: string): string {
+  const name = workspaceName?.trim()
+  return name ? `${code} is your code for ${name}` : `${code} is your sign-in code`
 }
 
 export async function sendMagicLinkEmail(params: SendMagicLinkParams): Promise<EmailResult> {
-  const { to, signInUrl, code, logoUrl } = params
+  const { to, signInUrl, code, logoUrl, workspaceName } = params
 
   log.debug('sending sign-in email')
   return sendEmail({
     to,
-    subject: 'Your Quackback sign-in link',
-    react: MagicLinkEmail({ signInUrl, code, logoUrl }),
+    subject: magicLinkSubject(code, workspaceName),
+    react: MagicLinkEmail({ signInUrl, code, logoUrl, workspaceName }),
     emailType: 'MagicLinkEmail',
     preview: { signInUrl, code },
   })
@@ -1258,7 +1333,7 @@ function ticketEventCopy(p: SendTicketEventEmailParams): TicketEmailCopy {
           subject: `Your ticket ${p.ticketLabel} was closed`,
           heading: 'Your ticket was closed',
           intro: `${p.ticketLabel} "${p.title}" has been closed by the ${p.workspaceName} team.`,
-          note: 'If you have a follow-up, reply on the ticket thread — replying reopens it.',
+          note: 'If you have a follow-up, reply on the ticket thread. Replying reopens it.',
           ctaLabel: 'View your ticket',
           reason: requesterReason,
         }
@@ -1738,6 +1813,8 @@ export async function sendCsatRequestEmail(
 export { InvitationEmail } from './templates/invitation'
 export { PortalInviteEmail } from './templates/portal-invite'
 export { WelcomeEmail } from './templates/welcome'
+export { MessengerInstallEmail } from './templates/messenger-install'
+export { OnboardingEmail } from './templates/onboarding-email'
 export { MagicLinkEmail } from './templates/magic-link'
 export { SignupNotAllowedEmail } from './templates/signup-not-allowed'
 export { StatusChangeEmail } from './templates/status-change'

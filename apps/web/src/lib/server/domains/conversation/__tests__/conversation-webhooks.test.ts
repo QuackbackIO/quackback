@@ -14,6 +14,14 @@ const dispatch = vi.hoisted(() => ({
   dispatchMessageNoteCreated: vi.fn().mockResolvedValue(undefined),
   dispatchMessageDeleted: vi.fn().mockResolvedValue(undefined),
 }))
+const testCustomers = vi.hoisted(() => new Set<string>())
+vi.mock('@/lib/server/test-data', () => ({
+  isTestCustomer: async (id: string) => testCustomers.has(id),
+  isTestConversation: async () => false,
+  testOwnerOf: async (id: string) => (testCustomers.has(id) ? 'principal_owner' : null),
+  activeTestOwnerOf: async () => null,
+  notTestPrincipal: () => ({}),
+}))
 vi.mock('@/lib/server/events/dispatch', () => dispatch)
 
 const defaultSla = vi.hoisted(() => ({
@@ -106,6 +114,18 @@ describe('conversation.webhooks emit helpers', () => {
     await emitConversationCreated(visitorActor, anonAuthor, baseConversation)
     expect(order).toEqual(['apply', 'dispatch'])
     expect(slaService.applySlaToConversation).toHaveBeenCalledWith('conversation_1', 'sla_policy_1')
+  })
+
+  it('never starts the default SLA on a test customer thread', async () => {
+    defaultSla.getDefaultSlaPolicySettings.mockResolvedValueOnce({ policyId: 'sla_policy_1' })
+    testCustomers.add(baseConversation.visitorPrincipalId)
+    try {
+      await emitConversationCreated(visitorActor, anonAuthor, baseConversation)
+    } finally {
+      testCustomers.clear()
+    }
+    expect(slaService.applySlaToConversation).not.toHaveBeenCalled()
+    expect(dispatch.dispatchConversationCreated).toHaveBeenCalledTimes(1)
   })
 
   it('skips default SLA apply when no policy is configured', async () => {

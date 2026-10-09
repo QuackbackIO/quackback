@@ -6,7 +6,10 @@ import { railControlClass } from '@/components/admin/rail-item'
 
 const dir = dirname(fileURLToPath(import.meta.url))
 const css = readFileSync(join(dir, '../../globals.css'), 'utf8')
-const adminSource = readFileSync(join(dir, '../../routes/admin.tsx'), 'utf8')
+const adminSource = readFileSync(
+  join(dir, '../../components/admin/admin-workspace-frame.tsx'),
+  'utf8'
+)
 
 /** The declaration block that follows the first occurrence of a selector. */
 function block(selector: string): string {

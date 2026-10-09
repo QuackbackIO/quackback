@@ -97,6 +97,11 @@ vi.mock('@/lib/server/db', () => {
     select: () => chain('select'),
     insert: (t: { __name?: string }) => chain(t?.__name ?? 'unknown'),
     update: (t: { __name?: string }) => chain(t?.__name ?? 'unknown'),
+    query: {
+      principal: {
+        findFirst: async () => ({ testOwnerPrincipalId: null, type: 'anonymous', role: 'user' }),
+      },
+    },
   }
 
   return {

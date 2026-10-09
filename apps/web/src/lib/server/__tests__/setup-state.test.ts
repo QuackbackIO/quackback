@@ -79,7 +79,9 @@ describe('mutateSetupStateAtomic', () => {
     ])
 
     const stored = JSON.parse(hoisted.setupState)
-    expect(stored.useCase).toBe('internal')
+    expect(stored.useCase).toBe('product_feedback')
+    expect(stored.goals).toEqual(['product_feedback'])
+    expect(stored.feedbackPrivate).toBe(true)
     expect(stored.activationHandoffSeenAt).toBe('2026-07-13T10:00:00.000Z')
     expect(stored.steps.workspace).toBe(true)
     expect(hoisted.forUpdate).toHaveBeenCalledTimes(2)

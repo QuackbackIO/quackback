@@ -36,7 +36,7 @@ describe('useQuackbackInit', () => {
       return null
     }
     const { unmount } = render(<C />)
-    expect(document.querySelector('iframe[title="Feedback Widget"]')).not.toBeNull()
+    expect(document.querySelector('iframe.quackback-widget-iframe')).not.toBeNull()
     unmount()
     expect(destroy).toHaveBeenCalled()
   })
@@ -63,7 +63,7 @@ describe('useQuackbackInit', () => {
       return null
     }
     render(<C />)
-    expect(document.querySelector('iframe[title="Feedback Widget"]')).toBeNull()
+    expect(document.querySelector('iframe.quackback-widget-iframe')).toBeNull()
   })
 
   it('inits later when shouldInitialize flips to true', () => {
@@ -72,9 +72,9 @@ describe('useQuackbackInit', () => {
       return null
     }
     const { rerender, unmount } = render(<C enabled={false} />)
-    expect(document.querySelector('iframe[title="Feedback Widget"]')).toBeNull()
+    expect(document.querySelector('iframe.quackback-widget-iframe')).toBeNull()
     act(() => rerender(<C enabled={true} />))
-    expect(document.querySelector('iframe[title="Feedback Widget"]')).not.toBeNull()
+    expect(document.querySelector('iframe.quackback-widget-iframe')).not.toBeNull()
     unmount()
   })
 
@@ -94,11 +94,11 @@ describe('useQuackbackInit', () => {
       return null
     }
     const { unmount } = render(<C />)
-    expect(document.querySelector('iframe[title="Feedback Widget"]')).toBeNull()
+    expect(document.querySelector('iframe.quackback-widget-iframe')).toBeNull()
     act(() => {
       vi.advanceTimersByTime(500)
     })
-    expect(document.querySelector('iframe[title="Feedback Widget"]')).not.toBeNull()
+    expect(document.querySelector('iframe.quackback-widget-iframe')).not.toBeNull()
     unmount()
     vi.useRealTimers()
   })

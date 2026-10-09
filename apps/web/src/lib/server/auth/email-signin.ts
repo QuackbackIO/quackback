@@ -3,6 +3,7 @@ import { mintMagicLinkUrl } from './magic-link-mint'
 import { isAccountCreationAllowed } from './signup-policy'
 import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
+import { isSafeCallbackUrl, isTeamCallback } from '@/lib/shared/routing'
 
 const log = logger.child({ component: 'auth-email-signin' })
 
@@ -107,15 +108,19 @@ export async function requestEmailSignin(opts: {
     return
   }
 
+  // The link lands on `${origin}${callbackPath}`, so only a same-origin path
+  // may ride in it ("@evil.example" or ".evil.example" would change the host).
+  const callbackPath = isSafeCallbackUrl(opts.callbackURL) ? opts.callbackURL : '/'
+
   // Failed verifies (token consumed by an email scanner, expired, etc.)
-  // need to land on the right login page. Admin callbacks (`/admin/...`)
-  // bounce to the unified login with a `/admin` callback so it renders
-  // the team break-glass form and can request a replacement link. Better-
-  // Auth merges its `error` param onto this URL via `URL.searchParams`,
-  // so the existing `?callbackUrl=` query survives (joined with `&`).
-  // Portal callbacks fall back to /auth/login (the public login screen).
-  const errorCallbackPath = opts.callbackURL.startsWith('/admin')
-    ? '/auth/login?callbackUrl=/admin'
+  // need to land on the right login page. Team callbacks (`/admin/...`)
+  // bounce to the unified login carrying the same deep link so it renders
+  // the team form and, once signed in, returns there. Better-Auth merges its
+  // `error` param onto this URL via `URL.searchParams`, so the existing
+  // `?callbackUrl=` query survives (joined with `&`). Portal callbacks fall
+  // back to /auth/login (the public login screen).
+  const errorCallbackPath = isTeamCallback(callbackPath)
+    ? `/auth/login?${new URLSearchParams({ callbackUrl: callbackPath }).toString()}`
     : '/auth/login'
 
   // Both halves are minted, neither is sent from here.
@@ -139,7 +144,7 @@ export async function requestEmailSignin(opts: {
   const [minted, otp] = await Promise.all([
     mintMagicLinkUrl({
       email: opts.email,
-      callbackPath: opts.callbackURL,
+      callbackPath,
       errorCallbackPath,
       portalUrl: config.baseUrl,
     }),
@@ -165,5 +170,6 @@ export async function requestEmailSignin(opts: {
     signInUrl: minted.url,
     code: otp,
     logoUrl,
+    workspaceName: settings?.name ?? undefined,
   })
 }

@@ -470,6 +470,9 @@ function WidgetPage() {
   const [conversationTarget, setConversationTarget] = useState<ConversationId | 'new' | null>(
     resumeConversationId ? (resumeConversationId as ConversationId) : null
   )
+  // A host's `open({ view: 'chat', body })`. The nonce remounts the messenger
+  // so a draft sent while it is already open still lands in the composer.
+  const [messengerDraft, setMessengerDraft] = useState<{ nonce: number; body: string } | null>(null)
   // Manual size preference: the header's expand/collapse button flips this,
   // and it is STICKY — collapsing turns auto-expansion off for every later
   // item view until the visitor expands again. Persisted per browser.
@@ -657,6 +660,10 @@ function WidgetPage() {
           setView('help')
           break
         case 'messenger':
+          if (command.body) {
+            const body = command.body
+            setMessengerDraft((prev) => ({ nonce: (prev?.nonce ?? 0) + 1, body }))
+          }
           openMessenger()
           break
         case 'tickets':
@@ -971,7 +978,8 @@ function WidgetPage() {
           fallback={<WidgetMessengerViewSkeleton isNew={conversationTarget === 'new'} />}
         >
           <WidgetMessenger
-            key={conversationTarget ?? 'active'}
+            key={`${conversationTarget ?? 'active'}:${messengerDraft?.nonce ?? 0}`}
+            initialDraft={messengerDraft?.body}
             helpEnabled={tabs.help}
             onArticleSelect={handleHelpArticleSelect}
             conversationTarget={conversationTarget === null ? undefined : conversationTarget}

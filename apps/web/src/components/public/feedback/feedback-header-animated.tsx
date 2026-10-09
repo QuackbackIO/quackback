@@ -31,6 +31,7 @@ import { resolveSubmitState } from '@/components/public/feedback/submit-permissi
 import { PUBLIC_FEEDBACK_EDITOR_FEATURES } from '@/components/public/feedback/feedback-editor-features'
 import type { EditorDocument } from '@/components/ui/rich-text-editor'
 import { useSessionContext } from '@/lib/client/hooks/use-root-context'
+import { shownName } from '@/lib/shared/greeting-name'
 
 interface BoardOption {
   id: string
@@ -85,9 +86,10 @@ export function FeedbackHeaderAnimated({
 
   // Identified users post as themselves; anonymous posting is handled separately.
   const isAnonymousSession = session?.user?.principalType === 'anonymous'
+  const anonymousName = isAnonymousSession ? session?.user?.displayName?.trim() || null : null
   const effectiveUser =
     session?.user && !isAnonymousSession
-      ? { name: session.user.name, email: session.user.email }
+      ? { name: shownName(session.user.name, session.user.email), email: session.user.email }
       : user
   const { upload: uploadMedia } = usePortalMediaUpload()
   const uploadMediaWithSession = useCallback(
@@ -441,6 +443,25 @@ export function FeedbackHeaderAnimated({
                     defaultMessage="You don't have access to post on this board"
                   />
                 </p>
+              ) : isAnonymousSession && canPostAnonymously ? (
+                // A visitor who never signed in posts under their generated
+                // name, and has nothing to sign out of.
+                <p className="text-xs text-muted-foreground">
+                  {anonymousName ? (
+                    <>
+                      <FormattedMessage
+                        id="portal.feedback.header.postingAs"
+                        defaultMessage="Posting as"
+                      />{' '}
+                      <span className="font-medium text-foreground">{anonymousName}</span>
+                    </>
+                  ) : (
+                    <FormattedMessage
+                      id="portal.feedback.header.postingAnonymously"
+                      defaultMessage="Posting anonymously"
+                    />
+                  )}
+                </p>
               ) : effectiveUser ? (
                 <p className="text-xs text-muted-foreground">
                   <FormattedMessage
@@ -448,7 +469,7 @@ export function FeedbackHeaderAnimated({
                     defaultMessage="Posting as"
                   />{' '}
                   <span className="font-medium text-foreground">
-                    {effectiveUser.name || effectiveUser.email}
+                    {shownName(effectiveUser.name, effectiveUser.email)}
                   </span>
                   {' ('}
                   <button

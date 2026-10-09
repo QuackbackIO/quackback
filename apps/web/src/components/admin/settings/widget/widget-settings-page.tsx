@@ -408,7 +408,7 @@ export function TabsCard({
           <TabRow
             id="tab-help"
             label="Help"
-            description="Browse and search Help Center articles"
+            description="Browse and search help center articles"
             checked={tabs.help}
             disabled={isBusy || (tabs.help && lastSectionLock)}
             disabledHint={lastSectionHint}

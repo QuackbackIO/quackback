@@ -46,6 +46,7 @@ export {
   enableFlagsForUseCase,
   PRODUCT_DEFINITIONS,
   getFirstEnabledAdminProductPath,
+  newWorkspaceFlagsForGoals,
   getProductFlagUpdate,
   isProductEnabled,
   DEFAULT_AUTH_CONFIG,

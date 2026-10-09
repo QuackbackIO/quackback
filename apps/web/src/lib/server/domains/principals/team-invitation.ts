@@ -239,10 +239,18 @@ export async function insertTeamInvites(
   )
 }
 
+/** The invitation's wording in the team's language; English when absent. */
+export type TeamInviteCopy = Parameters<typeof sendInvitationEmail>[0]['copy']
+
 /** Send the invitation email. Returns whether it went out. */
 export async function deliverTeamInvite(
   invite: MintedTeamInvite,
-  opts: { inviterName: string; inviteeName?: string | null; workspace: InviteWorkspace }
+  opts: {
+    inviterName: string
+    inviteeName?: string | null
+    workspace: InviteWorkspace
+    copy?: TeamInviteCopy
+  }
 ): Promise<{ sent: boolean }> {
   const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
   const logoUrl = getEmailSafeUrl(opts.workspace.logoKey) ?? undefined
@@ -256,6 +264,7 @@ export async function deliverTeamInvite(
     workspaceName: opts.workspace.name,
     inviteLink: invite.inviteLink,
     logoUrl,
+    copy: opts.copy,
   })
   return { sent: result.sent }
 }

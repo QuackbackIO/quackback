@@ -169,6 +169,7 @@ vi.mock('@/lib/server/realtime/stream-token', () => ({
 }))
 vi.mock('@/lib/server/domains/settings/settings.support', () => ({
   isConversationsEnabled: vi.fn(async () => true),
+  isConversationsEnabledFor: vi.fn(async () => true),
   isSupportTicketsEnabled: vi.fn(async () => true),
 }))
 vi.mock('@/lib/server/realtime/pubsub', () => ({ subscribe: vi.fn(async () => async () => {}) }))

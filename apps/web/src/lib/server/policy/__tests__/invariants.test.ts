@@ -13,7 +13,7 @@ import { describe, it, expect } from 'vitest'
 import { canViewBoard, boardViewFilter } from '../boards'
 import { postViewFilter } from '../posts'
 import { ANONYMOUS_ACTOR, type Actor } from '../types'
-import { createId, type SegmentId, type PrincipalId } from '@quackback/ids'
+import { createId, toUuid, type SegmentId, type PrincipalId } from '@quackback/ids'
 import type { BoardAccess, AccessTier } from '@/lib/server/db'
 import { PgDialect } from 'drizzle-orm/pg-core'
 import type { SQL } from 'drizzle-orm'
@@ -307,12 +307,12 @@ describe('postViewFilter — SQL shape', () => {
   it('non-team predicate maps principalId through typeid → uuid binding', () => {
     const { params } = toQueryShape(postViewFilter(actors.user))
     // The principal id is passed through the typeid column mapper, which
-    // converts the TypeID string to its UUID component. We assert: exactly
-    // one UUID-shaped param appears.
+    // converts both own-pending and own-test visibility bindings to the same UUID.
     const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
     const flat = params.flat(2).filter((p) => typeof p === 'string') as string[]
     const uuids = flat.filter((p) => uuidRe.test(p))
-    expect(uuids).toHaveLength(1)
+    expect(uuids).toEqual([toUuid(PRINCIPAL_USER), toUuid(PRINCIPAL_USER)])
+    expect(flat).not.toContain(PRINCIPAL_USER)
   })
 
   it('anonymous predicate has no principalId binding (no own-pending branch)', () => {

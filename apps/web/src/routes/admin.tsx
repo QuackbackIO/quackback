@@ -1,13 +1,16 @@
 import { useEffect, type ComponentProps } from 'react'
 import { createFileRoute, Outlet, redirect, useRouterState } from '@tanstack/react-router'
 import { IntlProvider } from 'react-intl'
+import { SearchPaletteProvider } from '@/components/admin/ask/search-palette'
+import { AdminWorkspaceFrame } from '@/components/admin/admin-workspace-frame'
 import { useAdminPresence } from '@/lib/client/hooks/use-admin-presence'
-import { DEFAULT_LOCALE, loadMessages, withoutPageScopedMessages } from '@/lib/shared/i18n'
+import { DEFAULT_LOCALE, adminSeedMessages, loadMessages } from '@/lib/shared/i18n'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { unreadCountQuery } from '@/lib/client/hooks/use-notifications-queries'
 import { getLatestVersion, isNewerVersion } from '@/lib/server/functions/version'
+import { AdminProductTourProvider } from '@/components/onboarding/admin-product-tour'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
 import { ArticleModal, ChangelogModal, PostModal } from '@/components/admin/entity-modals'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -22,6 +25,7 @@ import { createRouteContextMemo } from '@/lib/client/route-context-memo'
 import { isAdminPathAllowedDuringDowngradeLock } from '@/lib/shared/billing/plan-downgrade-lock'
 import type { requireWorkspaceRole } from '@/lib/server/functions/workspace-utils'
 import { useFeatureFlag, useProductEnabled } from '@/lib/client/hooks/use-root-context'
+import { useToasterLocale } from '@/components/ui/use-toaster-locale'
 
 /** What the admin pages read from the role guard's answer. */
 type AdminGuard = Pick<
@@ -36,10 +40,11 @@ type AdminGuard = Pick<
  */
 const adminGuard = createRouteContextMemo<AdminGuard>()
 
-async function loadAdminGuard(): Promise<AdminGuard> {
+async function loadAdminGuard(callbackUrl: string): Promise<AdminGuard> {
   const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
+  // The page being opened rides along so a signed-out visitor returns to it.
   const { user, principal, permissions } = await requireWorkspaceRole({
-    data: { allowedRoles: ['admin', 'member'] },
+    data: { allowedRoles: ['admin', 'member'], callbackUrl },
   })
   return { user, principal, permissions }
 }
@@ -67,7 +72,9 @@ export const Route = createFileRoute('/admin')({
     // Role guard first: it throws a sign-in redirect. The billing helper's
     // requireAuth() throws a plain Error, so racing the two can surface an
     // error page for an unauthenticated visitor.
-    const { user, principal, permissions } = await adminGuard.get(loadAdminGuard)
+    const { user, principal, permissions } = await adminGuard.get(() =>
+      loadAdminGuard(location.href)
+    )
 
     // A pending plan downgrade locks billing managers to the pages where they
     // can get under the new plan's limits. Only a billing manager of a
@@ -102,8 +109,9 @@ export const Route = createFileRoute('/admin')({
         updateBannerDismissedVersion: null,
         currentUser: null,
         planNotice: null,
+        inLaunchWindow: false,
         locale: DEFAULT_LOCALE,
-        messages: withoutPageScopedMessages(await loadMessages(DEFAULT_LOCALE)),
+        messages: adminSeedMessages(await loadMessages(DEFAULT_LOCALE)),
       }
     }
 
@@ -118,13 +126,19 @@ export const Route = createFileRoute('/admin')({
       (context.permissions ?? []).includes(PERMISSIONS.POST_APPROVE)
 
     const locale = context.acceptLanguageLocale ?? DEFAULT_LOCALE
-    const [avatarData, latestRelease, planNotice, messages] = await Promise.all([
+    const [avatarData, latestRelease, planNotice, messages, launchWindow] = await Promise.all([
       fetchUserAvatar({
         data: { userId: user.id, fallbackImageUrl: user.image },
       }),
       getLatestVersion(),
       getPlanNotice(),
-      loadMessages(locale).then(withoutPageScopedMessages),
+      loadMessages(locale).then(adminSeedMessages),
+      // Only cloud loads the help launcher, so only cloud asks whether to hide it.
+      context.cloudEnabled
+        ? import('@/lib/server/functions/onboarding-progress')
+            .then((module) => module.getLaunchWindowOpenFn())
+            .catch(() => ({ open: false }))
+        : { open: false },
       // The rail's unread badge rides the document rather than a request of
       // its own after hydration. Unreadable now, it is left to the bell.
       context.queryClient.ensureQueryData(unreadCountQuery()).catch(() => null),
@@ -150,6 +164,7 @@ export const Route = createFileRoute('/admin')({
       latestVersion,
       updateBannerDismissedVersion: context.updateBannerDismissedVersion ?? null,
       planNotice,
+      inLaunchWindow: launchWindow.open,
       locale,
       messages,
       currentUser: {
@@ -234,11 +249,13 @@ function AdminLayout() {
     latestVersion,
     updateBannerDismissedVersion,
     planNotice,
+    inLaunchWindow,
     currentUser,
     locale,
     messages,
   } = Route.useLoaderData()
   useSeedAdminGuard()
+  useToasterLocale(locale)
 
   // Mark team members online for conversation routing across the whole admin (not just
   // the inbox), but only when the support inbox feature is on.
@@ -252,34 +269,77 @@ function AdminLayout() {
 
   return (
     <IntlProvider locale={locale} defaultLocale={DEFAULT_LOCALE} messages={messages}>
-      <CloudQuackbackWidget />
-      <TooltipProvider delay={0}>
-        <div className="flex h-screen bg-background">
-          <AdminSidebar initialUserData={initialUserData} latestVersion={latestVersion} />
-          <main
-            data-admin-shell=""
-            className="flex-1 min-w-0 overflow-hidden bg-chrome p-0 sm:h-screen sm:py-2 sm:pe-2"
-          >
-            {/* Mobile: Add padding for fixed header */}
-            <div
-              data-admin-canvas=""
-              className="h-full sm:pt-0 pt-14 overflow-hidden flex flex-col bg-background text-foreground sm:rounded-[14px] sm:border sm:border-chrome-hairline sm:shadow-chrome-canvas"
-            >
-              <PlanNoticeBanner notice={planNotice} />
-              <UpdateBanner
-                latestVersion={latestVersion}
-                dismissedVersion={updateBannerDismissedVersion}
-              />
-              <div className="flex-1 min-h-0 overflow-hidden">
-                <FileViewerProvider onJumpToMessage={scrollToMessage}>
-                  <Outlet />
-                </FileViewerProvider>
-              </div>
-            </div>
-          </main>
-          <EntityModals currentUser={currentUser} />
-        </div>
-      </TooltipProvider>
+      <SearchPaletteProvider>
+        <AdminProductTourProvider>
+          <TooltipProvider delay={0}>
+            <AdminContent
+              initialUserData={initialUserData}
+              latestVersion={latestVersion}
+              updateBannerDismissedVersion={updateBannerDismissedVersion}
+              planNotice={planNotice}
+              inLaunchWindow={inLaunchWindow}
+              currentUser={currentUser}
+            />
+          </TooltipProvider>
+        </AdminProductTourProvider>
+      </SearchPaletteProvider>
     </IntlProvider>
+  )
+}
+
+function AdminContent({
+  initialUserData,
+  latestVersion,
+  updateBannerDismissedVersion,
+  planNotice,
+  inLaunchWindow,
+  currentUser,
+}: Pick<
+  ReturnType<typeof Route.useLoaderData>,
+  | 'initialUserData'
+  | 'latestVersion'
+  | 'updateBannerDismissedVersion'
+  | 'planNotice'
+  | 'inLaunchWindow'
+  | 'currentUser'
+>) {
+  // An open Home chat sits above the corner launcher's spot; the launcher steps aside.
+  const canUseCopilot = useHasPermission(PERMISSIONS.COPILOT_USE)
+  const chatOpen = useRouterState({
+    select: (state) =>
+      /^\/admin\/?$/.test(state.location.pathname) &&
+      typeof (state.location.search as { copilotThread?: unknown }).copilotThread === 'string',
+  })
+  return (
+    <>
+      {/* In the launch window the corner launcher stays hidden (it reads like the
+          workspace's own Messenger); Help, Contact us opens it. */}
+      <CloudQuackbackWidget launcherHidden={inLaunchWindow || (canUseCopilot && chatOpen)} />
+      <AdminWorkspaceFrame
+        sidebar={
+          initialUserData && (
+            <AdminSidebar
+              initialUserData={initialUserData}
+              latestVersion={latestVersion}
+              planNotice={planNotice}
+            />
+          )
+        }
+        notices={
+          <>
+            <PlanNoticeBanner notice={planNotice} />
+            <UpdateBanner
+              latestVersion={latestVersion}
+              dismissedVersion={updateBannerDismissedVersion}
+            />
+          </>
+        }
+      >
+        <FileViewerProvider onJumpToMessage={scrollToMessage}>
+          <Outlet />
+        </FileViewerProvider>
+      </AdminWorkspaceFrame>
+      <EntityModals currentUser={currentUser} />
+    </>
   )
 }

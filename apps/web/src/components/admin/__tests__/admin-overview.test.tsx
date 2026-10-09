@@ -1,7 +1,17 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render as rtlRender, screen, within } from '@testing-library/react'
+import type { ReactElement } from 'react'
+import { IntlProvider } from 'react-intl'
+import en from '@/locales/en.json'
 import type { AdminOverviewData } from '@/lib/shared/admin-overview'
+
+const render = (ui: ReactElement) =>
+  rtlRender(
+    <IntlProvider locale="en" messages={en}>
+      {ui}
+    </IntlProvider>
+  )
 
 const { state } = vi.hoisted(() => {
   const data: AdminOverviewData = {
@@ -16,7 +26,7 @@ const { state } = vi.hoisted(() => {
       },
       {
         key: 'feedback',
-        label: 'feedback posts',
+        label: 'ideas',
         detail: 'to review',
         count: 30,
         link: { to: '/admin/feedback' },
@@ -24,8 +34,8 @@ const { state } = vi.hoisted(() => {
       },
       {
         key: 'complete',
-        label: 'feedback posts',
-        detail: 'with no changelog',
+        label: 'ideas',
+        detail: 'shipped, not announced',
         count: 6,
         link: { to: '/admin/feedback' },
         filter: 'feedback',
@@ -62,6 +72,7 @@ const { state } = vi.hoisted(() => {
       feedback: { enabled: true, error: null },
       changelog: { enabled: true, error: null },
       helpCenter: { enabled: true, error: null },
+      status: { enabled: false, error: null },
     },
   }
   return { state: { data } }
@@ -112,16 +123,92 @@ vi.mock('@tanstack/react-router', () => ({
   },
 }))
 
-import { OverviewDashboard } from '../admin-overview'
+import { OverviewCounts, OverviewDashboard } from '../admin-overview'
 
 describe('OverviewDashboard', () => {
+  it('keeps a fresh workspace quiet until real data exists', () => {
+    const previous = state.data
+    state.data = {
+      ...state.data,
+      hasRealData: false,
+      metrics: state.data.metrics.map((metric) => ({ ...metric, count: 0 })),
+      attention: [],
+    }
+    try {
+      const { unmount } = render(<OverviewDashboard />)
+      expect(screen.queryByText('Conversations waiting for reply')).toBeNull()
+      expect(screen.queryByText('Nothing to review')).toBeNull()
+      expect(screen.queryByText('0')).toBeNull()
+      unmount()
+    } finally {
+      state.data = previous
+    }
+  })
+
+  it('says where each module’s first item will land while there is no real data', () => {
+    const previous = state.data
+    state.data = {
+      ...state.data,
+      hasRealData: false,
+      attention: [],
+      sections: {
+        support: { enabled: true, error: null },
+        feedback: { enabled: true, error: null },
+        changelog: { enabled: false, error: null },
+        helpCenter: { enabled: false, error: null },
+        status: { enabled: true, error: null },
+      },
+    }
+    try {
+      for (const view of [<OverviewDashboard />, <OverviewCounts />]) {
+        const { unmount } = render(view)
+        const empty = screen.getByRole('list', { name: 'Nothing here yet' })
+        expect(
+          within(empty)
+            .getAllByRole('listitem')
+            .map((item) => item.textContent)
+        ).toEqual([
+          'No ideas yet. They land in Feedback.',
+          'No conversations yet. They land in Support.',
+          'No subscribers yet. They sign up on your status page.',
+        ])
+        expect(within(empty).getByRole('link', { name: 'Feedback' })).toHaveAttribute(
+          'href',
+          '/admin/feedback'
+        )
+        expect(within(empty).getByRole('link', { name: 'status page' })).toHaveAttribute(
+          'href',
+          '/admin/status'
+        )
+        unmount()
+      }
+      // While the owner's launch plan leads Home, the plan is the one guide.
+      render(<OverviewDashboard emptyStates={false} />)
+      expect(screen.queryByRole('list', { name: 'Nothing here yet' })).toBeNull()
+    } finally {
+      state.data = previous
+    }
+  })
+
+  it('keeps the create actions beside a custom Home header', () => {
+    render(
+      <OverviewDashboard
+        header={<h1>Welcome, Acme</h1>}
+        actions={<button type="button">Actions</button>}
+      />
+    )
+    expect(screen.getByRole('heading', { level: 1, name: 'Welcome, Acme' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Actions' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Home' })).toBeNull()
+  })
+
   it('renders each count under a single-line label', () => {
     const { container } = render(<OverviewDashboard />)
 
     expect(screen.getByText('3')).toBeInTheDocument()
     expect(screen.getByText('Conversations waiting for reply')).toBeInTheDocument()
-    expect(screen.getByText('Feedback posts to review')).toBeInTheDocument()
-    expect(screen.getByText('Feedback posts with no changelog')).toBeInTheDocument()
+    expect(screen.getByText('Ideas to review')).toBeInTheDocument()
+    expect(screen.getByText('Ideas shipped, not announced')).toBeInTheDocument()
     expect(screen.getByText('Help center articles in draft')).toBeInTheDocument()
     expect(screen.getByText('Support')).toBeInTheDocument()
     expect(screen.getByText('Feedback')).toBeInTheDocument()
@@ -186,7 +273,7 @@ describe('OverviewDashboard', () => {
     const { container } = render(<OverviewDashboard />)
     expect(container.querySelector('aside')).toBeNull()
     expect(screen.queryByText('Changelog', { selector: 'h2' })).not.toBeInTheDocument()
-    expect(screen.queryByText('Help Center', { selector: 'h2' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Help center', { selector: 'h2' })).not.toBeInTheDocument()
     expect(screen.queryByText('No new votes this week.')).not.toBeInTheDocument()
   })
 
@@ -221,7 +308,7 @@ describe('OverviewDashboard', () => {
     expect(screen.queryByText('Publishing')).not.toBeInTheDocument()
     expect(screen.queryByText('Momentum')).not.toBeInTheDocument()
     expect(screen.getByText('Changelog', { selector: 'h2' })).toBeInTheDocument()
-    expect(screen.getByText('Help Center', { selector: 'h2' })).toBeInTheDocument()
+    expect(screen.getByText('Help center', { selector: 'h2' })).toBeInTheDocument()
     expect(screen.getByText('September updates')).toBeInTheDocument()
     expect(screen.getByText('Environment Variables')).toBeInTheDocument()
     expect(screen.getByText('Environment Variables').closest('a')).toHaveAttribute(
@@ -260,7 +347,7 @@ describe('OverviewDashboard', () => {
     render(<OverviewDashboard />)
     expect(screen.getByText('Changelog', { selector: 'h2' })).toBeInTheDocument()
     expect(screen.getByText('Couldn’t load this section.')).toBeInTheDocument()
-    expect(screen.getByText('Help Center', { selector: 'h2' })).toBeInTheDocument()
+    expect(screen.getByText('Help center', { selector: 'h2' })).toBeInTheDocument()
     expect(screen.getByText('Environment Variables')).toBeInTheDocument()
     expect(screen.queryByText('Feedback', { selector: 'h2' })).not.toBeInTheDocument()
   })
@@ -290,6 +377,7 @@ describe('OverviewDashboard', () => {
         feedback: { enabled: true, error: 'Couldn’t load this section.' },
         changelog: { enabled: true, error: null },
         helpCenter: { enabled: true, error: null },
+        status: { enabled: false, error: null },
       },
     }
     render(<OverviewDashboard />)
@@ -323,6 +411,7 @@ describe('OverviewDashboard', () => {
         feedback: { enabled: true, error: null },
         changelog: { enabled: true, error: null },
         helpCenter: { enabled: true, error: null },
+        status: { enabled: false, error: null },
       },
     }
     render(<OverviewDashboard />)

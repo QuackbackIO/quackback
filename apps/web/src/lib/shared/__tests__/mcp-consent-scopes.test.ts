@@ -24,6 +24,7 @@ describe('ACCESS_DOMAINS', () => {
       'Changelog',
       'Help Center',
       'Conversations',
+      'Settings',
     ])
     expect(ACCESS_DOMAINS.find((d) => d.domain === 'changelog')).toEqual(
       expect.objectContaining({
@@ -46,6 +47,7 @@ describe('defaultSelectedScopes', () => {
       changelog: 'off',
       article: 'read',
       chat: 'read',
+      settings: 'read',
     })
   })
 
@@ -92,7 +94,9 @@ describe('rewriteMcpAuthorizeRequest', () => {
     const url = new URL(request.url)
     expect(url.searchParams.get('scope')?.split(' ')).toEqual([...MCP_AS_SCOPES])
     expect(parseScopeList(url.searchParams.get(CLIENT_REQUESTED_SCOPE_PARAM))).toEqual([
-      ...MCP_FIRST_CONNECT_SCOPES,
+      'read:feedback',
+      'read:article',
+      'read:chat',
     ])
   })
 
@@ -125,7 +129,7 @@ describe('clientRequestedFromConsentSearch', () => {
         requested: 'read:feedback read:article read:chat',
         scope: expandAuthorizeScopes(),
       })
-    ).toEqual([...MCP_FIRST_CONNECT_SCOPES])
+    ).toEqual(['read:feedback', 'read:article', 'read:chat'])
   })
 
   it('does not treat an expanded scope= as the client request', () => {

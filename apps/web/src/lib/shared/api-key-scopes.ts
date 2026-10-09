@@ -12,6 +12,7 @@
  */
 import {
   PERMISSION_CATALOGUE,
+  PERMISSIONS,
   type PermissionKey,
   type PermissionCategory,
 } from '@/lib/shared/permissions'
@@ -24,6 +25,8 @@ export const API_KEY_SCOPES = [
   'write:article',
   'read:chat',
   'write:chat',
+  'read:settings',
+  'write:settings',
 ] as const
 
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number]
@@ -36,6 +39,7 @@ export const MCP_FIRST_CONNECT_SCOPES = [
   'read:feedback',
   'read:article',
   'read:chat',
+  'read:settings',
 ] as const satisfies readonly ApiKeyScope[]
 
 /** Identity + refresh + the full capability catalogue — AS allow-list. */
@@ -50,7 +54,7 @@ export const MCP_AS_SCOPES = [
 /** Shared empty-selection message (zod schema, key service, creation dialog). */
 export const EMPTY_SCOPES_MESSAGE = 'Select at least one scope'
 
-export type AccessDomainId = 'feedback' | 'changelog' | 'article' | 'chat'
+export type AccessDomainId = 'feedback' | 'changelog' | 'article' | 'chat' | 'settings'
 export type DomainAccessKind = 'read_write' | 'write_only'
 export type DomainAccessLevel = 'off' | 'read' | 'read_write' | 'write'
 export type DomainAccessChip = 'read' | 'read_write' | 'write'
@@ -102,10 +106,18 @@ export const ACCESS_DOMAINS: readonly AccessDomain[] = [
     readScope: 'read:chat',
     writeScope: 'write:chat',
   },
+  {
+    domain: 'settings',
+    label: 'Settings',
+    description: 'Branding, Messenger, modules, and office hours',
+    kind: 'read_write',
+    readScope: 'read:settings',
+    writeScope: 'write:settings',
+  },
 ]
 
 function emptyDomainAccessLevels(): DomainAccessLevels {
-  return { feedback: 'off', changelog: 'off', article: 'off', chat: 'off' }
+  return { feedback: 'off', changelog: 'off', article: 'off', chat: 'off', settings: 'off' }
 }
 
 /** The write sibling of a read scope, when that write exists in the vocabulary. */
@@ -173,7 +185,10 @@ export function toggleDomainLevel(
 }
 
 /** One-line list summary. Null scopes = pre-scope-selection key. */
-export function summarizeDomainAccess(scopes: readonly ApiKeyScope[] | null | undefined): string {
+export function summarizeDomainAccess(
+  scopes: readonly ApiKeyScope[] | null | undefined,
+  settingsSummary?: (level: DomainAccessLevel) => string
+): string {
   if (scopes == null) return 'Full access (legacy)'
   if (scopes.length === 0) return 'No API scopes'
   const levels = domainAccessLevels(scopes)
@@ -186,6 +201,10 @@ export function summarizeDomainAccess(scopes: readonly ApiKeyScope[] | null | un
   const parts: string[] = []
   for (const domain of ACCESS_DOMAINS) {
     const level = levels[domain.domain]
+    if (domain.domain === 'settings' && level !== 'off' && settingsSummary) {
+      parts.push(settingsSummary(level))
+      continue
+    }
     if (level === 'read') parts.push(`${domain.label} (read)`)
     else if (level === 'read_write') parts.push(`${domain.label} (read and write)`)
     else if (level === 'write') parts.push(`${domain.label} (write)`)
@@ -245,6 +264,12 @@ export function readScopeForCategory(category: PermissionCategory): ApiKeyScope 
 }
 
 export function scopeForPermission(permission: PermissionKey): ApiKeyScope {
+  if (
+    permission === PERMISSIONS.SETTINGS_MANAGE ||
+    permission === PERMISSIONS.SETTINGS_BRANDING ||
+    permission === PERMISSIONS.OFFICE_HOURS_MANAGE
+  )
+    return 'write:settings'
   // Every catalogue key has a category; fall back to the base write scope so an
   // unmapped permission fails toward requiring MORE authority, never less.
   const category = CATEGORY_BY_KEY.get(permission) ?? 'feedback'

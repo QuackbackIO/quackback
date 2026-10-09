@@ -66,6 +66,7 @@ import {
   and,
   asc,
   isNull,
+  sql,
   conversations,
   conversationMessages,
   ticketConversations,
@@ -81,7 +82,7 @@ import { ForbiddenError, ConflictError, NotFoundError } from '@/lib/shared/error
 import { isUniqueViolation } from '@/lib/server/utils'
 import { formatTicketNumber } from '@/lib/shared/tickets'
 import { logger } from '@/lib/server/logger'
-import { loadTicketOr404 } from './ticket.service'
+import { notTestTicket, notTestConversation } from '@/lib/server/test-data'
 import { loadSlaApplied } from '../sla/sla.service'
 import { applySlaToTicket } from '../sla/ticket-sla.service'
 
@@ -104,28 +105,48 @@ export async function linkTicketToConversation(
     throw new ForbiddenError('FORBIDDEN', 'You cannot link a ticket to a conversation')
   }
 
-  const ticket = await loadTicketOr404(ticketId)
-  // The pair rule keys off the ticket's own type — everything below that says
-  // "the conversation and the ticket are one" is gated on it.
-  const isPair = ticket.type === 'customer'
-
-  const [conversation] = await db
-    .select({ id: conversations.id })
-    .from(conversations)
-    .where(eq(conversations.id, conversationId))
-    .limit(1)
-  if (!conversation) {
-    throw new NotFoundError('NOT_FOUND', 'Conversation not found')
-  }
-
+  let ticket: Ticket
   try {
-    await db.insert(ticketConversations).values({
-      ticketId,
-      conversationId,
-      // Denormalized from the ticket so the partial uniques and every pair
-      // reader can tell a pair from provenance without a join.
-      ticketType: ticket.type,
-      linkedByPrincipalId: actor.principalId ?? null,
+    ticket = await db.transaction(async (tx) => {
+      const [currentTicket] = await tx
+        .select()
+        .from(tickets)
+        .where(and(eq(tickets.id, ticketId), isNull(tickets.deletedAt)))
+        .for('update')
+      if (!currentTicket) {
+        throw new NotFoundError('TICKET_NOT_FOUND', `Ticket ${ticketId} not found`)
+      }
+      const [conversation] = await tx
+        .select({ id: conversations.id })
+        .from(conversations)
+        .where(eq(conversations.id, conversationId))
+        .for('update')
+      if (!conversation) throw new NotFoundError('NOT_FOUND', 'Conversation not found')
+
+      // Both parents remain locked while their current provenance is checked and linked.
+      const [classification] = await tx
+        .select({
+          realTicket: sql<boolean>`${notTestTicket(tickets.id)}`,
+          realConversation: sql<boolean>`${notTestConversation(conversations.id)}`,
+        })
+        .from(tickets)
+        .innerJoin(conversations, eq(conversations.id, conversationId))
+        .where(eq(tickets.id, ticketId))
+      if (classification.realTicket !== classification.realConversation) {
+        throw new ConflictError(
+          'TEST_DATA_LINK_CONFLICT',
+          'Test and real conversations need separate tickets.'
+        )
+      }
+      await tx.insert(ticketConversations).values({
+        ticketId,
+        conversationId,
+        // Denormalized from the ticket so the partial uniques and every pair
+        // reader can tell a pair from provenance without a join.
+        ticketType: currentTicket.type,
+        linkedByPrincipalId: actor.principalId ?? null,
+      })
+      return currentTicket
     })
   } catch (err) {
     if (isUniqueViolation(err)) {
@@ -151,6 +172,9 @@ export async function linkTicketToConversation(
     }
     throw err
   }
+
+  // The pair rule keys off the ticket's own type; provenance links stay separate.
+  const isPair = ticket.type === 'customer'
 
   // CONVERGENCE PHASE 1a firstResponseAt rule (convergence-design.md,
   // mechanics appendix "Write (Phase 1)"): when the ticket has no

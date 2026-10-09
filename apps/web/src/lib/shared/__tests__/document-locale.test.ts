@@ -12,6 +12,7 @@ describe('documentLocale', () => {
   it('localizes the standalone auth and widget routes', () => {
     expect(documentLocale(['__root__', '/auth/reset-password'], 'zh-cn')).toBe('zh-cn')
     expect(documentLocale(['__root__', '/widget'], 'ar')).toBe('ar')
+    expect(documentLocale(['__root__', '/unsubscribe'], 'ar')).toBe('ar')
   })
   it('localizes the AI & Automation pages under settings and the workflow builder', () => {
     for (const id of [
@@ -53,7 +54,6 @@ describe('documentLocale', () => {
     expect(documentLocale(['__root__', '/admin/posts'], 'zh-cn')).toBe('en')
     expect(documentLocale(['__root__', '/onboarding'], 'ar')).toBe('en')
     expect(documentLocale(['__root__', '/apps'], 'zh-cn')).toBe('en')
-    expect(documentLocale(['__root__', '/unsubscribe'], 'zh-cn')).toBe('en')
     expect(documentLocale(['__root__', '/verify-magic-link'], 'zh-cn')).toBe('en')
   })
 })

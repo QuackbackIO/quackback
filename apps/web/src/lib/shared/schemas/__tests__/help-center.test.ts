@@ -168,12 +168,12 @@ describe('createArticleSchema', () => {
     expect(result.success).toBe(false)
   })
 
-  it('rejects missing categoryId', () => {
+  it('accepts a missing categoryId (the article is filed under General)', () => {
     const result = createArticleSchema.safeParse({
       title: 'Title',
       content: 'Content',
     })
-    expect(result.success).toBe(false)
+    expect(result.success).toBe(true)
   })
 
   it('accepts optional slug', () => {

@@ -98,6 +98,14 @@ const SCRATCH_DB = 'quackback_drift_check'
  */
 const EXEMPTIONS: { reason: string; pattern: RegExp; optional?: boolean }[] = [
   {
+    reason: 'workspace turn dedupe: jsonb expression member does not round-trip introspection',
+    pattern: /^CREATE UNIQUE INDEX "conversation_messages_workspace_run_sender_idx"/,
+  },
+  {
+    reason: 'workspace turn dedupe: jsonb expression member does not round-trip introspection',
+    pattern: /^DROP INDEX "conversation_messages_workspace_run_sender_idx"/,
+  },
+  {
     reason:
       'drizzle-kit composite PK column-order rewrite on PG 17; identical named key and columns',
     pattern:

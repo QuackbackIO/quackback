@@ -159,6 +159,7 @@ export async function getPendingActionByIdempotencyKey(
  * other bounded ticket/conversation authority.
  */
 async function surfacePendingActionNote(row: AssistantPendingAction): Promise<void> {
+  if (row.workspaceThreadKey) return
   try {
     const assistant = await getAssistantPrincipal()
     if (!assistant) return

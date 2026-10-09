@@ -18,6 +18,7 @@
  */
 import { db, sql, conversationAttributeDefinitions, eq } from '@/lib/server/db'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
+import { notTestConversation } from '@/lib/server/test-data'
 
 export interface AttributeValueCount {
   /** null for the "not set" bucket (key absent OR an explicit null value). */
@@ -68,6 +69,7 @@ export async function attributeValueCounts(input: {
     SELECT (custom_attributes -> ${input.key} ->> 'v') AS "optionId", COUNT(*)::int AS count
     FROM conversations
     WHERE created_at >= now() - interval '${sql.raw(String(sinceDays))} days'
+      AND ${notTestConversation(sql`conversations.id`)}
     GROUP BY "optionId"
   `)) as unknown as CountRow[]
 

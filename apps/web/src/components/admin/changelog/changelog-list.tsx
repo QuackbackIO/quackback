@@ -1,6 +1,14 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { useState, useCallback, useEffect, useMemo, startTransition, Suspense } from 'react'
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  startTransition,
+  Suspense,
+  type ReactNode,
+} from 'react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/shared/spinner'
@@ -16,7 +24,7 @@ import { NewButton } from '@/components/shared/new-button'
 import {
   ChangelogFiltersPanel,
   ChangelogFilterButton,
-  CHANGELOG_SORT_OPTIONS,
+  useChangelogSortOptions,
   type ChangelogSort,
 } from './changelog-filters'
 import { useChangelogFilters } from './use-changelog-filters'
@@ -26,6 +34,7 @@ import { changelogQueries } from '@/lib/client/queries/changelog'
 import { useDeleteChangelog } from '@/lib/client/mutations/changelog'
 import { Route } from '@/routes/admin/changelog'
 import type { ChangelogId } from '@quackback/ids'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { DocumentTextIcon } from '@heroicons/react/24/solid'
 
 // The create dialog carries the editor and the entry form, which outweigh the
@@ -37,7 +46,7 @@ const { Component: CreateChangelogDialog, preload: preloadCreateChangelogDialog 
 )
 
 /** The New entry button and the create dialog it opens. */
-function NewChangelogEntryButton() {
+function NewChangelogEntryButton({ label }: { label?: ReactNode }) {
   const [open, setOpen] = useState(false)
   // Kept mounted after the first open so closing animates.
   const opened = useOpenedOnce(open)
@@ -49,7 +58,11 @@ function NewChangelogEntryButton() {
         onPointerEnter={preloadCreateChangelogDialog}
         onFocus={preloadCreateChangelogDialog}
         onClick={() => setOpen(true)}
-      />
+      >
+        {label ?? (
+          <FormattedMessage id="admin.changelog.list.newEntry" defaultMessage="New entry" />
+        )}
+      </NewButton>
       {opened && (
         <Suspense fallback={null}>
           <CreateChangelogDialog open={open} onOpenChange={setOpen} />
@@ -80,6 +93,7 @@ function ChangelogSkeleton() {
 }
 
 export function ChangelogList() {
+  const intl = useIntl()
   const navigate = useNavigate({ from: Route.fullPath })
   const search = Route.useSearch()
   const { filters, setFilters, hasActiveFilters } = useChangelogFilters()
@@ -87,6 +101,15 @@ export function ChangelogList() {
   const [entryToDelete, setEntryToDelete] = useState<ChangelogId | null>(null)
 
   const deleteChangelogMutation = useDeleteChangelog()
+  const sortOptions = useChangelogSortOptions()
+  const formatSortLabel = useCallback(
+    (label: string) =>
+      intl.formatMessage(
+        { id: 'admin.changelog.list.sort', defaultMessage: 'Sort: {label}' },
+        { label }
+      ),
+    [intl]
+  )
 
   const { value: searchValue, setValue: setSearchValue } = useDebouncedSearch({
     externalValue: filters.search,
@@ -175,7 +198,10 @@ export function ChangelogList() {
   return (
     <>
       <InboxLayout
-        headerTitle="Changelog"
+        headerTitle={intl.formatMessage({
+          id: 'admin.nav.changelog',
+          defaultMessage: 'Changelog',
+        })}
         filters={
           <ChangelogFiltersPanel
             status={filters.status}
@@ -189,8 +215,12 @@ export function ChangelogList() {
           <AdminListHeader
             searchValue={searchValue}
             onSearchChange={setSearchValue}
-            searchPlaceholder="Search entries..."
-            sortOptions={CHANGELOG_SORT_OPTIONS}
+            searchPlaceholder={intl.formatMessage({
+              id: 'admin.changelog.list.searchPlaceholder',
+              defaultMessage: 'Search entries...',
+            })}
+            sortOptions={sortOptions}
+            formatSortLabel={formatSortLabel}
             activeSort={filters.sort}
             onSortChange={(sort) => setFilters({ sort: sort as ChangelogSort })}
             filters={
@@ -217,13 +247,31 @@ export function ChangelogList() {
               icon={DocumentTextIcon}
               title={
                 filters.search
-                  ? 'No changelog entries match your search'
+                  ? intl.formatMessage({
+                      id: 'admin.changelog.list.noSearchMatch',
+                      defaultMessage: 'No changelog entries match your search',
+                    })
                   : hasActiveFilters
-                    ? 'No changelog entries match your filters'
-                    : 'No changelog entries yet'
+                    ? intl.formatMessage({
+                        id: 'admin.changelog.list.noFilterMatch',
+                        defaultMessage: 'No changelog entries match your filters',
+                      })
+                    : intl.formatMessage({
+                        id: 'admin.empty.changelog.title',
+                        defaultMessage: 'No updates yet',
+                      })
               }
               action={
-                !hasActiveFilters && !filters.search ? <NewChangelogEntryButton /> : undefined
+                !hasActiveFilters && !filters.search ? (
+                  <NewChangelogEntryButton
+                    label={
+                      <FormattedMessage
+                        id="admin.empty.changelog.action"
+                        defaultMessage="Write an update"
+                      />
+                    }
+                  />
+                ) : undefined
               }
               className="h-48"
             />
@@ -267,7 +315,7 @@ export function ChangelogList() {
                   onClick={() => fetchNextPage()}
                   className="text-muted-foreground"
                 >
-                  Load more
+                  <FormattedMessage id="admin.changelog.list.loadMore" defaultMessage="Load more" />
                 </Button>
               )}
             </div>
@@ -279,9 +327,19 @@ export function ChangelogList() {
       <ConfirmDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
-        title="Delete changelog entry?"
-        description="This action cannot be undone. The changelog entry will be permanently deleted."
-        confirmLabel="Delete"
+        title={intl.formatMessage({
+          id: 'admin.changelog.delete.title',
+          defaultMessage: 'Delete changelog entry?',
+        })}
+        description={intl.formatMessage({
+          id: 'admin.changelog.delete.description',
+          defaultMessage:
+            'This action cannot be undone. The changelog entry will be permanently deleted.',
+        })}
+        confirmLabel={intl.formatMessage({
+          id: 'admin.changelog.delete.confirm',
+          defaultMessage: 'Delete',
+        })}
         variant="destructive"
         isPending={deleteChangelogMutation.isPending}
         onConfirm={confirmDelete}

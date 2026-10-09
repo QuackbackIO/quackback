@@ -1,11 +1,13 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
+import { FormattedMessage, useIntl, type MessageDescriptor } from 'react-intl'
 import { adminOverviewQueries } from '@/lib/client/queries/admin-overview'
 import {
   overviewMetricGridClass,
   publishStatusLabel,
   type AdminEntity,
+  type AdminOverviewData,
   type OverviewAttentionItem,
   type OverviewAttentionKind,
   type OverviewLink,
@@ -40,9 +42,17 @@ type Filter = OverviewAttentionKind | 'all'
 export function OverviewDashboard({
   actions,
   banner,
+  header,
+  emptyStates = true,
 }: {
   actions?: ReactNode
   banner?: ReactNode
+  header?: ReactNode
+  /**
+   * Say where each module's first item lands while there is no real data.
+   * Off while the owner's launch plan leads Home: the plan is the one guide.
+   */
+  emptyStates?: boolean
 }) {
   const overview = useQuery(adminOverviewQueries.get())
   const [filter, setFilter] = useState<Filter>('all')
@@ -76,7 +86,14 @@ export function OverviewDashboard({
 
   return (
     <div className="min-w-0 space-y-6">
-      <PageHeader title="Home" actions={actions} />
+      {header ? (
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">{header}</div>
+          {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+        </div>
+      ) : (
+        <PageHeader title="Home" actions={actions} />
+      )}
 
       {banner}
 
@@ -87,13 +104,17 @@ export function OverviewDashboard({
             <RetryButton onClick={() => void overview.refetch()}>Try again</RetryButton>
           </Quiet>
         </SettingsCard>
+      ) : data?.hasRealData === false ? (
+        emptyStates ? (
+          <ModuleEmptyStates sections={data.sections} />
+        ) : null
       ) : (
         <>
           <CountsCard
             metrics={data?.metrics ?? []}
             loading={overview.isLoading}
             onFilter={(next) => {
-              if (next !== 'helpCenter') setFilter(next)
+              if (next === 'support' || next === 'feedback') setFilter(next)
             }}
           />
 
@@ -165,7 +186,7 @@ export function OverviewDashboard({
                   {(item) => <DeskRow key={item.id} item={item} />}
                 </ModuleCard>
                 <ModuleCard
-                  title="Help Center"
+                  title="Help center"
                   items={helpCenter}
                   error={helpError}
                   onRetry={() => void overview.refetch()}
@@ -181,6 +202,24 @@ export function OverviewDashboard({
   )
 }
 
+/**
+ * The workspace's counts on their own: a teammate's Home under Copilot, where
+ * the owner's launch plan would be.
+ */
+export function OverviewCounts() {
+  const overview = useQuery(adminOverviewQueries.get())
+  if (overview.data?.hasRealData === false) {
+    return <ModuleEmptyStates sections={overview.data.sections} />
+  }
+  return (
+    <CountsCard
+      metrics={overview.data?.metrics ?? []}
+      loading={overview.isPending}
+      onFilter={() => {}}
+    />
+  )
+}
+
 function CountsCard({
   metrics,
   loading,
@@ -190,6 +229,7 @@ function CountsCard({
   loading: boolean
   onFilter: (filter: OverviewMetric['filter']) => void
 }) {
+  const intl = useIntl()
   const formatNumber = useFormatNumber()
   if (loading) return <Skeleton className="h-24 w-full rounded-xl" />
   if (metrics.length === 0) return null
@@ -204,7 +244,7 @@ function CountsCard({
             className="flex min-w-0 flex-col gap-2 bg-card px-5 py-4 transition-colors hover:bg-muted/40"
           >
             <span className="line-clamp-2 min-h-[2lh] text-[13px] text-muted-foreground">
-              {`${metric.label} ${metric.detail}`.replace(/^./, (c) => c.toUpperCase())}
+              {intl.formatMessage(METRIC_LABELS[metric.key])}
             </span>
             <span className="text-2xl leading-none font-bold tabular-nums tracking-tight sm:text-3xl">
               {formatNumber(metric.count)}
@@ -213,6 +253,111 @@ function CountsCard({
         ))}
       </div>
     </Card>
+  )
+}
+
+/** Each count's heading, in the viewer's language: what is counted, and its state. */
+const METRIC_LABELS: Record<OverviewMetric['key'], MessageDescriptor> = {
+  waiting: {
+    id: 'admin.overview.metric.waiting',
+    defaultMessage: 'Conversations waiting for reply',
+  },
+  feedback: { id: 'admin.overview.metric.feedback', defaultMessage: 'Ideas to review' },
+  complete: {
+    id: 'admin.overview.metric.complete',
+    defaultMessage: 'Ideas shipped, not announced',
+  },
+  helpCenter: {
+    id: 'admin.overview.metric.helpCenter',
+    defaultMessage: 'Help center articles in draft',
+  },
+  subscribers: {
+    id: 'admin.overview.metric.subscribers',
+    defaultMessage: 'Status page subscribers',
+  },
+  incidents: { id: 'admin.overview.metric.incidents', defaultMessage: 'Open incidents' },
+}
+
+type ModuleKey = keyof AdminOverviewData['sections']
+
+/** Where each module's first item lands, in the sidebar's order. */
+const EMPTY_MODULES: Array<{ key: ModuleKey; to: string; message: MessageDescriptor }> = [
+  {
+    key: 'feedback',
+    to: '/admin/feedback',
+    message: {
+      id: 'admin.overview.empty.feedback',
+      defaultMessage: 'No ideas yet. They land in <link>Feedback</link>.',
+    },
+  },
+  {
+    key: 'changelog',
+    to: '/admin/changelog',
+    message: {
+      id: 'admin.overview.empty.changelog',
+      defaultMessage: 'No updates yet. Publish them in <link>Changelog</link>.',
+    },
+  },
+  {
+    key: 'support',
+    to: '/admin/inbox',
+    message: {
+      id: 'admin.overview.empty.support',
+      defaultMessage: 'No conversations yet. They land in <link>Support</link>.',
+    },
+  },
+  {
+    key: 'helpCenter',
+    to: '/admin/help-center',
+    message: {
+      id: 'admin.overview.empty.helpCenter',
+      defaultMessage: 'No articles yet. Write them in <link>Help center</link>.',
+    },
+  },
+  {
+    key: 'status',
+    to: '/admin/status',
+    message: {
+      id: 'admin.overview.empty.status',
+      defaultMessage: 'No subscribers yet. They sign up on your <link>status page</link>.',
+    },
+  },
+]
+
+/**
+ * A new workspace with nothing real in it yet: one quiet line per module
+ * this person can see, saying where its first item will land.
+ */
+function ModuleEmptyStates({ sections }: { sections: AdminOverviewData['sections'] }) {
+  const intl = useIntl()
+  const modules = EMPTY_MODULES.filter((module) => sections[module.key]?.enabled)
+  if (modules.length === 0) return null
+  return (
+    <ul
+      aria-label={intl.formatMessage({
+        id: 'admin.overview.empty.label',
+        defaultMessage: 'Nothing here yet',
+      })}
+      className="divide-y divide-border overflow-hidden rounded-panel border border-border bg-card"
+    >
+      {modules.map((module) => (
+        <li key={module.key} className="px-5 py-3.5 text-sm text-muted-foreground">
+          <FormattedMessage
+            {...module.message}
+            values={{
+              link: (chunks: ReactNode) => (
+                <Link
+                  to={module.to}
+                  className="font-medium text-foreground underline-offset-2 hover:underline"
+                >
+                  {chunks}
+                </Link>
+              ),
+            }}
+          />
+        </li>
+      ))}
+    </ul>
   )
 }
 

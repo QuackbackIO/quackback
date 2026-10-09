@@ -27,9 +27,6 @@ vi.mock('../auth-helpers', () => ({
   requireAuth: vi.fn(async () => ({ principal: { id: 'principal_1', role: 'admin' } })),
 }))
 vi.mock('@/lib/server/auth/session', () => ({ getSession: vi.fn() }))
-vi.mock('../workspace', () => ({
-  getSettings: vi.fn(async () => ({ setupState: null, managedFieldPaths: [], featureFlags: '{}' })),
-}))
 vi.mock('@/lib/server/db', async (importOriginal) => {
   const empty = { findFirst: vi.fn(async () => undefined), findMany: vi.fn(async () => []) }
   const select = { from: () => ({ where: async () => [] }) }
@@ -37,6 +34,13 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
     ...(await importOriginal<typeof import('@/lib/server/db')>()),
     db: {
       query: {
+        settings: {
+          findFirst: vi.fn(async () => ({
+            setupState: null,
+            managedFieldPaths: [],
+            featureFlags: '{}',
+          })),
+        },
         boards: empty,
         integrations: empty,
         helpCenterArticles: empty,
@@ -61,6 +65,8 @@ vi.mock('@/lib/server/domains/assistant', () => ({
 }))
 vi.mock('@/lib/server/activation-wins', () => ({
   detectFirstWin: async () => ({ reached: false, reachedAt: null }),
+  winOutcome: () => null,
+  internalWinScope: async () => null,
 }))
 vi.mock('@/lib/server/logger', () => ({
   logger: { child: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }) },

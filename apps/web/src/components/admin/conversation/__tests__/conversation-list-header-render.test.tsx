@@ -5,7 +5,7 @@
  * does not depend on it, so it skips that render and only the rows update.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 import type { ComponentProps } from 'react'
@@ -16,6 +16,7 @@ import type { InboxItemDTO } from '@/lib/shared/inbox/items'
 afterEach(cleanup)
 
 const composeDialogRenders = vi.hoisted(() => ({ count: 0 }))
+const activation = vi.hoisted(() => ({ firstRun: false }))
 vi.mock('@/components/admin/conversation/new-conversation-dialog', () => ({
   NewConversationDialog: () => {
     composeDialogRenders.count++
@@ -24,10 +25,19 @@ vi.mock('@/components/admin/conversation/new-conversation-dialog', () => ({
 }))
 vi.mock('@tanstack/react-router', () => ({
   useRouteContext: ({ select }: { select: (context: unknown) => unknown }) =>
-    select({ userRole: 'admin', settings: { featureFlags: {} } }),
+    select({ userRole: 'admin', principal: { role: 'admin' }, settings: { featureFlags: {} } }),
 }))
 vi.mock('@/lib/client/hooks/use-activation-action', () => ({
-  useActivationAction: () => null,
+  useActivationAction: (surface: string) =>
+    surface === 'conversation_empty' && activation.firstRun
+      ? {
+          id: 'connect-messenger',
+          outcome: 'customer_support',
+          label: 'Connect Messenger',
+          kind: 'link',
+          destination: '/admin/settings/widget/install',
+        }
+      : null,
 }))
 
 const { ConversationListColumn } = await import('../conversation-list-column')
@@ -86,6 +96,37 @@ const PROPS: ComponentProps<typeof ConversationListColumn> = {
 }
 
 describe('ConversationListColumn', () => {
+  it('offers putting Messenger on the site on a fresh Support inbox', () => {
+    activation.firstRun = true
+    const client = new QueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <IntlProvider
+          locale="fr"
+          messages={{
+            // The admin inbox owns its title; the widget's string must not leak in.
+            'inbox.empty.firstRun.title': 'Aucune conversation pour le moment',
+            'widget.messages.empty': 'Widget string',
+          }}
+          onError={() => {}}
+        >
+          <ConversationListColumn {...PROPS} items={[]} />
+        </IntlProvider>
+      </QueryClientProvider>
+    )
+    expect(screen.getByText('Aucune conversation pour le moment')).toBeVisible()
+    expect(screen.queryByText('Widget string')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Connect Messenger' })).toHaveAttribute(
+      'href',
+      '/admin/settings/widget/install'
+    )
+    expect(screen.queryByRole('button', { name: /test message/i })).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('When customers message you, conversations show up here.')
+    ).not.toBeInTheDocument()
+    activation.firstRun = false
+  })
+
   it('re-renders the rows, not the header, when the selection changes', () => {
     const client = new QueryClient()
     const ui = (selectedId: string | null) => (

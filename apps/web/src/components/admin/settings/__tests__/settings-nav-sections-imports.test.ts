@@ -18,8 +18,15 @@ function importsOf(source: string): string[] {
 }
 
 describe('settings-nav-sections imports', () => {
-  const source = read('settings-nav-sections.ts')
+  const source = read('../../../lib/shared/settings-nav-sections.ts')
   const specifiers = importsOf(source)
+
+  it('keeps existing component imports as shared metadata reexports', () => {
+    expect(importsOf(read('settings-nav-sections.ts'))).toEqual([
+      '@/lib/shared/settings-nav-sections',
+    ])
+    expect(importsOf(read('settings-pages.ts'))).toEqual(['@/lib/shared/settings-pages'])
+  })
 
   it('reads its imports', () => {
     expect(specifiers).toContain('./settings-pages')
@@ -37,7 +44,7 @@ describe('settings-nav-sections imports', () => {
     for (const specifier of specifiers.filter((item) => item.startsWith('./'))) {
       expect(specifier).toBe('./settings-pages')
     }
-    const pages = importsOf(read('settings-pages.ts'))
+    const pages = importsOf(read('../../../lib/shared/settings-pages.ts'))
     for (const specifier of pages) {
       expect(specifier).not.toMatch(/icons?/i)
       expect(specifier).not.toMatch(/^react$/)

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useIntl } from 'react-intl'
 import { KeyIcon } from '@heroicons/react/24/outline'
 import { EmptyState } from '@/components/shared/empty-state'
 import { NewButton } from '@/components/shared/new-button'
@@ -19,6 +20,7 @@ interface ApiKeysSettingsProps {
 }
 
 export function ApiKeysSettings({ apiKeys }: ApiKeysSettingsProps) {
+  const intl = useIntl()
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [revealDialogOpen, setRevealDialogOpen] = useState(false)
   const [revokeDialogOpen, setRevokeDialogOpen] = useState(false)
@@ -85,7 +87,16 @@ export function ApiKeysSettings({ apiKeys }: ApiKeysSettingsProps) {
                       ? `Last used ${formatDistanceToNow(key.lastUsedAt, { addSuffix: true })}`
                       : 'Never used'}
                     <span className="block whitespace-normal">
-                      {summarizeDomainAccess(key.scopes)}
+                      {summarizeDomainAccess(key.scopes, (level) =>
+                        intl.formatMessage({
+                          id:
+                            level === 'read'
+                              ? 'apiKeys.scopes.settingsReadSummary'
+                              : 'apiKeys.scopes.settingsReadWriteSummary',
+                          defaultMessage:
+                            level === 'read' ? 'Settings (read)' : 'Settings (read and write)',
+                        })
+                      )}
                     </span>
                   </>
                 }

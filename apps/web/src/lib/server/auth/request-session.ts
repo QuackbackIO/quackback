@@ -40,6 +40,7 @@ import {
   memoizePerRequest,
   rememberPerRequest,
 } from '@/lib/server/request-memo'
+import { rememberTestOwner } from '@/lib/server/test-data'
 import type { Role } from '@/lib/shared/roles'
 
 export type RequestSession = NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>
@@ -73,6 +74,8 @@ export function getRequestSession(): Promise<RequestSession | null> {
 export function getRequestPrincipal(userId: UserId): Promise<Principal | null> {
   return memoizePerRequest(CACHE_KEYS.PRINCIPAL_BY_USER(userId), async () => {
     const record = await db.query.principal.findFirst({ where: eq(principal.userId, userId) })
+    // Test-customer identity is fixed at creation, so the loaded row answers it for the process.
+    if (record) rememberTestOwner(record)
     return record ?? null
   })
 }

@@ -6,7 +6,7 @@
  *   changelog_entries.publishedAt, kb_articles.publishedAt.
  * Do not invent status names such as "Unreviewed" or "Ready to announce".
  *
- * Labels match the admin modules (Support, Feedback, Changelog, Help Center).
+ * Labels match the admin modules (Support, Feedback, Changelog, Help Center, Status).
  * The page is workspace-wide. Personal relevance is expressed by ordering
  * (`mine` first within a kind) and the owner avatar, not by a scope filter.
  */
@@ -46,14 +46,14 @@ export type OverviewLink = {
 }
 
 export type OverviewMetric = {
-  key: 'waiting' | 'feedback' | 'complete' | 'helpCenter'
+  key: 'waiting' | 'feedback' | 'complete' | 'helpCenter' | 'subscribers' | 'incidents'
   /** The items, e.g. "feedback posts". */
   label: string
   /** The state of those items, e.g. "with no changelog". */
   detail: string
   count: number
   link: OverviewLink
-  filter: OverviewAttentionKind | 'helpCenter'
+  filter: OverviewAttentionKind | 'helpCenter' | 'status'
 }
 
 type OverviewMetricsInput = {
@@ -65,6 +65,15 @@ type OverviewMetricsInput = {
     completeLink: OverviewLink | null
   }
   help?: { draftCount: number; draftLink: OverviewLink }
+  status?: {
+    /** Null where the viewer cannot see the subscriber list. */
+    subscriberCount: number | null
+    openIncidentCount: number
+    subscribersLink: OverviewLink
+    incidentsLink: OverviewLink
+  }
+  /** Changelog is on: shipped ideas can wait for an announcement. */
+  changelog?: boolean
 }
 
 /** Count on the left, item + state on the right. No units or invented status names. */
@@ -85,19 +94,19 @@ export function buildOverviewMetrics(input: OverviewMetricsInput): OverviewMetri
     const n = input.feedback.reviewCount
     metrics.push({
       key: 'feedback',
-      label: n === 1 ? 'feedback post' : 'feedback posts',
+      label: n === 1 ? 'idea' : 'ideas',
       detail: 'to review',
       count: n,
       link: input.feedback.reviewLink,
       filter: 'feedback',
     })
   }
-  if (input.feedback?.completeLink) {
+  if (input.changelog && input.feedback?.completeLink) {
     const n = input.feedback.completeCount
     metrics.push({
       key: 'complete',
-      label: n === 1 ? 'feedback post' : 'feedback posts',
-      detail: 'with no changelog',
+      label: n === 1 ? 'idea' : 'ideas',
+      detail: 'shipped, not announced',
       count: n,
       link: input.feedback.completeLink,
       filter: 'feedback',
@@ -114,15 +123,43 @@ export function buildOverviewMetrics(input: OverviewMetricsInput): OverviewMetri
       filter: 'helpCenter',
     })
   }
+  if (input.status) {
+    const subscribers = input.status.subscriberCount
+    const incidents = input.status.openIncidentCount
+    if (subscribers !== null) {
+      metrics.push({
+        key: 'subscribers',
+        label: subscribers === 1 ? 'subscriber' : 'subscribers',
+        detail: 'to your status page',
+        count: subscribers,
+        link: input.status.subscribersLink,
+        filter: 'status',
+      })
+    }
+    metrics.push({
+      key: 'incidents',
+      label: incidents === 1 ? 'incident' : 'incidents',
+      detail: 'still open',
+      count: incidents,
+      link: input.status.incidentsLink,
+      filter: 'status',
+    })
+  }
   return metrics
 }
 
-/** Never 3-up on a phone — 3 skinny columns overflow the metric labels. */
+/**
+ * The counts card's columns: never 3-up on a phone, where 3 skinny columns
+ * overflow the metric labels, and every row full, since an empty cell shows
+ * as a grey block. With five, the last count takes the rest of its row.
+ */
 export function overviewMetricGridClass(count: number): string {
   if (count <= 1) return 'grid-cols-1'
+  if (count === 2) return 'grid-cols-2'
   if (count === 3) return 'grid-cols-1 sm:grid-cols-3'
-  if (count >= 4) return 'grid-cols-2 lg:grid-cols-4'
-  return 'grid-cols-2'
+  if (count === 4) return 'grid-cols-2 lg:grid-cols-4'
+  if (count === 5) return 'grid-cols-2 sm:grid-cols-3 [&>*:last-child]:col-span-2'
+  return 'grid-cols-2 sm:grid-cols-3'
 }
 
 export type OverviewMomentumItem = {
@@ -152,6 +189,7 @@ export type OverviewSectionState = {
 }
 
 export type AdminOverviewData = {
+  hasRealData?: boolean
   metrics: OverviewMetric[]
   attention: OverviewAttentionItem[]
   momentum: OverviewMomentumItem[]
@@ -162,6 +200,7 @@ export type AdminOverviewData = {
     feedback: OverviewSectionState
     changelog: OverviewSectionState
     helpCenter: OverviewSectionState
+    status: OverviewSectionState
   }
 }
 

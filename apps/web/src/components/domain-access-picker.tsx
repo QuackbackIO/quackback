@@ -1,3 +1,4 @@
+import { useIntl } from 'react-intl'
 import {
   ACCESS_DOMAINS,
   toggleDomainLevel,
@@ -51,6 +52,7 @@ export function DomainAccessPicker({
   disabled?: boolean
   className?: string
 }) {
+  const intl = useIntl()
   function select(domain: AccessDomainId, chip: DomainAccessChip) {
     onChange({
       ...levels,
@@ -66,22 +68,58 @@ export function DomainAccessPicker({
           className={`flex items-center justify-between px-4 py-3 ${i > 0 ? 'border-t border-border/30' : ''}`}
         >
           <div className="min-w-0">
-            <p className="text-sm font-medium">{group.label}</p>
-            <p className="text-xs text-muted-foreground">{group.description}</p>
+            <p className="text-sm font-medium">
+              {group.domain === 'settings'
+                ? intl.formatMessage({ id: 'apiKeys.scopes.settings', defaultMessage: 'Settings' })
+                : group.label}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {group.domain === 'settings'
+                ? intl.formatMessage({
+                    id: 'apiKeys.scopes.settingsDescription',
+                    defaultMessage: 'Branding, Messenger, modules, and office hours',
+                  })
+                : group.description}
+            </p>
           </div>
           <div className="flex gap-1.5 shrink-0 ml-4">
             {group.kind === 'read_write' && (
               <>
                 <AccessChip
-                  name={`${group.label}: Read`}
-                  display="Read"
+                  name={
+                    group.domain === 'settings'
+                      ? intl.formatMessage({
+                          id: 'apiKeys.scopes.settingsRead',
+                          defaultMessage: 'Settings: Read',
+                        })
+                      : `${group.label}: Read`
+                  }
+                  display={
+                    group.domain === 'settings'
+                      ? intl.formatMessage({ id: 'apiKeys.scopes.read', defaultMessage: 'Read' })
+                      : 'Read'
+                  }
                   pressed={levels[group.domain] === 'read'}
                   onPressedChange={() => select(group.domain, 'read')}
                   disabled={disabled}
                 />
                 <AccessChip
-                  name={`${group.label}: Read and write`}
-                  display="Read and write"
+                  name={
+                    group.domain === 'settings'
+                      ? intl.formatMessage({
+                          id: 'apiKeys.scopes.settingsReadWrite',
+                          defaultMessage: 'Settings: Read and write',
+                        })
+                      : `${group.label}: Read and write`
+                  }
+                  display={
+                    group.domain === 'settings'
+                      ? intl.formatMessage({
+                          id: 'apiKeys.scopes.readWrite',
+                          defaultMessage: 'Read and write',
+                        })
+                      : 'Read and write'
+                  }
                   pressed={levels[group.domain] === 'read_write'}
                   onPressedChange={() => select(group.domain, 'read_write')}
                   disabled={disabled}

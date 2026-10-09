@@ -5,13 +5,14 @@
  * Only accessible to team members.
  */
 
-import { db, eq, and, sql, postComments, posts } from '@/lib/server/db'
+import { db, eq, and, sql, postComments, posts, principal } from '@/lib/server/db'
 import { type PostCommentId, type PostId, type PrincipalId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { isTeamMember, Role } from '@/lib/shared/roles'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { logger } from '@/lib/server/logger'
 import { adjustCanonicalCommentCount } from '@/lib/server/domains/posts/post.merge-ids'
+import { notTestPrincipal } from '@/lib/server/test-data'
 
 const log = logger.child({ component: 'comment-pin' })
 
@@ -60,11 +61,22 @@ export async function restoreComment(
 
     // Re-increment comment count (only for public comments)
     if (!comment.isPrivate && updatedComment.moderationState !== 'pending') {
-      await tx
+      const counted = await tx
         .update(posts)
         .set({ commentCount: sql`${posts.commentCount} + 1` })
-        .where(eq(posts.id, comment.postId))
-      await adjustCanonicalCommentCount(comment.postId, 1, tx)
+        .where(
+          and(
+            eq(posts.id, comment.postId),
+            and(
+              notTestPrincipal(posts.principalId),
+              notTestPrincipal(
+                sql`(SELECT ${principal.id} FROM ${principal} WHERE ${eq(principal.id, updatedComment.principalId)})`
+              )
+            )!
+          )
+        )
+        .returning({ id: posts.id })
+      if (counted.length > 0) await adjustCanonicalCommentCount(comment.postId, 1, tx)
     }
 
     return true

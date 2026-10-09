@@ -37,6 +37,7 @@ import { resolveInstantSsoRedirectFn } from '@/lib/server/functions/instant-sso'
 import { useBrandingFont } from '@/lib/client/hooks/use-branding-font'
 import { usePreviewCss } from '@/components/public/preview-draft-context'
 import { resolvePortalOgImageUrl } from '@/lib/shared/portal-og-image'
+import { shownName } from '@/lib/shared/greeting-name'
 
 /**
  * Portal documents may be framed same-origin only — the admin Branding page
@@ -239,7 +240,7 @@ export const Route = createFileRoute('/_portal')({
 
     const initialUserData = session?.user
       ? {
-          name: session.user.name,
+          name: shownName(session.user.name, session.user.email),
           email: session.user.email,
           avatarUrl: avatarData?.avatarUrl ?? null,
         }

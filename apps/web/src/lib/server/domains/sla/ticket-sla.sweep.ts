@@ -34,11 +34,13 @@ import {
   eq,
   isNull,
   isNotNull,
+  inArray,
   sql,
   tickets,
   ticketConversations,
   conversations,
 } from '@/lib/server/db'
+import { notTestTicket } from '@/lib/server/test-data'
 import type { ConversationId, SlaPolicyId, TicketId } from '@quackback/ids'
 import type { EventConversationRef, EventTicketRef } from '@/lib/server/events/types'
 import {
@@ -145,7 +147,8 @@ async function scanTicketSlaCandidates(
   at: Date,
   buildWindowSql: (nowIso: string) => ReturnType<typeof sql>,
   isEligible: (applied: TicketSlaApplied, dueAt: string) => boolean,
-  visit: (row: TicketSlaSweepRow, applied: TicketSlaApplied, dueAt: string) => Promise<void>
+  visit: (row: TicketSlaSweepRow, applied: TicketSlaApplied, dueAt: string) => Promise<void>,
+  ticketIds?: TicketId[]
 ): Promise<void> {
   const nowIso = at.toISOString() // ISO-8601 compares lexicographically = chronologically
   const rows = await db
@@ -162,6 +165,8 @@ async function scanTicketSlaCandidates(
     .where(
       and(
         isNotNull(tickets.slaApplied),
+        notTestTicket(tickets.id),
+        ticketIds ? inArray(tickets.id, ticketIds) : undefined,
         isNull(tickets.deletedAt),
         sql`(${tickets.slaApplied} ->> 'pausedAt') IS NULL`,
         // Redundant given isNotNull + buildWindowSql's own settled-field arm —
@@ -202,7 +207,8 @@ async function scanTicketSlaCandidates(
  * currently-paused stamp never breaches. Returns the number recorded.
  */
 export async function sweepOverdueTicketSlaBreaches(
-  at: Date = new Date()
+  at: Date = new Date(),
+  ticketIds?: TicketId[]
 ): Promise<{ recorded: number }> {
   let recorded = 0
   await scanTicketSlaCandidates(
@@ -237,7 +243,8 @@ export async function sweepOverdueTicketSlaBreaches(
         )
         recorded++
       })
-    }
+    },
+    ticketIds
   )
   return { recorded }
 }
@@ -355,7 +362,8 @@ export async function claimTicketSlaTimerTriggerMarker(
  */
 export async function sweepApproachingTicketSlaBreaches(
   leadMinutes: number,
-  at: Date = new Date()
+  at: Date = new Date(),
+  ticketIds?: TicketId[]
 ): Promise<TicketSlaTimerTriggerCandidate[]> {
   const horizon = new Date(at.getTime() + leadMinutes * 60_000).toISOString()
   const candidates: TicketSlaTimerTriggerCandidate[] = []
@@ -392,7 +400,8 @@ export async function sweepApproachingTicketSlaBreaches(
         dueAt,
         appliedAt: applied.appliedAt,
       })
-    }
+    },
+    ticketIds
   )
   return candidates
 }
@@ -412,7 +421,8 @@ export async function sweepApproachingTicketSlaBreaches(
  * resolveTicketTriggerTarget's doc).
  */
 export async function sweepTicketSlaBreachTriggers(
-  at: Date = new Date()
+  at: Date = new Date(),
+  ticketIds?: TicketId[]
 ): Promise<TicketSlaTimerTriggerCandidate[]> {
   const candidates: TicketSlaTimerTriggerCandidate[] = []
   await scanTicketSlaCandidates(
@@ -450,7 +460,8 @@ export async function sweepTicketSlaBreachTriggers(
         dueAt,
         appliedAt: applied.appliedAt,
       })
-    }
+    },
+    ticketIds
   )
   return candidates
 }

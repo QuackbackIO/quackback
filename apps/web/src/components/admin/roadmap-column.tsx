@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { memo } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 import { ArrowPathIcon, InboxIcon } from '@heroicons/react/24/solid'
@@ -10,6 +11,7 @@ import {
   flattenRoadmapViewPosts,
 } from '@/lib/client/hooks/use-roadmap-posts-query'
 import type { RoadmapId, PostStatusId } from '@quackback/ids'
+import { useIntl } from 'react-intl'
 import type { RoadmapFilters } from '@/lib/shared/types'
 
 interface RoadmapColumnProps {
@@ -23,6 +25,8 @@ interface RoadmapColumnProps {
   color: string
   filters?: RoadmapFilters
   onCardClick?: (postId: string) => void
+  /** The empty column's one real action (the first column carries it). */
+  emptyAction?: ReactNode
 }
 
 export const RoadmapColumn = memo(function RoadmapColumn({
@@ -36,7 +40,9 @@ export const RoadmapColumn = memo(function RoadmapColumn({
   color,
   filters,
   onCardClick,
+  emptyAction,
 }: RoadmapColumnProps) {
+  const intl = useIntl()
   const { setNodeRef, isOver } = useDroppable({
     id: columnId,
     data: { type: 'Column', statusId, bucketId },
@@ -91,7 +97,15 @@ export const RoadmapColumn = memo(function RoadmapColumn({
             <ArrowPathIcon className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : posts.length === 0 ? (
-          <EmptyState icon={InboxIcon} title="No items" className="py-8" />
+          <EmptyState
+            icon={InboxIcon}
+            title={intl.formatMessage({
+              id: 'admin.empty.roadmap.title',
+              defaultMessage: 'No ideas here yet',
+            })}
+            action={emptyAction}
+            className="py-8"
+          />
         ) : (
           <>
             {posts.map((post) => (

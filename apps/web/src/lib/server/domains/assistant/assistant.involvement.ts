@@ -27,6 +27,7 @@ import {
 } from '@/lib/server/db'
 import type { Executor } from '@/lib/server/domains/principals/principal.factory'
 import { logger } from '@/lib/server/logger'
+import { notTestConversation } from '@/lib/server/test-data'
 import type { AssistantInvolvementId, ConversationId } from '@quackback/ids'
 import { classifyConversationAttributes } from '@/lib/server/domains/conversation-attributes/ai-classification.service'
 
@@ -65,6 +66,8 @@ export async function countAssistantInboxBuckets(
   const rows = await exec
     .select({ status: assistantInvolvements.status, n: sql<number>`count(*)::int` })
     .from(assistantInvolvements)
+    // Badges count real conversations; a teammate's test thread is not work.
+    .where(notTestConversation(assistantInvolvements.conversationId))
     .groupBy(assistantInvolvements.status)
   const byStatus = new Map(rows.map((r) => [r.status, r.n]))
   const sum = (statuses: readonly AssistantInvolvementStatus[]) =>

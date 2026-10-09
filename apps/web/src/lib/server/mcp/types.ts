@@ -1,5 +1,6 @@
 import type { PrincipalId, UserId } from '@quackback/ids'
 import type { Role } from '@/lib/shared/roles'
+import type { PermissionKey } from '@/lib/shared/permissions'
 import type { ApiKeyScope } from '@/lib/server/domains/api-keys/api-key-scopes'
 
 /**
@@ -14,6 +15,9 @@ export type McpScope = ApiKeyScope
  * Threaded through to all MCP write tools for attribution.
  */
 export interface McpAuthContext {
+  /** Server-bound private workspace conversation, never supplied as tool arguments. */
+  workspaceThreadKey?: string
+  permissions?: ReadonlySet<PermissionKey>
   principalId: PrincipalId
   /** Null for service principals (API keys) */
   userId?: UserId

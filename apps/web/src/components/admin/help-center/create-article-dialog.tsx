@@ -6,7 +6,14 @@ import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { createArticleSchema } from '@/lib/shared/schemas/help-center'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
-import { useCreateArticle } from '@/lib/client/mutations/help-center'
+import {
+  useCreateArticle,
+  usePublishArticle,
+  useUpdateArticle,
+} from '@/lib/client/mutations/help-center'
+import { useHasPermission } from '@/lib/client/use-permissions'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import type { KbArticleId } from '@quackback/ids'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
@@ -25,11 +32,17 @@ interface CreateArticleDialogProps {
   /** Controlled open state. When provided, the built-in trigger button is hidden. */
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  /**
+   * Takes a published article in place of opening it in the editor, for a
+   * caller that keeps the person where they are. A saved draft still opens.
+   */
+  onPublished?: (articleId: string) => void
 }
 
 export function CreateArticleDialog({
   open: openProp,
   onOpenChange,
+  onPublished,
 }: CreateArticleDialogProps = {}) {
   const [internalOpen, setInternalOpen] = useState(false)
   const isControlled = openProp !== undefined
@@ -38,6 +51,16 @@ export function CreateArticleDialog({
   const [categoryId, setCategoryId] = useState('')
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false)
   const createArticleMutation = useCreateArticle()
+  const updateArticleMutation = useUpdateArticle()
+  const publishArticleMutation = usePublishArticle()
+  // Publishing takes the same permission as writing; checked so the button
+  // never offers what the server would refuse.
+  const canPublish = useHasPermission(PERMISSIONS.HELP_CENTER_MANAGE)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const isPending =
+    createArticleMutation.isPending ||
+    updateArticleMutation.isPending ||
+    publishArticleMutation.isPending
   const navigate = useNavigate()
 
   const form = useForm({
@@ -65,28 +88,48 @@ export function CreateArticleDialog({
     [form]
   )
 
-  const handleSubmit = form.handleSubmit((data) => {
-    createArticleMutation.mutate(
-      {
+  // A draft that saved but did not publish: a retry saves the current edits
+  // into it and publishes it, never a second copy.
+  const [savedDraftId, setSavedDraftId] = useState<string | null>(null)
+
+  const save = (publish: boolean) =>
+    form.handleSubmit(async (data) => {
+      setSaveError(null)
+      const content = {
         categoryId: data.categoryId,
         title: data.title,
         content: data.content,
         contentJson: contentJson as TiptapContent | null,
-      },
-      {
-        onSuccess: (newArticle) => {
-          handleOpenChange(false)
-          form.reset()
-          setContentJson(null)
-          setCategoryId('')
-          void navigate({
-            to: '/admin/help-center',
-            search: { article: newArticle.id },
-          })
-        },
       }
-    )
-  })
+      let articleId = savedDraftId
+      try {
+        if (articleId) {
+          await updateArticleMutation.mutateAsync({ id: articleId, ...content })
+        } else {
+          articleId = (await createArticleMutation.mutateAsync(content)).id
+        }
+      } catch (error) {
+        setSaveError(error instanceof Error ? error.message : String(error))
+        return
+      }
+      try {
+        if (publish) await publishArticleMutation.mutateAsync(articleId as KbArticleId)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        setSavedDraftId(articleId)
+        // Stay open, so whoever clicked Publish sees it is not live yet.
+        setSaveError(`Saved as a draft, but not published: ${message}`)
+        return
+      }
+      handleOpenChange(false)
+      if (publish && onPublished) {
+        onPublished(articleId)
+        return
+      }
+      void navigate({ to: '/admin/help-center', search: { article: articleId } })
+    })
+  const handleSubmit = save(false)
+  const handlePublish = save(true)
 
   function handleOpenChange(isOpen: boolean) {
     if (isControlled) {
@@ -99,6 +142,10 @@ export function CreateArticleDialog({
       setContentJson(null)
       setCategoryId('')
       createArticleMutation.reset()
+      updateArticleMutation.reset()
+      publishArticleMutation.reset()
+      setSaveError(null)
+      setSavedDraftId(null)
     }
   }
 
@@ -126,9 +173,7 @@ export function CreateArticleDialog({
                   form={form}
                   contentJson={contentJson}
                   onContentChange={handleContentChange}
-                  error={
-                    createArticleMutation.isError ? createArticleMutation.error.message : undefined
-                  }
+                  error={saveError ?? undefined}
                 />
               </div>
 
@@ -142,9 +187,15 @@ export function CreateArticleDialog({
 
             <ModalFooter
               onCancel={() => handleOpenChange(false)}
-              submitLabel={createArticleMutation.isPending ? 'Saving...' : 'Save draft'}
-              isPending={createArticleMutation.isPending}
+              submitLabel={isPending ? 'Saving...' : canPublish ? 'Publish' : 'Save draft'}
+              isPending={isPending}
+              {...(canPublish ? { submitType: 'button' as const, onSubmit: handlePublish } : {})}
             >
+              {canPublish && (
+                <Button type="submit" variant="outline" size="sm" disabled={isPending}>
+                  Save draft
+                </Button>
+              )}
               <Sheet open={mobileSettingsOpen} onOpenChange={setMobileSettingsOpen}>
                 <SheetTrigger asChild>
                   <Button type="button" variant="outline" size="sm" className="lg:hidden">

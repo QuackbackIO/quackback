@@ -2,12 +2,6 @@ import { nameInitial } from '@/lib/shared/utils/initial'
 import { createFileRoute, isRedirect } from '@tanstack/react-router'
 import { useState } from 'react'
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
-import {
-  ChatBubbleLeftRightIcon,
-  SparklesIcon,
-  BoltIcon,
-  MapIcon,
-} from '@heroicons/react/24/outline'
 import { Spinner } from '@/components/shared/spinner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -29,13 +23,6 @@ const ERROR_MESSAGES: Record<string, string> = {
     'New account creation is currently disabled. Please contact your administrator.',
   failed_to_create_session: "We couldn't sign you in. Please try again.",
 }
-
-const FEATURES = [
-  { icon: ChatBubbleLeftRightIcon, label: 'Feedback & voting' },
-  { icon: SparklesIcon, label: 'AI-powered insights' },
-  { icon: BoltIcon, label: '24 integrations' },
-  { icon: MapIcon, label: 'Roadmap & changelog' },
-] as const
 
 export interface InviteBranding {
   workspaceName: string
@@ -98,7 +85,6 @@ function AcceptInvitationPage() {
     return (
       <PageShell>
         <NotAuthenticatedContent invitationId={id} branding={branding} />
-        <FeatureHighlights />
       </PageShell>
     )
   }
@@ -118,7 +104,6 @@ function AcceptInvitationPage() {
         passwordEnabled={data.passwordEnabled}
         branding={branding}
       />
-      <FeatureHighlights />
     </PageShell>
   )
 }
@@ -161,22 +146,6 @@ function WorkspaceIdentity({ branding }: { branding: InviteBranding }) {
         </div>
       )}
       <span className="text-lg font-semibold">{branding.workspaceName}</span>
-    </div>
-  )
-}
-
-function FeatureHighlights() {
-  return (
-    <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
-      {FEATURES.map(({ icon: Icon, label }) => (
-        <div
-          key={label}
-          className="flex items-center gap-1.5 rounded-full border border-border/30 bg-card/50 px-3 py-1.5 text-xs text-muted-foreground backdrop-blur-sm"
-        >
-          <Icon className="h-3.5 w-3.5 shrink-0" />
-          {label}
-        </div>
-      ))}
     </div>
   )
 }

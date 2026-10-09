@@ -146,6 +146,8 @@ export interface InboxPostListParams {
   sort?: 'newest' | 'oldest' | 'votes' | 'priority'
   /** Show only soft-deleted posts (within 30-day restorable window) */
   showDeleted?: boolean
+  /** Leave out teammates' test ideas (API, MCP and Copilot reads). */
+  excludeTest?: boolean
   cursor?: string
   limit?: number
 }

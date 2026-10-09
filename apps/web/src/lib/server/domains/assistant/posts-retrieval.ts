@@ -16,6 +16,7 @@ import { db, posts, boards, postStatuses, and, eq, isNull, sql } from '@/lib/ser
 import { generateEmbedding } from '@/lib/server/domains/embeddings/embedding.service'
 import { orTermsTsQuery } from '@/lib/server/domains/help-center/help-center-search.service'
 import type { ContentAudience } from './audience'
+import { notTestPrincipal } from '@/lib/server/test-data'
 import {
   KNOWLEDGE_SNIPPET_CHARS,
   type KnowledgeSource,
@@ -96,6 +97,8 @@ export function postsVisibilityConditions(ceiling: ContentAudience) {
     isNull(posts.canonicalPostId),
     eq(posts.moderationState, 'published'),
     isNull(boards.deletedAt),
+    // A teammate's test idea is never cited to anyone.
+    notTestPrincipal(posts.principalId),
   ]
   if (ceiling === 'public') {
     return [...base, sql`${boards.access}->>'view' = 'anonymous'`]
@@ -265,28 +268,26 @@ export const postsKnowledgeSource: KnowledgeSource = {
   sourceType: 'post',
   async retrieve(query, ceiling) {
     const rows = await retrievePosts(query, ceiling)
-    return rows.map(
-      (p): RetrievedItem => ({
+    return rows.map((p): RetrievedItem => ({
+      id: p.id,
+      sourceType: 'post' as const,
+      title: p.title,
+      // The status line leads the excerpt: a post's status is its roadmap
+      // state (roadmap columns derive from statuses), so "is X planned?"
+      // is answerable straight from the snippet.
+      excerpt: `${p.statusName ? `Status: ${p.statusName}\n` : ''}${p.content.slice(0, KNOWLEDGE_SNIPPET_CHARS)}`,
+      score: p.score,
+      updatedAt: p.updatedAt.toISOString(),
+      citation: {
+        type: 'post' as const,
         id: p.id,
-        sourceType: 'post' as const,
         title: p.title,
-        // The status line leads the excerpt: a post's status is its roadmap
-        // state (roadmap columns derive from statuses), so "is X planned?"
-        // is answerable straight from the snippet.
-        excerpt: `${p.statusName ? `Status: ${p.statusName}\n` : ''}${p.content.slice(0, KNOWLEDGE_SNIPPET_CHARS)}`,
-        score: p.score,
-        updatedAt: p.updatedAt.toISOString(),
-        citation: {
-          type: 'post' as const,
-          id: p.id,
-          title: p.title,
-          url: postUrl(p.boardSlug, p.id),
-          // Public at the 'public' ceiling is guaranteed by
-          // postsVisibilityConditions; on 'team'/'internal' this flags a post
-          // on a non-anonymous-viewable board for the copilot leak gate.
-          ...(p.isPublic ? {} : { internal: true }),
-        },
-      })
-    )
+        url: postUrl(p.boardSlug, p.id),
+        // Public at the 'public' ceiling is guaranteed by
+        // postsVisibilityConditions; on 'team'/'internal' this flags a post
+        // on a non-anonymous-viewable board for the copilot leak gate.
+        ...(p.isPublic ? {} : { internal: true }),
+      },
+    }))
   },
 }

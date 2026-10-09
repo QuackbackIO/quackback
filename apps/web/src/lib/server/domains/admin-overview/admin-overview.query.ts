@@ -1,4 +1,4 @@
-/* oxlint-disable max-lines -- one aggregation over support, feedback, changelog, and help center */
+/* oxlint-disable max-lines -- one aggregation over support, feedback, changelog, help center and status */
 /**
  * Admin Overview aggregation. Each section is gated on the real product flag
  * and permission, then reads the same columns the product lists already use.
@@ -19,6 +19,7 @@ import {
   sql,
   isNull,
   isNotNull,
+  lte,
   inArray,
   notExists,
   conversations,
@@ -30,6 +31,8 @@ import {
   changelogEntries,
   changelogEntryPosts,
   helpCenterArticles,
+  statusIncidents,
+  statusSubscriptions,
 } from '@/lib/server/db'
 import { can } from '@/lib/server/policy/authorize'
 import { conversationFilter } from '@/lib/server/policy/conversations'
@@ -57,6 +60,7 @@ import {
   type OverviewSectionState,
 } from '@/lib/shared/admin-overview'
 import type { ConversationPriority } from '@/lib/shared/conversation/types'
+import { notTestPrincipal } from '@/lib/server/test-data'
 
 const log = logger.child({ component: 'admin-overview' })
 
@@ -69,8 +73,14 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 export async function getAdminOverview(input: {
   actor: Actor
   flags: Partial<FeatureFlags> | undefined
+  /**
+   * Ask whether the workspace has any published, non-test content yet, so a
+   * new workspace's Home stays quiet. Only worth asking in the launch window:
+   * past it, Home always shows its numbers.
+   */
+  probeRealData?: boolean
 }): Promise<AdminOverviewData> {
-  const { actor, flags } = input
+  const { actor, flags, probeRealData = false } = input
   const viewerId = actor.principalId
   const now = new Date()
 
@@ -82,8 +92,11 @@ export async function getAdminOverview(input: {
   const changelogOn =
     isProductEnabled(flags, 'changelog') && can(actor, PERMISSIONS.CHANGELOG_VIEW_DRAFT)
   const helpOn = isProductEnabled(flags, 'helpCenter') && can(actor, PERMISSIONS.HELP_CENTER_MANAGE)
+  const statusOn = isProductEnabled(flags, 'status') && can(actor, PERMISSIONS.STATUS_PAGE_PUBLISH)
+  // Subscribers are counted only for whoever can open their list.
+  const subscribersOn = statusOn && can(actor, PERMISSIONS.STATUS_PAGE_MANAGE)
 
-  const [support, feedback, changelog, help, momentum] = await Promise.all([
+  const [support, feedback, changelog, help, momentum, status] = await Promise.all([
     supportOn
       ? loadSupport(actor, viewerId, now).catch((err) => {
           log.error({ err }, 'overview support failed')
@@ -91,7 +104,7 @@ export async function getAdminOverview(input: {
         })
       : Promise.resolve(disabledSupport()),
     feedbackOn
-      ? loadFeedback(viewerId, now).catch((err) => {
+      ? loadFeedback(viewerId, now, changelogOn).catch((err) => {
           log.error({ err }, 'overview feedback failed')
           return failedFeedback()
         })
@@ -114,6 +127,12 @@ export async function getAdminOverview(input: {
           return [] as OverviewMomentumItem[]
         })
       : Promise.resolve([] as OverviewMomentumItem[]),
+    statusOn
+      ? loadStatus(subscribersOn).catch((err) => {
+          log.error({ err }, 'overview status failed')
+          return failedStatus()
+        })
+      : Promise.resolve(disabledStatus()),
   ])
 
   const metrics = buildOverviewMetrics({
@@ -129,12 +148,82 @@ export async function getAdminOverview(input: {
         }
       : undefined,
     help: helpOn ? { draftCount: help.draftCount, draftLink: help.draftLink } : undefined,
+    status: statusOn && !status.section.error ? status.counts : undefined,
+    changelog: changelogOn,
   })
 
+  const [realConversation, realPost, realArticle, realUpdate, realSubscriber, realIncident] =
+    probeRealData
+      ? await Promise.all([
+          supportOn
+            ? db.query.conversations.findFirst({
+                columns: { id: true },
+                where: and(
+                  conversationFilter(actor),
+                  notTestPrincipal(conversations.visitorPrincipalId)
+                ),
+              })
+            : undefined,
+          feedbackOn
+            ? db.query.posts.findFirst({
+                columns: { id: true },
+                where: and(
+                  isNull(posts.deletedAt),
+                  eq(posts.moderationState, 'published'),
+                  notTestPrincipal(posts.principalId)
+                ),
+              })
+            : undefined,
+          helpOn
+            ? db.query.helpCenterArticles.findFirst({
+                columns: { id: true },
+                where: and(
+                  isNull(helpCenterArticles.deletedAt),
+                  isNotNull(helpCenterArticles.publishedAt),
+                  lte(helpCenterArticles.publishedAt, now)
+                ),
+              })
+            : undefined,
+          changelogOn
+            ? db.query.changelogEntries.findFirst({
+                columns: { id: true },
+                where: and(
+                  isNull(changelogEntries.deletedAt),
+                  isNotNull(changelogEntries.publishedAt),
+                  lte(changelogEntries.publishedAt, now)
+                ),
+              })
+            : undefined,
+          // Setup seeds the first service, so a status page's real data is a
+          // subscriber or an incident, not its services.
+          subscribersOn
+            ? db.query.statusSubscriptions.findFirst({
+                columns: { id: true },
+                where: and(
+                  isNull(statusSubscriptions.unsubscribedAt),
+                  notTestPrincipal(statusSubscriptions.principalId)
+                ),
+              })
+            : undefined,
+          statusOn
+            ? db.query.statusIncidents.findFirst({
+                columns: { id: true },
+                where: isNull(statusIncidents.deletedAt),
+              })
+            : undefined,
+        ])
+      : []
+
   return {
+    hasRealData:
+      !probeRealData ||
+      Boolean(
+        realConversation || realPost || realArticle || realUpdate || realSubscriber || realIncident
+      ),
     metrics,
+    // Shipped ideas wait for an announcement only where there is a changelog.
     attention: mixAttention(
-      [support.attention, feedback.attention, feedback.announce],
+      [support.attention, feedback.attention, changelogOn ? feedback.announce : []],
       ATTENTION_LIMIT
     ),
     momentum,
@@ -145,6 +234,8 @@ export async function getAdminOverview(input: {
       feedback: feedback.section,
       changelog: changelog.section,
       helpCenter: help.section,
+      // The status page's empty line is about subscribers.
+      status: subscribersOn ? status.section : disabledSection(),
     },
   }
 }
@@ -211,12 +302,67 @@ function failedHelp() {
   return { ...disabledHelp(), section: errorSection() }
 }
 
+function disabledStatus() {
+  return {
+    section: disabledSection(),
+    counts: {
+      subscriberCount: null as number | null,
+      openIncidentCount: 0,
+      subscribersLink: { to: '/admin/status', search: { view: 'subscribers' } } as OverviewLink,
+      incidentsLink: { to: '/admin/status', search: { view: 'open' } } as OverviewLink,
+    },
+  }
+}
+function failedStatus() {
+  return { ...disabledStatus(), section: errorSection() }
+}
+
+/**
+ * The status page's audience and what is wrong now: active subscribers, when
+ * the viewer can see them, and open incidents.
+ */
+async function loadStatus(withSubscribers: boolean) {
+  const [[subscribers], [incidents]] = await Promise.all([
+    withSubscribers
+      ? db
+          .select({ value: count() })
+          .from(statusSubscriptions)
+          .where(
+            and(
+              isNull(statusSubscriptions.unsubscribedAt),
+              notTestPrincipal(statusSubscriptions.principalId)
+            )
+          )
+      : [],
+    db
+      .select({ value: count() })
+      .from(statusIncidents)
+      .where(
+        and(
+          eq(statusIncidents.kind, 'incident'),
+          isNull(statusIncidents.resolvedAt),
+          isNull(statusIncidents.deletedAt)
+        )
+      ),
+  ])
+  const empty = disabledStatus()
+  return {
+    section: enabledSection(),
+    counts: {
+      ...empty.counts,
+      subscriberCount: subscribers ? Number(subscribers.value) : null,
+      openIncidentCount: Number(incidents?.value ?? 0),
+    },
+  }
+}
+
 async function loadSupport(actor: Actor, viewerId: PrincipalId | null, now: Date) {
   const visibility = conversationFilter(actor)
   const waitingLink: OverviewLink = { to: '/admin/inbox', search: { sort: 'waiting' } }
 
   const conditions = and(
     visibility,
+    notTestPrincipal(conversations.visitorPrincipalId),
     isNotNull(conversations.waitingSince),
     ne(conversations.status, 'closed')
   )
@@ -370,17 +516,27 @@ async function selectFeedbackRows(
   return [...mine, ...rest]
 }
 
-async function loadFeedback(viewerId: PrincipalId | null, now: Date) {
+/**
+ * Ideas to review, and with a changelog to announce them in, shipped ideas
+ * not announced yet.
+ */
+async function loadFeedback(viewerId: PrincipalId | null, now: Date, changelogOn: boolean) {
   const defaultStatus = await db.query.postStatuses.findFirst({
     where: and(eq(postStatuses.isDefault, true), isNull(postStatuses.deletedAt)),
     columns: { id: true, name: true, slug: true },
   })
-  const completeStatuses = await db
-    .select({ id: postStatuses.id, name: postStatuses.name, slug: postStatuses.slug })
-    .from(postStatuses)
-    .where(and(eq(postStatuses.category, 'complete'), isNull(postStatuses.deletedAt)))
+  const completeStatuses = changelogOn
+    ? await db
+        .select({ id: postStatuses.id, name: postStatuses.name, slug: postStatuses.slug })
+        .from(postStatuses)
+        .where(and(eq(postStatuses.category, 'complete'), isNull(postStatuses.deletedAt)))
+    : []
 
-  const livePost = and(isNull(posts.deletedAt), isNull(posts.canonicalPostId))
+  const livePost = and(
+    isNull(posts.deletedAt),
+    isNull(posts.canonicalPostId),
+    notTestPrincipal(posts.principalId)
+  )
 
   const reviewLink: OverviewLink = defaultStatus
     ? { to: '/admin/feedback', search: { status: [defaultStatus.slug] } }
@@ -452,8 +608,21 @@ async function loadMomentum(now: Date): Promise<OverviewMomentumItem[]> {
   const rows = await db
     .select({ postId: posts.id, title: posts.title, votesLast7d: voteDelta })
     .from(posts)
-    .innerJoin(postVotes, and(eq(postVotes.postId, posts.id), gte(postVotes.createdAt, since)))
-    .where(and(isNull(posts.deletedAt), isNull(posts.canonicalPostId)))
+    .innerJoin(
+      postVotes,
+      and(
+        eq(postVotes.postId, posts.id),
+        gte(postVotes.createdAt, since),
+        notTestPrincipal(postVotes.principalId)
+      )
+    )
+    .where(
+      and(
+        isNull(posts.deletedAt),
+        isNull(posts.canonicalPostId),
+        notTestPrincipal(posts.principalId)
+      )
+    )
     .groupBy(posts.id, posts.title)
     .orderBy(desc(voteDelta))
     .limit(MOMENTUM_LIMIT)

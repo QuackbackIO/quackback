@@ -106,6 +106,8 @@ export const addTeamMembersFn = createServerFn({ method: 'POST' })
     const { actorFromAuth } = await import('@/lib/server/audit/log')
     const { teamGranterFromAuth } = await import('@/lib/server/domains/principals/team-invitation')
     const { addTeamMembers } = await import('@/lib/server/domains/principals/team-additions')
+    const { invitationCopyForRequest } =
+      await import('@/lib/server/domains/onboarding/onboarding-email-copy')
 
     try {
       const result = await addTeamMembers(
@@ -116,7 +118,15 @@ export const addTeamMembersFn = createServerFn({ method: 'POST' })
           roleId: data.roleId as RoleId | undefined,
         },
         teamGranterFromAuth(auth),
-        { workspace: auth.settings, actor: actorFromAuth(auth), headers: getRequestHeaders() }
+        {
+          workspace: auth.settings,
+          actor: actorFromAuth(auth),
+          headers: getRequestHeaders(),
+          invitationCopy:
+            data.emails.length > 0
+              ? await invitationCopyForRequest(auth.user.name, null, auth.settings.name)
+              : undefined,
+        }
       )
       log.info({ added: result.added.length, invited: result.invited.length }, 'team members added')
       return { ok: true as const, ...result }

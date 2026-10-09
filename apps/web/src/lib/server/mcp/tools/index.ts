@@ -38,6 +38,8 @@ import { registerConversationTools } from './conversations'
 import { registerTicketTools } from './tickets'
 import { registerFileTools } from './files'
 import { registerWidgetTools } from './widget'
+import { registerSettingsTools } from './settings'
+import { registerNavigationTools } from './navigation'
 
 export function registerTools(server: McpServer, auth: McpAuthContext) {
   registerSearchTools(server, auth)
@@ -50,4 +52,6 @@ export function registerTools(server: McpServer, auth: McpAuthContext) {
   registerTicketTools(server, auth)
   registerFileTools(server, auth)
   registerWidgetTools(server, auth)
+  registerSettingsTools(server, auth)
+  registerNavigationTools(server, auth)
 }

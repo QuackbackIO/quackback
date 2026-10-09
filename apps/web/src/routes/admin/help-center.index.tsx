@@ -33,8 +33,8 @@ export const Route = createFileRoute('/admin/help-center/')({
 
 function HelpCenterIndexPage() {
   return (
-    <main className="h-full">
+    <div className="h-full">
       <HelpCenterList />
-    </main>
+    </div>
   )
 }

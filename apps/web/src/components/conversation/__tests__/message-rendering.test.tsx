@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render as renderRTL, screen } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import { AgentMessageBubble, VisitorMessageBubble } from '../message-bubble'
 import {
@@ -12,6 +12,17 @@ import type {
   ConversationMessageCitation,
 } from '@/lib/shared/conversation/types'
 import type { TiptapContent } from '@/lib/shared/db-types'
+import en from '@/locales/en.json'
+
+function render(ui: React.ReactNode) {
+  return renderRTL(ui, {
+    wrapper: ({ children }) => (
+      <IntlProvider locale="en" messages={en}>
+        {children}
+      </IntlProvider>
+    ),
+  })
+}
 
 afterEach(cleanup)
 
@@ -168,7 +179,7 @@ for (const surface of ['admin', 'widget'] as const) {
 describe('citation rendering safety', () => {
   // AssistantAnswer words its citation labels through react-intl.
   const renderAnswer = (ui: React.ReactElement) =>
-    render(ui, {
+    renderRTL(ui, {
       wrapper: ({ children }) => (
         <IntlProvider locale="en" messages={{}}>
           {children}

@@ -80,7 +80,7 @@ type Post = {
   createdAt: Date
 }
 type Board = { id: string; name: string; deletedAt?: Date | null }
-type Principal = { id: string; displayName: string | null }
+type Principal = { id: string; displayName: string | null; testOwnerPrincipalId?: string | null }
 // Comment rows for the comment-moderation mutation paths. Optional so existing
 // post-only tests don't have to initialize the comments slot.
 type Comment = {
@@ -133,7 +133,15 @@ type EqColCondition = { kind: 'eqCol'; left: ColRef; right: ColRef }
 type IsNullCondition = { kind: 'isNull'; col: ColRef }
 type AndCondition = { kind: 'and'; conditions: PostCondition[] }
 type ExistsCondition = { kind: 'exists'; subquery: SubqueryDescriptor }
-type PostCondition = EqCondition | EqColCondition | IsNullCondition | AndCondition | ExistsCondition
+type PrincipalProbe = { __principalProbe: true; condition: EqCondition }
+type NotTestPrincipalCondition = { kind: 'notTestPrincipal'; value: ColRef | PrincipalProbe }
+type PostCondition =
+  | EqCondition
+  | EqColCondition
+  | IsNullCondition
+  | AndCondition
+  | ExistsCondition
+  | NotTestPrincipalCondition
 
 // A subquery captured by the mocked select chain — carries the source table
 // and the WHERE condition so EXISTS can evaluate it against the outer row.
@@ -164,6 +172,14 @@ function rowsFor(table: string): Array<Record<string, unknown>> {
 }
 
 function matchRow(ctx: RowContext, c: PostCondition): boolean {
+  if (c.kind === 'notTestPrincipal') {
+    const value = c.value
+    const id =
+      '__principalProbe' in value
+        ? dbState.principals.find((row) => matchRow({ principal: row }, value.condition))?.id
+        : getVal(ctx, value)
+    return !dbState.principals.some((row) => row.id === id && row.testOwnerPrincipalId)
+  }
   if (c.kind === 'eq') return getVal(ctx, c.col) === c.val
   if (c.kind === 'eqCol') return getVal(ctx, c.left) === getVal(ctx, c.right)
   if (c.kind === 'isNull') {
@@ -368,6 +384,7 @@ vi.mock('@/lib/server/db', () => ({
                   matched.map((c) => ({
                     id: c.id,
                     postId: c.postId,
+                    principalId: c.principalId,
                     isPrivate: (c as Comment & { isPrivate?: boolean }).isPrivate,
                   }))
                 )
@@ -459,7 +476,22 @@ vi.mock('@/lib/server/db', () => ({
     return { kind: 'exists', subquery: subqueryChain.__subquery }
   }),
   desc: vi.fn((col: ColRef) => col),
-  sql: vi.fn(),
+  notTestPrincipal: vi.fn((value: ColRef | PrincipalProbe): NotTestPrincipalCondition => {
+    expect(value).toBeDefined()
+    if (!('__principalProbe' in value)) expect(value.__col).toBe('principalId')
+    return { kind: 'notTestPrincipal', value }
+  }),
+  sql: vi.fn((parts: TemplateStringsArray, ...values: unknown[]) => {
+    if (parts.join('?').includes('(SELECT')) {
+      const [column, table, condition] = values as [ColRef, unknown, EqCondition]
+      expect(column).toEqual({ __table: 'principal', __col: 'id' })
+      expect(tableNameOf(table)).toBe('principal')
+      expect(condition.kind).toBe('eq')
+      expect(condition.col).toEqual(column)
+      return { __principalProbe: true, condition } satisfies PrincipalProbe
+    }
+    return { parts, values }
+  }),
 }))
 
 import { NotFoundError, ConflictError } from '@/lib/shared/errors'
