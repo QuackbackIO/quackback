@@ -1954,5 +1954,16 @@
   "widget.messages.resumeAria": "打开与 {name} 的会话",
   "widget.tickets.progress": "工单进度",
   "widget.changelog.filter.all": "全部",
-  "widget.changelog.emptyFiltered": "此分类下暂无更新"
+  "widget.changelog.emptyFiltered": "此分类下暂无更新",
+  "workspaceUnavailable.deleted.title": "此工作区不可用",
+  "workspaceUnavailable.deleted.body": "{host} 已被运营它的团队删除。",
+  "workspaceUnavailable.deleted.owner": "您在管理这个工作区吗？登录 Quackback 即可恢复。",
+  "workspaceUnavailable.paused.title": "此工作区已暂停",
+  "workspaceUnavailable.paused.body": "它的团队暂时将其暂停。您之前分享的内容都会保留。",
+  "workspaceUnavailable.paused.owner": "您在管理这个工作区吗？登录 Quackback 查看暂停原因。",
+  "workspaceUnavailable.unknown.title": "这里没有工作区",
+  "workspaceUnavailable.unknown.body": "{host} 上没有设置任何内容。请检查地址，或询问向您发送链接的人。",
+  "workspaceUnavailable.unknown.owner": "正在设置工作区？请登录 Quackback。",
+  "workspaceUnavailable.signIn": "登录 Quackback",
+  "workspaceUnavailable.poweredBy": "由 {brand} 提供支持"
 }

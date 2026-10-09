@@ -1954,5 +1954,16 @@
   "widget.messages.resumeAria": "Abrir conversación con {name}",
   "widget.tickets.progress": "Progreso del ticket",
   "widget.changelog.filter.all": "Todo",
-  "widget.changelog.emptyFiltered": "Aún no hay novedades en esta categoría"
+  "widget.changelog.emptyFiltered": "Aún no hay novedades en esta categoría",
+  "workspaceUnavailable.deleted.title": "Este espacio no está disponible",
+  "workspaceUnavailable.deleted.body": "El equipo que gestionaba {host} lo ha eliminado.",
+  "workspaceUnavailable.deleted.owner": "¿Administras este espacio? Inicia sesión en Quackback para restaurarlo.",
+  "workspaceUnavailable.paused.title": "Este espacio está en pausa",
+  "workspaceUnavailable.paused.body": "Su equipo lo ha pausado por ahora. Todo lo que ya compartiste se conserva.",
+  "workspaceUnavailable.paused.owner": "¿Administras este espacio? Inicia sesión en Quackback para ver por qué está en pausa.",
+  "workspaceUnavailable.unknown.title": "Aquí no hay ningún espacio",
+  "workspaceUnavailable.unknown.body": "No hay nada configurado en {host}. Revisa la dirección o pregunta a quien te envió el enlace.",
+  "workspaceUnavailable.unknown.owner": "¿Estás configurando un espacio? Inicia sesión en Quackback.",
+  "workspaceUnavailable.signIn": "Iniciar sesión en Quackback",
+  "workspaceUnavailable.poweredBy": "Desarrollado con {brand}"
 }

@@ -1954,5 +1954,16 @@
   "widget.messages.resumeAria": "Unterhaltung mit {name} öffnen",
   "widget.tickets.progress": "Ticket-Fortschritt",
   "widget.changelog.filter.all": "Alle",
-  "widget.changelog.emptyFiltered": "In dieser Kategorie gibt es noch keine Neuigkeiten"
+  "widget.changelog.emptyFiltered": "In dieser Kategorie gibt es noch keine Neuigkeiten",
+  "workspaceUnavailable.deleted.title": "Dieser Workspace ist nicht verfügbar",
+  "workspaceUnavailable.deleted.body": "{host} wurde von dem Team gelöscht, das ihn betrieben hat.",
+  "workspaceUnavailable.deleted.owner": "Betreibst du diesen Workspace? Melde dich bei Quackback an, um ihn wiederherzustellen.",
+  "workspaceUnavailable.paused.title": "Dieser Workspace ist pausiert",
+  "workspaceUnavailable.paused.body": "Das Team hat ihn vorerst pausiert. Alles, was du bereits geteilt hast, bleibt erhalten.",
+  "workspaceUnavailable.paused.owner": "Betreibst du diesen Workspace? Melde dich bei Quackback an, um zu sehen, warum er pausiert ist.",
+  "workspaceUnavailable.unknown.title": "Hier gibt es keinen Workspace",
+  "workspaceUnavailable.unknown.body": "Unter {host} ist nichts eingerichtet. Prüfe die Adresse oder frag die Person, die dir den Link geschickt hat.",
+  "workspaceUnavailable.unknown.owner": "Richtest du einen Workspace ein? Melde dich bei Quackback an.",
+  "workspaceUnavailable.signIn": "Bei Quackback anmelden",
+  "workspaceUnavailable.poweredBy": "Powered by {brand}"
 }
