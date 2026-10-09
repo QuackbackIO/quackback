@@ -7,8 +7,10 @@ import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { NewButton } from '@/components/shared/new-button'
 import { MacrosSettingsBody } from '@/components/admin/settings/macros-settings-body'
 import { warmQuery } from '@/lib/client/queries/warm-query'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 export const Route = createFileRoute('/admin/settings/macros')({
+  head: adminPageHead('Macros settings'),
   beforeLoad: ({ context }) => {
     if (!isProductEnabled(context.settings?.featureFlags, 'support')) {
       throw redirect({ to: '/admin/settings/general' })

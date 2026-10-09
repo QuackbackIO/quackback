@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join, relative } from 'node:path'
 import {
   normalizeLocale,
   resolveLocale,
@@ -6,13 +8,18 @@ import {
   SUPPORTED_LOCALES,
   DEFAULT_LOCALE,
   isViewerMessage,
+  loadAreaMessages,
   loadMessages,
   loadPortalMessages,
   loadViewerMessages,
   loadWidgetMessages,
   isUnsubscribeMessage,
   loadUnsubscribeMessages,
+  messageArea,
   withoutPageScopedMessages,
+  isSetupWizardMessage,
+  loadOnboardingMessages,
+  SETUP_WIZARD_MESSAGE_PREFIXES,
 } from '../i18n'
 
 describe('normalizeLocale', () => {
@@ -91,6 +98,12 @@ describe('normalizeLocale', () => {
     expect(normalizeLocale('th-TH')).toBe('th')
     expect(normalizeLocale('TH-th')).toBe('th')
   })
+  it('maps every Portuguese tag to pt-br, the only Portuguese catalog', () => {
+    expect(normalizeLocale('pt-BR')).toBe('pt-br')
+    expect(normalizeLocale('pt')).toBe('pt-br')
+    expect(normalizeLocale('pt-PT')).toBe('pt-br')
+    expect(normalizeLocale('PT-ao')).toBe('pt-br')
+  })
 })
 
 describe('resolveLocale', () => {
@@ -137,6 +150,11 @@ describe('resolveLocale', () => {
     expect(resolveLocale('th-TH,th;q=0.9,en;q=0.8')).toBe('th')
     expect(resolveLocale('en', 'th-TH')).toBe('th')
     expect(resolveLocale('th;q=0,en;q=0.5')).toBe('en')
+  })
+  it('resolves Portuguese from the header', () => {
+    expect(resolveLocale('pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7')).toBe('pt-br')
+    expect(resolveLocale('pt,en;q=0.8')).toBe('pt-br')
+    expect(resolveLocale('pt-PT,pt;q=0.9,en;q=0.8')).toBe('pt-br')
   })
   it('respects an explicit Chinese locale override', () => {
     expect(resolveLocale('en', 'zh-Hant')).toBe('zh-tw')
@@ -219,10 +237,80 @@ describe('unsubscribe page strings', () => {
       loadViewerMessages('de'),
       loadUnsubscribeMessages('de'),
     ])
+    const wizard = Object.keys(all).filter(isSetupWizardMessage)
+    const areas = Object.keys(all).filter((key) => messageArea(key) !== null)
     expect(
       Object.keys(viewer).length +
         Object.keys(unsubscribe).length +
+        wizard.length +
+        areas.length +
         Object.keys(withoutPageScopedMessages(all)).length
     ).toBe(Object.keys(all).length)
+  })
+})
+
+describe('setup wizard strings', () => {
+  it('are seeded by the wizard and left out of the admin catalog', async () => {
+    const [all, onboarding] = await Promise.all([loadMessages('de'), loadOnboardingMessages('de')])
+    expect(Object.keys(withoutPageScopedMessages(all)).filter(isSetupWizardMessage)).toEqual([])
+    const wizard = Object.keys(all).filter(isSetupWizardMessage)
+    expect(wizard.length).toBeGreaterThan(0)
+    for (const key of wizard) expect(onboarding[key]).toBe(all[key])
+  })
+
+  // Leaving them out of the admin catalog is only safe while nothing outside
+  // the wizard renders them.
+  it('are rendered by the wizard alone', () => {
+    const src = join(__dirname, '../../..')
+    const wizardDirs = ['routes/onboarding', 'components/onboarding']
+    const offenders: string[] = []
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name)
+        if (entry.isDirectory()) {
+          if (entry.name !== '__tests__' && entry.name !== 'locales') walk(path)
+          continue
+        }
+        if (!/\.(tsx?|ts)$/.test(entry.name)) continue
+        const rel = relative(src, path)
+        if (wizardDirs.some((dir) => rel.startsWith(dir)) || rel === 'lib/shared/i18n.ts') continue
+        const text = readFileSync(path, 'utf8')
+        if (SETUP_WIZARD_MESSAGE_PREFIXES.some((prefix) => text.includes(`'${prefix}`)))
+          offenders.push(rel)
+      }
+    }
+    walk(src)
+    expect(offenders).toEqual([])
+  })
+})
+
+describe('area strings', () => {
+  it('are left out of the catalogs pages seed and load for their area', async () => {
+    const [all, widget, portal, settings] = await Promise.all([
+      loadMessages('pl'),
+      loadWidgetMessages('pl'),
+      loadPortalMessages('pl'),
+      loadAreaMessages('pl', 'settings', 'notificationPreferences'),
+    ])
+    for (const seeded of [widget, portal, withoutPageScopedMessages(all)]) {
+      expect(Object.keys(seeded).filter((key) => messageArea(key) !== null)).toEqual([])
+    }
+    expect(portal['portal.header.nav.feedback']).toBe(all['portal.header.nav.feedback'])
+    expect(settings['portal.settings.profile.avatar.title']).toBe('Awatar')
+    expect(settings['portal.settings.notifications.channel.inApp']).toBe('W aplikacji')
+    expect(
+      Object.keys(settings).every((key) =>
+        ['settings', 'notificationPreferences'].includes(messageArea(key) ?? '')
+      )
+    ).toBe(true)
+  })
+
+  it('puts a key in the first area whose prefix it has', () => {
+    expect(messageArea('portal.settings.notifications.saving')).toBe('notificationPreferences')
+    expect(messageArea('portal.settings.profile.title')).toBe('settings')
+    expect(messageArea('portal.hc.home.title')).toBe('helpCenter')
+    expect(messageArea('portal.auth.twoFactor.verify')).toBe('twoFactor')
+    expect(messageArea('portal.auth.continue')).toBeNull()
+    expect(messageArea('portal.header.nav.feedback')).toBeNull()
   })
 })

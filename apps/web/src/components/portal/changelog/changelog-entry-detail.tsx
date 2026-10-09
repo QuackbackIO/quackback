@@ -1,4 +1,5 @@
 import { Link } from '@tanstack/react-router'
+import { FormattedMessage } from 'react-intl'
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-content'
 import { EmbedHydration } from '@/components/shared/embed-hydration'
 import { StatusBadge } from '@/components/ui/status-badge'
@@ -53,7 +54,7 @@ export function ChangelogEntryDetail({
     <article>
       {/* Back link */}
       <BackLink to="/changelog" className="mb-8">
-        Changelog
+        <FormattedMessage id="portal.changelog.entry.backLink" defaultMessage="Changelog" />
       </BackLink>
 
       <div className="flex gap-8 lg:gap-16">
@@ -116,7 +117,12 @@ export function ChangelogEntryDetail({
           {/* Linked posts */}
           {linkedPosts.length > 0 && (
             <section className="mt-8 pt-8 border-t border-border/40">
-              <h2 className="text-lg font-semibold mb-4">Shipped Features</h2>
+              <h2 className="text-lg font-semibold mb-4">
+                <FormattedMessage
+                  id="portal.changelog.entry.shippedFeatures"
+                  defaultMessage="Shipped Features"
+                />
+              </h2>
               <div className="grid gap-2">
                 {linkedPosts.map((post) => (
                   <Link

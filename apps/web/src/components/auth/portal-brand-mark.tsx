@@ -1,3 +1,4 @@
+import { nameInitial } from '@/lib/shared/utils/initial'
 import { Link } from '@tanstack/react-router'
 import { useRouteContext } from '@tanstack/react-router'
 import type { SettingsBrandingData } from '@/lib/server/domains/settings/settings.types'
@@ -26,7 +27,7 @@ export function PortalBrandMark({ variant = 'stack' }: PortalBrandMarkProps) {
   })
   const name = branding?.name ?? 'Quackback'
   const logo = branding?.headerLogoUrl ?? branding?.logoUrl ?? null
-  const initial = name.charAt(0).toUpperCase()
+  const initial = nameInitial(name)
 
   if (variant === 'row') {
     return (

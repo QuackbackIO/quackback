@@ -2,6 +2,7 @@
 
 import { railControlClass } from '@/components/admin/rail-item'
 import { useState, useEffect, useRef } from 'react'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { BellIcon } from '@heroicons/react/24/solid'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -25,6 +26,7 @@ export function NotificationBell({
   labeled = false,
   active = false,
 }: NotificationBellProps) {
+  const intl = useIntl()
   const [open, setOpen] = useState(false)
   const { data: unreadCount = 0 } = useUnreadCount()
   const [shouldPulse, setShouldPulse] = useState(false)
@@ -57,10 +59,20 @@ export function NotificationBell({
               ),
           className
         )}
-        aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
+        aria-label={intl.formatMessage(
+          {
+            id: 'portal.notifications.bell.ariaLabel',
+            defaultMessage: 'Notifications{count, plural, =0 {} other { (# unread)}}',
+          },
+          { count: unreadCount }
+        )}
       >
         <BellIcon className="h-5 w-5 shrink-0" />
-        {labeled ? <span className="min-w-0 flex-1 truncate text-left">Notifications</span> : null}
+        {labeled ? (
+          <span className="min-w-0 flex-1 truncate text-left">
+            <FormattedMessage id="portal.notifications.title" defaultMessage="Notifications" />
+          </span>
+        ) : null}
         {unreadCount > 0 && (
           <span
             className={cn(
@@ -86,7 +98,7 @@ export function NotificationBell({
         <Tooltip>
           <TooltipTrigger asChild>{trigger}</TooltipTrigger>
           <TooltipContent side={isBottomAligned ? 'bottom' : 'right'} sideOffset={8}>
-            Notifications
+            <FormattedMessage id="portal.notifications.title" defaultMessage="Notifications" />
           </TooltipContent>
         </Tooltip>
       )}

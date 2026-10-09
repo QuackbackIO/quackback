@@ -4,7 +4,7 @@ import { Link } from '@tanstack/react-router'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { ClipboardDocumentIcon } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
+import { Button, NewTabHint } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { ChevronDownIcon } from '@heroicons/react/24/solid'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
@@ -85,6 +85,7 @@ export function WidgetInstallPage() {
           className={`${INLINE_LINK} text-[13px]`}
         >
           What the agent does
+          <NewTabHint />
         </a>
       </p>
     </>

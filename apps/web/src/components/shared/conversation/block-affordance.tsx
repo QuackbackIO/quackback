@@ -351,7 +351,7 @@ export function BlockCsatRow({
               id: 'widget.messenger.csat.commentPlaceholder',
               defaultMessage: 'Add a comment (optional)',
             })}
-            className="w-full resize-none rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+            className="w-full resize-none rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring/20"
           />
           <button
             type="button"

@@ -10,8 +10,10 @@ import {
   ticketStatusesQuery,
   ticketStageLabelsQuery,
 } from '@/components/admin/settings/tickets/queries'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 export const Route = createFileRoute('/admin/settings/ticket-statuses')({
+  head: adminPageHead('Ticket statuses settings'),
   beforeLoad: ({ context }) => {
     if (!context.settings?.featureFlags?.supportTickets) {
       throw redirect({ to: '/admin/settings/general' })

@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { MembersTab } from '@/components/admin/settings/team/members-tab'
 import { TeamsTab } from '@/components/admin/settings/teams/teams-tab'
 import { RolesTab } from '@/components/admin/settings/team/roles-tab'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 const TABS = ['members', 'teams', 'roles'] as const
 type MembersPageTab = (typeof TABS)[number]
@@ -19,6 +20,7 @@ const searchSchema = z.object({
 })
 
 export const Route = createFileRoute('/admin/settings/members')({
+  head: adminPageHead('Members settings'),
   validateSearch: searchSchema,
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.MEMBER_VIEW)

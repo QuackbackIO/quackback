@@ -3,7 +3,7 @@ import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
 import type { BillingProjectionOverview } from '@/lib/server/domains/billing/projection-overview'
 import type { BillingCatalogue } from '@/lib/server/control-plane/client'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Button, NewTabHint } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { cn } from '@/lib/shared/utils'
@@ -240,6 +240,7 @@ function PlanRow(props: {
             onClick={(event) => event.stopPropagation()}
           >
             View & compare features
+            <NewTabHint />
             <ArrowTopRightOnSquareIcon className="size-3.5" />
           </a>
         </div>
@@ -275,6 +276,7 @@ function FreePlanRow(props: { plan: CataloguePlan; action: BillingPlanAction }) 
           className={`${INLINE_LINK} mt-1 inline-flex items-center gap-1 text-[13px]`}
         >
           View & compare features
+          <NewTabHint />
           <ArrowTopRightOnSquareIcon className="size-3.5" />
         </a>
         {props.action.kind === 'downgrade' ? (

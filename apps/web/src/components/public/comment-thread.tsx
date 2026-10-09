@@ -279,7 +279,7 @@ export function CommentThread({
         <p className="text-muted-foreground text-center py-4">
           {intl.formatMessage({
             id: 'portal.commentThread.empty',
-            defaultMessage: 'No comments yet. Be the first to share your thoughts!',
+            defaultMessage: 'No comments yet. Be the first to share your thoughts.',
           })}
         </p>
       ) : (
@@ -449,7 +449,14 @@ function CommentItem({
       await editMutation.mutateAsync({ content: trimmed, contentJson: editJsonRef.current })
       setIsEditing(false)
     } catch (err) {
-      setEditError(err instanceof Error ? err.message : 'Failed to save edit')
+      setEditError(
+        err instanceof Error
+          ? err.message
+          : intl.formatMessage({
+              id: 'portal.commentThread.editFailed',
+              defaultMessage: 'Failed to save edit',
+            })
+      )
     }
   }
 

@@ -6,8 +6,10 @@ import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { IntegrationsSettingsBody } from '@/components/admin/settings/integrations/integrations-settings-body'
 import { readBatch } from '@/lib/client/queries/read-batch'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 export const Route = createFileRoute('/admin/settings/integrations/')({
+  head: adminPageHead('Integrations settings'),
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.INTEGRATION_VIEW)
     const { queryClient } = context

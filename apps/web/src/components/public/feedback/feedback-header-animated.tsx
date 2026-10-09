@@ -59,6 +59,10 @@ export interface FeedbackHeaderProps {
   boardLocked?: boolean
 }
 
+/** The server's limits for a new post's title and details (createPublicPostSchema). */
+const TITLE_MAX_LENGTH = 200
+const DETAILS_MAX_LENGTH = 10_000
+
 export function FeedbackHeaderAnimated({
   boards,
   defaultBoardId,
@@ -197,6 +201,20 @@ export function FeedbackHeaderAnimated({
       }
     }
 
+    // The server refuses longer details, and retrying would not change that.
+    if ((detailsRef.current?.markdown().length ?? 0) > DETAILS_MAX_LENGTH) {
+      setError(
+        intl.formatMessage(
+          {
+            id: 'portal.feedback.header.errorDetailsTooLong',
+            defaultMessage: 'Keep the details under {max} characters.',
+          },
+          { max: intl.formatNumber(DETAILS_MAX_LENGTH) }
+        )
+      )
+      return
+    }
+
     try {
       if (!effectiveUser && canPostAnonymously) {
         const ok = await ensureAnonSession()
@@ -211,12 +229,14 @@ export function FeedbackHeaderAnimated({
         }
       }
 
+      // No details written (or the editor not mounted yet) means no document:
+      // the post carries its title alone.
       const details = detailsRef.current
       const result = await createPost.mutateAsync({
         boardId: selectedBoardId as BoardId,
         title: typedTitle.trim(),
         content: details?.markdown() ?? '',
-        contentJson: details?.json() ?? null,
+        ...(details ? { contentJson: details.json() } : {}),
         ...(boardCustomFields.length > 0 ? { customFields: customFieldValues } : {}),
       })
 
@@ -239,14 +259,14 @@ export function FeedbackHeaderAnimated({
           },
         }
       )
-    } catch (err) {
+    } catch {
+      // The server logs why it refused the post; its message is not written
+      // for the visitor.
       setError(
-        err instanceof Error
-          ? err.message
-          : intl.formatMessage({
-              id: 'portal.feedback.header.errorSubmit',
-              defaultMessage: 'Failed to submit feedback',
-            })
+        intl.formatMessage({
+          id: 'portal.feedback.header.errorSubmit',
+          defaultMessage: 'Could not submit your feedback. Please try again.',
+        })
       )
     }
   }
@@ -539,6 +559,7 @@ function TitleInput({
     <motion.input
       ref={inputRef}
       type="text"
+      maxLength={TITLE_MAX_LENGTH}
       placeholder={intl.formatMessage({
         id: 'portal.feedback.header.titlePlaceholder',
         defaultMessage: "What's your idea?",
@@ -553,7 +574,7 @@ function TitleInput({
         if (!expanded) onExpand()
       }}
       onFocus={() => !expanded && onExpand()}
-      className="flex-1 bg-transparent border-0 outline-none text-foreground font-semibold placeholder:text-muted-foreground/60 placeholder:font-normal caret-primary focus-visible:ring-2 focus-visible:ring-ring/50"
+      className="flex-1 bg-transparent border-0 outline-none text-foreground font-semibold placeholder:text-muted-foreground/60 placeholder:font-normal caret-primary"
       initial={false}
       animate={{
         fontSize: expanded ? '1.25rem' : '1rem',

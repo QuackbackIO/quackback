@@ -5,10 +5,8 @@ export {
   type DatePresetValue,
 } from '@/components/shared/filter-presets'
 
-export const RESPONDED_OPTIONS = [
-  { value: 'responded', label: 'Has team response' },
-  { value: 'unresponded', label: 'Awaiting team response' },
-] as const
+/** Labels live in the filters bar, worded in the app's language. */
+export const RESPONDED_OPTIONS = [{ value: 'responded' }, { value: 'unresponded' }] as const
 
 export type { RespondedFilter as RespondedValue } from '@/lib/shared/types/filters'
 

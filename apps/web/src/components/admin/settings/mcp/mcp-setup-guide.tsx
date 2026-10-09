@@ -12,6 +12,7 @@ import {
 import { cn } from '@/lib/shared/utils'
 import { useCopyToClipboard } from '@/lib/client/hooks/use-copy-to-clipboard'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
+import { NewTabHint } from '@/components/ui/button'
 
 // ——————————————————————————————————————————————————
 // Client icons (Simple Icons, 24x24 viewBox)
@@ -478,6 +479,7 @@ export function McpSetupGuide({ endpointUrl }: McpSetupGuideProps) {
                 className={`${INLINE_LINK} inline-flex items-center gap-1 text-[11px]`}
               >
                 Reference
+                <NewTabHint />
                 <ArrowTopRightOnSquareIcon className="h-3 w-3" />
               </a>
             </div>

@@ -4,7 +4,8 @@
  * freshness in a viewport-aware tooltip on hover.
  */
 import { describe, expect, it } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render as baseRender, screen } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import userEvent from '@testing-library/user-event'
 import { AssistantAnswer, type RenderableCitation } from '../assistant-turn'
 import type { ConversationMessageCitation } from '@/lib/shared/conversation/types'
@@ -26,6 +27,14 @@ const internalCitation: RenderableCitation = {
   title: 'Refund policy (internal)',
   url: '',
   internal: true,
+}
+
+function render(ui: React.ReactElement) {
+  return baseRender(
+    <IntlProvider locale="en" defaultLocale="en">
+      {ui}
+    </IntlProvider>
+  )
 }
 
 describe('<AssistantAnswer> citations', () => {

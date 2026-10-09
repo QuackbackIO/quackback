@@ -13,6 +13,8 @@ vi.mock('@tanstack/react-start', () => ({
 const hoisted = vi.hoisted(() => ({
   getSession: vi.fn(),
   getSettings: vi.fn(),
+  /** Reads made on the pool, outside any transaction: the early checks. */
+  dbExecute: vi.fn(),
   txExecute: vi.fn(),
   principalFindFirst: vi.fn(),
   /** Reads made INSIDE the bootstrap transaction, kept distinct from the
@@ -113,6 +115,8 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
   const tx = {
     execute: hoisted.txExecute,
     query: { principal: { findFirst: hoisted.txPrincipalFindFirst } },
+    // The fresh-install write re-reads the settings table under the lock.
+    select: vi.fn(() => ({ from: vi.fn(() => ({ limit: vi.fn(async () => []) })) })),
     insert,
   }
   return {
@@ -121,6 +125,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
       transaction: vi.fn(async (callback: (executor: typeof tx) => Promise<unknown>) =>
         callback(tx)
       ),
+      execute: hoisted.dbExecute,
       query: {
         principal: { findFirst: hoisted.principalFindFirst },
         postStatuses: { findFirst: hoisted.postStatusesFindFirst },
@@ -149,7 +154,7 @@ beforeEach(() => {
   // the fixture's workspace shape implies. A double that answered both alike
   // could not tell a lock from a read, and this file's central assertion is
   // about the ordering between exactly those two.
-  hoisted.txExecute.mockImplementation(async (statement: { queryChunks?: unknown[] }) => {
+  const answer = async (statement: { queryChunks?: unknown[] }) => {
     const text = JSON.stringify(statement?.queryChunks ?? '')
     if (text.includes('setup_state')) {
       const row = await hoisted.getSettings()
@@ -157,7 +162,9 @@ beforeEach(() => {
     }
     if (!text.includes('cloud_workspace_key')) return undefined
     return [{ stamp_column: hoisted.stamp.value, metadata: null }]
-  })
+  }
+  hoisted.txExecute.mockImplementation(answer)
+  hoisted.dbExecute.mockImplementation(answer)
 })
 
 /** A workspace whose wizard steps are already stamped. */
@@ -182,7 +189,7 @@ describe('saveWorkspaceAndGoalFn bootstrap authorization', () => {
       saveWorkspaceAndGoalFn({
         data: { workspaceName: 'Acme', useCase: 'product_feedback' },
       })
-    ).rejects.toThrow(/only admin/i)
+    ).resolves.toEqual({ ok: false, refusal: 'not_owner' })
     expect(hoisted.settingsInsert).not.toHaveBeenCalled()
     // Refused at the gate: the promoter is never even opened.
     expect(hoisted.ensurePrincipalForUser).not.toHaveBeenCalled()
@@ -251,6 +258,7 @@ describe('saveWorkspaceAndGoalFn bootstrap authorization', () => {
     )
     expect(result).toEqual(
       expect.objectContaining({
+        ok: true,
         id: 'workspace_test',
         name: 'Acme Inc',
         slug: 'acme-inc',
@@ -313,7 +321,7 @@ describe('saveWorkspaceAndGoalFn bootstrap authorization', () => {
 
     await expect(
       saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme Inc', useCase: 'customer_support' } })
-    ).rejects.toThrow(/not open to be set up/i)
+    ).resolves.toEqual({ ok: false, refusal: 'not_owner' })
     expect(hoisted.ensurePrincipalForUser).not.toHaveBeenCalled()
     expect(hoisted.setPrincipalRole).not.toHaveBeenCalled()
     expect(hoisted.settingsInsert).not.toHaveBeenCalled()
@@ -337,10 +345,13 @@ describe('saveWorkspaceAndGoalFn bootstrap authorization', () => {
       data: { workspaceName: 'Acme Labs', useCase: 'product_feedback' },
     })
 
-    expect(result.name).toBe('Acme Labs')
-    expect(result.slug).toBe('fixed-portal')
-    expect(result.managed).toEqual({ name: false, slug: true, useCase: false })
-    expect(result.enabledModules).toEqual([])
+    expect(result).toMatchObject({
+      ok: true,
+      name: 'Acme Labs',
+      slug: 'fixed-portal',
+      managed: { name: false, slug: true, useCase: false },
+      enabledModules: [],
+    })
   })
 
   it('enables Help Center when an existing workspace picks that goal', async () => {
@@ -354,7 +365,7 @@ describe('saveWorkspaceAndGoalFn bootstrap authorization', () => {
       data: { workspaceName: 'Acme', useCase: 'help_center' },
     })
 
-    expect(result.enabledModules).toEqual(['Help Center'])
+    expect(result).toMatchObject({ ok: true, enabledModules: ['Help Center'] })
     const written = hoisted.flagWrites.find((values) => typeof values.featureFlags === 'string')
     expect(resolveFeatureFlags(written!.featureFlags as string).helpCenter).toBe(true)
   })

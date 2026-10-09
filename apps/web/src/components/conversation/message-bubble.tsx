@@ -431,7 +431,7 @@ function MessageEditForm({
 
   return (
     <div
-      className="w-[min(32rem,70vw)] rounded-lg border border-border bg-background px-3 py-2 focus-within:border-primary/60"
+      className="w-[min(32rem,70vw)] rounded-lg border border-border bg-background px-3 py-2 focus-within:border-ring/60"
       data-testid="message-edit-form"
       onKeyDown={(e) => {
         if (e.key === 'Escape') {

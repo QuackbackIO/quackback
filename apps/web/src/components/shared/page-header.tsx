@@ -68,11 +68,11 @@ export function PageHeader({
       )}
       <div
         className={cn(
-          'flex min-h-8 justify-between gap-4',
+          'flex min-h-8 flex-wrap justify-between gap-x-4 gap-y-2',
           description ? 'items-start' : 'items-center'
         )}
       >
-        <div className="min-w-0">
+        <div className="min-w-0 flex-[1_1_16rem]">
           {logo || badge ? (
             <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
               {logo}
@@ -89,7 +89,7 @@ export function PageHeader({
           {description && <p className="text-[13px] text-muted-foreground">{description}</p>}
         </div>
         {(status || actions) && (
-          <div className="flex shrink-0 items-center gap-3">
+          <div className="flex max-w-full flex-wrap items-center gap-x-3 gap-y-2">
             {status}
             {actions}
           </div>

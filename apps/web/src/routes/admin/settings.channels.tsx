@@ -5,8 +5,10 @@ import { settingsQueries } from '@/lib/client/queries/settings'
 import { ChannelsHubPage } from '@/components/admin/settings/channels-hub-page'
 import { readBatch } from '@/lib/client/queries/read-batch'
 import { warmQuery } from '@/lib/client/queries/warm-query'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 export const Route = createFileRoute('/admin/settings/channels')({
+  head: adminPageHead('Channels settings'),
   beforeLoad: ({ context }) => {
     if (!context.settings?.featureFlags?.supportInbox) {
       throw redirect({ to: '/admin/settings/general' })

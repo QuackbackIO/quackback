@@ -18,6 +18,7 @@ Production Compose supplies `DATABASE_URL` from its bundled service. You must se
 | `TRUSTED_PROXY_HOPS`       |                    `0` | Proxy hops permitted to supply client-IP headers. Keep `0` when directly exposed.           |
 | `TRUSTED_CLIENT_IP_HEADER` |                  unset | Header your proxy sets to the client IP, e.g. `X-Real-IP`. Wins over `TRUSTED_PROXY_HOPS`.  |
 | `CHAT_TRANSPORT_MODE`      |                 `live` | Set `poll` only behind proxies that buffer SSE.                                             |
+| `SETUP_OWNER_EMAIL`        |                  unset | Hands an unfinished setup to this address. See [Recovering setup](#recovering-setup).       |
 
 With `TRUSTED_PROXY_HOPS=0` (the default), rate limiting and IP-based checks never trust client-supplied headers; they use the actual TCP peer address instead, so distinct clients still get distinct buckets even directly exposed. That resolution depends on the platform reporting the socket peer, which the production build (`bun run start`) always has; a dev runtime that doesn't expose it falls back to a single shared bucket rather than trusting a spoofable header. When you do run behind reverse proxies, set this to the number of hops so client IP is read from the correct `X-Forwarded-For` position instead.
 
@@ -26,6 +27,10 @@ If your proxy sets one authoritative client-IP header, such as nginx with `proxy
 Use `/api/health/live` for process liveness and `/api/health/ready` for traffic readiness. Readiness checks PostgreSQL, the exact bundled migration ledger, and whether a worker-role process is actually running the job worker.
 
 For optional email, storage, AI, authentication, and integration settings, see [`.env.example`](../.env.example).
+
+## Recovering setup
+
+The first account created on a new install owns its setup until setup is finished, and nobody else can create an account before then. If that account belongs to someone else, such as a smoke test or a stray visitor, or you can't sign in to it and have no mail configured to reset its password, set `SETUP_OWNER_EMAIL` to the address that should set the install up and restart. Setup then belongs to the account at that address, and that address can create its account if it has none. Every other address still can't create one until setup is finished. Until that account exists, whoever signs up with the address gets it, as on a brand-new install, so create it right away. The variable has no effect once setup is finished.
 
 ## Database sizing and audit indexes
 

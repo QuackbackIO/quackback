@@ -6,8 +6,10 @@ import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { NewButton } from '@/components/shared/new-button'
 import { TicketTypesManager } from '@/components/admin/settings/tickets/ticket-types-manager'
 import { ticketTypesQuery } from '@/components/admin/settings/tickets/queries'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 export const Route = createFileRoute('/admin/settings/ticket-types')({
+  head: adminPageHead('Ticket types settings'),
   beforeLoad: ({ context }) => {
     if (!context.settings?.featureFlags?.supportTickets) {
       throw redirect({ to: '/admin/settings/general' })

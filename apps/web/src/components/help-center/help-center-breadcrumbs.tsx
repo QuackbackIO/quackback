@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { ChevronRightIcon } from '@heroicons/react/16/solid'
+import { useIntl } from 'react-intl'
 
 export interface BreadcrumbItem {
   label: string
@@ -11,9 +12,13 @@ interface HelpCenterBreadcrumbsProps {
 }
 
 export function HelpCenterBreadcrumbs({ items }: HelpCenterBreadcrumbsProps) {
+  const intl = useIntl()
   return (
     <nav
-      aria-label="Breadcrumb"
+      aria-label={intl.formatMessage({
+        id: 'portal.hc.breadcrumbs.ariaLabel',
+        defaultMessage: 'Breadcrumb',
+      })}
       className="flex items-center gap-1.5 text-sm text-muted-foreground"
     >
       {items.map((item, index) => {

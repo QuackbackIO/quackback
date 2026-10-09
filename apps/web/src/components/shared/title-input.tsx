@@ -25,7 +25,7 @@ export function TitleInput<T extends FieldValues = FieldValues>({
               type="text"
               aria-label={placeholder}
               placeholder={placeholder}
-              className="w-full text-lg sm:text-xl font-semibold bg-transparent border-0 outline-none placeholder:text-muted-foreground/50 focus-visible:ring-2 focus-visible:ring-ring/50"
+              className="w-full text-lg sm:text-xl font-semibold bg-transparent border-0 outline-none placeholder:text-muted-foreground/50"
               autoFocus={autoFocus}
               {...field}
             />

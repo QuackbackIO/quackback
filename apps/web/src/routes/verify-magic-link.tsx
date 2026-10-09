@@ -1,3 +1,4 @@
+import { nameInitial } from '@/lib/shared/utils/initial'
 import { createFileRoute } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
 import {
@@ -231,7 +232,7 @@ function WorkspaceIdentity({ branding }: { branding: InviteBranding }) {
         />
       ) : (
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-semibold">
-          {branding.workspaceName.charAt(0).toUpperCase()}
+          {nameInitial(branding.workspaceName)}
         </div>
       )}
       <span className="text-lg font-semibold">{branding.workspaceName}</span>

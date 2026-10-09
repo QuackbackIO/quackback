@@ -14,8 +14,10 @@ import { statusSettingsQueries } from '@/lib/client/queries/status'
 import { useDebouncedSave } from '@/lib/client/hooks/use-debounced-save'
 import { DEFAULT_STATUS_SETTINGS, type StatusSettings } from '@/lib/shared/status-settings'
 import { isProductEnabled } from '@/lib/shared/types/settings'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 export const Route = createFileRoute('/admin/settings/status')({
+  head: adminPageHead('Status settings'),
   beforeLoad: ({ context }) => {
     if (!isProductEnabled(context.settings?.featureFlags, 'status')) {
       throw redirect({ to: '/admin/settings/general' })

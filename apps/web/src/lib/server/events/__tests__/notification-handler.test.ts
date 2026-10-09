@@ -430,7 +430,12 @@ describe('notificationHook — ticket.status_changed', () => {
         type: 'ticket_status_changed',
         title: 'Cannot log in is now Resolved',
         body: 'Moved from Received to Resolved',
-        metadata: { ticketId: 'ticket_1' },
+        metadata: {
+          ticketId: 'ticket_1',
+          ticketTitle: 'Cannot log in',
+          stageLabel: 'Resolved',
+          previousStageLabel: 'Received',
+        },
       }),
     ])
   })
@@ -491,12 +496,22 @@ describe('notificationHook — ticket.replied (watchers)', () => {
         type: 'ticket_replied',
         title: 'Sarah replied on Cannot log in',
         body: 'Fix is queued for the next patch.',
-        metadata: { ticketId: 'ticket_1', actorName: 'Sarah', audience: 'portal' },
+        metadata: {
+          ticketId: 'ticket_1',
+          ticketTitle: 'Cannot log in',
+          actorName: 'Sarah',
+          audience: 'portal',
+        },
       }),
       expect.objectContaining({
         principalId: 'principal_agent_1',
         type: 'ticket_replied',
-        metadata: { ticketId: 'ticket_1', actorName: 'Sarah', audience: 'admin' },
+        metadata: {
+          ticketId: 'ticket_1',
+          ticketTitle: 'Cannot log in',
+          actorName: 'Sarah',
+          audience: 'admin',
+        },
       }),
     ])
   })

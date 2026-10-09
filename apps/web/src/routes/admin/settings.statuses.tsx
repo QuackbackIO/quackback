@@ -5,8 +5,10 @@ import { StatusesSettingsPage } from '@/components/admin/settings/statuses/statu
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { isProductEnabled } from '@/lib/shared/types/settings'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 export const Route = createFileRoute('/admin/settings/statuses')({
+  head: adminPageHead('Statuses settings'),
   beforeLoad: ({ context }) => {
     if (!isProductEnabled(context.settings?.featureFlags, 'feedback')) {
       throw redirect({ to: '/admin/settings/general' })

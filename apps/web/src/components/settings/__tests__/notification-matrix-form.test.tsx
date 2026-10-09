@@ -10,6 +10,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render as baseRender, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createAutosaveMutationCache } from '@/lib/client/autosave'
 
@@ -27,7 +28,13 @@ function render(ui: React.ReactElement) {
     mutationCache: createAutosaveMutationCache(),
     defaultOptions: { mutations: { retry: false } },
   })
-  return baseRender(<QueryClientProvider client={client}>{ui}</QueryClientProvider>)
+  return baseRender(
+    <QueryClientProvider client={client}>
+      <IntlProvider locale="en" defaultLocale="en">
+        {ui}
+      </IntlProvider>
+    </QueryClientProvider>
+  )
 }
 
 import { NotificationMatrixForm } from '../notification-matrix-form'

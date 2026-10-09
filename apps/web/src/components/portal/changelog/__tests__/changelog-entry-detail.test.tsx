@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render as baseRender, screen } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
 import type { ChangelogId } from '@quackback/ids'
 
 // BackLink renders a router Link; the detail layout is under test here, not
@@ -18,6 +19,14 @@ const baseProps = {
   contentJson: null,
   publishedAt: '2026-07-01T12:00:00.000Z',
   linkedPosts: [],
+}
+
+function render(ui: React.ReactElement) {
+  return baseRender(
+    <IntlProvider locale="en" defaultLocale="en">
+      {ui}
+    </IntlProvider>
+  )
 }
 
 describe('ChangelogEntryDetail featured image', () => {

@@ -331,13 +331,17 @@ function buildNotifications(
       // an agent watcher's row opens the admin inbox. A config with no
       // requesterPrincipalId at all is a pre-watchers outbox row being
       // redrained — omit audience so the client's portal default preserves its
-      // requester-only behavior.
+      // requester-only behavior. The title and stage labels let the bell word
+      // the row in the reader's language.
       metadata:
         requesterPrincipalId === undefined
-          ? { ticketId, conversationId }
+          ? { ticketId, conversationId, ticketTitle: title, stageLabel, previousStageLabel }
           : {
               ticketId,
               conversationId,
+              ticketTitle: title,
+              stageLabel,
+              previousStageLabel,
               audience:
                 requesterPrincipalId && principalId === requesterPrincipalId ? 'portal' : 'admin',
             },
@@ -354,6 +358,7 @@ function buildNotifications(
       metadata: {
         ticketId,
         conversationId,
+        ticketTitle: title,
         actorName: authorName,
         audience: requesterPrincipalId && principalId === requesterPrincipalId ? 'portal' : 'admin',
       },

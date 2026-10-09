@@ -70,7 +70,7 @@ const tabsTriggerVariants = cva(
           'text-foreground dark:text-muted-foreground',
           'data-active:bg-background',
           'dark:data-active:text-foreground dark:data-active:border-input dark:data-active:bg-input/30',
-          'focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:outline-ring focus-visible:ring-[3px] focus-visible:outline-1',
+          'focus-visible:border-ring focus-visible:ring-ring focus-visible:outline-ring focus-visible:ring-[3px] focus-visible:outline-1',
         ],
         line: [
           '-mb-px h-full rounded-none border-b-2 border-transparent px-1 pb-3',

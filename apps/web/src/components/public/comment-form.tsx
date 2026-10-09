@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { useIntl } from 'react-intl'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { useForm } from 'react-hook-form'
 import { useQueryClient, type UseMutationResult } from '@tanstack/react-query'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
@@ -360,7 +360,12 @@ export function CommentForm({
                         />
                         <span className="flex-1 text-start">{status.name}</span>
                         {isCurrent && !isSelected && (
-                          <span className="text-muted-foreground text-xs">current</span>
+                          <span className="text-muted-foreground text-xs">
+                            <FormattedMessage
+                              id="portal.commentForm.currentStatus"
+                              defaultMessage="current"
+                            />
+                          </span>
                         )}
                         {isSelected && <CheckIcon className="size-3.5 text-primary shrink-0" />}
                       </button>

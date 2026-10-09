@@ -27,6 +27,14 @@ describe('EmptyState', () => {
     expect(screen.getByText('Tags group posts.').className).toContain('text-[13px]')
   })
 
+  it('never lets a height on the root squash the icon tile', () => {
+    for (const size of ['default', 'compact'] as const) {
+      render(<EmptyState size={size} icon={Icon} title="T" className="h-32" />)
+      expect(screen.getByTestId('icon').parentElement?.className).toContain('shrink-0')
+      cleanup()
+    }
+  })
+
   it('renders the action slot in both sizes', () => {
     render(<EmptyState size="compact" icon={Icon} title="T" action={<button>New tag</button>} />)
     expect(screen.getByRole('button', { name: 'New tag' })).toBeTruthy()

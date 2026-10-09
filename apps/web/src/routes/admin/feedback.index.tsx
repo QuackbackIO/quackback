@@ -7,8 +7,10 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { errorMessage } from '@/components/shared/error-page'
+import { adminPageHead } from '@/lib/client/admin-head'
 
 export const Route = createFileRoute('/admin/feedback/')({
+  head: adminPageHead('Feedback'),
   // Note: No loaderDeps for the filter fields - the loader only runs on
   // initial route load for SSR (prefetching the default/unfiltered dataset).
   // Client-side filter changes are handled by InboxContainer's useInboxPosts
