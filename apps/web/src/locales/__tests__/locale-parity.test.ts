@@ -37,7 +37,14 @@ function icuArgNames(message: string): Set<string> {
 // copied over to satisfy the key-parity check and never translated, which
 // renders English to that locale's users. Only add a string here when a native
 // UI really would show the English word.
-const SAME_AS_ENGLISH_EVERYWHERE = ['Copilot', 'PDF', 'Quinn AI']
+const SAME_AS_ENGLISH_EVERYWHERE = [
+  'AI',
+  'Copilot',
+  'PDF',
+  'Quinn AI',
+  'jane@example.com',
+  'you@example.com',
+]
 const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
   de: [
     '(optional)',
@@ -113,20 +120,24 @@ const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
     'Tags',
     'Tickets',
     'Type',
+    'Votes',
     'Workflows',
     'Zoom',
     'via {workflowName}',
     '{count, plural, one {# article} other {# articles}}',
     '{count, plural, one {# collection} other {# collections}}',
     '{count, plural, one {# page} other {# pages}}',
+    '{count}+ votes',
   ],
   es: [
     'Audio',
     'Avatar',
     'ETA',
     'Feedback',
+    'Ideas',
     'Lead',
     'No',
+    'Personal',
     'Portal',
     'Roadmap',
     'Roadmaps',
@@ -135,8 +146,8 @@ const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
     'Video',
     'Zoom',
   ],
-  ar: ['AI', 'jane@example.com', 'you@example.com'],
-  ru: ['jane@example.com', 'you@example.com'],
+  ar: [],
+  ru: [],
   'pt-br': [
     'Admin',
     'Avatar',
@@ -158,13 +169,13 @@ const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
     'Zoom',
     'via {workflowName}',
   ],
-  'zh-cn': ['AI', 'jane@example.com', 'you@example.com'],
-  'zh-tw': ['AI', 'jane@example.com', 'you@example.com'],
+  'zh-cn': [],
+  'zh-tw': [],
   nl: [
-    'AI',
     'Agent',
     'Agents',
     'Audio',
+    'Avatar',
     'Changelog',
     'Code',
     'Details',
@@ -204,7 +215,6 @@ const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
     '{pct}% uptime',
   ],
   pl: [
-    'AI',
     'Agent',
     'Audio',
     'Lead',
