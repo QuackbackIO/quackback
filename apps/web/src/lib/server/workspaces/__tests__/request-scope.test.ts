@@ -251,7 +251,9 @@ describe('resolveWorkspaceAndContinue', () => {
     }
   )
 
-  it('403s a suspended workspace and names the reason', async () => {
+  it('503s a paused workspace and never names the reason to the visitor', async () => {
+    // The visitor is the workspace's customer. A billing or moderation reason
+    // is the control plane's business, not theirs to read.
     acquireScopeForHost.mockResolvedValue({
       kind: 'suspended',
       workspaceKey: 'inst_a',
@@ -259,8 +261,57 @@ describe('resolveWorkspaceAndContinue', () => {
       reason: 'nonpayment',
     })
     const res = (await serve('t1.localhost')) as Response
-    expect(res.status).toBe(403)
-    expect(await res.text()).toContain('nonpayment')
+    expect(res.status).toBe(503)
+    expect(res.headers.get('retry-after')).toBe('3600')
+    const body = await res.text()
+    expect(body).toBe('This workspace is paused.')
+    expect(body).not.toContain('nonpayment')
+  })
+
+  it('404s a workspace that was deleted and is in its restore window', async () => {
+    acquireScopeForHost.mockResolvedValue({
+      kind: 'suspended',
+      workspaceKey: 'inst_a',
+      hostname: 't1.localhost',
+      reason: 'deleted',
+    })
+    const res = (await serve('t1.localhost')) as Response
+    expect(res.status).toBe(404)
+    expect(await res.text()).not.toContain('deleted)')
+  })
+
+  it('serves a browser the branded page, with the host escaped and no reason', async () => {
+    acquireScopeForHost.mockResolvedValue({
+      kind: 'suspended',
+      workspaceKey: 'inst_a',
+      hostname: '<img src=x onerror=alert(1)>.example.com',
+      reason: 'deleted',
+    })
+    const res = (await serve('t1.localhost', {
+      headers: { accept: 'text/html,application/xhtml+xml', 'sec-fetch-dest': 'document' },
+    })) as Response
+    expect(res.status).toBe(404)
+    expect(res.headers.get('content-type')).toContain('text/html')
+    expect(res.headers.get('content-security-policy')).toContain("default-src 'none'")
+    const html = await res.text()
+    expect(html).toContain('This workspace isn&#39;t available')
+    expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;')
+    expect(html).not.toContain('<img src=x')
+    expect(html).toContain('Powered by Quackback')
+  })
+
+  it('answers a JSON client with a stable code and no reason', async () => {
+    acquireScopeForHost.mockResolvedValue({
+      kind: 'suspended',
+      workspaceKey: 'inst_a',
+      hostname: 't1.localhost',
+      reason: 'trial_ended',
+    })
+    const res = (await serve('t1.localhost', {
+      headers: { accept: 'application/json' },
+    })) as Response
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ error: { code: 'workspace_unavailable', state: 'paused' } })
   })
 
   it('410s a workspace being deleted', async () => {
@@ -469,6 +520,8 @@ describe('resolveWorkspaceAndContinue', () => {
       { kind: 'unknown_host', hostname: 'x.example.com' },
       { kind: 'redirect', workspaceKey: 'a', hostname: 'x', location: 'https://y.example.com' },
       { kind: 'deleting', workspaceKey: 'a', hostname: 'x' },
+      { kind: 'suspended', workspaceKey: 'a', hostname: 'x', reason: 'deleted' },
+      { kind: 'suspended', workspaceKey: 'a', hostname: 'x', reason: 'admin' },
       { kind: 'invalid', workspaceKey: 'a', hostname: 'x', problems: [] },
       { kind: 'refused', workspaceKey: 'a', code: 'c', detail: 'd' },
     ]) {

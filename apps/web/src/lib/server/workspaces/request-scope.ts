@@ -16,10 +16,11 @@
  *
  * | Outcome | Status | Database touched |
  * | --- | --- | --- |
- * | `unknown_host` — no record claims this hostname | 404 | none |
+ * | `unknown_host` — no record claims this hostname | 404, "no workspace here" page | none |
  * | `redirect` — obsolete friendly platform hostname | 308 for GET/HEAD, 409 otherwise | none |
- * | `suspended` — record exists, gated off | 403 + `reason` | none |
- * | `deleting` — teardown in flight | 410 | none |
+ * | `suspended` because deleted — in its restore window | 404, "isn't available" page | none |
+ * | `suspended` for any other reason — paused | 503 + `Retry-After`, "paused" page; the reason is never shown | none |
+ * | `deleting` — teardown in flight | 410, "isn't available" page | none |
  * | `invalid` — a record exists but fails the contract | 503, alert | none |
  * | `refused` — the database is not the one the record named | 503, alert | one query |
  * | `refused[schema_below_floor]` — right database, schema too old for this build | 503 + `Retry-After`, warn | one query |
@@ -37,6 +38,7 @@ import {
   SCHEMA_FLOOR_REFUSAL_CODE,
 } from '@/lib/server/fleet/schema-floor'
 import { isActivitySignal, noteWorkspaceActivity } from './activity'
+import { unavailableResponse } from './unavailable-page'
 import { isIdentityFailureCode, isKeyCustodyFailureCode } from './fingerprint'
 import { acquireScopeForHost } from './resolver'
 import { requestWorkspaceHost } from './saas-edge-host'
@@ -104,7 +106,7 @@ export async function resolveWorkspaceAndContinue<T>({
 
     case 'unknown_host':
       log.warn({ host: acquisition.hostname }, 'no workspace claims this hostname')
-      return refusal(404, 'Unknown workspace')
+      return unavailableResponse(request, 'unknown', { status: 404, host: acquisition.hostname })
 
     case 'redirect': {
       if (request.method !== 'GET' && request.method !== 'HEAD') {
@@ -142,11 +144,22 @@ export async function resolveWorkspaceAndContinue<T>({
         { workspaceKey: acquisition.workspaceKey, reason: acquisition.reason },
         'workspace is suspended'
       )
-      return refusal(403, `This workspace is suspended (${acquisition.reason}).`)
+      // The reason goes to the log, never to the visitor: they are the
+      // workspace's customers, and a billing or moderation reason is not theirs
+      // to read. A deleted workspace is gone as far as they can tell; any other
+      // suspension is a pause the team can lift.
+      if (acquisition.reason === 'deleted') {
+        return unavailableResponse(request, 'deleted', { status: 404, host: acquisition.hostname })
+      }
+      return unavailableResponse(request, 'paused', {
+        status: 503,
+        host: acquisition.hostname,
+        headers: { 'retry-after': '3600' },
+      })
 
     case 'deleting':
       log.warn({ workspaceKey: acquisition.workspaceKey }, 'workspace is being deleted')
-      return refusal(410, 'This workspace has been removed.')
+      return unavailableResponse(request, 'deleted', { status: 410, host: acquisition.hostname })
 
     case 'invalid':
       // Should essentially never fire: the control plane's write path refuses
