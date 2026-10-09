@@ -11,6 +11,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { EmptyState } from '@/components/shared/empty-state'
 import { Spinner } from '@/components/shared/spinner'
+import { AreaMessages } from '@/components/shared/area-messages'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -245,50 +246,59 @@ function NotificationsPage() {
           />
         </div>
       ) : notifications.length > 0 ? (
-        <div className="space-y-6">
-          {groups.map((group, groupIndex) => (
-            <section
-              key={group.label}
-              className="animate-in fade-in duration-200 fill-mode-backwards"
-              style={{ animationDelay: `${groupIndex * 75}ms` }}
-            >
-              <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3 px-1">
-                {groupLabels[group.label] ?? group.label}
-              </h2>
-              <div className="rounded-xl border border-border/50 bg-card shadow-sm overflow-hidden">
-                <div className="divide-y divide-border/40">
-                  {group.notifications.map((notification, index) => (
-                    <NotificationItem
-                      key={notification.id}
-                      notification={notification}
-                      variant="full"
-                      onMarkAsRead={(id) => markAsRead.mutate(id)}
-                      onArchive={(id) => archiveNotification.mutate(id)}
-                      className="animate-in fade-in-0 fill-mode-both"
-                      style={{
-                        animationDelay: `${groupIndex * 100 + index * 50}ms`,
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-            </section>
-          ))}
-          {hasNextPage && (
-            <div className="flex justify-center pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => fetchNextPage()}
-                disabled={isFetchingNextPage}
-                className="gap-1.5"
-              >
-                {isFetchingNextPage && <Spinner size="sm" />}
-                <FormattedMessage id="portal.notifications.loadMore" defaultMessage="Load more" />
-              </Button>
+        <AreaMessages
+          area="notificationText"
+          fallback={
+            <div className="flex items-center justify-center py-24">
+              <Spinner size="xl" className="border-primary" />
             </div>
-          )}
-        </div>
+          }
+        >
+          <div className="space-y-6">
+            {groups.map((group, groupIndex) => (
+              <section
+                key={group.label}
+                className="animate-in fade-in duration-200 fill-mode-backwards"
+                style={{ animationDelay: `${groupIndex * 75}ms` }}
+              >
+                <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3 px-1">
+                  {groupLabels[group.label] ?? group.label}
+                </h2>
+                <div className="rounded-xl border border-border/50 bg-card shadow-sm overflow-hidden">
+                  <div className="divide-y divide-border/40">
+                    {group.notifications.map((notification, index) => (
+                      <NotificationItem
+                        key={notification.id}
+                        notification={notification}
+                        variant="full"
+                        onMarkAsRead={(id) => markAsRead.mutate(id)}
+                        onArchive={(id) => archiveNotification.mutate(id)}
+                        className="animate-in fade-in-0 fill-mode-both"
+                        style={{
+                          animationDelay: `${groupIndex * 100 + index * 50}ms`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </section>
+            ))}
+            {hasNextPage && (
+              <div className="flex justify-center pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fetchNextPage()}
+                  disabled={isFetchingNextPage}
+                  className="gap-1.5"
+                >
+                  {isFetchingNextPage && <Spinner size="sm" />}
+                  <FormattedMessage id="portal.notifications.loadMore" defaultMessage="Load more" />
+                </Button>
+              </div>
+            )}
+          </div>
+        </AreaMessages>
       ) : unreadOnly ? (
         <div
           className="rounded-xl border border-border/50 bg-card shadow-sm animate-in fade-in duration-200 fill-mode-backwards"

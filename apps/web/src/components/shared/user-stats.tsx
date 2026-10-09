@@ -1,6 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
+import { useIntl } from 'react-intl'
 import { getUserStatsFn, type UserEngagementStats } from '@/lib/server/functions/user'
 import { cn } from '@/lib/shared/utils'
 
@@ -40,6 +41,7 @@ interface UserStatsBarProps {
 }
 
 export function UserStatsBar({ compact, className, headers, fetchStats }: UserStatsBarProps) {
+  const intl = useIntl()
   const { data } = useQuery({
     queryKey:
       fetchStats || headers ? ['widget', 'user', 'engagement-stats'] : ['user', 'engagement-stats'],
@@ -49,9 +51,21 @@ export function UserStatsBar({ compact, className, headers, fetchStats }: UserSt
 
   return (
     <div className={cn('grid grid-cols-3 gap-1', className)}>
-      <StatItem value={data?.ideas} label="Ideas" compact={compact} />
-      <StatItem value={data?.votes} label="Votes" compact={compact} />
-      <StatItem value={data?.comments} label="Comments" compact={compact} />
+      <StatItem
+        value={data?.ideas}
+        label={intl.formatMessage({ id: 'common.userStats.ideas', defaultMessage: 'Ideas' })}
+        compact={compact}
+      />
+      <StatItem
+        value={data?.votes}
+        label={intl.formatMessage({ id: 'common.userStats.votes', defaultMessage: 'Votes' })}
+        compact={compact}
+      />
+      <StatItem
+        value={data?.comments}
+        label={intl.formatMessage({ id: 'common.userStats.comments', defaultMessage: 'Comments' })}
+        compact={compact}
+      />
     </div>
   )
 }

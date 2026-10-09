@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
+import { FormattedMessage, useIntl } from 'react-intl'
 import Cropper from 'react-easy-crop'
 import type { Area, MediaSize } from 'react-easy-crop'
 import {
@@ -101,9 +102,10 @@ export function ImageCropper({
   onCropComplete,
   aspectRatio = 1,
   maxOutputSize = 512,
-  title = 'Crop your image',
+  title,
   cropShape = 'round',
 }: ImageCropperProps) {
+  const intl = useIntl()
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const [minZoom, setMinZoom] = useState(1)
@@ -191,7 +193,13 @@ export function ImageCropper({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+          <DialogTitle>
+            {title ??
+              intl.formatMessage({
+                id: 'ui.imageCropper.title',
+                defaultMessage: 'Crop your image',
+              })}
+          </DialogTitle>
         </DialogHeader>
 
         <div className="relative h-64 w-full bg-muted rounded-lg overflow-hidden">
@@ -227,10 +235,14 @@ export function ImageCropper({
 
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" onClick={handleCancel} disabled={isProcessing}>
-            Cancel
+            <FormattedMessage id="common.cancel" defaultMessage="Cancel" />
           </Button>
           <Button onClick={handleApply} disabled={isProcessing || !croppedAreaPixels}>
-            {isProcessing ? 'Processing...' : 'Apply'}
+            {isProcessing ? (
+              <FormattedMessage id="ui.imageCropper.processing" defaultMessage="Processing..." />
+            ) : (
+              <FormattedMessage id="ui.imageCropper.apply" defaultMessage="Apply" />
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

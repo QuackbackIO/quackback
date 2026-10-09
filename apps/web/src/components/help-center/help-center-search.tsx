@@ -116,7 +116,10 @@ export function HelpCenterHeroSearch({ askAiEnabled = false, locale }: HelpCente
         id: 'helpAskAi.searchPlaceholder',
         defaultMessage: 'Ask AI or search our help articles to find an answer',
       })
-    : 'Search articles...'
+    : intl.formatMessage({
+        id: 'portal.hc.search.placeholder',
+        defaultMessage: 'Search articles...',
+      })
 
   return (
     <div ref={containerRef} role="search" className="relative w-full">

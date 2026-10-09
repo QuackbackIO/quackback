@@ -4,22 +4,28 @@ import { Cog6ToothIcon } from '@heroicons/react/24/solid'
 import { PortalPageHeader } from '@/components/public/portal-page-header'
 import { ThemeSwitcher } from '@/components/theme-switcher'
 import { NotificationMatrixForm } from '@/components/settings/notification-matrix-form'
+import { AreaMessages } from '@/components/shared/area-messages'
 import { getNotificationPreferencesFn } from '@/lib/server/functions/user'
+import { DEFAULT_LOCALE, loadAreaMessages } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/_portal/settings/preferences')({
-  loader: async () => {
+  loader: async ({ context }) => {
     // The matrix form below would otherwise fetch this itself once mounted,
     // a separate post-hydration request redoing the session/principal lookup
-    // this document response already resolves for the parent layout.
-    const notificationPreferences = await getNotificationPreferencesFn()
-    return { notificationPreferences }
+    // this document response already resolves for the parent layout. Its
+    // strings, which only this page shows, load with it.
+    const [notificationPreferences, messages] = await Promise.all([
+      getNotificationPreferencesFn(),
+      loadAreaMessages(context.acceptLanguageLocale ?? DEFAULT_LOCALE, 'notificationPreferences'),
+    ])
+    return { notificationPreferences, messages }
   },
   component: PreferencesPage,
 })
 
 function PreferencesPage() {
   const intl = useIntl()
-  const { notificationPreferences } = Route.useLoaderData()
+  const { notificationPreferences, messages } = Route.useLoaderData()
 
   return (
     <div className="space-y-6">
@@ -81,7 +87,9 @@ function PreferencesPage() {
             defaultMessage="Choose what you're notified about and how"
           />
         </p>
-        <NotificationMatrixForm surface="portal" initialPreferences={notificationPreferences} />
+        <AreaMessages area="notificationPreferences" messages={messages}>
+          <NotificationMatrixForm surface="portal" initialPreferences={notificationPreferences} />
+        </AreaMessages>
       </div>
     </div>
   )

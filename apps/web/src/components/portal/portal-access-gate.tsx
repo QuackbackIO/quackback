@@ -16,7 +16,7 @@ import { nameInitial } from '@/lib/shared/utils/initial'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
-import { FormattedMessage } from 'react-intl'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { toast } from 'sonner'
 import { escapeInlineStyle } from '@/lib/shared/safe-inline-content'
 import { removeViewerScopedPortalQueries } from '@/lib/client/queries/portal'
@@ -347,6 +347,7 @@ function GateCard({
   callbackUrl,
   autoOpenSignin,
 }: GateCardProps) {
+  const intl = useIntl()
   const router = useRouter()
   const queryClient = useQueryClient()
   const [signingOut, setSigningOut] = useState(false)
@@ -446,7 +447,14 @@ function GateCard({
         router.invalidate(),
       ])
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Sign out failed. Please try again.')
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : intl.formatMessage({
+              id: 'portal.accessGate.signOutFailed',
+              defaultMessage: 'Sign out failed. Please try again.',
+            })
+      )
     } finally {
       setSigningOut(false)
     }
@@ -496,19 +504,32 @@ function GateCard({
       ) : (
         <>
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">You don&apos;t have access</h1>
+            <h1 className="text-xl font-semibold tracking-tight">
+              <FormattedMessage
+                id="portal.accessGate.noAccess.title"
+                defaultMessage="You don't have access"
+              />
+            </h1>
             <p className="mt-2 text-sm text-muted-foreground">
               {userEmail ? (
-                <>
-                  You&apos;re signed in as{' '}
-                  <span className="font-medium text-foreground">{userEmail}</span>, but this account
-                  isn&apos;t on the access list for this private portal.
-                </>
+                <FormattedMessage
+                  id="portal.accessGate.noAccess.signedInAs"
+                  defaultMessage="You're signed in as {email}, but this account isn't on the access list for this private portal."
+                  values={{
+                    email: <span className="font-medium text-foreground">{userEmail}</span>,
+                  }}
+                />
               ) : (
-                <>This portal is private and your account isn&apos;t on the access list.</>
+                <FormattedMessage
+                  id="portal.accessGate.noAccess.notOnList"
+                  defaultMessage="This portal is private and your account isn't on the access list."
+                />
               )}{' '}
-              Reach out to the {workspaceName} team to request access, or sign out and try a
-              different account.
+              <FormattedMessage
+                id="portal.accessGate.noAccess.requestAccess"
+                defaultMessage="Reach out to the {workspaceName} team to request access, or sign out and try a different account."
+                values={{ workspaceName }}
+              />
             </p>
           </div>
           <Button
@@ -518,7 +539,7 @@ function GateCard({
             disabled={signingOut}
           >
             {signingOut ? <ArrowPathIcon className="mr-2 h-3 w-3 animate-spin" /> : null}
-            Sign out
+            <FormattedMessage id="portal.accessGate.signOut" defaultMessage="Sign out" />
           </Button>
         </>
       )}

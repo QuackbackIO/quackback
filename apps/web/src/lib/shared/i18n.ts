@@ -192,12 +192,53 @@ export function isSetupWizardMessage(key: string): boolean {
   return SETUP_WIZARD_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
 }
 
-/** Strings no shared page seeds: each belongs to one lazy chunk or one page. */
-function isPageScopedMessage(key: string): boolean {
-  return isViewerMessage(key) || isUnsubscribeMessage(key) || isSetupWizardMessage(key)
+/**
+ * Strings only one area of the app shows. Like the viewer's, pages leave them
+ * out of the catalog they seed. An area its routes render on the server loads
+ * its strings in the route loader (portal settings and help center, the admin
+ * notification preferences); one that opens on a click loads them as it opens
+ * (the two-factor sign-in steps, the notification lists). The private portal's
+ * gate loads the whole catalog itself, so its strings need no seed at all.
+ * See `AreaMessages`.
+ *
+ * A key belongs to the first area whose prefix it has, so the notification
+ * preferences, which admin renders too, are their own area within settings.
+ */
+export const AREA_MESSAGE_PREFIXES = {
+  notificationPreferences: ['portal.settings.notifications.'],
+  settings: ['portal.settings.'],
+  helpCenter: ['portal.hc.'],
+  twoFactor: ['portal.auth.twoFactor.'],
+  notificationText: ['portal.notifications.text.'],
+  accessGate: ['portal.accessGate.'],
+} as const satisfies Record<string, readonly string[]>
+
+export type MessageArea = keyof typeof AREA_MESSAGE_PREFIXES
+
+const MESSAGE_AREAS = Object.entries(AREA_MESSAGE_PREFIXES) as [MessageArea, readonly string[]][]
+
+/** The area a message belongs to, or null for one every page seeds. */
+export function messageArea(key: string): MessageArea | null {
+  for (const [area, prefixes] of MESSAGE_AREAS) {
+    if (prefixes.some((prefix) => key.startsWith(prefix))) return area
+  }
+  return null
 }
 
-/** A catalog without the strings one page or lazy chunk seeds for itself, for seeding a page. */
+/** Strings no shared page seeds: each belongs to one lazy chunk, one page or one area. */
+function isPageScopedMessage(key: string): boolean {
+  return (
+    isViewerMessage(key) ||
+    isUnsubscribeMessage(key) ||
+    isSetupWizardMessage(key) ||
+    messageArea(key) !== null
+  )
+}
+
+/**
+ * A catalog without the strings one page, lazy chunk or area seeds for itself,
+ * for seeding a page.
+ */
 export function withoutPageScopedMessages(all: Record<string, string>): Record<string, string> {
   const subset: Record<string, string> = {}
   for (const [key, value] of Object.entries(all)) {
@@ -214,6 +255,20 @@ export async function loadUnsubscribeMessages(
   const subset: Record<string, string> = {}
   for (const [key, value] of Object.entries(all)) {
     if (isUnsubscribeMessage(key)) subset[key] = value
+  }
+  return subset
+}
+
+/** The strings of one or more areas in a locale. */
+export async function loadAreaMessages(
+  locale: SupportedLocale,
+  ...areas: MessageArea[]
+): Promise<Record<string, string>> {
+  const all = await loadMessages(locale)
+  const subset: Record<string, string> = {}
+  for (const [key, value] of Object.entries(all)) {
+    const area = messageArea(key)
+    if (area !== null && areas.includes(area)) subset[key] = value
   }
   return subset
 }
@@ -326,13 +381,15 @@ export const PORTAL_MESSAGE_PREFIX_LIST: readonly string[] = PORTAL_MESSAGE_PREF
  * already translated during SSR. Mirrors {@link loadWidgetMessages}: filtering
  * to the portal prefixes keeps the serialized payload to the strings the portal
  * can actually show, instead of the whole (admin-inclusive) catalog — a large
- * chunk of the portal SSR HTML. See {@link PORTAL_MESSAGE_PREFIXES}.
+ * chunk of the portal SSR HTML. See {@link PORTAL_MESSAGE_PREFIXES}. The
+ * viewer's strings and each area's are left out too (see
+ * {@link AREA_MESSAGE_PREFIXES}); they load where they are shown.
  */
 export async function loadPortalMessages(locale: SupportedLocale): Promise<Record<string, string>> {
   const all = await loadMessages(locale)
   const subset: Record<string, string> = {}
   for (const [key, value] of Object.entries(all)) {
-    if (isViewerMessage(key)) continue
+    if (isPageScopedMessage(key)) continue
     if (PORTAL_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))) subset[key] = value
   }
   return subset
