@@ -8,7 +8,6 @@ vi.mock('@tanstack/react-router', () => ({
   Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
     <a href={to}>{children}</a>
   ),
-  getRouteApi: (id: string) => ({ id }),
 }))
 
 import { HelpCenterCategoryGrid } from '../help-center-category-grid'

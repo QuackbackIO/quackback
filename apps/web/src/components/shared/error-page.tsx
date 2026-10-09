@@ -1,10 +1,9 @@
-import { useContext } from 'react'
+import { lazy, Suspense, useContext } from 'react'
 import { IntlContext, useIntl, type MessageDescriptor } from 'react-intl'
-import { AreaMessages } from '@/components/shared/area-messages'
 import { DocumentLocaleContext } from '@/components/shared/document-locale-context'
 import { Button } from '@/components/ui/button'
 import { describePlanRefusal } from '@/lib/shared/describe-upgrade'
-import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
+import { DEFAULT_LOCALE, messageArea, normalizeLocale } from '@/lib/shared/i18n'
 import { cn } from '@/lib/shared/utils'
 
 interface ErrorPageProps {
@@ -22,6 +21,13 @@ type Copy = (message: MessageDescriptor & { defaultMessage: string }) => string
 
 const english: Copy = (message) => message.defaultMessage
 
+// Error pages render under every route, so the module that loads their strings
+// is fetched when one shows rather than shipped in the chunk every page loads
+// (the notification list does the same).
+const AreaMessages = lazy(() =>
+  import('@/components/shared/area-messages').then((m) => ({ default: m.AreaMessages }))
+)
+
 /**
  * Words an error page in the document's language, so it matches the page
  * around it: translated on localized pages, English on the ones that stay
@@ -35,10 +41,20 @@ function ErrorPageCopy({ children }: { children: (copy: Copy) => React.ReactNode
   const intl = useContext(IntlContext)
   const documentLocale = useContext(DocumentLocaleContext)
   if (!intl || documentLocale === DEFAULT_LOCALE) return children(english)
+  // English needs nothing loaded, and a catalog loaded whole already holds the
+  // strings: word the page now rather than waiting on the loader's chunk.
+  if (
+    normalizeLocale(intl.locale) === DEFAULT_LOCALE ||
+    Object.keys(intl.messages).some((key) => messageArea(key) === 'errorPage')
+  ) {
+    return <PageLanguage>{children}</PageLanguage>
+  }
   return (
-    <AreaMessages area="errorPage" fallback={children(english)}>
-      <PageLanguage>{children}</PageLanguage>
-    </AreaMessages>
+    <Suspense fallback={children(english)}>
+      <AreaMessages area="errorPage" fallback={children(english)}>
+        <PageLanguage>{children}</PageLanguage>
+      </AreaMessages>
+    </Suspense>
   )
 }
 
