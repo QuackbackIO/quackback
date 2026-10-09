@@ -147,23 +147,23 @@ describe('Closed conversations reopen switch', () => {
   })
 })
 
-describe('Quinn row', () => {
-  it('reads "Quinn answers first" with a Configure link', () => {
+describe('AI agent row', () => {
+  it('reads "The AI agent answers first" with a Configure link', () => {
     assistant = { enabled: true, respond: true }
     renderPage()
-    expect(screen.getByText('Quinn answers first')).toBeInTheDocument()
+    expect(screen.getByText('The AI agent answers first')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Configure' }).getAttribute('href')).toBe(
       '/admin/settings/agent'
     )
     expect(screen.queryByText(/Fronting conversations/)).toBeNull()
   })
 
-  it('reads "Quinn is off" when answering is off or unset', () => {
+  it('reads "The AI agent is off" when answering is off or unset', () => {
     for (const value of [{ enabled: true, respond: false }, { enabled: true }]) {
       assistant = value
       const { unmount } = renderPage()
-      expect(screen.getByText('Quinn is off')).toBeInTheDocument()
-      expect(screen.queryByText('Quinn answers first')).toBeNull()
+      expect(screen.getByText('The AI agent is off')).toBeInTheDocument()
+      expect(screen.queryByText('The AI agent answers first')).toBeNull()
       expect(screen.queryByText('Answering is off.')).toBeNull()
       unmount()
     }

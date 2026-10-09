@@ -61,12 +61,12 @@ describe('InboxNavSidebar layout', () => {
     expect(container.querySelector('input')).toBeNull()
   })
 
-  it('lists Quinn activity under Conversations, with no AI section', async () => {
+  it('lists AI agent activity under Conversations, with no AI section', async () => {
     renderSidebar()
     expect(screen.queryByText('AI')).toBeNull()
-    const quinn = screen.getByRole('button', { name: /Quinn activity/ })
+    const quinn = screen.getByRole('button', { name: /AI agent activity/ })
     const conversations = screen.getByText('Conversations').closest('div.pb-4') as HTMLElement
-    expect(within(conversations).getByRole('button', { name: /Quinn activity/ })).toBe(quinn)
+    expect(within(conversations).getByRole('button', { name: /AI agent activity/ })).toBe(quinn)
   })
 
   it('shows no empty-state sentence under Saved views, only its add button', async () => {

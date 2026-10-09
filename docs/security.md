@@ -17,7 +17,7 @@ Quackback is designed so product and support teams can run customer feedback and
 
 ## AI & Connectors
 
-- Quinn's write tools — built-in and remote MCP **Connectors** — are permissioned per tool: **Always allow / Ask for approval / Deny**. A denied tool is omitted from the model's turn entirely, not merely refused when called.
+- Quackback AI's write tools — built-in and remote MCP **Connectors** — are permissioned per tool: **Always allow / Ask for approval / Deny**. A denied tool is omitted from the model's turn entirely, not merely refused when called.
 - Approving a proposed write is a teammate action behind the conversation-reply permission; view-only teammates cannot approve.
 - Connector credentials are encrypted at rest and never selected into client payloads.
 

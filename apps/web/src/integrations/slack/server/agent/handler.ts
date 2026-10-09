@@ -166,7 +166,7 @@ export async function handleSlackDecision(
     getToolSpecByName(pending.toolName) ??
     (actor
       ? ((await getConnectorSpecByToolName(pending.toolName, 'workspace')) ??
-        (await getWorkspaceMcpSpecByName(pending.toolName, actor, 'Quinn')))
+        (await getWorkspaceMcpSpecByName(pending.toolName, actor, 'Quackback AI')))
       : null)
   if (
     !terminal &&

@@ -1035,7 +1035,7 @@ export function AssistantLinkCard({
         <SettingsListRow
           to="/admin/settings/agent"
           leading={<RowIcon icon={SparklesIcon} />}
-          title="Quinn"
+          title="AI agent"
           badges={
             off ? <StateBadge state="off" /> : paused ? <StateBadge state="paused" /> : undefined
           }

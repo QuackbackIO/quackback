@@ -24,7 +24,7 @@ import { resolveContentAudience } from './audience'
 import { getConnectorSpecByToolName } from './connectors/connector-tools'
 import { getWorkspaceMcpSpecByName } from './mcp-workspace-tools'
 import { executeApprovedPendingAction } from './assistant.tools'
-import { ensureAssistantPrincipal } from './assistant.principal'
+import { ASSISTANT_DEFAULT_NAME, ensureAssistantPrincipal } from './assistant.principal'
 
 /** The proposed tool no longer exists in the catalogue (renamed/removed since the proposal). */
 class ToolSpecGoneError extends DomainException {
@@ -47,7 +47,7 @@ async function buildExecutionContext(
   return makeAssistantToolContext({
     db,
     assistantPrincipalId: assistant.id,
-    assistantName: assistant.displayName ?? 'Quinn',
+    assistantName: assistant.displayName ?? ASSISTANT_DEFAULT_NAME,
     role: pending.originRole,
     audience: resolveContentAudience(
       pending.originRole === 'customer_support' ? 'widget' : 'copilot'
@@ -135,7 +135,7 @@ export async function decideAssistantAction(
     (await getToolSpecByName(pending.toolName)) ??
     (await getConnectorSpecByToolName(pending.toolName, agentKind)) ??
     (pending.originRole === 'workspace_assistant'
-      ? await getWorkspaceMcpSpecByName(pending.toolName, actor, 'Quinn')
+      ? await getWorkspaceMcpSpecByName(pending.toolName, actor, ASSISTANT_DEFAULT_NAME)
       : null)
   if (!spec) throw new ToolSpecGoneError(pending.toolName)
   const parentKind = pending.ticketId ? 'ticket' : 'conversation'

@@ -48,7 +48,7 @@ describe('WHO_REPLIES_FIRST', () => {
   it('holds a title and three steps', () => {
     expect(WHO_REPLIES_FIRST.title).toBe('Who replies first')
     expect(WHO_REPLIES_FIRST.steps).toHaveLength(3)
-    expect(WHO_REPLIES_FIRST.steps[0]!.defaultMessage).toContain('Quinn answers instantly')
+    expect(WHO_REPLIES_FIRST.steps[0]!.defaultMessage).toContain('The AI agent answers instantly')
     expect(WHO_REPLIES_FIRST.steps[1]!.defaultMessage).toContain('{order}')
     expect(WHO_REPLIES_FIRST.orderBelow).toBe('in the order below')
     expect(WHO_REPLIES_FIRST.orderOnWorkflows).toBe('in the order on Workflows')
@@ -62,11 +62,11 @@ describe('WhoRepliesFirstCard', () => {
   it('renders the three-step list and permission-aware links', () => {
     renderCard()
     expect(screen.getByText('Who replies first')).toBeTruthy()
-    expect(screen.getByText(/Quinn answers instantly/)).toBeTruthy()
+    expect(screen.getByText(/The AI agent answers instantly/)).toBeTruthy()
     expect(screen.getByText(/Customer-facing workflows/)).toBeTruthy()
     expect(screen.getByText(/in the order below/)).toBeTruthy()
     expect(screen.getByText(/the workflow decides the assignment/)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Manage Quinn' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Manage the agent' })).toHaveAttribute(
       'href',
       '/admin/settings/agent'
     )
@@ -77,10 +77,10 @@ describe('WhoRepliesFirstCard', () => {
     )
   })
 
-  it('hides Manage Quinn on the agent page and points at Workflows', () => {
+  it('hides Manage the agent on the agent page and points at Workflows', () => {
     hoisted.pathname = '/admin/settings/agent'
     renderCard()
-    expect(screen.queryByRole('link', { name: 'Manage Quinn' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Manage the agent' })).toBeNull()
     expect(screen.getByText(/in the order on Workflows/)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Manage workflows' })).toHaveAttribute(
       'href',
@@ -92,7 +92,7 @@ describe('WhoRepliesFirstCard', () => {
   it('hides Office hours when the admin cannot open that settings page', () => {
     hoisted.permissions = new Set(['assistant.manage'])
     renderCard()
-    expect(screen.getByRole('link', { name: 'Manage Quinn' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Manage the agent' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Office hours' })).toBeNull()
   })
 })

@@ -367,11 +367,11 @@ function AttributeFormDialog({
             />
             {aiDetect && supportsAiDetect(fieldType) && (
               <p className="text-[11px] text-muted-foreground">
-                This is the whole prompt Quinn sees, so be explicit: when the value applies, when it
-                does not, and typical customer phrasing. Example: &quot;Applies when the customer
-                reports being charged the wrong amount. Does not apply to general billing questions.
-                Customers usually say things like &apos;double charged&apos; or &apos;wrong
-                price&apos;.&quot;
+                This is the whole prompt Quackback AI sees, so be explicit: when the value applies,
+                when it does not, and typical customer phrasing. Example: &quot;Applies when the
+                customer reports being charged the wrong amount. Does not apply to general billing
+                questions. Customers usually say things like &apos;double charged&apos; or
+                &apos;wrong price&apos;.&quot;
               </p>
             )}
           </div>
@@ -496,7 +496,7 @@ function AttributeFormDialog({
             <SettingRows>
               <SettingRow
                 label="Let AI detect this attribute"
-                description="Quinn classifies conversations it participates in."
+                description="Quackback AI classifies conversations it participates in."
                 htmlFor="attr-ai-detect"
                 control={
                   <Switch id="attr-ai-detect" checked={aiDetect} onCheckedChange={setAiDetect} />
@@ -524,7 +524,7 @@ function AttributeFormDialog({
               <div>
                 <p className="text-sm font-medium">Test detection</p>
                 <p className="text-[11px] text-muted-foreground">
-                  Paste a sample customer message to preview what Quinn would detect.
+                  Paste a sample customer message to preview what Quackback AI would detect.
                 </p>
               </div>
               <Textarea
@@ -729,8 +729,8 @@ export function ConversationAttributesList() {
                 !attr.aiDetect
                   ? 'Usually set by AI'
                   : attr.detectOnClose
-                    ? 'Quinn classifies this attribute and re-checks on close'
-                    : 'Quinn classifies this attribute'
+                    ? 'Quackback AI classifies this attribute and re-checks on close'
+                    : 'Quackback AI classifies this attribute'
               }
             >
               AI

@@ -243,7 +243,7 @@ export type AssistantConfig = z.infer<typeof assistantConfigSchema>
 export const DEFAULT_ASSISTANT_CONFIG: AssistantConfig = {
   version: ASSISTANT_CONFIG_VERSION,
   identity: {
-    name: 'Quinn',
+    name: 'Quackback AI',
     avatarUrl: null,
   },
   agents: {

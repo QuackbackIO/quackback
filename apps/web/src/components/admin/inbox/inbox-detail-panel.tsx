@@ -862,7 +862,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
           <div className="space-y-2.5 border-t border-border/30 pt-4">
             <div className="flex items-center justify-between">
               <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <SparklesIcon className="h-4 w-4" /> Quinn
+                <SparklesIcon className="h-4 w-4" /> AI agent
               </p>
               <AiOutcomePill outcome={aiActivity.outcome} />
             </div>

@@ -117,7 +117,7 @@ export function AnalyticsQuinnSection({
       {performance.isError ? (
         <Card className="overflow-hidden py-0">
           <LoadError
-            message="Quinn's results could not be loaded."
+            message="AI agent results could not be loaded."
             onRetry={() => void performance.refetch()}
           />
         </Card>
@@ -125,7 +125,7 @@ export function AnalyticsQuinnSection({
         <SectionSkeleton section="ai" />
       ) : quinn.involvements === 0 ? (
         <Card className="overflow-hidden">
-          <AnalyticsEmpty message="Quinn hasn't handled any conversations this period" />
+          <AnalyticsEmpty message="The AI agent hasn't handled any conversations this period" />
         </Card>
       ) : (
         <>

@@ -106,7 +106,7 @@ export const BLOCK_STEP_LABELS: Record<BlockStepKind, string> = {
   message: 'Message',
   send_ticket_form: 'Send ticket form',
   show_reply_time: 'Show expected reply time',
-  let_assistant_answer: 'Let Quinn answer',
+  let_assistant_answer: 'Let the AI agent answer',
   disable_composer: 'Disable replies',
   reply_buttons: 'Reply buttons',
   collect_data: 'Collect data',
@@ -1854,7 +1854,7 @@ export function graphToTree(graph: WorkflowGraphJson): Result<WorkflowTree> {
           outs,
           LET_ASSISTANT_ESCALATED_KEY,
           'escalated',
-          'Let Quinn answer',
+          'Let the AI agent answer',
           walkFrom
         )
         if (!resolved.ok) return resolved

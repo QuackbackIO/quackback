@@ -364,13 +364,14 @@ function buildOutcomeTasks(
   }
   const setUpQuinn: LaunchTaskInput = {
     id: 'set-up-quinn',
-    title: 'Set up Quinn',
-    description: 'Quinn answers customers in Messenger. Check its name, voice and knowledge.',
+    title: 'Set up the AI agent',
+    description:
+      'The AI agent answers customers in Messenger. Check its name, voice and knowledge.',
     completed: status.hasAgentAnswering === true,
     canAct: permissions.assistantManage,
     classification: 'prerequisite',
     href: '/admin/settings/agent',
-    actionLabel: 'Set up Quinn',
+    actionLabel: 'Set up the AI agent',
     completedLabel: 'Open Agent',
   }
   const helpDraft: LaunchTaskInput = {

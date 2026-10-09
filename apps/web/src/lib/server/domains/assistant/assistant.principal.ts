@@ -15,7 +15,7 @@ import type { Executor } from '@/lib/server/domains/principals/principal.factory
 import { createServicePrincipal } from '@/lib/server/domains/principals/principal.service'
 
 /** Default display name; the messenger settings identity overrides it in the UI. */
-export const ASSISTANT_DEFAULT_NAME = 'Quinn'
+export const ASSISTANT_DEFAULT_NAME = 'Quackback AI'
 
 // The service-metadata discriminator. Reuses the existing `integration` kind
 // (the metadata union is closed) with an `assistant`-only integration type, so

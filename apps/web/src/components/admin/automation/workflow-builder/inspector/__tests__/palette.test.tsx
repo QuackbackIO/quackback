@@ -58,7 +58,7 @@ describe('StepPalette', () => {
     expect(screen.getByText('Collect')).toBeInTheDocument()
     expect(screen.getByText('Message')).toBeInTheDocument()
     expect(screen.getByText('Show expected reply time')).toBeInTheDocument()
-    expect(screen.getByText('Let Quinn answer')).toBeInTheDocument()
+    expect(screen.getByText('Let the AI agent answer')).toBeInTheDocument()
     expect(screen.getByText('Disable replies')).toBeInTheDocument()
     expect(screen.getByText('Reply buttons')).toBeInTheDocument()
     expect(screen.getByText('Collect data')).toBeInTheDocument()
@@ -77,11 +77,11 @@ describe('StepPalette', () => {
     expect(onInsert).toHaveBeenLastCalledWith('request_csat')
   })
 
-  it('disables Let Quinn answer in a background workflow with the wait reason', () => {
+  it('disables Let the AI agent answer in a background workflow with the wait reason', () => {
     const onInsert = vi.fn()
     render(<StepPalette onInsert={onInsert} workflowClass="background" />)
 
-    const quinn = screen.getByRole('button', { name: /Let Quinn answer/ })
+    const quinn = screen.getByRole('button', { name: /Let the AI agent answer/ })
     expect(quinn).toBeDisabled()
     expect(quinn.textContent).toContain(
       "Customer-facing workflows only: a background run can't wait for the reply"

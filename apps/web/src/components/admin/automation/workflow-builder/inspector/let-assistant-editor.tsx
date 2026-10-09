@@ -27,7 +27,7 @@ export function LetAssistantAnswerEditor({
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        Hands the turn to Quinn using its{' '}
+        Hands the turn to the AI agent using its{' '}
         {canAgent ? (
           <Link to="/admin/settings/agent" className={INLINE_LINK}>
             Agent settings
@@ -36,7 +36,7 @@ export function LetAssistantAnswerEditor({
           'Agent settings'
         )}
         , plus any one-time instruction below for just this step. Escalates after {escalateMinutes}{' '}
-        {escalateMinutes === 1 ? 'minute' : 'minutes'} if Quinn can&apos;t reply.
+        {escalateMinutes === 1 ? 'minute' : 'minutes'} if the agent can&apos;t reply.
       </p>
 
       <Field label="Instructions for this step (optional)">
@@ -48,14 +48,14 @@ export function LetAssistantAnswerEditor({
           className="min-h-20 text-sm"
         />
         <p className="text-[11px] text-muted-foreground">
-          Added to Quinn's prompt for this turn only. It never changes the workspace-wide
+          Added to the agent's prompt for this turn only. It never changes the workspace-wide
           configuration.
         </p>
       </Field>
 
       <p className="text-xs text-muted-foreground">
-        Continues on its default path once Quinn answers. If the conversation escalates to a human,
-        the run instead follows the “If escalated to a human” path below.
+        Continues on its default path once the agent answers. If the conversation escalates to a
+        human, the run instead follows the “If escalated to a human” path below.
       </p>
     </div>
   )

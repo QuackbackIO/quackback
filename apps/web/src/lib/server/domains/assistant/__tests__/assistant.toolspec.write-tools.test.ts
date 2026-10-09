@@ -563,7 +563,7 @@ describe('capture_feedback', () => {
     expect(mockCreatePostFromConversation).not.toHaveBeenCalled()
   })
 
-  it('creates the post attributed to Quinn as agent on the happy path', async () => {
+  it('creates the post attributed to the assistant as agent on the happy path', async () => {
     mockCreatePostFromConversation.mockResolvedValue({
       postId: 'post_1',
       created: true,
@@ -585,7 +585,7 @@ describe('capture_feedback', () => {
         agentPrincipalId: 'principal_assistant',
         agent: expect.objectContaining({
           principalId: 'principal_assistant',
-          displayName: 'Quinn',
+          displayName: 'Quackback AI',
         }),
       })
     )
@@ -688,7 +688,7 @@ describe('share_post', () => {
     expect(mockSharePost).not.toHaveBeenCalled()
   })
 
-  it('shares a ledgered post as Quinn on the happy path', async () => {
+  it('shares a ledgered post as the assistant on the happy path', async () => {
     const out = await spec.execute({ postId: POST_ID }, ledgeredCtx())
     expect(mockSharePost).toHaveBeenCalledWith(
       { conversationId: 'conversation_1', postId: POST_ID },
@@ -697,7 +697,7 @@ describe('share_post', () => {
         agentActor: expect.objectContaining({ principalType: 'service' }),
         agent: expect.objectContaining({
           principalId: 'principal_assistant',
-          displayName: 'Quinn',
+          displayName: 'Quackback AI',
         }),
       })
     )

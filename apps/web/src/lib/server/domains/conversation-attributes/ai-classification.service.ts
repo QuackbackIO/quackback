@@ -150,10 +150,10 @@ async function recordClassificationNote(
     // still Quinn's bounded actor, not an ambient admin-equivalent principal.
     const assistantPrincipal = await ensureAssistantPrincipal()
     const actor = quinnActor(assistantPrincipal.id)
-    const author = { principalId: actor.principalId!, displayName: 'Quinn' }
+    const author = { principalId: actor.principalId!, displayName: 'Quackback AI' }
 
     const lines = applied.map((a) => `- Set ${a.label} → ${a.optionLabel}: ${a.reasoning}`)
-    const content = ['Quinn classified this conversation:', ...lines].join('\n')
+    const content = ['Quackback AI classified this conversation:', ...lines].join('\n')
 
     const [message] = await db
       .insert(conversationMessages)

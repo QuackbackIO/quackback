@@ -226,7 +226,7 @@ describe('walkStepList — no fork', () => {
     })
   })
 
-  it('renders Let Quinn answer as a Step with the engine-default 10-min escalate chip', () => {
+  it('renders Let the AI agent answer as a Step with the engine-default 10-min escalate chip', () => {
     let tree = newTree()
     const step = createStep(tree, 'let_assistant_answer')
     tree = insertStepAt(tree, ROOT_LOCATION, 0, step)
@@ -235,9 +235,13 @@ describe('walkStepList — no fork', () => {
       type: 'fork',
       data: {
         eyebrow: 'Step',
-        title: 'Let Quinn answer',
+        title: 'Let the AI agent answer',
         chips: [
-          { label: "Escalates after 10 min if Quinn can't reply", tone: 'amber', wrap: true },
+          {
+            label: "Escalates after 10 min if the AI agent can't reply",
+            tone: 'amber',
+            wrap: true,
+          },
         ],
       },
     })
@@ -250,7 +254,7 @@ describe('walkStepList — no fork', () => {
     const item = walkStepList(baseInput(tree, { assistantEscalateMinutes: 5 })).items[0]
     expect(item).toMatchObject({
       type: 'fork',
-      data: { chips: [{ label: "Escalates after 5 min if Quinn can't reply" }] },
+      data: { chips: [{ label: "Escalates after 5 min if the AI agent can't reply" }] },
     })
   })
 })

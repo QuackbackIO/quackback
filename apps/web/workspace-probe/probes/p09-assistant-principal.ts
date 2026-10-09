@@ -79,8 +79,8 @@ export const p09AssistantPrincipal: Probe = {
           'the relevant feature enabled. No REST endpoint provisions it, so the fixture cannot, and ' +
           'writing a principal row straight into the workspace database would be a fixture the ' +
           'application would never create: it would satisfy this probe while proving nothing about ' +
-          'the memo that poisons it. To unblock, configure AI on both workspaces and ask Quinn one ' +
-          'question in each, then re-run. Reported as blocked rather than passed: an absent ' +
+          'the memo that poisons it. To unblock, configure AI on both workspaces and ask Quackback AI ' +
+          'one question in each, then re-run. Reported as blocked rather than passed: an absent ' +
           'principal cannot be misattributed, which is not the same as isolation being proven.',
       })
     }

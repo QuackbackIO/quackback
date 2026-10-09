@@ -82,7 +82,7 @@ export const CONVERSATION_VIEWS = [
   { view: 'spam', label: 'Spam', Icon: NoSymbolIcon },
 ] as const
 
-const QUINN_VIEW = { view: 'quinn', label: 'Quinn activity', Icon: SparklesIcon } as const
+const QUINN_VIEW = { view: 'quinn', label: 'AI agent activity', Icon: SparklesIcon } as const
 
 /**
  * The solid beaker, drawn here rather than imported: the settings menu's icon
@@ -208,7 +208,7 @@ export function scopeLabelFor(
     case 'test':
       return 'Test conversations'
     case 'quinn':
-      return 'Quinn activity'
+      return 'AI agent activity'
     case 'saved':
       return 'Saved messages'
     case 'mine':

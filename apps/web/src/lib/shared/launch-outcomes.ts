@@ -12,7 +12,7 @@ const OUTCOMES: Record<string, string> = {
   'distribute-feedback': 'Customers find your board',
   'publish-changelog': 'Customers see what shipped',
   'connect-messenger': 'Customers reach you from your site',
-  'set-up-quinn': 'Quinn answers customers instantly',
+  'set-up-quinn': 'The AI agent answers customers instantly',
   'help-article': 'Customers answer their own questions',
   'add-status-service': 'Customers see what is running',
   'share-status-page': 'Customers subscribe for updates',

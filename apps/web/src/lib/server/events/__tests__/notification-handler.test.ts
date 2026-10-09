@@ -690,7 +690,7 @@ describe('notificationHook — assistant.handed_off', () => {
       expect.objectContaining({
         principalId: 'principal_agent',
         type: 'assistant_handed_off',
-        title: 'Quinn handed off a conversation',
+        title: 'The AI agent handed off a conversation',
         body: 'Customer asked for a human',
         metadata: { conversationId: 'conversation_1' },
       }),

@@ -262,7 +262,7 @@ describe('ConversationAttributesList', () => {
 
     expect(await screen.findByText('Let AI detect this attribute')).toBeInTheDocument()
     expect(
-      screen.getByText('Quinn classifies conversations it participates in.')
+      screen.getByText('Quackback AI classifies conversations it participates in.')
     ).toBeInTheDocument()
     void user
   })
