@@ -175,7 +175,10 @@ function GeneralSettingsPage() {
 
       <WorkspaceDataCard />
 
-      <WorkspaceDangerCard cloudEnabled={Boolean(cloudIdentity)} />
+      <WorkspaceDangerCard
+        cloudEnabled={Boolean(cloudIdentity)}
+        workspaceName={cloudIdentity?.displayName ?? settings?.name ?? ''}
+      />
     </SettingsPage>
   )
 }

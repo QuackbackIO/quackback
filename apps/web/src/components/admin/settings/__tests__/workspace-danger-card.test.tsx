@@ -8,6 +8,14 @@ vi.mock('@/lib/server/functions/workspace-wipe', () => ({
   wipeCloudWorkspaceFn: vi.fn(),
 }))
 
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ to, children, ...rest }: { to: string; children: React.ReactNode }) => (
+    <a href={to} {...rest}>
+      {children}
+    </a>
+  ),
+}))
+
 describe('WorkspaceDangerCard', () => {
   afterEach(cleanup)
 
@@ -26,13 +34,28 @@ describe('WorkspaceDangerCard', () => {
     expect(screen.queryByText(/export/i)).toBeNull()
   })
 
-  it('says the delete is restorable and describes no hosting', () => {
+  it('names the restore window and what happens after it, and describes no hosting', () => {
     render(<WorkspaceDangerCard cloudEnabled />)
-    expect(screen.getByText(/restored until it is purged/i)).toBeTruthy()
-    expect(screen.queryByText(/permanently removes/i)).toBeNull()
+    expect(screen.getByText(/restore it from your Quackback dashboard for 30 days/i)).toBeTruthy()
+    expect(screen.queryByText(/until it is purged/i)).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Delete workspace' }))
-    expect(screen.getByRole('alertdialog').textContent).not.toMatch(/fleet/i)
-    expect(screen.getByRole('alertdialog').textContent).toMatch(/offline/i)
+    const dialog = screen.getByRole('alertdialog').textContent ?? ''
+    expect(dialog).not.toMatch(/fleet/i)
+    expect(dialog).toMatch(/offline/i)
+    expect(dialog).toMatch(/permanently deleted/i)
+    expect(dialog).toMatch(/subscription won't renew/i)
+  })
+
+  it('holds the delete back until the workspace name is typed', () => {
+    render(<WorkspaceDangerCard cloudEnabled workspaceName="Acme" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Delete workspace' }))
+    const dialog = screen.getByRole('alertdialog')
+    const confirm = Array.from(dialog.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Delete workspace'
+    )!
+    expect(confirm.hasAttribute('disabled')).toBe(true)
+    fireEvent.change(screen.getByLabelText('Type Acme to confirm'), { target: { value: 'Acme' } })
+    expect(confirm.hasAttribute('disabled')).toBe(false)
   })
 
   it('confirms before calling the delete, and calls it with the wipe confirmation', async () => {
@@ -42,6 +65,9 @@ describe('WorkspaceDangerCard', () => {
     render(<WorkspaceDangerCard cloudEnabled />)
     fireEvent.click(screen.getByRole('button', { name: 'Delete workspace' }))
     expect(wipeCloudWorkspaceFn).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText('Type delete to confirm'), {
+      target: { value: 'delete' },
+    })
     const dialog = screen.getByRole('alertdialog')
     const confirm = Array.from(dialog.querySelectorAll('button')).find(
       (b) => b.textContent === 'Delete workspace'
