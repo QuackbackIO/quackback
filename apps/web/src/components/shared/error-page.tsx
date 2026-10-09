@@ -1,3 +1,5 @@
+import { useContext } from 'react'
+import { IntlContext, type MessageDescriptor } from 'react-intl'
 import { Button } from '@/components/ui/button'
 import { describePlanRefusal } from '@/lib/shared/describe-upgrade'
 import { cn } from '@/lib/shared/utils'
@@ -11,6 +13,17 @@ interface ErrorPageProps {
 interface FriendlyShellProps {
   children: React.ReactNode
   fullPage?: boolean
+}
+
+/**
+ * Words a message in the page's language. The router's default not-found and
+ * error pages can render above every IntlProvider, so with none mounted this
+ * falls back to the English instead of throwing the way `useIntl` would.
+ */
+function usePageCopy() {
+  const intl = useContext(IntlContext)
+  return (message: MessageDescriptor & { defaultMessage: string }) =>
+    intl ? intl.formatMessage(message) : message.defaultMessage
 }
 
 export function FriendlyShell({ children, fullPage = true }: FriendlyShellProps) {
@@ -144,6 +157,7 @@ export function EntitlementRequiredPage({
 }
 
 export function DefaultErrorPage({ error, reset, fullPage = true }: ErrorPageProps) {
+  const copy = usePageCopy()
   if (isAuthorizationError(error)) {
     return <PermissionDeniedPage fullPage={fullPage} />
   }
@@ -154,15 +168,20 @@ export function DefaultErrorPage({ error, reset, fullPage = true }: ErrorPagePro
   const message = errorMessage(error)
   return (
     <FriendlyShell fullPage={fullPage}>
-      <h1 className="text-2xl font-semibold tracking-tight">Something went wrong</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">
+        {copy({ id: 'common.errorPage.error.title', defaultMessage: 'Something went wrong' })}
+      </h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        An unexpected error occurred. Try again, or return to the home page.
+        {copy({
+          id: 'common.errorPage.error.description',
+          defaultMessage: 'An unexpected error occurred. Try again, or return to the home page.',
+        })}
       </p>
 
       {message && (
         <details className="mt-4 rounded-md border bg-muted/40 px-4 py-3 text-left">
           <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-            Technical details
+            {copy({ id: 'common.errorPage.technicalDetails', defaultMessage: 'Technical details' })}
           </summary>
           <p className="mt-2 break-words text-sm text-muted-foreground">{message}</p>
         </details>
@@ -171,11 +190,11 @@ export function DefaultErrorPage({ error, reset, fullPage = true }: ErrorPagePro
       <div className="mt-6 flex items-center justify-center gap-3">
         {reset && (
           <Button onClick={reset} variant="default">
-            Try again
+            {copy({ id: 'common.errorPage.tryAgain', defaultMessage: 'Try again' })}
           </Button>
         )}
         <Button variant="outline" asChild>
-          <a href="/">Go home</a>
+          <a href="/">{copy({ id: 'common.errorPage.goHome', defaultMessage: 'Go home' })}</a>
         </Button>
       </div>
     </FriendlyShell>
@@ -183,17 +202,23 @@ export function DefaultErrorPage({ error, reset, fullPage = true }: ErrorPagePro
 }
 
 export function NotFoundPage() {
+  const copy = usePageCopy()
   return (
     <FriendlyShell>
-      <h1 className="text-2xl font-semibold tracking-tight">Page not found</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">
+        {copy({ id: 'common.errorPage.notFound.title', defaultMessage: 'Page not found' })}
+      </h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        The page you're looking for doesn't exist. It may have been moved or deleted, or the link
-        may be incorrect.
+        {copy({
+          id: 'common.errorPage.notFound.description',
+          defaultMessage:
+            "The page you're looking for doesn't exist. It may have been moved or deleted, or the link may be incorrect.",
+        })}
       </p>
 
       <div className="mt-6">
         <Button variant="outline" asChild>
-          <a href="/">Go home</a>
+          <a href="/">{copy({ id: 'common.errorPage.goHome', defaultMessage: 'Go home' })}</a>
         </Button>
       </div>
     </FriendlyShell>

@@ -1,8 +1,15 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, afterEach } from 'vitest'
 import { render, screen, cleanup } from '@testing-library/react'
+import { IntlProvider } from 'react-intl'
+import pl from '@/locales/pl.json'
 
-import { DefaultErrorPage, isAuthorizationError, isEntitlementError } from '../error-page'
+import {
+  DefaultErrorPage,
+  NotFoundPage,
+  isAuthorizationError,
+  isEntitlementError,
+} from '../error-page'
 
 describe('isAuthorizationError', () => {
   it('flags the role-gate failures thrown by requireAuth', () => {
@@ -105,5 +112,36 @@ describe('DefaultErrorPage', () => {
     )
 
     expect(screen.getByRole('heading', { name: 'This is a plan feature' })).toBeInTheDocument()
+  })
+})
+
+describe('error pages in the reader’s language', () => {
+  afterEach(cleanup)
+
+  it('words the not-found page in the page language', () => {
+    render(
+      <IntlProvider locale="pl" defaultLocale="en" messages={pl}>
+        <NotFoundPage />
+      </IntlProvider>
+    )
+    expect(screen.getByText(pl['common.errorPage.notFound.title'])).toBeTruthy()
+    expect(screen.getByText(pl['common.errorPage.goHome'])).toBeTruthy()
+  })
+
+  it('words the generic error page in the page language', () => {
+    render(
+      <IntlProvider locale="pl" defaultLocale="en" messages={pl}>
+        <DefaultErrorPage error={new Error('boom')} reset={() => {}} />
+      </IntlProvider>
+    )
+    expect(screen.getByText(pl['common.errorPage.error.title'])).toBeTruthy()
+    expect(screen.getByText(pl['common.errorPage.tryAgain'])).toBeTruthy()
+    expect(screen.getByText(pl['common.errorPage.technicalDetails'])).toBeTruthy()
+  })
+
+  // The router's default not-found page can render above every IntlProvider.
+  it('falls back to English when no IntlProvider is mounted', () => {
+    render(<NotFoundPage />)
+    expect(screen.getByText('Page not found')).toBeTruthy()
   })
 })

@@ -1,5 +1,15 @@
 import type { IntlShape } from 'react-intl'
-import type { SerializedNotification } from '@/lib/client/hooks/use-notifications-queries'
+import type { NotificationType } from '@/lib/shared/types'
+import type { NotificationTextParams } from './text-params'
+
+/** The parts of a notification row its wording depends on. */
+export interface NotificationTextSource {
+  type: NotificationType
+  title: string
+  body: string | null
+  actorName: string | null
+  params?: NotificationTextParams
+}
 
 export interface NotificationText {
   title: string
@@ -16,7 +26,7 @@ export interface NotificationText {
  * stored text. Bodies that quote user content (comment and message previews)
  * are left as they are.
  */
-export function notificationText(n: SerializedNotification, intl: IntlShape): NotificationText {
+export function notificationText(n: NotificationTextSource, intl: IntlShape): NotificationText {
   const stored = { title: n.title, body: n.body }
   const p = n.params ?? {}
   const name = n.actorName

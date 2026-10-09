@@ -37,7 +37,7 @@ const CHANNEL_LABELS = {
 
 /** The rows the portal shows, in the app's language. Admin-only rows keep the
  *  catalog's English label and description. */
-const TYPE_LABELS: Partial<
+export const TYPE_LABELS: Partial<
   Record<NotificationTypeMeta['type'], { label: Message; description: Message }>
 > = {
   post_status_changed: {

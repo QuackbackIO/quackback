@@ -37,7 +37,7 @@ const AREAS: Record<MessageArea, { users: RegExp; importers: RegExp | null }> = 
     importers: null,
   },
   notificationText: {
-    users: /^components\/notifications\/notification-text\.ts$/,
+    users: /^lib\/shared\/notifications\/notification-text\.ts$/,
     importers: null,
   },
   accessGate: {
