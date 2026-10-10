@@ -2,6 +2,16 @@ import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
 import { FormattedMessage } from 'react-intl'
 import type { PlanNotice } from '@/lib/server/domains/settings/tier-limits.types'
 import { isQuietTrial, presentPlanNotice } from '@/lib/shared/plan-notice'
+import { LocalDate } from '@/components/ui/local-date'
+
+/** "Mon, Oct 12, 2:00 PM": the copy around it is English. */
+export const CHOICE_DUE_FORMAT: Intl.DateTimeFormatOptions = {
+  weekday: 'short',
+  month: 'short',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+}
 
 interface PlanNoticeBannerProps {
   notice: PlanNotice | null
@@ -17,12 +27,16 @@ export function PlanNoticeBanner({ notice }: PlanNoticeBannerProps) {
   // A trial with days to spare is a quiet line in the sidebar, not a banner.
   if (!view || isQuietTrial(view)) return null
 
-  const ended = view.ended
+  // Red only for someone who can act on it. A teammate who cannot choose a
+  // plan gets the same news as a quiet strip, not an alarm with no way out.
+  const ended = view.ended && Boolean(view.actionUrl)
   const tone = ended
     ? 'bg-red-600 text-white border-red-700'
-    : view.urgent
-      ? 'bg-amber-500/10 border-amber-500/20'
-      : 'bg-primary/5 border-primary/10'
+    : view.ended
+      ? 'bg-muted/60 border-border'
+      : view.urgent
+        ? 'bg-amber-500/10 border-amber-500/20'
+        : 'bg-primary/5 border-primary/10'
   const muted = ended ? 'text-white/80' : 'text-muted-foreground'
   const actionClass = ended
     ? 'inline-flex items-center gap-1 font-medium text-white underline underline-offset-2 hover:text-white'
@@ -34,7 +48,7 @@ export function PlanNoticeBanner({ notice }: PlanNoticeBannerProps) {
         <span className={`font-medium shrink-0 ${ended ? 'text-white' : 'text-foreground'}`}>
           {view.label}
         </span>
-        {!ended && view.daysLeft !== null && (
+        {!view.ended && view.daysLeft !== null && (
           <>
             <span className="text-muted-foreground">·</span>
             <span
@@ -50,6 +64,7 @@ export function PlanNoticeBanner({ notice }: PlanNoticeBannerProps) {
             </span>
           </>
         )}
+        {ended && view.choiceDueAt && <ChoiceDue at={view.choiceDueAt} />}
         {view.message && (
           <span className={`${muted} hidden sm:inline truncate`}>{view.message}</span>
         )}
@@ -67,6 +82,18 @@ export function PlanNoticeBanner({ notice }: PlanNoticeBannerProps) {
         </a>
       )}
     </div>
+  )
+}
+
+/** When the rest of admin starts waiting on a plan choice, in the viewer's own time. */
+function ChoiceDue({ at }: { at: Date }) {
+  return (
+    <>
+      <span className="text-white/80">·</span>
+      <span className="shrink-0 font-medium text-white">
+        Choose by <LocalDate date={at} options={CHOICE_DUE_FORMAT} locale="en-US" />
+      </span>
+    </>
   )
 }
 

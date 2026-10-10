@@ -38,19 +38,43 @@ describe('trialNotice', () => {
 })
 
 describe('trialEndedNotice', () => {
-  it('leads with keep-your-work copy and a Continue action', () => {
-    const notice = trialEndedNotice(
-      config({
-        plan: 'free',
-        trialActive: false,
-        trialExpiresAt: '2026-08-18T00:00:00.000Z',
-      }),
-      { trialPlanName: 'Pro', now: NOW }
-    )
+  const ended = config({
+    plan: 'free',
+    trialActive: false,
+    trialExpiresAt: '2026-08-19T00:00:00.000Z',
+  })
+
+  it('asks a billing manager to choose, and says by when', () => {
+    const notice = trialEndedNotice(ended, { trialPlanName: 'Pro', now: NOW })
     expect(notice).toMatchObject({
       label: 'Pro trial ended',
-      actionLabel: 'Update billing',
+      ended: true,
+      actionLabel: 'Choose a plan',
+      actionUrl: '/admin/settings/billing',
+      choiceDueAt: '2026-08-21T00:00:00.000Z',
     })
-    expect(notice?.message).toMatch(/trial has come to an end/)
+    expect(notice?.message).toBe(
+      'Choose how this workspace continues: keep Pro, or switch to Free.'
+    )
+  })
+
+  it('never asks for billing details: the trial never had any', () => {
+    const notice = trialEndedNotice(ended, { trialPlanName: 'Pro', now: NOW })
+    expect(notice?.message).not.toMatch(/billing information/)
+  })
+
+  it('gives a teammate the news without a button or a deadline', () => {
+    const notice = trialEndedNotice(ended, { now: NOW, canManageBilling: false })
+    expect(notice).toMatchObject({ label: 'Trial ended', ended: true })
+    expect(notice).not.toHaveProperty('actionUrl')
+    expect(notice).not.toHaveProperty('choiceDueAt')
+  })
+
+  it('is gone once Free closed the trial', () => {
+    expect(
+      trialEndedNotice(config({ plan: 'free', trialActive: false, trialExpiresAt: null }), {
+        now: NOW,
+      })
+    ).toBeNull()
   })
 })

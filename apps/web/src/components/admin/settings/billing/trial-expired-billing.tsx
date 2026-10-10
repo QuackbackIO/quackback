@@ -14,6 +14,50 @@ import {
 import { FreeDowngradeDialog } from './free-downgrade-dialog'
 import { SubscribeDialog } from './subscribe-dialog'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
+import { LocalDate } from '@/components/ui/local-date'
+import { CHOICE_DUE_FORMAT } from '@/components/admin/plan-notice-banner'
+import { TRIAL_CHOICE_GRACE_MS } from '@/lib/shared/billing/trial-state'
+
+/**
+ * What happened and what is being asked. Billing managers land here from every
+ * admin page once the grace period is over, so this says why, and that the
+ * rest of admin opens again as soon as a plan is chosen.
+ */
+function TrialChoiceLead(props: { trialName: string; trialExpiresAt: string | null }) {
+  const expires = props.trialExpiresAt ? Date.parse(props.trialExpiresAt) : Number.NaN
+  const dueAt = Number.isNaN(expires) ? null : new Date(expires + TRIAL_CHOICE_GRACE_MS)
+  const graceLeft = useGraceLeft(dueAt)
+  return (
+    <div className="space-y-1.5">
+      <h2 className="text-base font-semibold">Your {props.trialName} trial has ended</h2>
+      <p className="text-sm text-muted-foreground">
+        Choose how this workspace continues: keep {props.trialName}, or switch to Free once anything
+        over Free's limits is removed. Everything you built is still here.
+      </p>
+      <p className="text-sm text-muted-foreground">
+        {dueAt && graceLeft ? (
+          <>
+            The rest of admin stays open until{' '}
+            <LocalDate date={dueAt} options={CHOICE_DUE_FORMAT} locale="en-US" />. After that it
+            waits until a plan is chosen.
+          </>
+        ) : (
+          'The rest of admin opens again as soon as you choose a plan.'
+        )}
+      </p>
+    </div>
+  )
+}
+
+/** Whether the grace period is still running, read after hydration so both renders agree. */
+function useGraceLeft(dueAt: Date | null): boolean {
+  const [graceLeft, setGraceLeft] = useState(false)
+  const dueMs = dueAt?.getTime() ?? null
+  useEffect(() => {
+    setGraceLeft(dueMs !== null && dueMs > Date.now())
+  }, [dueMs])
+  return graceLeft
+}
 
 export function TrialExpiredBilling(props: {
   overview: BillingProjectionOverview
@@ -40,10 +84,7 @@ export function TrialExpiredBilling(props: {
 
   return (
     <div className="space-y-6">
-      <p className="text-sm text-muted-foreground">
-        Need more time to test everything? Pick a plan below, including Free after you remove
-        anything that exceeds it.
-      </p>
+      <TrialChoiceLead trialName={trialName} trialExpiresAt={overview.trialExpiresAt} />
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="space-y-5">
@@ -162,8 +203,9 @@ export function TrialExpiredBilling(props: {
           onOpenChange={setSubscribeOpen}
         />
       ) : null}
-      {freeOpen ? <FreeDowngradeDialog open onOpenChange={setFreeOpen} /> : null}
-      <p className="sr-only">Your {trialName} trial has ended.</p>
+      {freeOpen ? (
+        <FreeDowngradeDialog open onOpenChange={setFreeOpen} cancelLabel="Back to plans" />
+      ) : null}
     </div>
   )
 }

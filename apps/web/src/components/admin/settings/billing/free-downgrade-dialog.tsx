@@ -29,6 +29,8 @@ export function PlanDowngradeDialog(props: {
   planId: string
   planName: string
   checkout?: PlanDowngradeCheckout
+  /** The way out. An ended trial has no current plan to keep, so it goes back to the plans. */
+  cancelLabel?: string
 }) {
   const queryClient = useQueryClient()
   const [issues, setIssues] = useState<PlanDowngradeIssue[]>([])
@@ -76,9 +78,13 @@ export function PlanDowngradeDialog(props: {
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Action required before downgrading</DialogTitle>
+          <DialogTitle>
+            {blocked ? 'Action required before downgrading' : `Switch to ${planName}`}
+          </DialogTitle>
           <DialogDescription>
-            Please resolve the following issues before switching to the {planName} plan.
+            {blocked
+              ? `Please resolve the following issues before switching to the ${planName} plan.`
+              : `Check what changes on ${planName}, then confirm.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -130,7 +136,7 @@ export function PlanDowngradeDialog(props: {
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => void keepCurrentPlan()}>
-            Keep current plan
+            {props.cancelLabel ?? 'Keep current plan'}
           </Button>
           {blocked || loading || error ? (
             <Button type="button" disabled>
@@ -173,6 +179,7 @@ export function PlanDowngradeDialog(props: {
 export function FreeDowngradeDialog(props: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  cancelLabel?: string
 }) {
   return <PlanDowngradeDialog {...props} planId="free" planName="Free" />
 }

@@ -1,7 +1,11 @@
 import { kvDel, kvGet, kvSet } from '@/lib/server/kv/pg-kv'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { isAdminPathAllowedDuringDowngradeLock } from '@/lib/shared/billing/plan-downgrade-lock'
-import { planRank } from '@/lib/shared/billing/plan-action'
+import {
+  adminBillingLock,
+  isAdminPathAllowedDuringTrialChoice,
+} from '@/lib/shared/billing/plan-downgrade-lock'
+import { pendingDowngradeIsLive } from '@/lib/shared/billing/pending-downgrade-state'
+import { trialChoiceDueAt } from '@/lib/shared/billing/trial-state'
 import {
   canonicalPlanId,
   isPlanId,
@@ -37,27 +41,50 @@ export function pendingPlanName(planId: PlanId, catalogueName?: string | null): 
 }
 
 /**
- * True when a billing manager with a live quota-blocked downgrade tries to
- * leave settings (and the posts inbox). Stale rows for a plan the workspace
- * already sits on or below are dropped.
+ * True when a billing manager must stay on billing pages: a quota-blocked
+ * downgrade is pending and this path is outside the pages that resolve it, or
+ * a trial ended two days ago and nobody has chosen a plan. Stale pending rows,
+ * for a plan the workspace already sits on or below, are dropped.
  */
 export async function shouldLockAdminToBilling(
   pathname: string,
-  permissions: readonly string[]
+  permissions: readonly string[],
+  now: Date = new Date()
 ): Promise<boolean> {
-  if (isAdminPathAllowedDuringDowngradeLock(pathname)) return false
   if (!permissions.includes(PERMISSIONS.BILLING_MANAGE)) return false
-  const pending = await getPendingDowngrade()
-  if (!pending) return false
+  // Both locks leave the plan picker open, so skip the reads there.
+  if (isAdminPathAllowedDuringTrialChoice(pathname)) return false
   const { getCloudConfig } = await import('../settings/cloud/cloud.service')
-  const cloud = await getCloudConfig()
+  const [cloud, stored] = await Promise.all([getCloudConfig(), getPendingDowngrade()])
   if (!cloud.enabled || !cloud.plan) {
-    await clearPendingDowngrade()
+    if (stored) await clearPendingDowngrade()
     return false
   }
-  if (planRank(cloud.plan) <= planRank(pending.planId)) {
+  const dueAt = trialChoiceDueAt({
+    plan: cloud.plan,
+    trialActive: cloud.trialActive,
+    trialExpiresAt: cloud.trialExpiresAt,
+    status: cloud.subscriptionStatus,
+    now,
+  })
+  let pending = stored
+  if (
+    pending &&
+    !pendingDowngradeIsLive({
+      currentPlan: cloud.plan,
+      pendingPlan: pending.planId,
+      trialUndecided: dueAt !== null,
+    })
+  ) {
     await clearPendingDowngrade()
-    return false
+    pending = null
   }
-  return true
+  const lock = adminBillingLock({
+    pathname,
+    pendingDowngrade: pending !== null,
+    // Only gate when the plan picker can act on the choice.
+    trialChoiceDueAt: cloud.canUpgrade ? dueAt : null,
+    now,
+  })
+  return lock !== null
 }
