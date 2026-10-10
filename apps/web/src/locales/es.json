@@ -92,7 +92,7 @@
   "widget.messages.ask": "Haz una pregunta",
   "widget.messages.empty": "Aún no hay conversaciones",
   "widget.tickets.empty": "Aún no hay tickets",
-  "widget.tickets.emptyHint": "Abre un ticket y le haremos seguimiento por ti.",
+  "widget.tickets.emptyHint": "Los tickets que abra tu equipo aparecerán aquí.",
   "widget.tickets.new": "Nuevo ticket",
   "widget.tickets.new.subject": "Asunto",
   "widget.tickets.new.subjectPlaceholder": "Resume tu solicitud...",

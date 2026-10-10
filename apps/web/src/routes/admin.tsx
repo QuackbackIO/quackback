@@ -4,7 +4,7 @@ import { IntlProvider } from 'react-intl'
 import { SearchPaletteProvider } from '@/components/admin/ask/search-palette'
 import { AdminWorkspaceFrame } from '@/components/admin/admin-workspace-frame'
 import { useAdminPresence } from '@/lib/client/hooks/use-admin-presence'
-import { DEFAULT_LOCALE, adminSeedMessages, loadMessages } from '@/lib/shared/i18n'
+import { DEFAULT_LOCALE, loadAdminMessages } from '@/lib/shared/i18n'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { isProductEnabled } from '@/lib/shared/types/settings'
@@ -106,7 +106,7 @@ export const Route = createFileRoute('/admin')({
         planNotice: null,
         inLaunchWindow: false,
         locale: DEFAULT_LOCALE,
-        messages: adminSeedMessages(await loadMessages(DEFAULT_LOCALE)),
+        messages: await loadAdminMessages(DEFAULT_LOCALE),
       }
     }
 
@@ -127,7 +127,7 @@ export const Route = createFileRoute('/admin')({
       }),
       getLatestVersion(),
       getPlanNotice(),
-      loadMessages(locale).then(adminSeedMessages),
+      loadAdminMessages(locale),
       // Only cloud loads the help launcher, so only cloud asks whether to hide it.
       context.cloudEnabled
         ? import('@/lib/server/functions/onboarding-progress')

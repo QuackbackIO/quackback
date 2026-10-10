@@ -92,7 +92,7 @@
   "widget.messages.ask": "Задать вопрос",
   "widget.messages.empty": "Диалогов пока нет",
   "widget.tickets.empty": "Пока нет тикетов",
-  "widget.tickets.emptyHint": "Откройте тикет, и мы будем отслеживать его для вас.",
+  "widget.tickets.emptyHint": "Здесь появятся тикеты, которые откроет ваша команда.",
   "widget.tickets.new": "Новый тикет",
   "widget.tickets.new.subject": "Тема",
   "widget.tickets.new.subjectPlaceholder": "Кратко опишите свой запрос...",

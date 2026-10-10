@@ -325,7 +325,7 @@ export function VisitorConversationThread({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const composerPlaceholder = intl.formatMessage({
     id: 'widget.messenger.placeholder',
-    defaultMessage: 'Type your message…',
+    defaultMessage: 'Message...',
   })
 
   // Only the JSON is read: the send gate needs its text on every edit (see

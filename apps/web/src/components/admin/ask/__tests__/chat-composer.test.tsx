@@ -27,7 +27,7 @@ function mount(overrides: Partial<ChatComposerProps> = {}) {
 describe('the focused chat composer', () => {
   it('focuses an accessible multiline question field', () => {
     mount()
-    const input = screen.getByRole('textbox', { name: 'Ask or tell Quackback anything' })
+    const input = screen.getByRole('textbox', { name: 'Ask Copilot anything' })
     expect(input.tagName).toBe('TEXTAREA')
     expect(document.activeElement).toBe(input)
   })

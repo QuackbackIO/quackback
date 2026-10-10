@@ -92,7 +92,7 @@
   "widget.messages.ask": "提问",
   "widget.messages.empty": "暂无对话",
   "widget.tickets.empty": "暂无工单",
-  "widget.tickets.emptyHint": "创建一个工单，我们会为你跟进。",
+  "widget.tickets.emptyHint": "你的团队创建的工单会显示在这里。",
   "widget.tickets.new": "新建工单",
   "widget.tickets.new.subject": "主题",
   "widget.tickets.new.subjectPlaceholder": "概括你的请求…",

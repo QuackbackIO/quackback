@@ -677,11 +677,7 @@ function ReturningSignIn({
       <SetupSteps current="account" />
       <div className="mt-8 mb-8">
         <OnboardingHeading>
-          <FormattedMessage
-            id="onboarding.account.returning.title"
-            defaultMessage="Welcome {br}back"
-            values={{ br: <br /> }}
-          />
+          <FormattedMessage id="onboarding.account.returning.title" defaultMessage="Welcome back" />
         </OnboardingHeading>
         <OnboardingLead>
           <FormattedMessage

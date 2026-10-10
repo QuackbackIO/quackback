@@ -92,7 +92,7 @@
   "widget.messages.ask": "Vraag stellen",
   "widget.messages.empty": "Nog geen gesprekken",
   "widget.tickets.empty": "Nog geen tickets",
-  "widget.tickets.emptyHint": "Open een ticket en we volgen het voor je op.",
+  "widget.tickets.emptyHint": "Tickets die je team opent, verschijnen hier.",
   "widget.tickets.new": "Nieuw ticket",
   "widget.tickets.new.subject": "Onderwerp",
   "widget.tickets.new.subjectPlaceholder": "Vat je verzoek samen…",

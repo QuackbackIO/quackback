@@ -126,7 +126,7 @@ function AssistantAgentSettings() {
             <p className="text-sm text-muted-foreground">
               {intl.formatMessage({
                 id: 'automation.agent.loading',
-                defaultMessage: 'Loading AI agent settings…',
+                defaultMessage: 'Loading AI agent settings...',
               })}
             </p>
           </div>
