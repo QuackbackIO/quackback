@@ -18,6 +18,7 @@ import {
   statusIncidentComponents,
   statusIncidents,
 } from '@/lib/server/db'
+import type { Database, Transaction } from '@/lib/server/db'
 import type { StatusComponentId, StatusComponentGroupId, StatusIncidentId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { assertTrimmedName, nextPosition, positionCaseSql } from '@/lib/server/utils'
@@ -35,6 +36,9 @@ import type {
 } from './status.types'
 
 const log = logger.child({ component: 'status-components' })
+
+/** The global handle, or a transaction a lifecycle write is running in. */
+type Executor = Database | Transaction
 
 function validateName(name: string, label: string): string {
   return assertTrimmedName(
@@ -220,7 +224,10 @@ export async function updateStatusComponent(
   return toComponentRow(updated)
 }
 
-/** Soft delete — keeps incident history (affected-component links) readable. */
+/** Soft delete — keeps incident history (affected-component links) readable.
+ *  Lifecycle writes skip a deleted component (reconcileComponentStatus), and
+ *  the admin incident detail and templates leave it out, so an open incident
+ *  that used it still resolves, and the editor stops resubmitting it. */
 export async function deleteStatusComponent(id: StatusComponentId): Promise<void> {
   const result = await db
     .update(statusComponents)
@@ -260,15 +267,25 @@ export async function setComponentStatus(
   incidentId?: StatusIncidentId | null
 ): Promise<void> {
   const existing = await getComponentOrThrow(componentId)
+  await writeComponentStatus(existing, status, source, incidentId, db)
+}
+
+async function writeComponentStatus(
+  existing: typeof statusComponents.$inferSelect,
+  status: StatusComponentStatus,
+  source: StatusComponentEventSource,
+  incidentId: StatusIncidentId | null | undefined,
+  executor: Executor
+): Promise<void> {
   if (existing.status === status) return
 
-  await db
+  await executor
     .update(statusComponents)
     .set({ status, updatedAt: new Date() })
-    .where(eq(statusComponents.id, componentId))
+    .where(eq(statusComponents.id, existing.id))
 
-  await db.insert(statusComponentEvents).values({
-    componentId,
+  await executor.insert(statusComponentEvents).values({
+    componentId: existing.id,
     status,
     source,
     incidentId: incidentId ?? null,
@@ -277,13 +294,13 @@ export async function setComponentStatus(
   if (source === 'manual' || source === 'api') {
     const actor: EventActor = { type: 'service', displayName: source }
     await dispatchStatusEvent('status.component_changed', actor, {
-      componentId,
+      componentId: existing.id,
       componentName: existing.name,
       previousStatus: existing.status,
       status,
       source,
     }).catch((err) =>
-      log.error({ err, component_id: componentId }, 'failed to dispatch status.component_changed')
+      log.error({ err, component_id: existing.id }, 'failed to dispatch status.component_changed')
     )
   }
 }
@@ -296,13 +313,25 @@ const STATUS_WEIGHT: Record<StatusComponentStatus, number> = {
   major_outage: 4,
 }
 
-/** Recompute a component from every currently active incident/window. */
+/**
+ * Recompute a component from every currently active incident/window. A
+ * soft-deleted component is skipped rather than thrown on: it is off the page
+ * and has no live status, but an incident that still links to it must stay
+ * resolvable, reopenable and deletable, and its other components must still
+ * be recomputed. Pass `executor` to run inside the caller's transaction.
+ */
 export async function reconcileComponentStatus(
   componentId: StatusComponentId,
   source: StatusComponentEventSource,
-  incidentId?: StatusIncidentId | null
+  incidentId?: StatusIncidentId | null,
+  executor: Executor = db
 ): Promise<void> {
-  const active = await db
+  const component = await executor.query.statusComponents.findFirst({
+    where: and(eq(statusComponents.id, componentId), isNull(statusComponents.deletedAt)),
+  })
+  if (!component) return
+
+  const active = await executor
     .select({ status: statusIncidentComponents.componentStatus })
     .from(statusIncidentComponents)
     .innerJoin(statusIncidents, eq(statusIncidents.id, statusIncidentComponents.incidentId))
@@ -321,7 +350,7 @@ export async function reconcileComponentStatus(
     (worst, row) => (STATUS_WEIGHT[row.status] > STATUS_WEIGHT[worst] ? row.status : worst),
     'operational'
   )
-  await setComponentStatus(componentId, effective, source, incidentId)
+  await writeComponentStatus(component, effective, source, incidentId, executor)
 }
 
 // ============================================================================

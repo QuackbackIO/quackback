@@ -13,6 +13,7 @@ import {
   asc,
   gte,
   ilike,
+  inArray,
   lt,
   or,
   sql,
@@ -22,6 +23,8 @@ import {
   statusComponents,
   statusComponentEvents,
   statusIncidentTemplates,
+  type Database,
+  type Transaction,
 } from '@/lib/server/db'
 import type {
   StatusIncidentId,
@@ -45,10 +48,12 @@ import type {
   StatusIncidentTemplateRow,
   ListStatusIncidentsParams,
   StatusIncidentListResult,
-  StatusComponentStatus,
 } from './status.types'
 
 const log = logger.child({ component: 'status-service' })
+
+/** The global handle, or the transaction a lifecycle write is running in. */
+type Executor = Database | Transaction
 
 function validateTitle(title: string): string {
   const trimmed = title.trim()
@@ -80,6 +85,19 @@ function appliesComponentStatusNow(input: {
   return true
 }
 
+/** The subset of `ids` that are live (not soft-deleted) services. */
+async function liveComponentIds(
+  ids: StatusComponentId[],
+  executor: Executor
+): Promise<Set<StatusComponentId>> {
+  if (ids.length === 0) return new Set()
+  const rows = await executor
+    .select({ id: statusComponents.id })
+    .from(statusComponents)
+    .where(and(inArray(statusComponents.id, ids), isNull(statusComponents.deletedAt)))
+  return new Set(rows.map((r) => r.id))
+}
+
 // ============================================================================
 // Create
 // ============================================================================
@@ -106,48 +124,65 @@ export async function createIncident(
   const startedAt = input.backfill?.startedAt ?? new Date()
   const resolvedAt = input.backfill?.resolvedAt ?? null
 
-  const [incident] = await db
-    .insert(statusIncidents)
-    .values({
-      kind: input.kind,
-      title,
+  // One transaction: the row, its links, the first update and the component
+  // statuses it applies land together or not at all, so a failure part-way
+  // can't leave a published incident with no timeline or no services.
+  const incident = await db.transaction(async (tx) => {
+    const requested = input.affectedComponents.map((c) => c.componentId)
+    const live = await liveComponentIds(requested, tx)
+    if (requested.some((id) => !live.has(id))) {
+      throw new ValidationError(
+        'VALIDATION_ERROR',
+        'An affected service no longer exists. Refresh the page and choose the services again.'
+      )
+    }
+
+    const [created] = await tx
+      .insert(statusIncidents)
+      .values({
+        kind: input.kind,
+        title,
+        status: input.status,
+        impact,
+        impactOverride: input.kind === 'incident' && !!input.impactOverride,
+        scheduledStartAt: input.scheduledStartAt ?? null,
+        scheduledEndAt: input.scheduledEndAt ?? null,
+        autoStart: input.autoStart ?? true,
+        autoComplete: input.autoComplete ?? true,
+        startedAt,
+        resolvedAt,
+        backfilled,
+        createdBy: author.principalId,
+      })
+      .returning()
+
+    await tx.insert(statusIncidentComponents).values(
+      input.affectedComponents.map((c) => ({
+        incidentId: created.id,
+        componentId: c.componentId,
+        componentStatus: c.componentStatus,
+      }))
+    )
+
+    await tx.insert(statusIncidentUpdates).values({
+      incidentId: created.id,
       status: input.status,
-      impact,
-      impactOverride: input.kind === 'incident' && !!input.impactOverride,
-      scheduledStartAt: input.scheduledStartAt ?? null,
-      scheduledEndAt: input.scheduledEndAt ?? null,
-      autoStart: input.autoStart ?? true,
-      autoComplete: input.autoComplete ?? true,
-      startedAt,
-      resolvedAt,
-      backfilled,
+      body,
       createdBy: author.principalId,
+      templateId: input.templateId ?? null,
     })
-    .returning()
 
-  await db.insert(statusIncidentComponents).values(
-    input.affectedComponents.map((c) => ({
-      incidentId: incident.id,
-      componentId: c.componentId,
-      componentStatus: c.componentStatus,
-    }))
-  )
-
-  await db.insert(statusIncidentUpdates).values({
-    incidentId: incident.id,
-    status: input.status,
-    body,
-    createdBy: author.principalId,
-    templateId: input.templateId ?? null,
+    if (appliesComponentStatusNow({ kind: created.kind, status: created.status, backfilled })) {
+      const source = created.kind === 'incident' ? 'incident' : 'maintenance'
+      for (const c of input.affectedComponents) {
+        await reconcileComponentStatus(c.componentId, source, created.id, tx)
+      }
+    }
+    return created
   })
 
-  if (appliesComponentStatusNow({ kind: incident.kind, status: incident.status, backfilled })) {
-    const source = incident.kind === 'incident' ? 'incident' : 'maintenance'
-    for (const c of input.affectedComponents) {
-      await reconcileComponentStatus(c.componentId, source, incident.id)
-    }
-  }
-
+  // Jobs and the publish notification reach outside this database, so they
+  // run only once the rows above are committed.
   if (incident.kind === 'maintenance') {
     await enqueueMaintenanceJobs(incident).catch((err) =>
       log.error({ err, incident_id: incident.id }, 'failed to enqueue maintenance jobs')
@@ -182,36 +217,66 @@ export async function updateIncident(
   if (input.autoStart !== undefined) updateData.autoStart = input.autoStart
   if (input.autoComplete !== undefined) updateData.autoComplete = input.autoComplete
 
-  let newComponentStatuses: StatusComponentStatus[] | null = null
-  if (input.affectedComponents !== undefined) {
-    if (input.affectedComponents.length === 0) {
-      throw new ValidationError('VALIDATION_ERROR', 'At least one affected component is required')
-    }
-    newComponentStatuses = input.affectedComponents.map((c) => c.componentStatus)
+  if (input.affectedComponents !== undefined && input.affectedComponents.length === 0) {
+    throw new ValidationError('VALIDATION_ERROR', 'At least one affected component is required')
   }
-
   if (input.impactOverride !== undefined) {
     updateData.impactOverride = existing.kind === 'incident' && input.impactOverride
   }
   const impactOverride =
     (updateData.impactOverride as boolean | undefined) ?? existing.impactOverride
-  if (existing.kind === 'incident') {
-    if (impactOverride && input.impact !== undefined) {
-      updateData.impact = input.impact
-    } else if (!impactOverride && newComponentStatuses) {
-      updateData.impact = deriveImpact(newComponentStatuses)
+
+  await db.transaction(async (tx) => {
+    // A link to a service deleted since is history: it stays as it is, and a
+    // stale editor that sends the deleted service back doesn't relink it.
+    let previousLinks: { componentId: StatusComponentId }[] = []
+    let nextComponents = input.affectedComponents
+    let live = new Set<StatusComponentId>()
+    if (input.affectedComponents !== undefined) {
+      previousLinks = await tx.query.statusIncidentComponents.findMany({
+        where: eq(statusIncidentComponents.incidentId, id),
+      })
+      live = await liveComponentIds(
+        [
+          ...new Set([
+            ...previousLinks.map((link) => link.componentId),
+            ...input.affectedComponents.map((c) => c.componentId),
+          ]),
+        ],
+        tx
+      )
+      nextComponents = input.affectedComponents.filter((c) => live.has(c.componentId))
+      if (nextComponents.length === 0) {
+        throw new ValidationError('VALIDATION_ERROR', 'At least one affected component is required')
+      }
     }
-  }
 
-  await db.update(statusIncidents).set(updateData).where(eq(statusIncidents.id, id))
+    if (existing.kind === 'incident') {
+      if (impactOverride && input.impact !== undefined) {
+        updateData.impact = input.impact
+      } else if (!impactOverride && nextComponents) {
+        updateData.impact = deriveImpact(nextComponents.map((c) => c.componentStatus))
+      }
+    }
 
-  if (input.affectedComponents !== undefined) {
-    const previousLinks = await db.query.statusIncidentComponents.findMany({
-      where: eq(statusIncidentComponents.incidentId, id),
-    })
-    await db.delete(statusIncidentComponents).where(eq(statusIncidentComponents.incidentId, id))
-    await db.insert(statusIncidentComponents).values(
-      input.affectedComponents.map((c) => ({
+    await tx.update(statusIncidents).set(updateData).where(eq(statusIncidents.id, id))
+
+    if (nextComponents === undefined) return
+    const replaced = previousLinks
+      .map((link) => link.componentId)
+      .filter((componentId) => live.has(componentId))
+    if (replaced.length > 0) {
+      await tx
+        .delete(statusIncidentComponents)
+        .where(
+          and(
+            eq(statusIncidentComponents.incidentId, id),
+            inArray(statusIncidentComponents.componentId, replaced)
+          )
+        )
+    }
+    await tx.insert(statusIncidentComponents).values(
+      nextComponents.map((c) => ({
         incidentId: id,
         componentId: c.componentId,
         componentStatus: c.componentStatus,
@@ -228,14 +293,14 @@ export async function updateIncident(
     if (nowLive) {
       const source = existing.kind === 'incident' ? 'incident' : 'maintenance'
       const affected = new Set([
-        ...previousLinks.map((link) => link.componentId),
-        ...input.affectedComponents.map((component) => component.componentId),
+        ...replaced,
+        ...nextComponents.map((component) => component.componentId),
       ])
       for (const componentId of affected) {
-        await reconcileComponentStatus(componentId, source, id)
+        await reconcileComponentStatus(componentId, source, id, tx)
       }
     }
-  }
+  })
 
   if (
     existing.kind === 'maintenance' &&
@@ -273,14 +338,6 @@ export async function postIncidentUpdate(
   const existing = await requireIncident(id)
   const body = validateBody(input.body)
 
-  await db.insert(statusIncidentUpdates).values({
-    incidentId: id,
-    status: input.status,
-    body,
-    createdBy: author.principalId,
-    templateId: input.templateId ?? null,
-  })
-
   const becomesTerminal = input.status === TERMINAL_STATUS[existing.kind]
   // Posting 'in_progress' on a still-'scheduled' window is a real start:
   // pull the start bound to now (job guards + uptime derivation read it),
@@ -297,20 +354,37 @@ export async function postIncidentUpdate(
     updateData.resolvedAt = new Date()
   }
   if (startsMaintenance) {
+    updateData.scheduledStartAt = new Date()
+  }
+
+  // The timeline row, the status change and the component statuses it moves
+  // commit together, so a failure part-way can't leave an incident marked
+  // resolved while some of its services were never restored.
+  await db.transaction(async (tx) => {
+    await tx.insert(statusIncidentUpdates).values({
+      incidentId: id,
+      status: input.status,
+      body,
+      createdBy: author.principalId,
+      templateId: input.templateId ?? null,
+    })
+    await tx.update(statusIncidents).set(updateData).where(eq(statusIncidents.id, id))
+
+    if (startsMaintenance || (becomesTerminal && !input.skipRestore)) {
+      const links = await tx.query.statusIncidentComponents.findMany({
+        where: eq(statusIncidentComponents.incidentId, id),
+      })
+      const source = existing.kind === 'incident' ? 'incident' : 'maintenance'
+      for (const link of links) {
+        await reconcileComponentStatus(link.componentId, source, id, tx)
+      }
+    }
+  })
+
+  if (startsMaintenance) {
     await cancelMaintenanceJobs(existing).catch((err) =>
       log.error({ err, incident_id: id }, 'failed to cancel maintenance jobs on manual start')
     )
-    updateData.scheduledStartAt = new Date()
-  }
-  await db.update(statusIncidents).set(updateData).where(eq(statusIncidents.id, id))
-
-  if (startsMaintenance) {
-    const links = await db.query.statusIncidentComponents.findMany({
-      where: eq(statusIncidentComponents.incidentId, id),
-    })
-    for (const link of links) {
-      await reconcileComponentStatus(link.componentId, 'maintenance', id)
-    }
     await enqueueMaintenanceJobs({
       ...existing,
       status: 'in_progress',
@@ -318,16 +392,6 @@ export async function postIncidentUpdate(
     }).catch((err) =>
       log.error({ err, incident_id: id }, 'failed to re-enqueue maintenance jobs on manual start')
     )
-  }
-
-  if (becomesTerminal && !input.skipRestore) {
-    const links = await db.query.statusIncidentComponents.findMany({
-      where: eq(statusIncidentComponents.incidentId, id),
-    })
-    const source = existing.kind === 'incident' ? 'incident' : 'maintenance'
-    for (const link of links) {
-      await reconcileComponentStatus(link.componentId, source, id)
-    }
   }
 
   const actor: EventActor = author.principalId
@@ -418,7 +482,9 @@ export async function getStatusIncidentById(
     })
     .from(statusIncidentComponents)
     .innerJoin(statusComponents, eq(statusIncidentComponents.componentId, statusComponents.id))
-    .where(eq(statusIncidentComponents.incidentId, id))
+    // A deleted service is off the page and out of the picker; leaving it out
+    // here keeps the editor from resubmitting it on every autosave.
+    .where(and(eq(statusIncidentComponents.incidentId, id), isNull(statusComponents.deletedAt)))
 
   const updates = await db.query.statusIncidentUpdates.findMany({
     where: eq(statusIncidentUpdates.incidentId, id),
@@ -659,7 +725,20 @@ export async function listStatusIncidentTemplates(): Promise<StatusIncidentTempl
     .groupBy(statusIncidentUpdates.templateId)
   const usageByTemplate = new Map(usageRows.map((r) => [r.templateId, r.count]))
 
-  return rows.map((row) => toTemplateRow(row, usageByTemplate.get(row.id) ?? 0))
+  // A template can still name a service deleted after it was saved. Offer
+  // only the live ones, or applying it would submit a service that no longer
+  // exists.
+  const live = await liveComponentIds(
+    [...new Set(rows.flatMap((r) => r.componentIds))] as StatusComponentId[],
+    db
+  )
+
+  return rows.map((row) =>
+    toTemplateRow(
+      { ...row, componentIds: row.componentIds.filter((id) => live.has(id as StatusComponentId)) },
+      usageByTemplate.get(row.id) ?? 0
+    )
+  )
 }
 
 export async function createStatusIncidentTemplate(

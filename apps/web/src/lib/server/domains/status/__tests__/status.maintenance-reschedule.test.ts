@@ -22,9 +22,10 @@ const mockUpdatesInsertValues = vi.fn()
 const mockReconcileComponentStatus = vi.fn()
 const mockDispatchStatusEvent = vi.fn().mockResolvedValue(undefined)
 
-vi.mock('@/lib/server/db', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/server/db')>()),
-  db: {
+vi.mock('@/lib/server/db', async (importOriginal) => {
+  // Lifecycle writes run in a transaction; the mock hands the same stubs in
+  // as the transaction handle.
+  const db = {
     query: {
       statusIncidents: { findFirst: (...args: unknown[]) => mockIncidentFindFirst(...args) },
       statusIncidentComponents: {
@@ -43,8 +44,10 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
         return Promise.resolve()
       },
     }),
-  },
-}))
+    transaction: (fn: (tx: unknown) => unknown) => fn(db),
+  }
+  return { ...(await importOriginal<typeof import('@/lib/server/db')>()), db }
+})
 
 vi.mock('../status.components', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../status.components')>()),
@@ -125,7 +128,8 @@ describe('handleMaintenanceStart — stale reschedule boundary', () => {
     expect(mockReconcileComponentStatus).toHaveBeenCalledWith(
       COMPONENT_ID,
       'maintenance',
-      INCIDENT_B
+      INCIDENT_B,
+      expect.anything()
     )
     expect(mockDispatchStatusEvent).toHaveBeenCalledWith(
       'status.maintenance_started',
