@@ -129,9 +129,11 @@ export async function handleMaintenanceStart(incidentId: StatusIncidentId): Prom
   if (!incident.scheduledStartAt || incident.scheduledStartAt.getTime() > Date.now()) return
 
   const links = await db.transaction(async (tx) => {
+    // started_at becomes the real start; until now it held the planned one.
+    const now = new Date()
     await tx
       .update(statusIncidents)
-      .set({ status: 'in_progress', updatedAt: new Date() })
+      .set({ status: 'in_progress', startedAt: now, updatedAt: now })
       .where(eq(statusIncidents.id, incidentId))
 
     const links = await affectedComponentIds(incidentId, tx)

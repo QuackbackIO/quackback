@@ -68,12 +68,15 @@ export function ScheduleMaintenanceDialog({
   // The window bounds are required: a date-less window with autoStart on
   // would sit in 'scheduled' forever (no job is ever enqueued for a null
   // start bound).
+  const windowOutOfOrder =
+    !!scheduledStart && !!scheduledEnd && scheduledEnd.getTime() <= scheduledStart.getTime()
   const canSubmit =
     title.trim().length > 0 &&
     body.trim().length > 0 &&
     affected.length > 0 &&
     !!scheduledStart &&
-    !!scheduledEnd
+    !!scheduledEnd &&
+    !windowOutOfOrder
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -177,6 +180,11 @@ export function ScheduleMaintenanceDialog({
                 minDate={scheduledStart}
               />
             </div>
+            {windowOutOfOrder && (
+              <p className="col-span-2 text-xs text-destructive">
+                The end must be after the start.
+              </p>
+            )}
             <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
               <Switch checked={autoStart} onCheckedChange={setAutoStart} />
               Auto-start at scheduled time

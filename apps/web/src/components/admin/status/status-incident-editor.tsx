@@ -85,6 +85,12 @@ function detailsFromIncident(incident: StatusIncidentAdminDetail): DetailsState 
   }
 }
 
+/** A window's end must come after its start (the server rejects it too). */
+function windowInOrder(details: Pick<DetailsState, 'scheduledStart' | 'scheduledEnd'>): boolean {
+  const { scheduledStart, scheduledEnd } = details
+  return !scheduledStart || !scheduledEnd || scheduledEnd.getTime() > scheduledStart.getTime()
+}
+
 function formatDuration(startIso: string, endIso: string | null): string {
   const start = new Date(startIso).getTime()
   const end = endIso ? new Date(endIso).getTime() : Date.now()
@@ -140,6 +146,7 @@ function StatusIncidentEditorContent({
   const { mutateAsync: saveDetailsAsync } = updateMutation
   async function flushSave(next: DetailsState, kind: 'incident' | 'maintenance') {
     if (next.title.trim().length === 0 || next.affected.length === 0) return
+    if (kind === 'maintenance' && !windowInOrder(next)) return
     setSaveState('saving')
     try {
       await saveDetailsAsync({
@@ -475,6 +482,11 @@ function EditorSidebarContent({
                 onChange={(d) => onPatch({ scheduledEnd: d })}
               />
             </div>
+            {!windowInOrder(details) && (
+              <p className="text-[11px] text-destructive">
+                The end must be after the start. Changes are not saved until it is.
+              </p>
+            )}
             <label className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
               Auto-start at scheduled time
               <Switch
@@ -507,14 +519,21 @@ function EditorSidebarContent({
       </SideSection>
 
       <SideSection label="Started">
-        <p className="text-sm">
-          <TimeAgo date={incident.startedAt} />
-        </p>
-        <p className="text-[11px] text-muted-foreground">
-          {incident.resolvedAt
-            ? `Lasted ${formatDuration(incident.startedAt, incident.resolvedAt)}`
-            : `Ongoing for ${formatDuration(incident.startedAt, null)}`}
-        </p>
+        {incident.kind === 'maintenance' && incident.status === 'scheduled' ? (
+          // Until a window starts, startedAt only holds its planned start.
+          <p className="text-sm text-muted-foreground">Not started yet</p>
+        ) : (
+          <>
+            <p className="text-sm">
+              <TimeAgo date={incident.startedAt} />
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              {incident.resolvedAt
+                ? `Lasted ${formatDuration(incident.startedAt, incident.resolvedAt)}`
+                : `Ongoing for ${formatDuration(incident.startedAt, null)}`}
+            </p>
+          </>
+        )}
       </SideSection>
 
       <SideSection label="Title">

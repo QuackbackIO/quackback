@@ -15,6 +15,8 @@ import {
   StatusSubscribeButton,
   LIFECYCLE_STYLE,
   LIFECYCLE_LABEL,
+  formatMaintenanceWindow,
+  statusIncidentDate,
 } from '@/components/portal/status'
 import type { StatusUptimeDay } from '@/components/portal/status'
 
@@ -65,35 +67,6 @@ function formatUtcDayLong(dateStr: string, locale: string): string {
     year: 'numeric',
     timeZone: 'UTC',
   })
-}
-
-function formatMaintenanceWindow(
-  startIso: string | null,
-  endIso: string | null,
-  locale: string
-): string {
-  if (!startIso) return ''
-  const start = new Date(startIso)
-  const dayLabel = start.toLocaleDateString(locale, {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    timeZone: 'UTC',
-  })
-  const startTime = start.toLocaleTimeString(locale, {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-    timeZone: 'UTC',
-  })
-  if (!endIso) return `${dayLabel} · ${startTime} UTC`
-  const endTime = new Date(endIso).toLocaleTimeString(locale, {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-    timeZone: 'UTC',
-  })
-  return `${dayLabel} · ${startTime} – ${endTime} UTC`
 }
 
 function StatusPage() {
@@ -314,7 +287,7 @@ function StatusPage() {
             {historyItems.map((incident) => (
               <div key={incident.id}>
                 <p className="text-xs text-muted-foreground">
-                  {new Date(incident.startedAt).toLocaleDateString(intl.locale, {
+                  {new Date(statusIncidentDate(incident)).toLocaleDateString(intl.locale, {
                     month: 'long',
                     day: 'numeric',
                     year: 'numeric',

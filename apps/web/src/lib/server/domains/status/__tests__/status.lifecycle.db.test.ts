@@ -6,11 +6,14 @@
  * Event dispatch and the delayed-job scheduler are stubbed; everything else
  * runs for real inside the fixture's always-rolled-back transaction.
  */
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createId, type PrincipalId, type StatusComponentId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
   eq,
+  sql,
   principal,
   statusComponents,
   statusIncidentComponents,
@@ -44,7 +47,12 @@ import {
   postIncidentUpdate,
   updateIncident,
 } from '../status.service'
-import { handleMaintenanceComplete, reconcileMaintenanceWindows } from '../status.maintenance'
+import {
+  handleMaintenanceComplete,
+  handleMaintenanceStart,
+  reconcileMaintenanceWindows,
+  startMaintenanceNow,
+} from '../status.maintenance'
 import { getStatusPageSnapshot } from '../status.public'
 
 const fixture = await createDbTestFixture({
@@ -77,6 +85,27 @@ async function openIncident(
     },
     { principalId: author }
   )
+}
+
+async function scheduleWindow(start: Date, end: Date | null) {
+  const db = await service('Database')
+  return createIncident(
+    {
+      kind: 'maintenance',
+      title: 'Upgrade',
+      status: 'scheduled',
+      body: 'Planned upgrade.',
+      affectedComponents: [{ componentId: db, componentStatus: 'under_maintenance' }],
+      scheduledStartAt: start,
+      scheduledEndAt: end,
+      notifySubscribers: false,
+    },
+    { principalId: author }
+  )
+}
+
+function isRecent(date: Date) {
+  return Math.abs(Date.now() - date.getTime()) < 60_000
 }
 
 async function statusOf(id: StatusComponentId) {
@@ -380,6 +409,109 @@ describe('status lifecycle (Postgres)', () => {
 
       await reconcileMaintenanceWindows()
       expect((await getStatusIncidentById(window.id)).status).toBe('scheduled')
+    })
+  })
+
+  describe('maintenance start time', () => {
+    it('holds the planned start until the window starts, and follows a reschedule', async () => {
+      const start = new Date(Date.now() + 24 * HOUR)
+      const window = await scheduleWindow(start, new Date(start.getTime() + HOUR))
+      expect(window.startedAt.getTime()).toBe(start.getTime())
+
+      const later = new Date(start.getTime() + 2 * HOUR)
+      const moved = await updateIncident(window.id, {
+        scheduledStartAt: later,
+        scheduledEndAt: new Date(later.getTime() + HOUR),
+      })
+      expect(moved.startedAt.getTime()).toBe(later.getTime())
+    })
+
+    it('records the real start when the scheduler starts the window', async () => {
+      const window = await scheduleWindow(new Date(Date.now() - HOUR), new Date(Date.now() + HOUR))
+      await handleMaintenanceStart(window.id)
+      const started = await getStatusIncidentById(window.id)
+      expect(started.status).toBe('in_progress')
+      expect(isRecent(started.startedAt)).toBe(true)
+    })
+
+    it('records the real start on "Start now" and on a posted in-progress update', async () => {
+      const early = await scheduleWindow(new Date(Date.now() + 24 * HOUR), null)
+      await startMaintenanceNow(early.id)
+      expect(isRecent((await getStatusIncidentById(early.id)).startedAt)).toBe(true)
+
+      const posted = await scheduleWindow(new Date(Date.now() + 24 * HOUR), null)
+      const after = await postIncidentUpdate(
+        posted.id,
+        { status: 'in_progress', body: 'Starting early.' },
+        { principalId: author }
+      )
+      expect(isRecent(after.startedAt)).toBe(true)
+    })
+
+    it('rejects a window that ends before it starts, on create and on update', async () => {
+      const start = new Date(Date.now() + 24 * HOUR)
+      await expect(scheduleWindow(start, new Date(start.getTime() - HOUR))).rejects.toBeInstanceOf(
+        ValidationError
+      )
+
+      const window = await scheduleWindow(start, new Date(start.getTime() + HOUR))
+      await expect(
+        updateIncident(window.id, { scheduledEndAt: new Date(start.getTime() - HOUR) })
+      ).rejects.toBeInstanceOf(ValidationError)
+      await expect(
+        updateIncident(window.id, { scheduledStartAt: new Date(start.getTime() + 2 * HOUR) })
+      ).rejects.toBeInstanceOf(ValidationError)
+    })
+
+    it('migration 0298 dates existing windows by their start, and a second run changes nothing', async () => {
+      const day = 24 * HOUR
+      const now = Date.now()
+      const rows = {
+        upcoming: { created: now - day, start: now + day },
+        started: { created: now - 3 * day, start: now - 2 * day },
+        createdUnderWay: { created: now - HOUR, start: now - 2 * HOUR },
+      }
+      const ids: Record<string, string> = {}
+      for (const [name, row] of Object.entries(rows)) {
+        const [inserted] = await testDb
+          .insert(statusIncidents)
+          .values({
+            kind: 'maintenance',
+            title: name,
+            status: 'scheduled',
+            impact: 'maintenance',
+            scheduledStartAt: new Date(row.start),
+            startedAt: new Date(row.created),
+          })
+          .returning({ id: statusIncidents.id })
+        ids[name] = inserted.id
+      }
+      const [incident] = await testDb
+        .insert(statusIncidents)
+        .values({
+          kind: 'incident',
+          title: 'incident',
+          status: 'investigating',
+          scheduledStartAt: new Date(now + day),
+          startedAt: new Date(now - day),
+        })
+        .returning({ id: statusIncidents.id })
+
+      const migration = readFileSync(
+        resolve(process.cwd(), 'packages/db/drizzle/0298_status_maintenance_started_at.sql'),
+        'utf8'
+      )
+      await testDb.execute(sql.raw(migration))
+      await testDb.execute(sql.raw(migration))
+
+      const startedAt = async (id: string) =>
+        (await testDb.query.statusIncidents.findFirst({
+          where: eq(statusIncidents.id, id as never),
+        }))!.startedAt.getTime()
+      expect(await startedAt(ids.upcoming)).toBe(rows.upcoming.start)
+      expect(await startedAt(ids.started)).toBe(rows.started.start)
+      expect(await startedAt(ids.createdUnderWay)).toBe(rows.createdUnderWay.created)
+      expect(await startedAt(incident.id)).toBe(now - day)
     })
   })
 })

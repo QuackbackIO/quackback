@@ -87,6 +87,17 @@ function assertStatusMatchesKind(kind: 'incident' | 'maintenance', status: strin
   )
 }
 
+/** A window must end after it starts. Checked server-side so the API and a
+ *  stale editor can't store a window that auto-completes before it begins. */
+function assertWindowOrder(start: Date | null | undefined, end: Date | null | undefined): void {
+  if (start && end && end.getTime() <= start.getTime()) {
+    throw new ValidationError(
+      'VALIDATION_ERROR',
+      'The scheduled end must be after the scheduled start'
+    )
+  }
+}
+
 /** A maintenance row applies its component statuses at window start
  *  (status.maintenance.ts), not at creation — a future 'scheduled' window
  *  must not show the public page as already under maintenance. Everything
@@ -146,7 +157,16 @@ export async function createIncident(
         ? (input.impact ?? 'none')
         : deriveImpact(componentStatuses)
 
-  const startedAt = input.backfill?.startedAt ?? new Date()
+  assertWindowOrder(input.scheduledStartAt, input.scheduledEndAt)
+
+  // started_at is when the row actually started. A window still 'scheduled'
+  // hasn't, so until it does the column (NOT NULL) holds its planned start;
+  // handleMaintenanceStart / a manual start overwrite it with the real one.
+  const startedAt =
+    input.backfill?.startedAt ??
+    (input.kind === 'maintenance' && input.status === 'scheduled' && input.scheduledStartAt
+      ? input.scheduledStartAt
+      : new Date())
   const resolvedAt = input.backfill?.resolvedAt ?? null
 
   // One transaction: the row, its links, the first update and the component
@@ -244,6 +264,21 @@ export async function updateIncident(
 
   if (input.affectedComponents !== undefined && input.affectedComponents.length === 0) {
     throw new ValidationError('VALIDATION_ERROR', 'At least one affected component is required')
+  }
+  if (input.scheduledStartAt !== undefined || input.scheduledEndAt !== undefined) {
+    assertWindowOrder(
+      input.scheduledStartAt !== undefined ? input.scheduledStartAt : existing.scheduledStartAt,
+      input.scheduledEndAt !== undefined ? input.scheduledEndAt : existing.scheduledEndAt
+    )
+  }
+  // A window that hasn't started keeps its planned start in started_at, so a
+  // reschedule moves it along.
+  if (
+    existing.kind === 'maintenance' &&
+    existing.status === 'scheduled' &&
+    input.scheduledStartAt
+  ) {
+    updateData.startedAt = input.scheduledStartAt
   }
   if (input.impactOverride !== undefined) {
     updateData.impactOverride = existing.kind === 'incident' && input.impactOverride
@@ -404,6 +439,7 @@ export async function postIncidentUpdate(
   }
   if (startsMaintenance) {
     updateData.scheduledStartAt = now
+    updateData.startedAt = now
   }
   // A window moved back across a boundary that has already passed would be
   // pushed straight forward again by the scheduler's sweep (re-completed, or
