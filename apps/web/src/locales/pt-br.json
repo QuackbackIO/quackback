@@ -671,7 +671,7 @@
   "portal.status.componentStatus.partialOutage": "Interrupção parcial",
   "portal.status.componentStatus.majorOutage": "Interrupção total",
   "portal.status.componentStatus.underMaintenance": "Em manutenção",
-  "portal.status.hero.operational": "Todos os sistemas operacionais",
+  "portal.status.hero.operational": "Todos os sistemas operando normalmente",
   "portal.status.hero.degradedPerformance": "Serviço parcialmente degradado",
   "portal.status.hero.partialOutage": "Interrupção parcial do sistema",
   "portal.status.hero.majorOutage": "Interrupção total do sistema",
