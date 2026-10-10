@@ -267,7 +267,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/billing.ts`::fetchPendingDowngradeFn | billing.manage |
 | `lib/server/functions/billing.ts`::beginPlanDowngradeFn | billing.manage |
 | `lib/server/functions/billing.ts`::cancelPlanDowngradeFn | billing.manage |
-| `lib/server/functions/billing.ts`::shouldLockAdminToBillingFn | END_USER (any authenticated) |
+| `lib/server/functions/billing.ts`::getAdminBillingLockFn | END_USER (any authenticated) |
 | `lib/server/functions/blocking.ts`::getPersonBlockStatusFn | people.view |
 | `lib/server/functions/blocking.ts`::blockPersonFn | people.manage |
 | `lib/server/functions/blocking.ts`::unblockPersonFn | people.manage |

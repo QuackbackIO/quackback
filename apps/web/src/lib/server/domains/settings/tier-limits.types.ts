@@ -47,6 +47,8 @@ export interface PlanNotice {
   actionLabel?: string
   /** Expired-trial strip: persistent red, no countdown. */
   ended?: boolean
+  /** Expired-trial strip, billing managers only: when the rest of admin waits on a plan choice. */
+  choiceDueAt?: string
 }
 
 export interface TierLimits {

@@ -22,7 +22,6 @@ import { FileViewerProvider, scrollToMessage } from '@/components/shared/files/f
 import { useHasPermission } from '@/lib/client/use-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { createRouteContextMemo } from '@/lib/client/route-context-memo'
-import { isAdminPathAllowedDuringDowngradeLock } from '@/lib/shared/billing/plan-downgrade-lock'
 import type { requireWorkspaceRole } from '@/lib/server/functions/workspace-utils'
 import { useFeatureFlag, useProductEnabled } from '@/lib/client/hooks/use-root-context'
 import { useToasterLocale } from '@/components/ui/use-toaster-locale'
@@ -76,18 +75,14 @@ export const Route = createFileRoute('/admin')({
       loadAdminGuard(location.href)
     )
 
-    // A pending plan downgrade locks billing managers to the pages where they
-    // can get under the new plan's limits. Only a billing manager of a
-    // workspace with plan billing (cloudEnabled) can be locked, so only they
-    // pay for the check, and it runs on every navigation because the path
-    // decides it.
-    if (
-      context.cloudEnabled &&
-      permissions.includes(PERMISSIONS.BILLING_MANAGE) &&
-      !isAdminPathAllowedDuringDowngradeLock(location.pathname)
-    ) {
-      const { shouldLockAdminToBillingFn } = await import('@/lib/server/functions/billing')
-      if (await shouldLockAdminToBillingFn({ data: { pathname: location.pathname } })) {
+    // Two billing locks keep billing managers on billing pages: a pending plan
+    // downgrade (to the pages where they get under the new plan's limits), and
+    // a trial that ended with no plan chosen, once its grace period is over (to
+    // the plan picker). Only a billing manager of a workspace with plan billing
+    // (cloudEnabled) can be held, so only they load and pay for the check.
+    if (context.cloudEnabled && permissions.includes(PERMISSIONS.BILLING_MANAGE)) {
+      const { holdOnBilling } = await import('@/lib/client/admin-billing-lock')
+      if (await holdOnBilling(location.pathname)) {
         throw redirect({ href: '/admin/settings/billing' })
       }
     }
