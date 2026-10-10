@@ -1,6 +1,7 @@
 import { Button, Heading, Section, Text } from '@react-email/components'
 import { EmailLayout, NotificationFooter } from './email-layout'
 import { typography, button } from './shared-styles'
+import { withLineBreaks } from './line-breaks'
 
 const MAINTENANCE_BLUE = '#3b82f6'
 const MAINTENANCE_BLUE_BG = '#eff6ff'
@@ -9,7 +10,7 @@ const MAINTENANCE_BLUE_BORDER = '#bfdbfe'
 interface StatusMaintenanceScheduledEmailProps {
   workspaceName: string
   maintenanceTitle: string
-  /** Plain text description of the maintenance. */
+  /** Plain text description of the maintenance. Its line breaks are kept. */
   body: string
   /** Pre-formatted display string for the start of the maintenance window. */
   startLabel: string
@@ -59,7 +60,7 @@ export function StatusMaintenanceScheduledEmail({
       <Text style={typography.text}>
         {workspaceName} has scheduled maintenance that may affect its services.
       </Text>
-      {body && <Text style={typography.text}>{body}</Text>}
+      {body && <Text style={typography.text}>{withLineBreaks(body)}</Text>}
 
       {/* Maintenance window */}
       <Section

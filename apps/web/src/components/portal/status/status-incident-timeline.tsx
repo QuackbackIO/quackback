@@ -40,7 +40,8 @@ function formatTimestamp(iso: string, compact: boolean, locale: string): string 
 
 /** Vertical update timeline (from post-activity-timeline's colored
  *  status-pill pattern): latest update first, a colored dot per lifecycle
- *  status, the update body, and its timestamp. */
+ *  status, the update body, and its timestamp. Bodies are plain text typed
+ *  into a textarea, so `whitespace-pre-line` keeps the author's line breaks. */
 export function StatusIncidentTimeline({
   updates,
   compact = false,
@@ -67,7 +68,9 @@ export function StatusIncidentTimeline({
               >
                 {intl.formatMessage(LIFECYCLE_LABEL[update.status])}
               </span>
-              <span className="min-w-0 flex-1 text-muted-foreground">{update.body}</span>
+              <span className="min-w-0 flex-1 whitespace-pre-line text-muted-foreground">
+                {update.body}
+              </span>
               <span className="shrink-0 whitespace-nowrap text-[11px] text-muted-foreground/70">
                 {formatTimestamp(update.createdAt, true, intl.locale)}
               </span>
@@ -98,7 +101,9 @@ export function StatusIncidentTimeline({
                   {formatTimestamp(update.createdAt, false, intl.locale)}
                 </span>
               </div>
-              <p className="mt-1 max-w-[72ch] text-sm text-foreground/90">{update.body}</p>
+              <p className="mt-1 max-w-[72ch] text-sm whitespace-pre-line text-foreground/90">
+                {update.body}
+              </p>
             </div>
           </div>
         )
