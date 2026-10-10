@@ -8,35 +8,35 @@
   "journeys": {
     "doc:portal-home": {
       "dbQueries": 6,
-      "htmlKB": 140
+      "htmlKB": 98.2
     },
     "doc:portal-roadmap": {
       "dbQueries": 4,
-      "htmlKB": 85.4
+      "htmlKB": 43.3
     },
     "doc:portal-changelog": {
       "dbQueries": 0,
-      "htmlKB": 66.9
+      "htmlKB": 21.7
     },
     "doc:portal-post": {
       "dbQueries": 15,
-      "htmlKB": 78.6
+      "htmlKB": 36.9
     },
     "doc:help-center": {
       "dbQueries": 3,
-      "htmlKB": 73.9
+      "htmlKB": 26.3
     },
     "doc:widget": {
       "dbQueries": 19,
-      "htmlKB": 55.8
+      "htmlKB": 40.7
     },
     "doc:portal-home+session": {
       "dbQueries": 14,
-      "htmlKB": 158.1
+      "htmlKB": 116.5
     },
     "doc:portal-changelog+session": {
       "dbQueries": 5,
-      "htmlKB": 72.7
+      "htmlKB": 27.1
     },
     "doc:admin-feedback": {
       "dbQueries": 25,
@@ -340,7 +340,7 @@
     },
     "sweep:doc:admin:/admin/settings/workflows": {
       "dbQueries": 7,
-      "htmlKB": 153.2
+      "htmlKB": 79.3
     },
     "sweep:ui:admin:/admin/settings/workflows": {
       "dbQueries": 13,
@@ -834,7 +834,7 @@
     },
     "sweep:doc:admin:/admin/settings/ticket-types": {
       "dbQueries": 8,
-      "htmlKB": 151.3
+      "htmlKB": 77.5
     },
     "sweep:ui:admin:/admin/settings/ticket-types": {
       "dbQueries": 8,
@@ -847,7 +847,7 @@
     },
     "sweep:doc:admin:/admin/settings/widget": {
       "dbQueries": 16,
-      "htmlKB": 190.9
+      "htmlKB": 112.1
     },
     "sweep:ui:admin:/admin/settings/widget": {
       "dbQueries": 77,
@@ -860,7 +860,7 @@
     },
     "sweep:doc:admin:/admin/settings/widget/install": {
       "dbQueries": 17,
-      "htmlKB": 152.7
+      "htmlKB": 78.7
     },
     "sweep:ui:admin:/admin/settings/widget/install": {
       "dbQueries": 17,
@@ -873,7 +873,7 @@
     },
     "sweep:doc:anon:/roadmap": {
       "dbQueries": 4,
-      "htmlKB": 85.4
+      "htmlKB": 43.3
     },
     "sweep:ui:anon:/roadmap": {
       "dbQueries": 11,
@@ -886,7 +886,7 @@
     },
     "sweep:doc:anon:/changelog": {
       "dbQueries": 0,
-      "htmlKB": 66.9
+      "htmlKB": 21.7
     },
     "sweep:ui:anon:/changelog": {
       "dbQueries": 6,
@@ -899,7 +899,7 @@
     },
     "sweep:doc:anon:/hc": {
       "dbQueries": 3,
-      "htmlKB": 73.9
+      "htmlKB": 26.3
     },
     "sweep:ui:anon:/hc": {
       "dbQueries": 3,
@@ -912,7 +912,7 @@
     },
     "sweep:doc:anon:/support": {
       "dbQueries": 0,
-      "htmlKB": 67.6
+      "htmlKB": 22
     },
     "sweep:ui:anon:/support": {
       "dbQueries": 0,
@@ -925,7 +925,7 @@
     },
     "sweep:doc:anon:/notifications": {
       "dbQueries": 0,
-      "htmlKB": 70.4
+      "htmlKB": 24.8
     },
     "sweep:ui:anon:/notifications": {
       "dbQueries": 0,
@@ -938,7 +938,7 @@
     },
     "sweep:doc:admin:/settings/profile": {
       "dbQueries": 11,
-      "htmlKB": 90
+      "htmlKB": 38.9
     },
     "sweep:ui:admin:/settings/profile": {
       "dbQueries": 16,
@@ -951,7 +951,7 @@
     },
     "sweep:doc:admin:/settings/preferences": {
       "dbQueries": 6,
-      "htmlKB": 98.6
+      "htmlKB": 45
     },
     "sweep:ui:admin:/settings/preferences": {
       "dbQueries": 11,
@@ -964,7 +964,7 @@
     },
     "sweep:doc:admin:/notifications": {
       "dbQueries": 5,
-      "htmlKB": 74.5
+      "htmlKB": 29
     },
     "sweep:ui:admin:/notifications": {
       "dbQueries": 18,
@@ -977,7 +977,7 @@
     },
     "sweep:doc:admin:/support": {
       "dbQueries": 5,
-      "htmlKB": 73.9
+      "htmlKB": 28.3
     },
     "sweep:ui:admin:/support": {
       "dbQueries": 10,
