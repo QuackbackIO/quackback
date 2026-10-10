@@ -40,31 +40,31 @@
     },
     "doc:admin-feedback": {
       "dbQueries": 25,
-      "htmlKB": 226
+      "htmlKB": 155.2
     },
     "doc:admin-inbox": {
       "dbQueries": 22,
-      "htmlKB": 173
+      "htmlKB": 96.5
     },
     "doc:admin-roadmap": {
       "dbQueries": 20,
-      "htmlKB": 258.7
+      "htmlKB": 191.2
     },
     "doc:admin-changelog": {
       "dbQueries": 6,
-      "htmlKB": 127.6
+      "htmlKB": 53.5
     },
     "doc:admin-help-center": {
       "dbQueries": 11,
-      "htmlKB": 135.6
+      "htmlKB": 61.5
     },
     "doc:admin-users": {
       "dbQueries": 21,
-      "htmlKB": 183.0
+      "htmlKB": 107
     },
     "doc:admin-settings": {
       "dbQueries": 8,
-      "htmlKB": 152.0
+      "htmlKB": 78.6
     },
     "ui:portal-load": {
       "dbQueries": 6,
@@ -275,7 +275,7 @@
     },
     "sweep:doc:admin:/admin/analytics": {
       "dbQueries": 6,
-      "htmlKB": 127.5
+      "htmlKB": 53.3
     },
     "sweep:ui:admin:/admin/analytics": {
       "dbQueries": 31,
@@ -288,7 +288,7 @@
     },
     "sweep:doc:admin:/admin/settings/agent": {
       "dbQueries": 8,
-      "htmlKB": 150.2
+      "htmlKB": 76.3
     },
     "sweep:ui:admin:/admin/settings/agent": {
       "dbQueries": 16,
@@ -301,7 +301,7 @@
     },
     "sweep:doc:admin:/admin/settings/connectors": {
       "dbQueries": 7,
-      "htmlKB": 154.7
+      "htmlKB": 80.6
     },
     "sweep:ui:admin:/admin/settings/connectors": {
       "dbQueries": 7,
@@ -314,7 +314,7 @@
     },
     "sweep:doc:admin:/admin/settings/copilot": {
       "dbQueries": 6,
-      "htmlKB": 142.9
+      "htmlKB": 68.6
     },
     "sweep:ui:admin:/admin/settings/copilot": {
       "dbQueries": 16,
@@ -327,7 +327,7 @@
     },
     "sweep:doc:admin:/admin/settings/skills": {
       "dbQueries": 7,
-      "htmlKB": 141.3
+      "htmlKB": 67.1
     },
     "sweep:ui:admin:/admin/settings/skills": {
       "dbQueries": 7,
@@ -353,7 +353,7 @@
     },
     "sweep:doc:admin:/admin/changelog": {
       "dbQueries": 6,
-      "htmlKB": 127.6
+      "htmlKB": 53.5
     },
     "sweep:ui:admin:/admin/changelog": {
       "dbQueries": 20,
@@ -366,7 +366,7 @@
     },
     "sweep:doc:admin:/admin/feedback": {
       "dbQueries": 25,
-      "htmlKB": 226
+      "htmlKB": 155.2
     },
     "sweep:ui:admin:/admin/feedback": {
       "dbQueries": 25,
@@ -379,7 +379,7 @@
     },
     "sweep:doc:admin:/admin/help-center": {
       "dbQueries": 11,
-      "htmlKB": 135.6
+      "htmlKB": 61.5
     },
     "sweep:ui:admin:/admin/help-center": {
       "dbQueries": 11,
@@ -392,7 +392,7 @@
     },
     "sweep:doc:admin:/admin/inbox": {
       "dbQueries": 22,
-      "htmlKB": 173
+      "htmlKB": 96.5
     },
     "sweep:ui:admin:/admin/inbox": {
       "dbQueries": 22,
@@ -405,7 +405,7 @@
     },
     "sweep:doc:admin:/admin/notifications": {
       "dbQueries": 6,
-      "htmlKB": 117.6
+      "htmlKB": 43.5
     },
     "sweep:ui:admin:/admin/notifications": {
       "dbQueries": 14,
@@ -418,7 +418,7 @@
     },
     "sweep:doc:admin:/admin/roadmap": {
       "dbQueries": 20,
-      "htmlKB": 258.7
+      "htmlKB": 191.2
     },
     "sweep:ui:admin:/admin/roadmap": {
       "dbQueries": 20,
@@ -431,7 +431,7 @@
     },
     "sweep:doc:admin:/admin/users?sort=newest": {
       "dbQueries": 21,
-      "htmlKB": 183.0
+      "htmlKB": 107
     },
     "sweep:ui:admin:/admin/users?sort=newest": {
       "dbQueries": 21,
@@ -444,7 +444,7 @@
     },
     "sweep:doc:admin:/admin/settings/billing": {
       "dbQueries": 17,
-      "htmlKB": 140.9
+      "htmlKB": 66.7
     },
     "sweep:ui:admin:/admin/settings/billing": {
       "dbQueries": 17,
@@ -457,7 +457,7 @@
     },
     "sweep:doc:admin:/admin/settings/boards": {
       "dbQueries": 8,
-      "htmlKB": 148.7
+      "htmlKB": 74.5
     },
     "sweep:ui:admin:/admin/settings/boards": {
       "dbQueries": 8,
@@ -470,7 +470,7 @@
     },
     "sweep:doc:admin:/admin/settings/changelog": {
       "dbQueries": 8,
-      "htmlKB": 151.4
+      "htmlKB": 77.2
     },
     "sweep:ui:admin:/admin/settings/changelog": {
       "dbQueries": 8,
@@ -483,7 +483,7 @@
     },
     "sweep:doc:admin:/admin/settings/channels": {
       "dbQueries": 8,
-      "htmlKB": 149.9
+      "htmlKB": 75.6
     },
     "sweep:ui:admin:/admin/settings/channels": {
       "dbQueries": 8,
@@ -496,7 +496,7 @@
     },
     "sweep:doc:admin:/admin/settings/channels/email": {
       "dbQueries": 11,
-      "htmlKB": 168.7
+      "htmlKB": 84.8
     },
     "sweep:ui:admin:/admin/settings/channels/email": {
       "dbQueries": 11,
@@ -509,7 +509,7 @@
     },
     "sweep:doc:admin:/admin/settings/channels/github": {
       "dbQueries": 8,
-      "htmlKB": 140.5
+      "htmlKB": 66.3
     },
     "sweep:ui:admin:/admin/settings/channels/github": {
       "dbQueries": 8,
@@ -522,7 +522,7 @@
     },
     "sweep:doc:admin:/admin/settings/channels/messenger": {
       "dbQueries": 6,
-      "htmlKB": 154.0
+      "htmlKB": 79.3
     },
     "sweep:ui:admin:/admin/settings/channels/messenger": {
       "dbQueries": 6,
@@ -535,7 +535,7 @@
     },
     "sweep:doc:admin:/admin/settings/companies": {
       "dbQueries": 7,
-      "htmlKB": 151.9
+      "htmlKB": 78.4
     },
     "sweep:ui:admin:/admin/settings/companies": {
       "dbQueries": 7,
@@ -548,7 +548,7 @@
     },
     "sweep:doc:admin:/admin/settings/conversation-data": {
       "dbQueries": 7,
-      "htmlKB": 157.8
+      "htmlKB": 84
     },
     "sweep:ui:admin:/admin/settings/conversation-data": {
       "dbQueries": 7,
@@ -561,7 +561,7 @@
     },
     "sweep:doc:admin:/admin/settings/developers": {
       "dbQueries": 8,
-      "htmlKB": 154.6
+      "htmlKB": 77.9
     },
     "sweep:ui:admin:/admin/settings/developers": {
       "dbQueries": 8,
@@ -574,7 +574,7 @@
     },
     "sweep:doc:admin:/admin/settings/domains": {
       "dbQueries": 6,
-      "htmlKB": 138.5
+      "htmlKB": 64.3
     },
     "sweep:ui:admin:/admin/settings/domains": {
       "dbQueries": 6,
@@ -587,7 +587,7 @@
     },
     "sweep:doc:admin:/admin/settings/general": {
       "dbQueries": 8,
-      "htmlKB": 152.0
+      "htmlKB": 78.6
     },
     "sweep:ui:admin:/admin/settings/general": {
       "dbQueries": 8,
@@ -600,7 +600,7 @@
     },
     "sweep:doc:admin:/admin/settings/help-center": {
       "dbQueries": 6,
-      "htmlKB": 146.4
+      "htmlKB": 72.2
     },
     "sweep:ui:admin:/admin/settings/help-center": {
       "dbQueries": 6,
@@ -613,7 +613,7 @@
     },
     "sweep:doc:admin:/admin/settings/imports": {
       "dbQueries": 9,
-      "htmlKB": 151.9
+      "htmlKB": 77.8
     },
     "sweep:ui:admin:/admin/settings/imports": {
       "dbQueries": 9,
@@ -626,7 +626,7 @@
     },
     "sweep:doc:admin:/admin/settings/integrations": {
       "dbQueries": 8,
-      "htmlKB": 211.1
+      "htmlKB": 112.8
     },
     "sweep:ui:admin:/admin/settings/integrations": {
       "dbQueries": 8,
@@ -639,7 +639,7 @@
     },
     "sweep:doc:admin:/admin/settings/labs": {
       "dbQueries": 8,
-      "htmlKB": 140.0
+      "htmlKB": 65.6
     },
     "sweep:ui:admin:/admin/settings/labs": {
       "dbQueries": 8,
@@ -652,7 +652,7 @@
     },
     "sweep:doc:admin:/admin/settings/macros": {
       "dbQueries": 7,
-      "htmlKB": 143.4
+      "htmlKB": 69.2
     },
     "sweep:ui:admin:/admin/settings/macros": {
       "dbQueries": 7,
@@ -665,7 +665,7 @@
     },
     "sweep:doc:admin:/admin/settings/members": {
       "dbQueries": 16,
-      "htmlKB": 173
+      "htmlKB": 98.7
     },
     "sweep:ui:admin:/admin/settings/members": {
       "dbQueries": 16,
@@ -678,7 +678,7 @@
     },
     "sweep:doc:admin:/admin/settings/members/roles/new": {
       "dbQueries": 10,
-      "htmlKB": 168.8
+      "htmlKB": 94.6
     },
     "sweep:ui:admin:/admin/settings/members/roles/new": {
       "dbQueries": 10,
@@ -691,7 +691,7 @@
     },
     "sweep:doc:admin:/admin/settings/moderation": {
       "dbQueries": 6,
-      "htmlKB": 148.1
+      "htmlKB": 73.9
     },
     "sweep:ui:admin:/admin/settings/moderation": {
       "dbQueries": 6,
@@ -704,7 +704,7 @@
     },
     "sweep:doc:admin:/admin/settings/notifications": {
       "dbQueries": 7,
-      "htmlKB": 154.1
+      "htmlKB": 82.2
     },
     "sweep:ui:admin:/admin/settings/notifications": {
       "dbQueries": 7,
@@ -717,7 +717,7 @@
     },
     "sweep:doc:admin:/admin/settings/office-hours": {
       "dbQueries": 6,
-      "htmlKB": 142.7
+      "htmlKB": 68.4
     },
     "sweep:ui:admin:/admin/settings/office-hours": {
       "dbQueries": 6,
@@ -730,7 +730,7 @@
     },
     "sweep:doc:admin:/admin/settings/people": {
       "dbQueries": 7,
-      "htmlKB": 147.0
+      "htmlKB": 73.2
     },
     "sweep:ui:admin:/admin/settings/people": {
       "dbQueries": 7,
@@ -743,7 +743,7 @@
     },
     "sweep:doc:admin:/admin/settings/portal": {
       "dbQueries": 6,
-      "htmlKB": 179.7
+      "htmlKB": 105.9
     },
     "sweep:ui:admin:/admin/settings/portal": {
       "dbQueries": 40,
@@ -756,7 +756,7 @@
     },
     "sweep:doc:admin:/admin/settings/security/authentication": {
       "dbQueries": 11,
-      "htmlKB": 155.9
+      "htmlKB": 81.6
     },
     "sweep:ui:admin:/admin/settings/security/authentication": {
       "dbQueries": 11,
@@ -769,7 +769,7 @@
     },
     "sweep:doc:admin:/admin/settings/security/sso/new": {
       "dbQueries": 6,
-      "htmlKB": 153.4
+      "htmlKB": 79.3
     },
     "sweep:ui:admin:/admin/settings/security/sso/new": {
       "dbQueries": 6,
@@ -782,7 +782,7 @@
     },
     "sweep:doc:admin:/admin/settings/sla": {
       "dbQueries": 8,
-      "htmlKB": 148.6
+      "htmlKB": 74.5
     },
     "sweep:ui:admin:/admin/settings/sla": {
       "dbQueries": 8,
@@ -795,7 +795,7 @@
     },
     "sweep:doc:admin:/admin/settings/statuses": {
       "dbQueries": 7,
-      "htmlKB": 168.2
+      "htmlKB": 94.7
     },
     "sweep:ui:admin:/admin/settings/statuses": {
       "dbQueries": 7,
@@ -807,7 +807,7 @@
       "componentRenders": 569
     },
     "sweep:doc:admin:/admin/settings/tags": {
-      "htmlKB": 163.3,
+      "htmlKB": 82.6,
       "dbQueries": 8
     },
     "sweep:ui:admin:/admin/settings/tags": {
@@ -821,7 +821,7 @@
     },
     "sweep:doc:admin:/admin/settings/ticket-statuses": {
       "dbQueries": 7,
-      "htmlKB": 187
+      "htmlKB": 109.2
     },
     "sweep:ui:admin:/admin/settings/ticket-statuses": {
       "dbQueries": 7,
@@ -1044,7 +1044,7 @@
     },
     "sweep:doc:admin:/admin/feedback/moderation": {
       "dbQueries": 18,
-      "htmlKB": 143.5
+      "htmlKB": 69.3
     },
     "sweep:ui:admin:/admin/feedback/moderation": {
       "dbQueries": 18,
