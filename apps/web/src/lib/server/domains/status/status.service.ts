@@ -70,6 +70,23 @@ function validateBody(body: string): string {
   return trimmed
 }
 
+const LIFECYCLE_STATUSES: Record<'incident' | 'maintenance', readonly string[]> = {
+  incident: ['investigating', 'identified', 'monitoring', 'resolved'],
+  maintenance: ['scheduled', 'in_progress', 'verifying', 'completed'],
+}
+
+/** The two kinds share one status column but not one vocabulary: a
+ *  maintenance status on an incident (or the reverse) would never match any
+ *  lifecycle check and strand the row, so reject it as bad input. */
+function assertStatusMatchesKind(kind: 'incident' | 'maintenance', status: string): void {
+  const allowed = LIFECYCLE_STATUSES[kind]
+  if (allowed.includes(status)) return
+  throw new ValidationError(
+    'VALIDATION_ERROR',
+    `"${status}" is not ${kind === 'incident' ? 'an incident' : 'a maintenance'} status. Use one of: ${allowed.join(', ')}.`
+  )
+}
+
 /** A maintenance row applies its component statuses at window start
  *  (status.maintenance.ts), not at creation — a future 'scheduled' window
  *  must not show the public page as already under maintenance. Everything
@@ -115,6 +132,7 @@ export async function createIncident(
 ): Promise<StatusIncidentWithDetails> {
   const title = validateTitle(input.title)
   const body = validateBody(input.body)
+  assertStatusMatchesKind(input.kind, input.status)
   if (input.affectedComponents.length === 0) {
     throw new ValidationError('VALIDATION_ERROR', 'At least one affected component is required')
   }
@@ -344,6 +362,7 @@ export async function postIncidentUpdate(
 ): Promise<StatusIncidentWithDetails> {
   const existing = await requireIncident(id)
   const body = validateBody(input.body)
+  assertStatusMatchesKind(existing.kind, input.status)
 
   const wasTerminal = existing.status === TERMINAL_STATUS[existing.kind]
   const becomesTerminal = input.status === TERMINAL_STATUS[existing.kind]
