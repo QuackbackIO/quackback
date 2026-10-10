@@ -436,9 +436,9 @@
     "sweep:ui:admin:/admin/users?sort=newest": {
       "dbQueries": 21,
       "serverRequests": 1,
-      "requests": 163,
-      "jsRequests": 158,
-      "jsKB": 479.0,
+      "requests": 130,
+      "jsRequests": 126,
+      "jsKB": 432.5,
       "htmlTransferKB": 33.4,
       "componentRenders": 434
     },
