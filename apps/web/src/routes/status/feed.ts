@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { stripHtml, truncate } from '@/lib/shared/utils'
+import { truncate } from '@/lib/shared/utils'
 
 export const Route = createFileRoute('/status/feed')({
   server: {
@@ -157,7 +157,9 @@ function buildRssFeed(options: RssFeedOptions): string {
 
   const items = entries
     .map((entry) => {
-      const truncatedContent = truncate(stripHtml(entry.content), 500)
+      // Status update bodies are plain text: escaping is all they need, and
+      // stripping would drop anything an admin typed that looks like a tag.
+      const truncatedContent = truncate(entry.content, 500)
 
       return `    <item>
       <title>${escapeXml(entry.title)}</title>

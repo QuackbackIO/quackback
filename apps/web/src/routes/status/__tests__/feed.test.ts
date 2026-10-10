@@ -123,6 +123,24 @@ describe('GET /status/feed', () => {
     expect(xml).toContain('<title>A &amp; B &lt;outage&gt; (Investigating)</title>')
   })
 
+  it('keeps text in a plain-text body that looks like markup', async () => {
+    // Bodies are plain text: what the admin typed is what the page shows.
+    listStatusFeedFn.mockResolvedValue([
+      item({
+        updates: [
+          {
+            id: 'status_update_1',
+            status: 'investigating',
+            body: 'Calls to <b>v2</b> fail',
+            createdAt: '2026-10-10T09:00:00.000Z',
+          },
+        ],
+      }),
+    ])
+    const xml = await (await GET()).text()
+    expect(itemsOf(xml)[0].description).toContain('Calls to &lt;b&gt;v2&lt;/b&gt; fail')
+  })
+
   it('still returns a valid, empty feed when the page is gated out', async () => {
     listStatusFeedFn.mockResolvedValue([])
     const xml = await (await GET()).text()
