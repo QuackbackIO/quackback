@@ -66,7 +66,7 @@ export function WhoRepliesFirstCard() {
             >
               {intl.formatMessage({
                 id: 'automation.whoRepliesFirst.manageQuinn',
-                defaultMessage: 'Manage Quinn',
+                defaultMessage: 'Manage the agent',
               })}
             </Link>
           )}

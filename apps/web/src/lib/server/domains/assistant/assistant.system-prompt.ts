@@ -196,7 +196,7 @@ export function buildAssistantRoleProfile(
 
   switch (role) {
     case 'customer_support': {
-      const assistantName = normalizeSystemValue(input.config.identity.name, 'Quinn', 80)
+      const assistantName = normalizeSystemValue(input.config.identity.name, 'Quackback AI', 80)
       const workspaceName = normalizeSystemValue(input.workspaceName, 'this workspace', 160)
       const humanSupport = toolNames.has('handoff_to_human')
         ? `- Hand off when the customer explicitly asks for a person, safety requires human judgment,

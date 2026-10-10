@@ -58,7 +58,7 @@ export function QuinnViewHeader({
           to="/admin/settings/agent"
           className="ms-auto rounded-full px-2.5 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
-          Configure Quinn
+          Configure the agent
         </Link>
       )}
     </div>

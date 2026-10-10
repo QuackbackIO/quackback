@@ -104,7 +104,7 @@ export function AddConnectorDialog({
             {intl.formatMessage({
               id: 'automation.connectors.add.description',
               defaultMessage:
-                'Connect Quinn to an external MCP server. Tools are discovered automatically.',
+                'Connect Quackback AI to an external MCP server. Tools are discovered automatically.',
             })}
           </DialogDescription>
         </DialogHeader>

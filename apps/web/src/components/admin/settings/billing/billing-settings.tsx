@@ -473,7 +473,7 @@ function UsageCard(props: {
         {hasAi && ai ? (
           <div className="px-6 py-4">
             <UsageMeter
-              label="Quinn usage"
+              label="AI usage"
               description={[
                 ai.extraCents > 0
                   ? 'Included usage is used first, then extra credit.'

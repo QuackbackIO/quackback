@@ -30,19 +30,19 @@ function renderCard(assistant?: { enabled?: boolean; respond?: boolean; name?: s
 describe('AssistantLinkCard', () => {
   afterEach(cleanup)
 
-  it('is a row named Quinn that links to AI & Automation', () => {
+  it('is a row named AI agent that links to AI & Automation', () => {
     renderCard({ enabled: true })
     const row = document.querySelector('[data-slot="settings-list-row"]') as HTMLElement
     expect(row.getAttribute('href')).toBe('/admin/settings/agent')
-    expect(row).toHaveTextContent('Quinn')
+    expect(row).toHaveTextContent('AI agent')
     expect(screen.queryByText('Assistant')).toBeNull()
     expect(screen.queryByText(/assistant off/i)).toBeNull()
   })
 
-  it('keeps the name Quinn and marks it Off when it is turned off', () => {
+  it('keeps the name AI agent and marks it Off when it is turned off', () => {
     renderCard({ enabled: false, name: 'Helper' })
     const row = document.querySelector('[data-slot="settings-list-row"]') as HTMLElement
-    expect(row).toHaveTextContent('Quinn')
+    expect(row).toHaveTextContent('AI agent')
     expect(row).toHaveTextContent('Off')
     expect(row).toHaveTextContent('Turn it on in AI & Automation')
   })

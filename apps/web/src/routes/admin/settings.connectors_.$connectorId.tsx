@@ -240,7 +240,7 @@ function ConnectorDetailPage() {
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
         title="Disconnect this connector?"
-        description="Quinn will stop calling its tools. Existing approval cards fail closed."
+        description="Quackback AI will stop calling its tools. Existing approval cards fail closed."
         confirmLabel="Disconnect"
         onConfirm={() => {
           remove.mutate(connector.id, {

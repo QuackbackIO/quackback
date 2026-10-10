@@ -41,7 +41,7 @@ const SAME_AS_ENGLISH_EVERYWHERE = [
   'AI',
   'Copilot',
   'PDF',
-  'Quinn AI',
+  'Quackback AI',
   'jane@example.com',
   'you@example.com',
   'name@company.com',

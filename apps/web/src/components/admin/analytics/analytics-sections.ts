@@ -16,7 +16,7 @@ export const SECTION_NAV_ITEMS: SectionNavItem[] = [
   { key: 'visitors', label: 'Visitors', icon: GlobeAltIcon },
   { key: 'feedback', label: 'Feedback', icon: ENTITY_ICONS.post },
   { key: 'support', label: 'Support', icon: ENTITY_ICONS.conversation },
-  { key: 'ai', label: 'Quinn', icon: SparklesIcon },
+  { key: 'ai', label: 'Quackback AI', icon: SparklesIcon },
   { key: 'changelog', label: 'Changelog', icon: ENTITY_ICONS.changelog },
   { key: 'users', label: 'Users', icon: UsersIcon },
 ]

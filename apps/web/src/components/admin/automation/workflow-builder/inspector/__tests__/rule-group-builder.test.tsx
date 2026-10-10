@@ -326,7 +326,7 @@ describe('RuleGroupBuilder — AI-classified attributes', () => {
     })
     expect(await screen.findByLabelText('AI')).toBeInTheDocument()
     expect(
-      screen.getByText('Classified by Quinn when conversations settle. Requires Inbox AI.')
+      screen.getByText('Classified by Quackback AI when conversations settle. Requires Inbox AI.')
     ).toBeInTheDocument()
     expect(screen.queryByText(/· AI/)).not.toBeInTheDocument()
   })

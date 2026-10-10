@@ -454,10 +454,10 @@ export const HANDOFF_REASON_LABELS: Record<string, string> = {
   explicit_request: 'customer asked for a person',
   frustration: 'customer seemed frustrated',
   repetition: 'customer repeated the issue',
-  low_confidence: "Quinn wasn't confident",
-  capability_limit: 'outside what Quinn can do',
+  low_confidence: "AI agent wasn't confident",
+  capability_limit: 'outside what the AI agent can do',
   safety: 'safety topic',
-  system_error: 'Quinn hit an error',
+  system_error: 'AI agent hit an error',
 }
 
 /** Quinn's activity on one conversation, for the agent details panel. Null when

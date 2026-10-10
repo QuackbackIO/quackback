@@ -393,7 +393,7 @@ function buildStepNodeData(
         tone: 'pink',
         chips: [
           {
-            label: `Escalates after ${assistantEscalatePhrase(ctx.assistantEscalateMinutes ?? ASSISTANT_WAIT_MINUTES_WHEN_AUTO_CLOSE_OFF)} if Quinn can't reply`,
+            label: `Escalates after ${assistantEscalatePhrase(ctx.assistantEscalateMinutes ?? ASSISTANT_WAIT_MINUTES_WHEN_AUTO_CLOSE_OFF)} if the AI agent can't reply`,
             tone: 'amber',
             wrap: true,
           },

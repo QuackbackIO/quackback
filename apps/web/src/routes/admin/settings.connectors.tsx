@@ -67,7 +67,7 @@ function ConnectorsPage() {
       page="/admin/settings/connectors"
       description={intl.formatMessage({
         id: 'automation.connectors.description',
-        defaultMessage: 'Give Quinn tools from external MCP servers.',
+        defaultMessage: 'Give Quackback AI tools from external MCP servers.',
       })}
       actions={addButton}
     >

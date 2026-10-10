@@ -8,7 +8,8 @@ export const WHO_REPLIES_FIRST = {
   steps: [
     {
       id: 'automation.whoRepliesFirst.step1',
-      defaultMessage: "<b>Quinn answers instantly</b> whenever it's enabled, around the clock.",
+      defaultMessage:
+        "<b>The AI agent answers instantly</b> whenever it's enabled, around the clock.",
     },
     {
       id: 'automation.whoRepliesFirst.step2',
@@ -18,7 +19,7 @@ export const WHO_REPLIES_FIRST = {
     {
       id: 'automation.whoRepliesFirst.step3',
       defaultMessage:
-        'When Quinn <b>hands off</b> and a routing workflow is live, <b>the workflow decides the assignment</b>.',
+        'When the AI agent <b>hands off</b> and a routing workflow is live, <b>the workflow decides the assignment</b>.',
     },
   ],
   orderBelowId: 'automation.whoRepliesFirst.orderBelow',

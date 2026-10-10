@@ -133,7 +133,7 @@ describe('buildLaunchTasks', () => {
     expect(task?.isCompleted).toBe(true)
   })
 
-  describe('Set up Quinn', () => {
+  describe('Set up the AI agent', () => {
     const withSupport = { ...base, features: { ...noExtraModules, supportInbox: true } }
     const quinn = (status: LaunchStatus) =>
       buildLaunchTasks(status).find((task) => task.id === 'set-up-quinn')
@@ -165,7 +165,7 @@ describe('buildLaunchTasks', () => {
     it('opens the Agent settings for an assistant manager', () => {
       const task = quinn({ ...withSupport, hasAgentAnswering: false })
       expect(task?.href).toBe('/admin/settings/agent')
-      expect(task?.actionLabel).toBe('Set up Quinn')
+      expect(task?.actionLabel).toBe('Set up the AI agent')
       expect(task?.availability).toBe('available')
     })
 

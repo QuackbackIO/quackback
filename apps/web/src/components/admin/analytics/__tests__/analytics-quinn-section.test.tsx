@@ -169,7 +169,7 @@ describe('AnalyticsQuinnSection', () => {
     hoisted.copilot.mockResolvedValue(COPILOT)
     renderSection(<AnalyticsQuinnSection range={RANGE} periodLabel="Last 30 days" />)
     expect(
-      await screen.findByText("Quinn hasn't handled any conversations this period")
+      await screen.findByText("The AI agent hasn't handled any conversations this period")
     ).toBeInTheDocument()
     expect(screen.queryByText('Outcomes')).toBeNull()
     expect(await screen.findByText('No actions in this period')).toBeInTheDocument()

@@ -39,7 +39,7 @@ const catalogue: BillingCatalogue = {
       priceYearlyCents: 34800,
       billedPer: 'workspace',
       bestFor: 'For small teams getting started',
-      highlights: ['Custom domain', 'Standard Quinn usage included'],
+      highlights: ['Custom domain', 'Standard AI usage included'],
       recommended: false,
     },
     {
@@ -50,7 +50,7 @@ const catalogue: BillingCatalogue = {
       priceYearlyCents: 70800,
       billedPer: 'workspace',
       bestFor: 'For teams working the inbox daily',
-      highlights: ['Workflows & SLAs', 'Higher Quinn usage'],
+      highlights: ['Workflows & SLAs', 'Higher AI usage'],
       recommended: true,
     },
     {
@@ -61,7 +61,7 @@ const catalogue: BillingCatalogue = {
       priceYearlyCents: 118800,
       billedPer: 'workspace',
       bestFor: 'For orgs with compliance needs',
-      highlights: ['SSO (SAML & OIDC)', 'Maximum Quinn usage'],
+      highlights: ['SSO (SAML & OIDC)', 'Maximum AI usage'],
       recommended: false,
     },
   ],
@@ -175,11 +175,11 @@ describe('BillingPlansView', () => {
     expect(screen.getByText('INV-1001')).toBeInTheDocument()
   })
 
-  it('shows Quinn usage as a period percent and an emails meter', () => {
+  it('shows AI usage as a period percent and an emails meter', () => {
     renderView({
       usage: [{ key: 'emailsPerMonth', label: 'emails', used: 1840, limit: 10_000 }],
     })
-    expect(screen.getByText('Quinn usage')).toBeInTheDocument()
+    expect(screen.getByText('AI usage')).toBeInTheDocument()
     expect(screen.getByText('84% used this period')).toBeInTheDocument()
     expect(screen.getByText('Included usage is used first, then extra credit.')).toBeInTheDocument()
     expect(screen.queryByText(/\$25\.20/)).not.toBeInTheDocument()
@@ -228,7 +228,7 @@ describe('BillingPlansView', () => {
         ai: { includedCents: 0, usedCents: 0, extraCents: 1000, resetsAt: null },
       },
     })
-    expect(screen.getByText('Quinn usage')).toBeInTheDocument()
+    expect(screen.getByText('AI usage')).toBeInTheDocument()
     expect(screen.getByText('0% used this period')).toBeInTheDocument()
     expect(screen.getByText('Included usage is used first, then extra credit.')).toBeInTheDocument()
     expect(screen.queryByText(/\$0\.00 of \$0\.00/)).not.toBeInTheDocument()
@@ -444,7 +444,7 @@ describe('BillingPlansView', () => {
         { key: 'maxBoards', label: 'boards', used: 2, limit: null },
       ],
     })
-    expect(screen.getByText('Quinn usage')).toBeInTheDocument()
+    expect(screen.getByText('AI usage')).toBeInTheDocument()
     expect(screen.getByText('API requests')).toBeInTheDocument()
     expect(screen.getByText('REST API calls this month.')).toBeInTheDocument()
     expect(screen.getByText('1,200 of 250,000')).toBeInTheDocument()

@@ -214,13 +214,13 @@ export function MessengerChannelPage() {
         </SettingRows>
       </SettingsCard>
 
-      <SettingsCard title="Quinn">
+      <SettingsCard title="AI agent">
         <SettingRows>
           <SettingRow
             label={
               assistant?.enabled !== false && assistant?.respond
-                ? 'Quinn answers first'
-                : 'Quinn is off'
+                ? 'The AI agent answers first'
+                : 'The AI agent is off'
             }
             control={
               <Button variant="outline" size="sm" asChild>

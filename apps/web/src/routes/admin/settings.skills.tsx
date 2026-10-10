@@ -137,7 +137,7 @@ function SkillsPage() {
       page="/admin/settings/skills"
       description={intl.formatMessage({
         id: 'automation.skills.description',
-        defaultMessage: 'Procedures Quinn follows for specific situations.',
+        defaultMessage: 'Procedures Quackback AI follows for specific situations.',
       })}
       actions={newButton}
     >
@@ -247,7 +247,7 @@ function SkillsPage() {
                 {intl.formatMessage({
                   id: 'automation.skills.whenHint',
                   defaultMessage:
-                    'Always visible to Quinn. Keep it to one line; it decides when the skill loads.',
+                    'Always visible to Quackback AI. Keep it to one line; it decides when the skill loads.',
                 })}
               </p>
             </div>

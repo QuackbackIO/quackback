@@ -233,7 +233,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   {
     id: 'route-by-issue-type',
     title: 'Route by issue type',
-    benefit: 'Quinn classifies, the workflow routes. The modern pattern.',
+    benefit: 'Quackback AI classifies, the workflow routes. The modern pattern.',
     categories: ['popular', 'routing'],
     icon: FunnelIcon,
     iconClassName: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
@@ -373,7 +373,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     id: 'handoff-triage',
     title: 'Handoff triage',
     benefit:
-      'When Quinn hands off: frustrated customers jump the queue, platform errors page the right team.',
+      'When the AI agent hands off: frustrated customers jump the queue, platform errors page the right team.',
     categories: ['popular'],
     icon: FaceFrownIcon,
     iconClassName: 'bg-red-500/10 text-red-600 dark:text-red-400',
@@ -430,7 +430,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   {
     id: 'ai-first-support',
     title: 'AI-first support with honest escalation',
-    benefit: 'Let Quinn try first, CSAT-checked and honestly escalated.',
+    benefit: 'Let the AI agent try first, CSAT-checked and honestly escalated.',
     categories: ['customer_facing'],
     icon: SparklesIcon,
     iconClassName: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
@@ -641,7 +641,8 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   {
     id: 'prioritize-by-ai-urgency',
     title: 'Prioritize by AI urgency',
-    benefit: 'React when Quinn marks a conversation urgent, the signal that exists at intake.',
+    benefit:
+      'React when Quackback AI marks a conversation urgent, the signal that exists at intake.',
     categories: ['sla'],
     icon: SparklesIcon,
     iconClassName: 'bg-orange-500/10 text-orange-600 dark:text-orange-400',
@@ -853,7 +854,7 @@ export function templateGalleryChips(
   }
 
   if (templateNeedsQuinn(template) && !ctx.quinnOn) {
-    chips.push({ kind: 'prereq', label: 'Needs Quinn on' })
+    chips.push({ kind: 'prereq', label: 'Needs AI agent on' })
   }
   if (templateUsesOfficeHours(template)) {
     chips.push({ kind: 'note', label: 'Uses office hours' })

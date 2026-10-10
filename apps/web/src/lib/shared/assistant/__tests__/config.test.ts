@@ -61,7 +61,7 @@ describe('assistantConfigSchema', () => {
     expect(assistantConfigSchema.parse(DEFAULT_ASSISTANT_CONFIG)).toEqual({
       version: 4,
       identity: {
-        name: 'Quinn',
+        name: 'Quackback AI',
         avatarUrl: null,
       },
       agents: {

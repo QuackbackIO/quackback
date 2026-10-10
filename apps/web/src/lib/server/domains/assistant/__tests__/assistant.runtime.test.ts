@@ -170,7 +170,7 @@ vi.mock('@/lib/server/domains/boards/board.service', () => ({
 const DEFAULT_RUNTIME_CONFIG: AssistantRuntimeConfig = {
   config: {
     version: 4 as const,
-    identity: { name: 'Quinn', avatarUrl: null },
+    identity: { name: 'Quackback AI', avatarUrl: null },
     agents: {
       workspace: structuredClone(DEFAULT_WORKSPACE_ASSISTANT),
       agent: {

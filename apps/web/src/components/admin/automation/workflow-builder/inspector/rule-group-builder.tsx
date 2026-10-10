@@ -458,7 +458,7 @@ function RuleRow({
       </div>
       {showAiHint && (
         <p className="text-[11px] text-muted-foreground">
-          Classified by Quinn when conversations settle. Requires Inbox AI.
+          Classified by Quackback AI when conversations settle. Requires Inbox AI.
         </p>
       )}
       <div className="flex items-center gap-1.5">

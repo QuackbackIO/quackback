@@ -405,7 +405,7 @@ while proving nothing about the memo. P09 correctly refuses to pass on the
 absence and reports `BLOCKED`, which fails the run unless the operator passes
 `--allow-blocked`.
 
-To unblock it: configure AI on both workspaces and ask Quinn one question in each,
+To unblock it: configure AI on both workspaces and ask Quackback AI one question in each,
 then re-run.
 
 ## Surfaces and families no probe can judge

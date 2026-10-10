@@ -123,6 +123,7 @@ vi.mock('@/lib/server/domains/settings/settings.assistant', () => ({
 }))
 
 vi.mock('@/lib/server/domains/assistant/assistant.principal', () => ({
+  ASSISTANT_DEFAULT_NAME: 'Quackback AI',
   ensureAssistantPrincipal: hoisted.ensureAssistantPrincipal,
 }))
 

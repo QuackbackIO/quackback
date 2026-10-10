@@ -25,7 +25,7 @@ describe('QuinnViewHeader', () => {
   it('links an assistant manager to the Agent settings', () => {
     hoisted.canManage = true
     render(<QuinnViewHeader onChange={() => {}} />)
-    expect(screen.getByRole('link', { name: 'Configure Quinn' }).getAttribute('href')).toBe(
+    expect(screen.getByRole('link', { name: 'Configure the agent' }).getAttribute('href')).toBe(
       '/admin/settings/agent'
     )
   })
@@ -33,7 +33,7 @@ describe('QuinnViewHeader', () => {
   it('shows no link to someone who cannot manage the assistant', () => {
     hoisted.canManage = false
     render(<QuinnViewHeader onChange={() => {}} />)
-    expect(screen.queryByRole('link', { name: 'Configure Quinn' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Configure the agent' })).toBeNull()
   })
 
   it('keeps the outcome filters, with counts', () => {

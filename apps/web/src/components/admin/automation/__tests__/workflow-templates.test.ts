@@ -276,9 +276,9 @@ describe('templateGalleryChips', () => {
     const front = WORKFLOW_TEMPLATES.find((t) => t.id === 'front-door-triage-bot')!
     expect(templateNeedsQuinn(front)).toBe(true)
     const off = templateGalleryChips(front, { quinnOn: false })
-    expect(off.some((c) => c.label === 'Needs Quinn on')).toBe(true)
+    expect(off.some((c) => c.label === 'Needs AI agent on')).toBe(true)
     const on = templateGalleryChips(front, { quinnOn: true })
-    expect(on.some((c) => c.label === 'Needs Quinn on')).toBe(false)
+    expect(on.some((c) => c.label === 'Needs AI agent on')).toBe(false)
   })
 
   it('marks route-by-issue-type as needing 2 options', () => {

@@ -53,7 +53,7 @@ describe('widget settings child outlet', () => {
       await import('@/components/admin/settings/widget/widget-settings-page')
     render(<WidgetSettingsGate />)
     expect(screen.getByText('install-outlet')).toBeTruthy()
-    expect(screen.queryByText('Quinn')).toBeNull()
+    expect(screen.queryByText('AI agent')).toBeNull()
   })
 
   it('renders the general widget page when there is no child route', async () => {
@@ -68,6 +68,6 @@ describe('widget settings child outlet', () => {
       </QueryClientProvider>
     )
     expect(screen.queryByText('install-outlet')).toBeNull()
-    expect(screen.getByText('Quinn')).toBeTruthy()
+    expect(screen.getByText('AI agent')).toBeTruthy()
   })
 })

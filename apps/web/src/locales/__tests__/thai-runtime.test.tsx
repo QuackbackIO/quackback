@@ -54,7 +54,7 @@ describe('Thai locale runtime wiring', () => {
     }
     expect(
       intl.formatMessage({ id: 'automation.whoRepliesFirst.step1' }, { b: (chunks) => chunks })
-    ).toBe('Quinn ตอบทันทีตลอดเวลาที่เปิดใช้ ทั้งวันทั้งคืน')
+    ).toBe('เอเจนต์ AI ตอบทันทีตลอดเวลาที่เปิดใช้ ทั้งวันทั้งคืน')
     expect(intl.formatNumber(1234.5)).toBe(new Intl.NumberFormat('th').format(1234.5))
     const date = new Date('2026-10-08T00:00:00Z')
     const dateOptions = { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' } as const
