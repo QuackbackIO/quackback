@@ -528,6 +528,7 @@ describe('canCreateComment — board access gate', () => {
     moderationState: 'published' as ModerationState,
     principalId: 'p_other' as PrincipalId,
     isCommentsLocked: false,
+    isMerged: false,
   }
 
   it('portal user CANNOT comment on a post in a team-audience board', () => {
@@ -557,6 +558,7 @@ describe('canCreateComment — post visibility gate', () => {
       moderationState: 'pending' as ModerationState,
       principalId: 'p_other' as PrincipalId,
       isCommentsLocked: false,
+      isMerged: false,
     }
     expect(canCreateComment(portal, pendingPost, publicBoard, 'none').allowed).toBe(false)
   })
@@ -566,6 +568,7 @@ describe('canCreateComment — post visibility gate', () => {
       moderationState: 'pending' as ModerationState,
       principalId: portal.principalId,
       isCommentsLocked: false,
+      isMerged: false,
     }
     expect(canCreateComment(portal, ownPendingPost, publicBoard, 'none').allowed).toBe(true)
   })
@@ -575,6 +578,7 @@ describe('canCreateComment — post visibility gate', () => {
       moderationState: 'pending' as ModerationState,
       principalId: 'p_other' as PrincipalId,
       isCommentsLocked: false,
+      isMerged: false,
     }
     expect(canCreateComment(admin, pendingPost, publicBoard, 'none').allowed).toBe(true)
     expect(canCreateComment(member, pendingPost, publicBoard, 'none').allowed).toBe(true)
@@ -586,6 +590,7 @@ describe('canCreateComment — isCommentsLocked gate', () => {
     moderationState: 'published' as ModerationState,
     principalId: 'p_other' as PrincipalId,
     isCommentsLocked: true,
+    isMerged: false,
   }
 
   it('portal user CANNOT comment when isCommentsLocked=true', () => {
@@ -620,6 +625,7 @@ describe('canCreateComment — author-only reply policy', () => {
     moderationState: 'published' as ModerationState,
     principalId,
     isCommentsLocked,
+    isMerged: false,
   })
 
   it('the post author CAN reply on their own thread', () => {
@@ -703,8 +709,38 @@ describe('canCreateComment — author-only reply policy', () => {
       moderationState: 'pending' as ModerationState,
       principalId: portal.principalId,
       isCommentsLocked: false,
+      isMerged: false,
     }
     expect(canCreateComment(portal, ownPending, authorOnly(), 'none').allowed).toBe(true)
+  })
+})
+
+describe('canCreateComment — merged post gate', () => {
+  const mergedPost = {
+    moderationState: 'published' as ModerationState,
+    principalId: 'p_other' as PrincipalId,
+    isCommentsLocked: false,
+    isMerged: true,
+  }
+
+  it('portal user CANNOT comment on a post merged into another', () => {
+    const decision = canCreateComment(portal, mergedPost, publicBoard, 'none')
+    expect(decision.allowed).toBe(false)
+    if (!decision.allowed) expect(decision.reason).toMatch(/merged/i)
+  })
+
+  it('anonymous user CANNOT comment on a post merged into another', () => {
+    expect(canCreateComment(anon, mergedPost, publicBoard, 'none').allowed).toBe(false)
+  })
+
+  it('the author CANNOT comment on their own merged post', () => {
+    const ownMerged = { ...mergedPost, principalId: portal.principalId }
+    expect(canCreateComment(portal, ownMerged, publicBoard, 'none').allowed).toBe(false)
+  })
+
+  it('admin and member CAN comment on a merged post', () => {
+    expect(canCreateComment(admin, mergedPost, publicBoard, 'none').allowed).toBe(true)
+    expect(canCreateComment(member, mergedPost, publicBoard, 'none').allowed).toBe(true)
   })
 })
 
@@ -713,6 +749,7 @@ describe('canCreateComment — board.access.comment tier gates commenting indepe
     moderationState: 'published' as ModerationState,
     principalId: 'p_other' as PrincipalId,
     isCommentsLocked: false,
+    isMerged: false,
   }
 
   it('rejects anon when comment=authenticated even if view=anonymous', () => {
@@ -777,6 +814,7 @@ describe('canCreateComment — tri-state moderation.comments resolves against wo
     moderationState: 'published' as ModerationState,
     principalId: 'p_other' as PrincipalId,
     isCommentsLocked: false,
+    isMerged: false,
   }
 
   const mkBoard = (comments: BoardAccess['moderation']['comments']) => ({
@@ -1193,6 +1231,7 @@ describe('canCreateComment — service principal + precedence edges', () => {
     moderationState: 'published' as ModerationState,
     principalId: 'p_other' as PrincipalId,
     isCommentsLocked: false,
+    isMerged: false,
   }
   const commentTierBoard = (
     comment: BoardAccess['comment'],
@@ -1258,7 +1297,12 @@ describe('canCreateComment — service principal + precedence edges', () => {
     (state) => {
       const d = canCreateComment(
         portal,
-        { moderationState: state, principalId: 'p_other' as PrincipalId, isCommentsLocked: false },
+        {
+          moderationState: state,
+          principalId: 'p_other' as PrincipalId,
+          isCommentsLocked: false,
+          isMerged: false,
+        },
         publicBoard,
         'none'
       )
@@ -1271,6 +1315,7 @@ describe('canCreateComment — service principal + precedence edges', () => {
       moderationState: 'pending' as ModerationState,
       principalId: portal.principalId,
       isCommentsLocked: false,
+      isMerged: false,
     }
     expect(
       canCreateComment(portal, ownPending, commentTierBoard('anonymous', 'on'), 'none')
@@ -1292,6 +1337,7 @@ describe('canCreateComment — service principal + precedence edges', () => {
       moderationState: 'pending' as ModerationState,
       principalId: trustedPortal.principalId,
       isCommentsLocked: false,
+      isMerged: false,
     }
     expect(canCreateComment(trustedPortal, ownPending, segBoard, 'none').allowed).toBe(true)
   })
