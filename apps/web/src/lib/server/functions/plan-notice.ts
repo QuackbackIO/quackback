@@ -31,7 +31,8 @@ export const getPlanNotice = createServerFn({ method: 'GET' }).handler(
     const running = trialNotice(cloud)
     if (running) return running
 
-    const ended = trialEndedNotice(cloud)
+    const canManageBilling = auth.permissions.includes(PERMISSIONS.BILLING_MANAGE)
+    const ended = trialEndedNotice(cloud, { canManageBilling })
     if (!ended) return null
 
     try {
@@ -41,7 +42,10 @@ export const getPlanNotice = createServerFn({ method: 'GET' }).handler(
       const catalogue = await fetchBillingCatalogue()
       const last = catalogue.lastTrialPlanId ? canonicalPlanId(catalogue.lastTrialPlanId) : null
       if (last && isPlanId(last) && last in PLAN_CATALOGUE) {
-        return trialEndedNotice(cloud, { trialPlanName: PLAN_CATALOGUE[last].name })
+        return trialEndedNotice(cloud, {
+          trialPlanName: PLAN_CATALOGUE[last].name,
+          canManageBilling,
+        })
       }
     } catch {
       /* catalogue is optional; ended copy falls back without the plan name */

@@ -29,6 +29,8 @@ export function PlanDowngradeDialog(props: {
   planId: string
   planName: string
   checkout?: PlanDowngradeCheckout
+  /** The way out. An ended trial has no current plan to keep, so it goes back to the plans. */
+  cancelLabel?: string
 }) {
   const queryClient = useQueryClient()
   const [issues, setIssues] = useState<PlanDowngradeIssue[]>([])
@@ -69,24 +71,39 @@ export function PlanDowngradeDialog(props: {
     props.onOpenChange(false)
   }
 
+  // Closing the dialog is not choosing the plan. Opening it records the
+  // downgrade as pending so its issue links keep their pages open; leaving it
+  // by Esc, the close button or the overlay must not leave that lock behind.
+  function handleOpenChange(open: boolean) {
+    if (!open && blocked) {
+      void keepCurrentPlan()
+      return
+    }
+    props.onOpenChange(open)
+  }
+
   const planName = resolvedName || props.planName
   const confirmLabel = props.planId === 'free' ? 'Switch to Free' : `Continue to ${planName}`
 
   return (
-    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+    <Dialog open={props.open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Action required before downgrading</DialogTitle>
+          <DialogTitle>Switch to {planName}</DialogTitle>
           <DialogDescription>
-            Please resolve the following issues before switching to the {planName} plan.
+            {blocked
+              ? `Resolve these first: ${planName} applies its own limits.`
+              : `Check what changes on ${planName}, then confirm.`}
           </DialogDescription>
         </DialogHeader>
 
-        <Alert>
-          <AlertDescription>
-            Switching to {planName} will apply that plan's quotas. Delete extra resources first.
-          </AlertDescription>
-        </Alert>
+        {blocked ? (
+          <Alert>
+            <AlertDescription>
+              Switching to {planName} will apply that plan's quotas. Delete extra resources first.
+            </AlertDescription>
+          </Alert>
+        ) : null}
 
         {loading ? (
           <p className="text-sm text-muted-foreground">
@@ -130,11 +147,11 @@ export function PlanDowngradeDialog(props: {
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => void keepCurrentPlan()}>
-            Keep current plan
+            {props.cancelLabel ?? 'Keep current plan'}
           </Button>
           {blocked || loading || error ? (
             <Button type="button" disabled>
-              Resolve issues first
+              {loading ? 'Checking…' : error ? `Switch to ${planName}` : 'Resolve issues first'}
             </Button>
           ) : props.planId === 'free' ? (
             <form method="post" action="/api/billing/session">
@@ -173,6 +190,7 @@ export function PlanDowngradeDialog(props: {
 export function FreeDowngradeDialog(props: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  cancelLabel?: string
 }) {
   return <PlanDowngradeDialog {...props} planId="free" planName="Free" />
 }

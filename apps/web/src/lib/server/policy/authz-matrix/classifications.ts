@@ -391,8 +391,8 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/teammate-preferences.ts::setMyLanguagePreferenceFn': END_USER(
     'teammate sets their own language preference'
   ),
-  'lib/server/functions/billing.ts::shouldLockAdminToBillingFn': END_USER(
-    'admin layout lock: any teammate may read it; only billing.manage is redirected'
+  'lib/server/functions/billing.ts::getAdminBillingLockFn': END_USER(
+    'admin layout lock inputs: any teammate may ask; only billing.manage gets an answer'
   ),
 
   // MCP transport entry: a valid key authenticates; per-tool scopes authorize

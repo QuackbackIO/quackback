@@ -15,9 +15,17 @@ export interface PlanNoticeView {
   actionUrl?: string
   actionLabel?: string
   ended: boolean
+  /** An ended trial's deadline for choosing a plan, while it is still ahead. */
+  choiceDueAt: Date | null
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
+
+function futureDate(iso: string | undefined, now: Date): Date | null {
+  if (!iso) return null
+  const at = Date.parse(iso)
+  return Number.isNaN(at) || at <= now.getTime() ? null : new Date(at)
+}
 
 export function presentPlanNotice(
   notice: PlanNotice | null | undefined,
@@ -44,6 +52,7 @@ export function presentPlanNotice(
     actionUrl: notice.actionUrl,
     actionLabel: notice.actionLabel,
     ended: Boolean(notice.ended),
+    choiceDueAt: futureDate(notice.choiceDueAt, now),
   }
 }
 
