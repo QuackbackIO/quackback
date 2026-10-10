@@ -38,6 +38,7 @@ import {
   deleteIncident,
   clearStatusHistory,
   getStatusIncidentById,
+  findStatusIncidentById,
   listStatusIncidents,
   countStatusIncidentsSince,
   countStatusSubscriptionsSince,
@@ -447,7 +448,11 @@ export const getStatusIncidentAdminFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     log.debug({ incident_id: data.id }, 'get status incident admin')
     await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_PUBLISH })
-    const incident = await getStatusIncidentById(data.id as StatusIncidentId)
+    // null, not a thrown 404, for an incident that was deleted or never
+    // existed: the editor shows that as "not found" and keeps its error state
+    // (with retry) for failures that are worth retrying.
+    const incident = await findStatusIncidentById(data.id as StatusIncidentId)
+    if (!incident) return null
 
     // Approximate "emailed N subscribers" for the editor's publish marker.
     // The recipient count is not persisted at publish time (the claim only

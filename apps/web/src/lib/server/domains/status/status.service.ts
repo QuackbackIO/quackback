@@ -640,6 +640,19 @@ export async function getStatusIncidentById(
   }
 }
 
+/** Like getStatusIncidentById, but null for a deleted or unknown incident
+ *  instead of a NotFoundError, for a reader that shows "not found" itself. */
+export async function findStatusIncidentById(
+  id: StatusIncidentId
+): Promise<StatusIncidentWithDetails | null> {
+  try {
+    return await getStatusIncidentById(id)
+  } catch (err) {
+    if (err instanceof NotFoundError) return null
+    throw err
+  }
+}
+
 export async function listStatusIncidents(
   params: ListStatusIncidentsParams
 ): Promise<StatusIncidentListResult> {

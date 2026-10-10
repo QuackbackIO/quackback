@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
-import { Cog6ToothIcon, EnvelopeIcon } from '@heroicons/react/24/outline'
+import { Cog6ToothIcon, EnvelopeIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 import type { StatusIncidentId } from '@quackback/ids'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -25,6 +25,7 @@ import { useFormatNumber } from '@/components/ui/format-number'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { ModalHeader } from '@/components/shared/modal-header'
 import { ModalFooter } from '@/components/shared/modal-footer'
+import { EmptyState } from '@/components/shared/empty-state'
 import { UrlModalShell } from '@/components/shared/url-modal-shell'
 import { useUrlModal } from '@/lib/client/hooks/use-url-modal'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
@@ -119,7 +120,13 @@ function StatusIncidentEditorContent({
   incidentId: StatusIncidentId
   onClose: () => void
 }) {
-  const { data: incident, isLoading } = useQuery(statusIncidentQueries.detail(incidentId))
+  const {
+    data: incident,
+    isLoading,
+    isError,
+    isFetching,
+    refetch,
+  } = useQuery(statusIncidentQueries.detail(incidentId))
   const updateMutation = useUpdateStatusIncident()
   const postMutation = usePostStatusIncidentUpdate()
 
@@ -235,6 +242,32 @@ function StatusIncidentEditorContent({
   }
 
   const handleKeyDown = useKeyboardSubmit(handlePost)
+
+  // A failed load would otherwise spin forever; say so and offer a retry.
+  if (isError && !incident) {
+    return (
+      <EditorUnavailable
+        onClose={onClose}
+        title="Couldn't load this incident"
+        description="Something went wrong loading it. Check your connection and try again."
+        action={
+          <Button variant="outline" size="sm" onClick={() => void refetch()} disabled={isFetching}>
+            {isFetching ? 'Retrying…' : 'Try again'}
+          </Button>
+        }
+      />
+    )
+  }
+
+  if (incident === null) {
+    return (
+      <EditorUnavailable
+        onClose={onClose}
+        title="Incident not found"
+        description="It may have been deleted, or the link is wrong."
+      />
+    )
+  }
 
   if (isLoading || !incident || !details) {
     return (
@@ -377,6 +410,31 @@ function StatusIncidentEditorContent({
           </SheetContent>
         </Sheet>
       </ModalFooter>
+    </div>
+  )
+}
+
+function EditorUnavailable({
+  onClose,
+  title,
+  description,
+  action,
+}: {
+  onClose: () => void
+  title: string
+  description: string
+  action?: React.ReactNode
+}) {
+  return (
+    <div className="flex flex-col h-full">
+      <ModalHeader section="Incidents" title={title} onClose={onClose} hideCopyLink />
+      <EmptyState
+        icon={ExclamationTriangleIcon}
+        title={title}
+        description={description}
+        action={action}
+        className="flex-1"
+      />
     </div>
   )
 }

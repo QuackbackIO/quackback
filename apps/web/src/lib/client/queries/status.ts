@@ -114,7 +114,10 @@ export const statusComponentQueries = {
 }
 
 export type StatusOverview = Awaited<ReturnType<typeof getStatusOverviewAdminFn>>
-export type StatusIncidentAdminDetail = Awaited<ReturnType<typeof getStatusIncidentAdminFn>>
+/** The detail fn returns null for a deleted or unknown incident. */
+export type StatusIncidentAdminDetail = NonNullable<
+  Awaited<ReturnType<typeof getStatusIncidentAdminFn>>
+>
 
 export const statusOverviewQueries = {
   get: () =>

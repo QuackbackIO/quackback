@@ -42,6 +42,7 @@ import {
   createIncident,
   createStatusIncidentTemplate,
   deleteIncident,
+  findStatusIncidentById,
   getStatusIncidentById,
   listStatusIncidents,
   listStatusIncidentTemplates,
@@ -314,6 +315,16 @@ describe('status lifecycle (Postgres)', () => {
 
       await deleteIncident(second.id)
       expect(await statusOf(api)).toBe('operational')
+    })
+
+    it('reads back as missing (null) for the editor, not as an error', async () => {
+      const api = await service('API')
+      const incident = await openIncident([{ componentId: api, componentStatus: 'major_outage' }])
+      expect((await findStatusIncidentById(incident.id))?.id).toBe(incident.id)
+
+      await deleteIncident(incident.id)
+      expect(await findStatusIncidentById(incident.id)).toBeNull()
+      expect(await findStatusIncidentById(createId('status_incident'))).toBeNull()
     })
   })
 

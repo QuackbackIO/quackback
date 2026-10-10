@@ -87,6 +87,7 @@ export {
   deleteIncident,
   clearStatusHistory,
   getStatusIncidentById,
+  findStatusIncidentById,
   listStatusIncidents,
   countStatusIncidentsSince,
   notifyStatusIncidentPublished,
