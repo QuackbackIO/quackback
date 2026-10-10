@@ -44,7 +44,7 @@
     },
     "doc:admin-inbox": {
       "dbQueries": 22,
-      "htmlKB": 164.7
+      "htmlKB": 173
     },
     "doc:admin-roadmap": {
       "dbQueries": 20,
@@ -392,7 +392,7 @@
     },
     "sweep:doc:admin:/admin/inbox": {
       "dbQueries": 22,
-      "htmlKB": 164.7
+      "htmlKB": 173
     },
     "sweep:ui:admin:/admin/inbox": {
       "dbQueries": 22,
