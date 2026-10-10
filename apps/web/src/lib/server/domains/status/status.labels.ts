@@ -30,3 +30,8 @@ export const STATUS_LIFECYCLE_LABELS: Record<
   verifying: 'Verifying',
   completed: 'Completed',
 }
+
+/** A lifecycle status as display text; an unknown value passes through. */
+export function statusLifecycleLabel(status: string): string {
+  return (STATUS_LIFECYCLE_LABELS as Record<string, string>)[status] ?? status
+}
