@@ -146,7 +146,8 @@ function serializeSnapshot(snapshot: StatusPageSnapshot) {
 }
 
 // ============================================================================
-// Admin: Components / Groups (gate: STATUS_PAGE_MANAGE)
+// Admin: Components / Groups (gate: STATUS_PAGE_MANAGE, except the
+// publish-gated picker list)
 // ============================================================================
 
 export const listStatusComponentsAdminFn = createServerFn({ method: 'GET' }).handler(async () => {
@@ -156,6 +157,23 @@ export const listStatusComponentsAdminFn = createServerFn({ method: 'GET' }).han
     listUngroupedStatusComponents(),
   ])
   return { groups, ungrouped }
+})
+
+/** Read-only service list for the incident composers' affected-services
+ *  picker. Gated on STATUS_PAGE_PUBLISH (not manage) so anyone who can report
+ *  an incident can choose what it affects; id + name only, nothing a
+ *  publisher couldn't already see on the overview. */
+export const listStatusComponentChoicesFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_PUBLISH })
+  const [groups, ungrouped] = await Promise.all([
+    listStatusComponentGroupsWithComponents(),
+    listUngroupedStatusComponents(),
+  ])
+  const choice = (c: { id: StatusComponentId; name: string }) => ({ id: c.id, name: c.name })
+  return {
+    groups: groups.map((g) => ({ id: g.id, name: g.name, components: g.components.map(choice) })),
+    ungrouped: ungrouped.map(choice),
+  }
 })
 
 const createStatusComponentSchema = z.object({

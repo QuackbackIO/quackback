@@ -37,6 +37,24 @@ describe('status template permissions', () => {
   })
 })
 
+describe('status service-list permissions', () => {
+  it('listStatusComponentChoicesFn gates on status_page.publish (composer picker)', () => {
+    // A publisher reporting an incident must be able to pick what it affects;
+    // the full services list stays with the manage-only Services view.
+    expect(fnPermissionFor('listStatusComponentChoicesFn')).toBe('STATUS_PAGE_PUBLISH')
+    expect(fnPermissionFor('listStatusComponentsAdminFn')).toBe('STATUS_PAGE_MANAGE')
+  })
+
+  it('the affected-services picker reads the publish-gated list', () => {
+    const fieldSource = readFileSync(
+      join(here, '../../../../components/admin/status/status-incident-fields.tsx'),
+      'utf-8'
+    )
+    expect(fieldSource).toContain('statusComponentQueries.choices()')
+    expect(fieldSource).not.toContain('statusComponentQueries.list()')
+  })
+})
+
 describe('status incident permissions', () => {
   it.each([
     ['createStatusIncidentFn'],
