@@ -57,7 +57,7 @@ export function AffectedComponentsField({
   value: AffectedRow[]
   onChange: (next: AffectedRow[]) => void
 }) {
-  const { data, isLoading } = useQuery(statusComponentQueries.choices())
+  const { data, isLoading, isError, refetch } = useQuery(statusComponentQueries.choices())
   const components = useMemo(() => flattenComponents(data), [data])
   const byId = useMemo(() => new Map(value.map((v) => [v.componentId, v.componentStatus])), [value])
 
@@ -74,6 +74,18 @@ export function AffectedComponentsField({
   }
 
   if (isLoading) return <p className="text-xs text-muted-foreground">Loading services…</p>
+  // A failed load is not an empty list: saying "No services yet" would send
+  // the admin off to create services that already exist.
+  if (isError) {
+    return (
+      <p className="text-xs text-destructive">
+        Couldn't load services.{' '}
+        <button type="button" className="underline" onClick={() => void refetch()}>
+          Try again
+        </button>
+      </p>
+    )
+  }
   if (components.length === 0) {
     return <p className="text-xs text-muted-foreground">No services yet. Create one first.</p>
   }
