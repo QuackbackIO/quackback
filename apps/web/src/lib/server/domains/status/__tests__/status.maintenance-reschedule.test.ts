@@ -52,6 +52,10 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
 vi.mock('../status.components', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../status.components')>()),
   reconcileComponentStatus: (...args: unknown[]) => mockReconcileComponentStatus(...args),
+  // The batch form recomputes each component in id order through the single one.
+  reconcileComponentStatuses: async (ids: Iterable<string>, ...rest: unknown[]) => {
+    for (const id of [...new Set(ids)].sort()) await mockReconcileComponentStatus(id, ...rest)
+  },
   dispatchStatusEvent: (...args: unknown[]) => mockDispatchStatusEvent(...args),
 }))
 

@@ -36,7 +36,7 @@ import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
 import { buildEventActor, type EventActor } from '@/lib/server/events/dispatch'
 import { deriveImpact } from './status.calc'
-import { reconcileComponentStatus, dispatchStatusEvent } from './status.components'
+import { reconcileComponentStatuses, dispatchStatusEvent } from './status.components'
 import { enqueueMaintenanceJobs, cancelMaintenanceJobs } from './status.maintenance'
 import type {
   CreateStatusIncidentInput,
@@ -226,9 +226,12 @@ export async function createIncident(
 
     if (appliesComponentStatusNow({ kind: created.kind, status: created.status, backfilled })) {
       const source = created.kind === 'incident' ? 'incident' : 'maintenance'
-      for (const c of input.affectedComponents) {
-        await reconcileComponentStatus(c.componentId, source, created.id, tx)
-      }
+      await reconcileComponentStatuses(
+        input.affectedComponents.map((c) => c.componentId),
+        source,
+        created.id,
+        tx
+      )
     }
     return created
   })
@@ -362,9 +365,7 @@ export async function updateIncident(
         ...replaced,
         ...nextComponents.map((component) => component.componentId),
       ])
-      for (const componentId of affected) {
-        await reconcileComponentStatus(componentId, source, id, tx)
-      }
+      await reconcileComponentStatuses(affected, source, id, tx)
     }
   })
 
@@ -483,9 +484,12 @@ export async function postIncidentUpdate(
         where: eq(statusIncidentComponents.incidentId, id),
       })
       const source = existing.kind === 'incident' ? 'incident' : 'maintenance'
-      for (const link of links) {
-        await reconcileComponentStatus(link.componentId, source, id, tx)
-      }
+      await reconcileComponentStatuses(
+        links.map((link) => link.componentId),
+        source,
+        id,
+        tx
+      )
     }
   })
 
@@ -555,9 +559,12 @@ export async function deleteIncident(id: StatusIncidentId): Promise<void> {
       where: eq(statusIncidentComponents.incidentId, id),
     })
     const source = existing.kind === 'incident' ? 'incident' : 'maintenance'
-    for (const link of links) {
-      await reconcileComponentStatus(link.componentId, source, id, tx)
-    }
+    await reconcileComponentStatuses(
+      links.map((link) => link.componentId),
+      source,
+      id,
+      tx
+    )
   })
 }
 

@@ -326,9 +326,16 @@ export async function reconcileComponentStatus(
   incidentId?: StatusIncidentId | null,
   executor: Executor = db
 ): Promise<void> {
-  const component = await executor.query.statusComponents.findFirst({
-    where: and(eq(statusComponents.id, componentId), isNull(statusComponents.deletedAt)),
-  })
+  // Lock the component before reading which incidents hold it. Two lifecycle
+  // writes sharing a component (say, two incidents deleted at once) would
+  // otherwise each read the other's change as not yet made, and the later
+  // commit would restore a status neither incident still sets. Holding the
+  // row, the second waits for the first to commit and then reads its result.
+  const [component] = await executor
+    .select()
+    .from(statusComponents)
+    .where(and(eq(statusComponents.id, componentId), isNull(statusComponents.deletedAt)))
+    .for('update')
   if (!component) return
 
   const active = await executor
@@ -351,6 +358,22 @@ export async function reconcileComponentStatus(
     'operational'
   )
   await writeComponentStatus(component, effective, source, incidentId, executor)
+}
+
+/**
+ * Recompute several components in one lifecycle write. They are locked in id
+ * order, so two writes that share components always take them in the same
+ * order and can't deadlock.
+ */
+export async function reconcileComponentStatuses(
+  componentIds: Iterable<StatusComponentId>,
+  source: StatusComponentEventSource,
+  incidentId: StatusIncidentId | null | undefined,
+  executor: Executor
+): Promise<void> {
+  for (const componentId of [...new Set(componentIds)].sort()) {
+    await reconcileComponentStatus(componentId, source, incidentId, executor)
+  }
 }
 
 // ============================================================================

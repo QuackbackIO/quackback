@@ -28,7 +28,7 @@ import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
 import { scheduleDispatch, cancelScheduledDispatch } from '@/lib/server/events/scheduler'
 import type { EventActor } from '@/lib/server/events/dispatch'
-import { reconcileComponentStatus, dispatchStatusEvent } from './status.components'
+import { reconcileComponentStatuses, dispatchStatusEvent } from './status.components'
 
 const log = logger.child({ component: 'status-maintenance' })
 
@@ -138,9 +138,12 @@ export async function handleMaintenanceStart(incidentId: StatusIncidentId): Prom
       .where(eq(statusIncidents.id, incidentId))
 
     const links = await affectedComponentIds(incidentId, tx)
-    for (const link of links) {
-      await reconcileComponentStatus(link.componentId, 'maintenance', incidentId, tx)
-    }
+    await reconcileComponentStatuses(
+      links.map((link) => link.componentId),
+      'maintenance',
+      incidentId,
+      tx
+    )
 
     await tx.insert(statusIncidentUpdates).values({
       incidentId,
@@ -185,9 +188,12 @@ export async function handleMaintenanceComplete(incidentId: StatusIncidentId): P
       .where(eq(statusIncidents.id, incidentId))
 
     const links = await affectedComponentIds(incidentId, tx)
-    for (const link of links) {
-      await reconcileComponentStatus(link.componentId, 'maintenance', incidentId, tx)
-    }
+    await reconcileComponentStatuses(
+      links.map((link) => link.componentId),
+      'maintenance',
+      incidentId,
+      tx
+    )
 
     await tx.insert(statusIncidentUpdates).values({
       incidentId,
