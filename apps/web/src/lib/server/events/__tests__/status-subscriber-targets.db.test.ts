@@ -62,11 +62,13 @@ const runSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 const SEGMENT = createId('segment') as SegmentId
 const P_MEMBER = createId('principal') as PrincipalId
 const P_OUTSIDER = createId('principal') as PrincipalId
+const P_PICKER = createId('principal') as PrincipalId
 const API = createId('status_component') as StatusComponentId
 const BILLING = createId('status_component') as StatusComponentId
 const INCIDENT = createId('status_incident') as StatusIncidentId
 const MEMBER_EMAIL = `status-member-${runSuffix}@example.com`
 const OUTSIDER_EMAIL = `status-outsider-${runSuffix}@example.com`
+const PICKER_EMAIL = `status-picker-${runSuffix}@example.com`
 
 const CANDIDATE_URLS = [
   process.env.DATABASE_URL,
@@ -151,15 +153,18 @@ describe.skipIf(!dbAvailable)('status incident emails (execution-level)', () => 
 
     const memberUser = createId('user')
     const outsiderUser = createId('user')
+    const pickerUser = createId('user')
     await activeDb.insert(user).values([
       { id: memberUser, name: 'Member', email: MEMBER_EMAIL },
       { id: outsiderUser, name: 'Outsider', email: OUTSIDER_EMAIL },
+      { id: pickerUser, name: 'Picker', email: PICKER_EMAIL },
     ])
     // Portal users: the default 'member' role is a teammate, who sees every
     // component regardless of segments.
     await activeDb.insert(principal).values([
       { id: P_MEMBER, userId: memberUser, role: 'user', createdAt: new Date() },
       { id: P_OUTSIDER, userId: outsiderUser, role: 'user', createdAt: new Date() },
+      { id: P_PICKER, userId: pickerUser, role: 'user', createdAt: new Date() },
     ])
     await activeDb
       .insert(userSegments)
@@ -184,6 +189,9 @@ describe.skipIf(!dbAvailable)('status incident emails (execution-level)', () => 
     await activeDb.insert(statusSubscriptions).values([
       { principalId: P_MEMBER, scope: 'page', source: 'admin' },
       { principalId: P_OUTSIDER, scope: 'page', source: 'admin' },
+      // Chose only Billing, which was later restricted to a segment they
+      // aren't in: the API outage is nothing they asked to hear about.
+      { principalId: P_PICKER, scope: 'components', componentIds: [BILLING], source: 'self_serve' },
     ])
   }, 60_000)
 
@@ -215,8 +223,13 @@ describe.skipIf(!dbAvailable)('status incident emails (execution-level)', () => 
     const notified = targets
       .filter((t) => t.type === 'notification')
       .flatMap((t) => (t.target as { principalIds: string[] }).principalIds)
-      .filter((id) => id === P_MEMBER || id === P_OUTSIDER)
+      .filter((id) => id === P_MEMBER || id === P_OUTSIDER || id === P_PICKER)
       .sort()
     expect(notified).toEqual([P_MEMBER, P_OUTSIDER].sort())
+  })
+
+  it('tells a subscriber who chose components only about those they can see', async () => {
+    const targets = await getStatusSubscriberTargets(incidentCreated, context)
+    expect(Object.keys(emailedComponents(targets))).not.toContain(PICKER_EMAIL)
   })
 })

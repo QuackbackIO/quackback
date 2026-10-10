@@ -1943,7 +1943,7 @@ export async function getStatusSubscriberTargets(
   } = await import('@/lib/server/db')
   const { STATUS_COMPONENT_STATUS_LABELS, statusLifecycleLabel } =
     await import('@/lib/server/domains/status/status.labels')
-  const { getActiveSubscribersForComponents } =
+  const { getActiveSubscriptionsForComponents } =
     await import('@/lib/server/domains/status/status.subscription')
   const { isStatusAudienceGranted } = await import('@/lib/server/domains/status/status.audience')
   const { canViewStatusComponent } = await import('@/lib/server/policy/status')
@@ -1986,11 +1986,17 @@ export async function getStatusSubscriberTargets(
     .map((id) => affectedById.get(String(id)))
     .filter((c): c is NonNullable<typeof c> => !!c)
 
-  // The base subscriber pool (page-wide OR overlapping an affected component).
-  const principalIds = (await getActiveSubscribersForComponents(
-    affectedComponentIds as never
-  )) as PrincipalId[]
-  if (principalIds.length === 0) return []
+  // The base subscriber pool (page-wide OR overlapping an affected component),
+  // with the components each one chose (null: the whole page).
+  const subscriptions = await getActiveSubscriptionsForComponents(affectedComponentIds as never)
+  if (subscriptions.length === 0) return []
+  const principalIds = subscriptions.map((s) => s.principalId as PrincipalId)
+  const chosenComponents = new Map(
+    subscriptions.map((s) => [
+      String(s.principalId),
+      s.scope === 'components' ? new Set(s.componentIds) : null,
+    ])
+  )
 
   // Batch-load role/type + segments + email for each subscriber.
   const principals = await db
@@ -2017,9 +2023,12 @@ export async function getStatusSubscriberTargets(
     segmentsByPrincipal.set(key, set)
   }
 
-  // Eligible = passes page gate AND can see ≥1 affected component. The
-  // visible subset is kept: it is the component list that recipient's email
-  // may show (the page hides the rest from them, so the email must too).
+  // Eligible = passes page gate AND can see ≥1 affected component it follows
+  // (any, for a whole-page subscriber; one it chose, otherwise). A subscriber
+  // who chose only components they can no longer see isn't told about the
+  // rest. The visible subset is kept: it is the component list that
+  // recipient's email may show (the page hides the rest from them, so the
+  // email must too).
   const eligible = principals.flatMap((p) => {
     const actor: Actor = {
       principalId: p.id,
@@ -2031,7 +2040,11 @@ export async function getStatusSubscriberTargets(
     const visibleAffected = affectedInOrder.filter((c) =>
       canViewStatusComponent(actor, { segmentIds: c.segmentIds })
     )
-    if (affected.length > 0 && visibleAffected.length === 0) return []
+    const chosen = chosenComponents.get(String(p.id))
+    const followed = chosen
+      ? visibleAffected.filter((c) => chosen.has(String(c.id)))
+      : visibleAffected
+    if (affected.length > 0 && followed.length === 0) return []
     return [{ ...p, visibleAffected }]
   })
   if (eligible.length === 0) return []

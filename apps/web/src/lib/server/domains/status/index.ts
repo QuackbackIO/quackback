@@ -126,6 +126,7 @@ export {
   getStatusSubscriptionCounts,
   countStatusSubscriptionsSince,
   getActiveSubscribersForComponents,
+  getActiveSubscriptionsForComponents,
   countActiveSubscribersForComponents,
   addStatusSubscriberByEmail,
   importStatusSubscribersFromEmails,

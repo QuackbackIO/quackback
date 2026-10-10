@@ -303,12 +303,27 @@ export async function countActiveSubscribersForComponents(
 export async function getActiveSubscribersForComponents(
   affectedComponentIds: StatusComponentId[]
 ): Promise<PrincipalId[]> {
+  const rows = await getActiveSubscriptionsForComponents(affectedComponentIds)
+  return rows.map((r) => r.principalId)
+}
+
+/** The active subscriptions an incident affecting these components reaches,
+ *  with what each one follows: the whole page, or the components it chose. */
+export async function getActiveSubscriptionsForComponents(
+  affectedComponentIds: StatusComponentId[]
+): Promise<
+  Array<{ principalId: PrincipalId; scope: StatusSubscriptionScope; componentIds: string[] }>
+> {
+  const columns = {
+    principalId: statusSubscriptions.principalId,
+    scope: statusSubscriptions.scope,
+    componentIds: statusSubscriptions.componentIds,
+  }
   if (affectedComponentIds.length === 0) {
-    const pageRows = await db
-      .select({ principalId: statusSubscriptions.principalId })
+    return db
+      .select(columns)
       .from(statusSubscriptions)
       .where(and(isNull(statusSubscriptions.unsubscribedAt), eq(statusSubscriptions.scope, 'page')))
-    return pageRows.map((r) => r.principalId)
   }
 
   const componentOverlap = sql`
@@ -321,8 +336,8 @@ export async function getActiveSubscribersForComponents(
     )
   `
 
-  const rows = await db
-    .select({ principalId: statusSubscriptions.principalId })
+  return db
+    .select(columns)
     .from(statusSubscriptions)
     .where(
       and(
@@ -333,5 +348,4 @@ export async function getActiveSubscribersForComponents(
         )
       )
     )
-  return rows.map((r) => r.principalId)
 }
