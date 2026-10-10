@@ -1,21 +1,10 @@
+import { lazy, Suspense } from 'react'
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
 import { FormattedMessage } from 'react-intl'
 import type { PlanNotice } from '@/lib/server/domains/settings/tier-limits.types'
 import { isQuietTrial, presentPlanNotice } from '@/lib/shared/plan-notice'
-import { LocalDate } from '@/components/ui/local-date'
 
-/**
- * "Mon, Oct 12, 2:00 PM BST": the copy around it is English. The zone is named
- * because the first render is in UTC until the page hydrates.
- */
-export const CHOICE_DUE_FORMAT: Intl.DateTimeFormatOptions = {
-  weekday: 'short',
-  month: 'short',
-  day: 'numeric',
-  hour: 'numeric',
-  minute: '2-digit',
-  timeZoneName: 'short',
-}
+const ChoiceDue = lazy(() => import('./plan-notice-choice-due'))
 
 interface PlanNoticeBannerProps {
   notice: PlanNotice | null
@@ -68,7 +57,11 @@ export function PlanNoticeBanner({ notice }: PlanNoticeBannerProps) {
             </span>
           </>
         )}
-        {ended && view.choiceDueAt && <ChoiceDue at={view.choiceDueAt} />}
+        {ended && view.choiceDueAt && (
+          <Suspense fallback={null}>
+            <ChoiceDue at={view.choiceDueAt} />
+          </Suspense>
+        )}
         {view.message && (
           // A strip with no button has nothing but its message to say, so it
           // keeps it on a phone too.
@@ -90,18 +83,6 @@ export function PlanNoticeBanner({ notice }: PlanNoticeBannerProps) {
         </a>
       )}
     </div>
-  )
-}
-
-/** When the rest of admin starts waiting on a plan choice, in the viewer's own time. */
-function ChoiceDue({ at }: { at: Date }) {
-  return (
-    <>
-      <span className="text-white/80">·</span>
-      <span className="font-medium text-white">
-        Choose by <LocalDate date={at} options={CHOICE_DUE_FORMAT} locale="en-US" />
-      </span>
-    </>
   )
 }
 

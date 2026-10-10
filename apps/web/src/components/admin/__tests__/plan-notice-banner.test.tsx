@@ -33,10 +33,10 @@ describe('PlanNoticeBanner', () => {
     expect(screen.queryByRole('button', { name: 'Dismiss' })).not.toBeInTheDocument()
   })
 
-  it('says when the choice is due while the grace period runs', () => {
+  it('says when the choice is due while the grace period runs', async () => {
     const due = new Date(Date.now() + 36 * 3_600_000)
     render(<PlanNoticeBanner notice={{ ...ENDED, choiceDueAt: due.toISOString() }} />)
-    expect(screen.getByText(/Choose by/)).toBeInTheDocument()
+    expect(await screen.findByText(/Choose by/)).toBeInTheDocument()
     expect(document.querySelector('time')).toHaveAttribute('dateTime', due.toISOString())
   })
 

@@ -15,7 +15,7 @@ import { FreeDowngradeDialog } from './free-downgrade-dialog'
 import { SubscribeDialog } from './subscribe-dialog'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
 import { LocalDate } from '@/components/ui/local-date'
-import { CHOICE_DUE_FORMAT } from '@/components/admin/plan-notice-banner'
+import { CHOICE_DUE_FORMAT } from '@/components/admin/plan-notice-choice-due'
 import { TRIAL_CHOICE_GATE_FROM, TRIAL_CHOICE_GRACE_MS } from '@/lib/shared/billing/trial-state'
 import { useHydrated } from '@tanstack/react-router'
 
