@@ -30,7 +30,12 @@ const ctx = vi.hoisted(() => ({
 vi.mock('@tanstack/react-router', () => ({
   createFileRoute:
     () =>
-    <T extends object>(options: T) => ({ ...options, options }),
+    <T extends object>(options: T) => ({
+      ...options,
+      options,
+      // The page's own strings (English here, so the defaults serve).
+      useLoaderData: () => ({ messages: {} }),
+    }),
   notFound: () => new Error('not found'),
   useRouteContext: (opts?: { select?: (context: never) => unknown }) =>
     opts?.select ? opts.select(ctx as never) : ctx,

@@ -5,6 +5,8 @@ import { useIntl, FormattedMessage } from 'react-intl'
 import { RssIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import { PortalPageHeader } from '@/components/public/portal-page-header'
+import { AreaMessages } from '@/components/shared/area-messages'
+import { DEFAULT_LOCALE, loadAreaMessages } from '@/lib/shared/i18n'
 import { publicStatusPageQueries, publicStatusHistoryQueries } from '@/lib/client/queries/status'
 import { setPublicDocumentCacheHeaders } from '@/lib/server/functions/public-cache'
 import {
@@ -23,6 +25,12 @@ import type { StatusUptimeDay } from '@/components/portal/status'
 export const Route = createFileRoute('/_portal/status/')({
   loader: async ({ context }) => {
     if (typeof window === 'undefined') await setPublicDocumentCacheHeaders()
+    // The status page's strings stay out of the catalog every other page
+    // seeds; the page reads them with its data.
+    const messagesPromise = loadAreaMessages(
+      context.acceptLanguageLocale ?? DEFAULT_LOCALE,
+      'statusPage'
+    )
     try {
       await context.queryClient.ensureQueryData(publicStatusPageQueries.get())
     } catch {
@@ -35,6 +43,7 @@ export const Route = createFileRoute('/_portal/status/')({
     return {
       workspaceName: context.settings?.name ?? 'Quackback',
       baseUrl: context.baseUrl ?? '',
+      messages: await messagesPromise,
     }
   },
   head: ({ loaderData }) => {
@@ -56,8 +65,12 @@ export const Route = createFileRoute('/_portal/status/')({
       links: canonicalUrl ? [{ rel: 'canonical', href: canonicalUrl }] : [],
     }
   },
-  notFoundComponent: StatusPageNotFound,
-  component: StatusPage,
+  notFoundComponent: () => (
+    <AreaMessages area="statusPage">
+      <StatusPageNotFound />
+    </AreaMessages>
+  ),
+  component: StatusPageRoute,
 })
 
 function formatUtcDayLong(dateStr: string, locale: string): string {
@@ -96,6 +109,15 @@ function formatMaintenanceWindow(
     timeZone: 'UTC',
   })
   return `${dayLabel} · ${startTime} – ${endTime} UTC`
+}
+
+function StatusPageRoute() {
+  const { messages } = Route.useLoaderData()
+  return (
+    <AreaMessages area="statusPage" messages={messages}>
+      <StatusPage />
+    </AreaMessages>
+  )
 }
 
 function StatusPage() {

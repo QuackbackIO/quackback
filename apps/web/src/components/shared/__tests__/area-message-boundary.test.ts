@@ -48,6 +48,11 @@ const AREAS: Record<MessageArea, { users: RegExp; importers: RegExp | null }> = 
     users: /^components\/shared\/error-page\.tsx$/,
     importers: null,
   },
+  statusPage: {
+    users: /^(components\/portal\/status\/|routes\/_portal\/status\.(index|\$incidentId)\.tsx$)/,
+    importers:
+      /^(components\/portal\/status\/|routes\/_portal\/status\.(index|\$incidentId)\.tsx$)/,
+  },
 }
 
 /** Where an area that loads as it opens is shown, and so must be mounted. */
