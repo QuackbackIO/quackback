@@ -1,7 +1,7 @@
 import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
 import { SettingsNav } from '@/components/settings/settings-nav'
 import { AreaMessages } from '@/components/shared/area-messages'
-import { DEFAULT_LOCALE, loadAreaMessages } from '@/lib/shared/i18n'
+import { DEFAULT_LOCALE, seedAreaMessages } from '@/lib/shared/i18n'
 
 /**
  * Settings layout for authenticated users.
@@ -18,7 +18,7 @@ export const Route = createFileRoute('/_portal/settings')({
   // Settings strings stay out of the catalog every other page seeds; these
   // pages read them with the page.
   loader: async ({ context }) => ({
-    messages: await loadAreaMessages(context.acceptLanguageLocale ?? DEFAULT_LOCALE, 'settings'),
+    messages: await seedAreaMessages(context.acceptLanguageLocale ?? DEFAULT_LOCALE, 'settings'),
   }),
   component: SettingsLayout,
 })

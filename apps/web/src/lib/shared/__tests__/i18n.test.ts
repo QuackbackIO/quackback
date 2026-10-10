@@ -9,6 +9,7 @@ import {
   DEFAULT_LOCALE,
   isViewerMessage,
   loadAreaMessages,
+  seedAreaMessages,
   loadMessages,
   loadPortalMessages,
   loadViewerMessages,
@@ -348,6 +349,32 @@ describe('admin seed', () => {
     expect(tour['onboarding.tour.next']).toBe(all['onboarding.tour.next'])
     expect(Object.keys(tour).every(isTourMessage)).toBe(true)
     expect(Object.keys(tour).length).toBeGreaterThan(20)
+  })
+})
+
+describe('public pages in English', () => {
+  // As on admin pages: the code holds every message's English, so no page in
+  // English seeds a catalog (see useIntlSetup, which then loads nothing either).
+  it('seed nothing on the portal, widget, unsubscribe page or setup wizard', async () => {
+    expect(await loadPortalMessages(DEFAULT_LOCALE)).toEqual({})
+    expect(await loadWidgetMessages(DEFAULT_LOCALE)).toEqual({})
+    expect(await loadUnsubscribeMessages(DEFAULT_LOCALE)).toEqual({})
+    expect(await loadOnboardingMessages(DEFAULT_LOCALE)).toEqual({})
+    expect(await seedAreaMessages(DEFAULT_LOCALE, 'helpCenter')).toEqual({})
+  })
+
+  it('seed the same slices as before in any other language', async () => {
+    for (const load of [
+      loadPortalMessages,
+      loadWidgetMessages,
+      loadUnsubscribeMessages,
+      loadOnboardingMessages,
+    ]) {
+      expect(Object.keys(await load('de')).length).toBeGreaterThan(10)
+    }
+    expect(await seedAreaMessages('de', 'helpCenter')).toEqual(
+      await loadAreaMessages('de', 'helpCenter')
+    )
   })
 })
 

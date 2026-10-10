@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { loadMessages, type SupportedLocale } from '@/lib/shared/i18n'
+import { DEFAULT_LOCALE, loadMessages, type SupportedLocale } from '@/lib/shared/i18n'
 
 /**
  * Shared hook that loads the message catalog for a locale (used by
@@ -11,12 +11,15 @@ import { loadMessages, type SupportedLocale } from '@/lib/shared/i18n'
  * Pass `initialMessages` (loaded server-side and serialized into the route's
  * loader data) so SSR renders translated and the client hydrates from the same
  * catalog — without it the page renders English until the client fetch lands.
+ * English needs no catalog: every message's English is in the code (the
+ * default-messages guard), so an English page seeds nothing and loads nothing.
  */
 export function useIntlSetup(
   locale: SupportedLocale,
   initialMessages?: Record<string, string>
 ): Record<string, string> {
-  const hasInitial = !!initialMessages && Object.keys(initialMessages).length > 0
+  const hasInitial =
+    locale === DEFAULT_LOCALE || (!!initialMessages && Object.keys(initialMessages).length > 0)
   const [messages, setMessages] = useState<Record<string, string>>(initialMessages ?? {})
   // The locale whose catalog is already in `messages`. When SSR seeds it we
   // skip the initial fetch (and the redundant network chunk it would pull); a
@@ -25,6 +28,11 @@ export function useIntlSetup(
 
   useEffect(() => {
     if (loadedLocale.current === locale) return
+    if (locale === DEFAULT_LOCALE) {
+      setMessages({})
+      loadedLocale.current = locale
+      return
+    }
     let cancelled = false
     loadMessages(locale).then((msgs) => {
       if (!cancelled) {

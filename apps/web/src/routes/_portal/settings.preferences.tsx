@@ -6,7 +6,7 @@ import { ThemeSwitcher } from '@/components/theme-switcher'
 import { NotificationMatrixForm } from '@/components/settings/notification-matrix-form'
 import { AreaMessages } from '@/components/shared/area-messages'
 import { getNotificationPreferencesFn } from '@/lib/server/functions/user'
-import { DEFAULT_LOCALE, loadAreaMessages } from '@/lib/shared/i18n'
+import { DEFAULT_LOCALE, seedAreaMessages } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/_portal/settings/preferences')({
   loader: async ({ context }) => {
@@ -16,7 +16,7 @@ export const Route = createFileRoute('/_portal/settings/preferences')({
     // strings, which only this page shows, load with it.
     const [notificationPreferences, messages] = await Promise.all([
       getNotificationPreferencesFn(),
-      loadAreaMessages(context.acceptLanguageLocale ?? DEFAULT_LOCALE, 'notificationPreferences'),
+      seedAreaMessages(context.acceptLanguageLocale ?? DEFAULT_LOCALE, 'notificationPreferences'),
     ])
     return { notificationPreferences, messages }
   },

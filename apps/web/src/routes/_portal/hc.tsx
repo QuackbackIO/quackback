@@ -5,7 +5,7 @@ import { resolveHelpCenterDomainRedirect } from '@/lib/shared/help-center-domain
 import { HelpCenterLocaleSwitcher } from '@/components/help-center/help-center-locale-switcher'
 import { parseHcLocalePath } from '@/lib/shared/help-center-url'
 import { AreaMessages } from '@/components/shared/area-messages'
-import { DEFAULT_LOCALE, isRtlLocale, loadAreaMessages } from '@/lib/shared/i18n'
+import { DEFAULT_LOCALE, isRtlLocale, seedAreaMessages } from '@/lib/shared/i18n'
 import type { FeatureFlags, HelpCenterConfig } from '@/lib/shared/types/settings'
 import { setPublicDocumentCacheHeaders } from '@/lib/server/functions/public-cache'
 
@@ -54,7 +54,7 @@ export const Route = createFileRoute('/_portal/hc')({
     // Help center strings stay out of the catalog every other page seeds;
     // these pages read them with the page.
     const [messages] = await Promise.all([
-      loadAreaMessages(context.acceptLanguageLocale ?? DEFAULT_LOCALE, 'helpCenter'),
+      seedAreaMessages(context.acceptLanguageLocale ?? DEFAULT_LOCALE, 'helpCenter'),
       typeof window === 'undefined' ? setPublicDocumentCacheHeaders() : undefined,
     ])
     return { helpCenterConfig, messages }
