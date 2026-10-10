@@ -15,6 +15,7 @@ import {
   and,
   isNull,
   lte,
+  ne,
   or,
   statusIncidents,
   statusIncidentComponents,
@@ -256,7 +257,9 @@ export async function startMaintenanceNow(incidentId: StatusIncidentId): Promise
  * Boot-time safety net for maintenance windows missed while the process was
  * down (a delayed BullMQ job only fires if something is listening). Finds
  * overdue scheduled starts and overdue completions and runs each handler,
- * which is idempotent via the guards above.
+ * which is idempotent via the guards above. Only windows that can still need
+ * action are loaded: a completed window is done, so the query leaves out the
+ * ever-growing pile of past ones rather than reading them every sweep.
  */
 export async function reconcileMaintenanceWindows(): Promise<{
   started: number
@@ -273,7 +276,11 @@ export async function reconcileMaintenanceWindows(): Promise<{
           eq(statusIncidents.autoStart, true),
           lte(statusIncidents.scheduledStartAt, now)
         ),
-        and(eq(statusIncidents.autoComplete, true), lte(statusIncidents.scheduledEndAt, now))
+        and(
+          ne(statusIncidents.status, 'completed'),
+          eq(statusIncidents.autoComplete, true),
+          lte(statusIncidents.scheduledEndAt, now)
+        )
       )
     ),
   })

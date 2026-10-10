@@ -158,6 +158,12 @@ export async function createIncident(
         : deriveImpact(componentStatuses)
 
   assertWindowOrder(input.scheduledStartAt, input.scheduledEndAt)
+  if (input.backfill && input.backfill.resolvedAt.getTime() <= input.backfill.startedAt.getTime()) {
+    throw new ValidationError(
+      'VALIDATION_ERROR',
+      'A past incident must be resolved after it started'
+    )
+  }
 
   // started_at is when the row actually started. A window still 'scheduled'
   // hasn't, so until it does the column (NOT NULL) holds its planned start;

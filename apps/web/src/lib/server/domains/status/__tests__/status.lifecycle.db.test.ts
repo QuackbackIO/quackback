@@ -16,6 +16,7 @@ import {
   sql,
   principal,
   statusComponents,
+  statusComponentEvents,
   statusIncidentComponents,
   statusIncidents,
 } from '@/lib/server/db'
@@ -59,10 +60,15 @@ import {
 } from '../status.maintenance'
 import { getStatusPageSnapshot } from '../status.public'
 
+const statements: { query: string; params: unknown[] }[] = []
 const fixture = await createDbTestFixture({
   probe: async (db) => {
-    await db.select({ id: statusIncidents.id }).from(statusIncidents).limit(0)
+    await db
+      .select({ id: statusIncidents.id, notify: statusIncidents.notifySubscribers })
+      .from(statusIncidents)
+      .limit(0)
   },
+  logger: { logQuery: (query, params) => statements.push({ query, params }) },
 })
 
 const HOUR = 60 * 60 * 1000
@@ -554,6 +560,85 @@ describe('status lifecycle (Postgres)', () => {
         ([event]) => (event as { type: string }).type === 'status.incident_created'
       )
       expect(published).toHaveLength(1)
+    })
+  })
+
+  describe('logging a past incident', () => {
+    it('rejects one resolved before it started', async () => {
+      const api = await service('API')
+      const start = new Date(Date.now() - 2 * HOUR)
+      await expect(
+        createIncident(
+          {
+            kind: 'incident',
+            title: 'Old outage',
+            status: 'resolved',
+            body: 'It happened.',
+            affectedComponents: [{ componentId: api, componentStatus: 'major_outage' }],
+            backfill: { startedAt: start, resolvedAt: new Date(start.getTime() - HOUR) },
+          },
+          { principalId: author }
+        )
+      ).rejects.toBeInstanceOf(ValidationError)
+    })
+
+    it('adds history without touching uptime or service status', async () => {
+      const api = await service('API')
+      const start = new Date(Date.now() - 3 * HOUR)
+      const logged = await createIncident(
+        {
+          kind: 'incident',
+          title: 'Old outage',
+          status: 'resolved',
+          body: 'It happened.',
+          affectedComponents: [{ componentId: api, componentStatus: 'major_outage' }],
+          backfill: { startedAt: start, resolvedAt: new Date(start.getTime() + HOUR) },
+        },
+        { principalId: author }
+      )
+
+      expect(logged.backfilled).toBe(true)
+      expect(logged.startedAt.getTime()).toBe(start.getTime())
+      expect(await statusOf(api)).toBe('operational')
+      // Uptime bars derive from this log; a backfill writes nothing to it.
+      expect(
+        await testDb.query.statusComponentEvents.findMany({
+          where: eq(statusComponentEvents.componentId, api),
+        })
+      ).toEqual([])
+    })
+  })
+
+  describe('the maintenance sweep', () => {
+    it('only loads windows that can still need action', async () => {
+      const db = await service('Database')
+      const past = {
+        affectedComponents: [{ componentId: db, componentStatus: 'under_maintenance' as const }],
+        scheduledStartAt: new Date(Date.now() - 3 * HOUR),
+        scheduledEndAt: new Date(Date.now() - 2 * HOUR),
+        notifySubscribers: false,
+      }
+      const done = await createIncident(
+        { ...past, kind: 'maintenance', title: 'Done', status: 'in_progress', body: 'Running.' },
+        { principalId: author }
+      )
+      await handleMaintenanceComplete(done.id)
+      const overdue = await createIncident(
+        { ...past, kind: 'maintenance', title: 'Overdue', status: 'in_progress', body: 'Running.' },
+        { principalId: author }
+      )
+
+      statements.length = 0
+      expect(await reconcileMaintenanceWindows()).toEqual({ started: 0, completed: 1 })
+      expect((await getStatusIncidentById(overdue.id)).status).toBe('completed')
+
+      // The sweep's own read excludes completed windows in SQL, rather than
+      // loading every past window and skipping them in code.
+      const sweepRead = statements.find(
+        (s) => /from "status_incidents"/.test(s.query) && /"scheduled_end_at" <= /.test(s.query)
+      )
+      expect(sweepRead?.query).toMatch(/\."status" <> \$\d+ and [^)]*"auto_complete"/)
+      expect(sweepRead?.params).toContain('completed')
     })
   })
 })
