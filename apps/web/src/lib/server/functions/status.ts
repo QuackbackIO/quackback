@@ -58,6 +58,8 @@ import {
   getPublicStatusIncident,
   getUptimeSeries,
   listIncidentHistory,
+  listStatusFeedItems,
+  statusIncidentLastActivityAt,
 } from '@/lib/server/domains/status'
 import type {
   StatusIncidentWithDetails,
@@ -873,4 +875,24 @@ export const listStatusHistoryFn = createServerFn({ method: 'GET' })
       before: data.before ? new Date(data.before) : undefined,
     })
     return { ...result, items: result.items.map(serializePublicIncident) }
+  })
+
+const listStatusFeedSchema = z.object({
+  limit: PageLimitSchema,
+})
+
+/** The status RSS feed's items (public view): open incidents, scheduled and
+ *  in-progress maintenance, then recently resolved items, newest activity
+ *  first. Empty (not an error) when the page is gated out, like the history. */
+export const listStatusFeedFn = createServerFn({ method: 'GET' })
+  .validator(listStatusFeedSchema)
+  .handler(async ({ data }) => {
+    const gate = await resolveStatusPageGate()
+    if (!gate.available) return []
+
+    const items = await listStatusFeedItems(gate.actor, data.limit)
+    return items.map((incident) => ({
+      ...serializePublicIncident(incident),
+      lastActivityAt: toIsoString(statusIncidentLastActivityAt(incident)),
+    }))
   })

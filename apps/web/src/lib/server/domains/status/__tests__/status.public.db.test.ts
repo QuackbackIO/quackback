@@ -1,8 +1,11 @@
 /**
  * Execution-level tests for the public status reads that page past the
- * snapshot: incident history resumes after the page's recent window instead
- * of starting again from the newest incident, which listed the first 14 days
- * twice.
+ * snapshot: incident history and the RSS feed's items.
+ *
+ * - History resumes after the page's recent window instead of starting again
+ *   from the newest incident, which listed the first 14 days twice.
+ * - The feed carries open incidents and scheduled or in-progress maintenance,
+ *   not only resolved history, newest activity first.
  *
  * Runs the real queries against the real database: the global `db` proxy is
  * pointed at this file's own short-lived connection (closed in afterAll).
@@ -22,7 +25,12 @@ import {
 import { createDb } from '@quackback/db/client'
 import { createId, type StatusComponentId, type StatusIncidentId } from '@quackback/ids'
 import { ANONYMOUS_ACTOR } from '@/lib/server/policy/types'
-import { getStatusPageSnapshot, listIncidentHistory } from '../status.public'
+import {
+  getStatusPageSnapshot,
+  listIncidentHistory,
+  listStatusFeedItems,
+  statusIncidentLastActivityAt,
+} from '../status.public'
 
 const runSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 const DAY = 24 * 60 * 60 * 1000
@@ -182,5 +190,19 @@ describe.skipIf(!dbAvailable)('public status reads past the snapshot (execution-
       RECENT_MAINTENANCE,
       OLD_INCIDENT,
     ])
+  })
+
+  it('feeds open incidents and scheduled maintenance with resolved history, newest activity first', async () => {
+    const items = await listStatusFeedItems(ANONYMOUS_ACTOR, 50)
+    // The gated incident's only component is hidden from this visitor.
+    expect(mine(items.map((i) => i.id))).toEqual([
+      OPEN_INCIDENT,
+      SCHEDULED_MAINTENANCE,
+      RECENT_INCIDENT,
+      RECENT_MAINTENANCE,
+      OLD_INCIDENT,
+    ])
+    const activity = items.map((i) => statusIncidentLastActivityAt(i).getTime())
+    expect(activity).toEqual([...activity].sort((a, b) => b - a))
   })
 })

@@ -410,3 +410,55 @@ export async function listIncidentHistory(
     hasMore,
   }
 }
+
+/** When an incident last changed: its newest update, or its resolution if
+ *  that came later. A scheduled window's `startedAt` can lie in the future,
+ *  so it is only the fallback for a row with neither. */
+export function statusIncidentLastActivityAt(incident: PublicStatusIncident): Date {
+  let latest: Date | null = incident.resolvedAt
+  for (const update of incident.updates) {
+    if (!latest || update.createdAt > latest) latest = update.createdAt
+  }
+  return latest ?? incident.startedAt
+}
+
+/**
+ * Everything a status feed carries, most recent activity first: open
+ * incidents, maintenance that is scheduled or under way, and the most
+ * recently resolved incidents and completed windows. Visibility is the
+ * public page's, so a feed never lists what the page would hide.
+ */
+export async function listStatusFeedItems(
+  actor: Actor,
+  limit: number = 50
+): Promise<PublicStatusIncident[]> {
+  const [openRows, resolvedRows] = await Promise.all([
+    db.query.statusIncidents.findMany({
+      where: and(
+        isNull(statusIncidents.deletedAt),
+        or(
+          and(eq(statusIncidents.kind, 'incident'), isNull(statusIncidents.resolvedAt)),
+          and(
+            eq(statusIncidents.kind, 'maintenance'),
+            inArray(statusIncidents.status, ['scheduled', 'in_progress', 'verifying'])
+          )
+        )
+      ),
+    }),
+    db.query.statusIncidents.findMany({
+      where: and(isNull(statusIncidents.deletedAt), isNotNull(statusIncidents.resolvedAt)),
+      orderBy: [desc(statusIncidents.resolvedAt), desc(statusIncidents.id)],
+      limit,
+    }),
+  ])
+
+  const rows = [...openRows, ...resolvedRows]
+  const links = await getComponentLinksForIncidents(rows.map((r) => r.id))
+  const items = await projectIncidents(rows, groupLinksByIncident(links), actor)
+
+  return items
+    .map((incident) => ({ incident, at: statusIncidentLastActivityAt(incident).getTime() }))
+    .sort((a, b) => b.at - a.at)
+    .slice(0, limit)
+    .map(({ incident }) => incident)
+}

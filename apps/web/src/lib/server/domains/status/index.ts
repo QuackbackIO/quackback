@@ -113,6 +113,8 @@ export {
   getPublicStatusIncident,
   getUptimeSeries,
   listIncidentHistory,
+  listStatusFeedItems,
+  statusIncidentLastActivityAt,
 } from './status.public'
 
 export {
