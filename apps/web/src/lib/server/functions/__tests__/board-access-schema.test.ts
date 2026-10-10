@@ -191,6 +191,39 @@ describe('boardAccessSchema — vote action invariants', () => {
   })
 })
 
+describe('boardAccessSchema — replyPolicy', () => {
+  it('accepts a payload with no replyPolicy key and leaves it absent (absent = anyone)', () => {
+    const parsed = boardAccessSchema.parse(baseValid)
+    expect('replyPolicy' in parsed).toBe(false)
+  })
+
+  it("accepts and round-trips replyPolicy='author-only'", () => {
+    const parsed = boardAccessSchema.parse({ ...baseValid, replyPolicy: 'author-only' })
+    expect(parsed.replyPolicy).toBe('author-only')
+  })
+
+  it("accepts an explicit replyPolicy='anyone'", () => {
+    const parsed = boardAccessSchema.parse({ ...baseValid, replyPolicy: 'anyone' })
+    expect(parsed.replyPolicy).toBe('anyone')
+  })
+
+  it('rejects an unknown reply policy', () => {
+    expect(() =>
+      boardAccessSchema.parse({ ...baseValid, replyPolicy: 'authors-only' as never })
+    ).toThrow()
+  })
+
+  it('rejects null (omitting the key is how a board says "no restriction")', () => {
+    expect(() => boardAccessSchema.parse({ ...baseValid, replyPolicy: null as never })).toThrow()
+  })
+
+  it('carries no tier-rank invariant — author-only rides any comment tier', () => {
+    expect(() =>
+      boardAccessSchema.parse({ ...baseValid, comment: 'team', replyPolicy: 'author-only' })
+    ).not.toThrow()
+  })
+})
+
 describe('boardAccessSchema — tier enum invariants', () => {
   it('rejects unknown tier name', () => {
     expect(() => boardAccessSchema.parse({ ...baseValid, view: 'admin' as never })).toThrow()

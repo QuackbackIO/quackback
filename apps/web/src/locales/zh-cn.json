@@ -64,6 +64,7 @@
   "widget.postDetail.loginToComment": "登录以参与讨论",
   "widget.postDetail.teamAuthorFallback": "团队",
   "widget.postDetail.commentNoAccess": "你没有权限在此看板评论",
+  "widget.postDetail.authorOnlyReplies": "只有帖子作者和团队成员可以在此看板回复",
   "widget.commentList.empty": "暂无评论。快来分享你的想法吧。",
   "widget.commentList.deleted": "[已删除]",
   "widget.commentList.removed": "[已移除]",
@@ -401,6 +402,7 @@
   "portal.commentThread.edit": "编辑",
   "portal.commentThread.edited": "（已编辑）",
   "portal.commentThread.noAccess": "你没有权限在此看板评论",
+  "portal.commentThread.authorOnlyReplies": "只有帖子作者和团队成员可以在此看板回复",
   "portal.commentThread.save": "保存",
   "portal.commentThread.saving": "保存中…",
   "portal.commentThread.teamBadgeAria": "{name} 成员",
@@ -1954,5 +1956,16 @@
   "widget.messages.resumeAria": "打开与 {name} 的会话",
   "widget.tickets.progress": "工单进度",
   "widget.changelog.filter.all": "全部",
-  "widget.changelog.emptyFiltered": "此分类下暂无更新"
+  "widget.changelog.emptyFiltered": "此分类下暂无更新",
+  "workspaceUnavailable.deleted.title": "此工作区不可用",
+  "workspaceUnavailable.deleted.body": "{host} 已被运营它的团队删除。",
+  "workspaceUnavailable.deleted.owner": "您在管理这个工作区吗？登录 Quackback 即可恢复。",
+  "workspaceUnavailable.paused.title": "此工作区已暂停",
+  "workspaceUnavailable.paused.body": "它的团队暂时将其暂停。您之前分享的内容都会保留。",
+  "workspaceUnavailable.paused.owner": "您在管理这个工作区吗？登录 Quackback 查看暂停原因。",
+  "workspaceUnavailable.unknown.title": "这里没有工作区",
+  "workspaceUnavailable.unknown.body": "{host} 上没有设置任何内容。请检查地址，或询问向您发送链接的人。",
+  "workspaceUnavailable.unknown.owner": "正在设置工作区？请登录 Quackback。",
+  "workspaceUnavailable.signIn": "登录 Quackback",
+  "workspaceUnavailable.poweredBy": "由 {brand} 提供支持"
 }

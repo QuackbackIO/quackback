@@ -159,8 +159,12 @@ export const beginPlanDowngradeFn = createServerFn({ method: 'POST' })
       await import('@/lib/server/domains/billing/pending-downgrade')
     const [overview, used] = await Promise.all([getBillingProjectionOverview(), loadUsageCounts()])
     const preview = await loadDowngradePreview({ planId, overview, used })
-    if (preview.issues.length > 0) await setPendingDowngrade(planId)
-    else await clearPendingDowngrade()
+    if (preview.issues.length > 0) {
+      await setPendingDowngrade(
+        planId,
+        preview.issues.map((issue) => issue.href)
+      )
+    } else await clearPendingDowngrade()
     return { ...preview, locked: preview.issues.length > 0 }
   })
 
@@ -171,11 +175,9 @@ export const cancelPlanDowngradeFn = createServerFn({ method: 'POST' }).handler(
   return { ok: true as const }
 })
 
-export const shouldLockAdminToBillingFn = createServerFn({ method: 'GET' })
-  .validator((data: { pathname: string }) => data)
-  .handler(async ({ data }) => {
-    const { permissions } = await requireAuth()
-    const { shouldLockAdminToBilling } =
-      await import('@/lib/server/domains/billing/pending-downgrade')
-    return shouldLockAdminToBilling(data.pathname, permissions)
-  })
+/** The billing lock's inputs for the admin layout, or null when it cannot hold this viewer. */
+export const getAdminBillingLockFn = createServerFn({ method: 'GET' }).handler(async () => {
+  const { permissions } = await requireAuth()
+  const { loadAdminBillingLock } = await import('@/lib/server/domains/billing/pending-downgrade')
+  return loadAdminBillingLock(permissions)
+})

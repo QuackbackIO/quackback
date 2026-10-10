@@ -67,6 +67,7 @@
   "widget.postDetail.loginToComment": "เข้าสู่ระบบเพื่อร่วมสนทนา",
   "widget.postDetail.teamAuthorFallback": "ทีมงาน",
   "widget.postDetail.commentNoAccess": "คุณไม่มีสิทธิแสดงความคิดเห็นในบอร์ดนี้",
+  "widget.postDetail.authorOnlyReplies": "เฉพาะผู้เขียนโพสต์และสมาชิกทีมเท่านั้นที่ตอบกลับในบอร์ดนี้ได้",
   "widget.commentList.empty": "ยังไม่มีความคิดเห็น เป็นคนแรกที่แบ่งปันความคิดเห็น.",
   "widget.commentList.deleted": "[ลบแล้ว]",
   "widget.commentList.removed": "[นำออกแล้ว]",
@@ -551,6 +552,7 @@
   "portal.commentThread.edit": "แก้ไข",
   "portal.commentThread.edited": "(แก้ไขแล้ว)",
   "portal.commentThread.noAccess": "คุณไม่มีสิทธิแสดงความคิดเห็นในบอร์ดนี้",
+  "portal.commentThread.authorOnlyReplies": "เฉพาะผู้เขียนโพสต์และสมาชิกทีมเท่านั้นที่ตอบกลับในบอร์ดนี้ได้",
   "portal.commentThread.save": "บันทึก",
   "portal.commentThread.saving": "กำลังบันทึก…",
   "portal.commentThread.teamBadgeAria": "สมาชิก {name}",
@@ -1954,5 +1956,16 @@
   "activation.copying": "กำลังคัดลอก…",
   "onboarding.trial.quietPlan": "ทดลองใช้ {plan} · {days, plural, other {# วัน}}",
   "ui.close": "ปิด",
-  "admin.nav.openMenu": "เปิดเมนู"
+  "admin.nav.openMenu": "เปิดเมนู",
+  "workspaceUnavailable.deleted.title": "เวิร์กสเปซนี้ไม่พร้อมใช้งาน",
+  "workspaceUnavailable.deleted.body": "ทีมที่ดูแล {host} ได้ลบเวิร์กสเปซนี้แล้ว",
+  "workspaceUnavailable.deleted.owner": "คุณดูแลเวิร์กสเปซนี้อยู่ใช่ไหม เข้าสู่ระบบ Quackback เพื่อกู้คืน",
+  "workspaceUnavailable.paused.title": "เวิร์กสเปซนี้หยุดชั่วคราว",
+  "workspaceUnavailable.paused.body": "ทีมของเวิร์กสเปซนี้หยุดใช้งานไว้ชั่วคราว ทุกอย่างที่คุณแชร์ไว้แล้วยังถูกเก็บไว้",
+  "workspaceUnavailable.paused.owner": "คุณดูแลเวิร์กสเปซนี้อยู่ใช่ไหม เข้าสู่ระบบ Quackback เพื่อดูว่าทำไมจึงหยุดชั่วคราว",
+  "workspaceUnavailable.unknown.title": "ไม่มีเวิร์กสเปซที่นี่",
+  "workspaceUnavailable.unknown.body": "ยังไม่มีการตั้งค่าใดๆ ที่ {host} ตรวจสอบที่อยู่ หรือสอบถามผู้ที่ส่งลิงก์ให้คุณ",
+  "workspaceUnavailable.unknown.owner": "กำลังตั้งค่าเวิร์กสเปซอยู่ใช่ไหม เข้าสู่ระบบ Quackback",
+  "workspaceUnavailable.signIn": "เข้าสู่ระบบ Quackback",
+  "workspaceUnavailable.poweredBy": "ให้บริการโดย {brand}"
 }

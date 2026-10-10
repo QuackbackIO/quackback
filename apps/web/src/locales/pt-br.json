@@ -64,6 +64,7 @@
   "widget.postDetail.loginToComment": "Entre para participar da conversa",
   "widget.postDetail.teamAuthorFallback": "Equipe",
   "widget.postDetail.commentNoAccess": "Você não tem acesso para comentar neste quadro",
+  "widget.postDetail.authorOnlyReplies": "Somente o autor do post e os membros da equipe podem responder neste quadro",
   "widget.commentList.empty": "Ainda não há comentários. Seja o primeiro a compartilhar sua opinião.",
   "widget.commentList.deleted": "[excluído]",
   "widget.commentList.removed": "[removido]",
@@ -401,6 +402,7 @@
   "portal.commentThread.edit": "Editar",
   "portal.commentThread.edited": "(editado)",
   "portal.commentThread.noAccess": "Você não tem acesso para comentar neste quadro",
+  "portal.commentThread.authorOnlyReplies": "Somente o autor do post e os membros da equipe podem responder neste quadro",
   "portal.commentThread.save": "Salvar",
   "portal.commentThread.saving": "Salvando…",
   "portal.commentThread.teamBadgeAria": "Membro de {name}",
@@ -1954,5 +1956,16 @@
   "widget.messages.resumeAria": "Abrir conversa com {name}",
   "widget.tickets.progress": "Progresso do ticket",
   "widget.changelog.filter.all": "Todos",
-  "widget.changelog.emptyFiltered": "Ainda não há atualizações nesta categoria"
+  "widget.changelog.emptyFiltered": "Ainda não há atualizações nesta categoria",
+  "workspaceUnavailable.deleted.title": "Este espaço não está disponível",
+  "workspaceUnavailable.deleted.body": "{host} foi excluído pela equipe que o administrava.",
+  "workspaceUnavailable.deleted.owner": "Você administra este espaço? Entre no Quackback para restaurá-lo.",
+  "workspaceUnavailable.paused.title": "Este espaço está pausado",
+  "workspaceUnavailable.paused.body": "A equipe o pausou por enquanto. Tudo o que você já compartilhou está guardado.",
+  "workspaceUnavailable.paused.owner": "Você administra este espaço? Entre no Quackback para ver por que ele está pausado.",
+  "workspaceUnavailable.unknown.title": "Não há nenhum espaço aqui",
+  "workspaceUnavailable.unknown.body": "Nada está configurado em {host}. Confira o endereço ou pergunte a quem enviou o link.",
+  "workspaceUnavailable.unknown.owner": "Está configurando um espaço? Entre no Quackback.",
+  "workspaceUnavailable.signIn": "Entrar no Quackback",
+  "workspaceUnavailable.poweredBy": "Desenvolvido por {brand}"
 }

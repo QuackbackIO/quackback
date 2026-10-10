@@ -64,6 +64,7 @@
   "widget.postDetail.loginToComment": "Connectez-vous pour participer à la conversation",
   "widget.postDetail.teamAuthorFallback": "Équipe",
   "widget.postDetail.commentNoAccess": "Vous n'avez pas l'autorisation de commenter dans cette catégorie",
+  "widget.postDetail.authorOnlyReplies": "Seuls l'auteur de la publication et les membres de l'équipe peuvent répondre dans cette catégorie",
   "widget.commentList.empty": "Aucun commentaire pour le moment. Soyez le premier à partager vos réflexions.",
   "widget.commentList.deleted": "[supprimé]",
   "widget.commentList.removed": "[retiré]",
@@ -401,6 +402,7 @@
   "portal.commentThread.edit": "Modifier",
   "portal.commentThread.edited": "(modifié)",
   "portal.commentThread.noAccess": "Vous n'avez pas l'autorisation de commenter dans cette catégorie",
+  "portal.commentThread.authorOnlyReplies": "Seuls l'auteur de la publication et les membres de l'équipe peuvent répondre dans cette catégorie",
   "portal.commentThread.save": "Enregistrer",
   "portal.commentThread.saving": "Enregistrement…",
   "portal.commentThread.teamBadgeAria": "Membre de {name}",
@@ -1954,5 +1956,16 @@
   "widget.messages.resumeAria": "Ouvrir la conversation avec {name}",
   "widget.tickets.progress": "Avancement du ticket",
   "widget.changelog.filter.all": "Tout",
-  "widget.changelog.emptyFiltered": "Aucune nouveauté dans cette catégorie pour le moment"
+  "widget.changelog.emptyFiltered": "Aucune nouveauté dans cette catégorie pour le moment",
+  "workspaceUnavailable.deleted.title": "Cet espace n’est pas disponible",
+  "workspaceUnavailable.deleted.body": "{host} a été supprimé par l’équipe qui le gérait.",
+  "workspaceUnavailable.deleted.owner": "Vous gérez cet espace ? Connectez-vous à Quackback pour le restaurer.",
+  "workspaceUnavailable.paused.title": "Cet espace est en pause",
+  "workspaceUnavailable.paused.body": "Son équipe l’a mis en pause pour le moment. Tout ce que vous avez déjà partagé est conservé.",
+  "workspaceUnavailable.paused.owner": "Vous gérez cet espace ? Connectez-vous à Quackback pour savoir pourquoi il est en pause.",
+  "workspaceUnavailable.unknown.title": "Il n’y a aucun espace ici",
+  "workspaceUnavailable.unknown.body": "Rien n’est configuré à l’adresse {host}. Vérifiez l’adresse ou demandez à la personne qui vous a envoyé le lien.",
+  "workspaceUnavailable.unknown.owner": "Vous configurez un espace ? Connectez-vous à Quackback.",
+  "workspaceUnavailable.signIn": "Se connecter à Quackback",
+  "workspaceUnavailable.poweredBy": "Propulsé par {brand}"
 }

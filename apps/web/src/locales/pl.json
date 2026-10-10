@@ -64,6 +64,7 @@
   "widget.postDetail.loginToComment": "Zaloguj się, aby dołączyć do dyskusji",
   "widget.postDetail.teamAuthorFallback": "Zespół",
   "widget.postDetail.commentNoAccess": "Nie masz uprawnień do komentowania na tej tablicy",
+  "widget.postDetail.authorOnlyReplies": "Na tej tablicy odpowiadać mogą tylko autor wpisu i członkowie zespołu",
   "widget.commentList.empty": "Nie ma jeszcze komentarzy. Napisz pierwszy komentarz.",
   "widget.commentList.deleted": "[usunięty]",
   "widget.commentList.removed": "[usunięty przez zespół]",
@@ -401,6 +402,7 @@
   "portal.commentThread.edit": "Edytuj",
   "portal.commentThread.edited": "(edytowano)",
   "portal.commentThread.noAccess": "Nie masz uprawnień do komentowania na tej tablicy",
+  "portal.commentThread.authorOnlyReplies": "Na tej tablicy odpowiadać mogą tylko autor wpisu i członkowie zespołu",
   "portal.commentThread.save": "Zapisz",
   "portal.commentThread.saving": "Zapisywanie…",
   "portal.commentThread.teamBadgeAria": "Członek zespołu {name}",
@@ -1954,5 +1956,16 @@
   "widget.messages.resumeAria": "Otwórz rozmowę: {name}",
   "widget.tickets.progress": "Postęp sprawy",
   "widget.changelog.filter.all": "Wszystkie",
-  "widget.changelog.emptyFiltered": "Nie ma jeszcze aktualizacji w tej kategorii"
+  "widget.changelog.emptyFiltered": "Nie ma jeszcze aktualizacji w tej kategorii",
+  "workspaceUnavailable.deleted.title": "Ten obszar roboczy jest niedostępny",
+  "workspaceUnavailable.deleted.body": "Zespół, który prowadził {host}, usunął ten obszar roboczy.",
+  "workspaceUnavailable.deleted.owner": "Zarządzasz tym obszarem roboczym? Zaloguj się do Quackback, aby go przywrócić.",
+  "workspaceUnavailable.paused.title": "Ten obszar roboczy jest wstrzymany",
+  "workspaceUnavailable.paused.body": "Zespół na razie go wstrzymał. Wszystko, co już udostępniono, zostaje zachowane.",
+  "workspaceUnavailable.paused.owner": "Zarządzasz tym obszarem roboczym? Zaloguj się do Quackback, aby sprawdzić, dlaczego jest wstrzymany.",
+  "workspaceUnavailable.unknown.title": "Nie ma tu żadnego obszaru roboczego",
+  "workspaceUnavailable.unknown.body": "Pod adresem {host} nic nie skonfigurowano. Sprawdź adres albo zapytaj osobę, która przysłała ci link.",
+  "workspaceUnavailable.unknown.owner": "Konfigurujesz obszar roboczy? Zaloguj się do Quackback.",
+  "workspaceUnavailable.signIn": "Zaloguj się do Quackback",
+  "workspaceUnavailable.poweredBy": "Obsługiwane przez {brand}"
 }

@@ -11,6 +11,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { TRIAL_CHOICE_GATE_FROM } from '@/lib/shared/billing/trial-state'
 import type { StoredCloudConfig } from '@/lib/shared/db-types'
 
 const hoisted = vi.hoisted(() => ({
@@ -152,6 +153,15 @@ describe('getPlanNotice — the trial countdown', () => {
     hoisted.mockRequireAuth.mockResolvedValue({
       user: { id: 'usr_member' },
       principal: { id: 'prn_member', role: 'member' },
+      permissions: [PERMISSIONS.MEMBER_VIEW],
+    })
+  }
+
+  function asBillingManager(): void {
+    hoisted.mockRequireAuth.mockResolvedValue({
+      user: { id: 'usr_admin' },
+      principal: { id: 'prn_admin', role: 'admin' },
+      permissions: [PERMISSIONS.MEMBER_VIEW, PERMISSIONS.BILLING_MANAGE],
     })
   }
 
@@ -194,26 +204,47 @@ describe('getPlanNotice — the trial countdown', () => {
 
   it('keeps a persistent ended banner after expiry', async () => {
     vi.setSystemTime(AFTER)
+    asBillingManager()
     hoisted.mockFetchCatalogue.mockResolvedValue({ lastTrialPlanId: 'business' })
     hoisted.mockGetWorkspaceSettings.mockResolvedValue({ settings: { cloud: trialing } })
     await expect(getPlanNoticeHandler()).resolves.toEqual(
       expect.objectContaining({
         label: 'Business trial ended',
         ended: true,
-        actionLabel: 'Update billing',
+        actionLabel: 'Choose a plan',
+        choiceDueAt: new Date(
+          Math.max(Date.parse(ENDS) + 2 * 86_400_000, TRIAL_CHOICE_GATE_FROM)
+        ).toISOString(),
       })
     )
   })
 
+  it('tells a teammate who cannot manage billing, without a button they could not use', async () => {
+    vi.setSystemTime(AFTER)
+    hoisted.mockFetchCatalogue.mockResolvedValue({ lastTrialPlanId: 'business' })
+    hoisted.mockGetWorkspaceSettings.mockResolvedValue({ settings: { cloud: trialing } })
+    const notice = await getPlanNoticeHandler()
+    expect(notice).toEqual(
+      expect.objectContaining({
+        label: 'Business trial ended',
+        ended: true,
+        message: expect.stringMatching(/workspace owner needs to choose a plan/),
+      })
+    )
+    expect(notice).not.toHaveProperty('actionUrl')
+    expect(notice).not.toHaveProperty('choiceDueAt')
+  })
+
   it('still shows the ended banner more than seven days later', async () => {
     vi.setSystemTime(new Date('2026-03-23T00:00:00.000Z'))
+    asBillingManager()
     hoisted.mockFetchCatalogue.mockResolvedValue({ lastTrialPlanId: 'business' })
     hoisted.mockGetWorkspaceSettings.mockResolvedValue({ settings: { cloud: trialing } })
     await expect(getPlanNoticeHandler()).resolves.toEqual(
       expect.objectContaining({
         label: 'Business trial ended',
         ended: true,
-        actionLabel: 'Update billing',
+        actionLabel: 'Choose a plan',
       })
     )
   })

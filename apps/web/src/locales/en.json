@@ -64,6 +64,7 @@
   "widget.postDetail.loginToComment": "Log in to join the conversation",
   "widget.postDetail.teamAuthorFallback": "Team",
   "widget.postDetail.commentNoAccess": "You don't have access to comment on this board",
+  "widget.postDetail.authorOnlyReplies": "Only the post author and team members can reply on this board",
   "widget.commentList.empty": "No comments yet. Be the first to share your thoughts.",
   "widget.commentList.deleted": "[deleted]",
   "widget.commentList.removed": "[removed]",
@@ -401,6 +402,7 @@
   "portal.commentThread.edit": "Edit",
   "portal.commentThread.edited": "(edited)",
   "portal.commentThread.noAccess": "You don't have access to comment on this board",
+  "portal.commentThread.authorOnlyReplies": "Only the post author and team members can reply on this board",
   "portal.commentThread.save": "Save",
   "portal.commentThread.saving": "Saving…",
   "portal.commentThread.teamBadgeAria": "{name} Member",
@@ -1954,5 +1956,16 @@
   "widget.messages.resumeAria": "Open conversation with {name}",
   "widget.tickets.progress": "Ticket progress",
   "widget.changelog.filter.all": "All",
-  "widget.changelog.emptyFiltered": "No updates in this category yet"
+  "widget.changelog.emptyFiltered": "No updates in this category yet",
+  "workspaceUnavailable.deleted.title": "This workspace isn't available",
+  "workspaceUnavailable.deleted.body": "{host} has been deleted by the team that ran it.",
+  "workspaceUnavailable.deleted.owner": "Do you run this workspace? Sign in to Quackback to restore it.",
+  "workspaceUnavailable.paused.title": "This workspace is paused",
+  "workspaceUnavailable.paused.body": "Its team has paused it for now. Anything you've already shared is kept.",
+  "workspaceUnavailable.paused.owner": "Do you run this workspace? Sign in to Quackback to see why it's paused.",
+  "workspaceUnavailable.unknown.title": "There's no workspace here",
+  "workspaceUnavailable.unknown.body": "Nothing is set up at {host}. Check the address, or ask whoever sent you the link.",
+  "workspaceUnavailable.unknown.owner": "Setting up a workspace? Sign in to Quackback.",
+  "workspaceUnavailable.signIn": "Sign in to Quackback",
+  "workspaceUnavailable.poweredBy": "Powered by {brand}"
 }
