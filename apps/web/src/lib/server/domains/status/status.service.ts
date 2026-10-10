@@ -85,6 +85,13 @@ function appliesComponentStatusNow(input: {
   return true
 }
 
+/** Whether a row in this status holds its services at their affected status.
+ *  Mirrors the active-set filter in reconcileComponentStatus's query. */
+function holdsComponents(kind: string, status: string): boolean {
+  if (kind === 'incident') return status !== 'resolved'
+  return status === 'in_progress' || status === 'verifying'
+}
+
 /** The subset of `ids` that are live (not soft-deleted) services. */
 async function liveComponentIds(
   ids: StatusComponentId[],
@@ -338,23 +345,63 @@ export async function postIncidentUpdate(
   const existing = await requireIncident(id)
   const body = validateBody(input.body)
 
+  const wasTerminal = existing.status === TERMINAL_STATUS[existing.kind]
   const becomesTerminal = input.status === TERMINAL_STATUS[existing.kind]
-  // Posting 'in_progress' on a still-'scheduled' window is a real start:
-  // pull the start bound to now (job guards + uptime derivation read it),
-  // apply component statuses, and reschedule the auto-complete job — same
-  // effects as handleMaintenanceStart, but with the admin's own words as
-  // the single timeline row instead of the scheduler's canned copy.
+  // Moving a resolved incident or completed window back to an earlier stage
+  // reopens it: clearing resolvedAt takes it out of resolved history and puts
+  // it back in the open lists (and an incident in the public active list),
+  // and it holds its services again. Resolving it later stamps a fresh
+  // resolvedAt.
+  const reopens = wasTerminal && !becomesTerminal
+  // Posting 'in_progress' (or 'verifying') on a still-'scheduled' window is
+  // a real start: pull the start bound to now (job guards + uptime
+  // derivation read it), apply component statuses, and reschedule the
+  // auto-complete job — same effects as handleMaintenanceStart, but with the
+  // admin's own words as the single timeline row instead of the scheduler's
+  // canned copy.
   const startsMaintenance =
     existing.kind === 'maintenance' &&
     existing.status === 'scheduled' &&
-    input.status === 'in_progress'
+    holdsComponents(existing.kind, input.status)
+  const unschedulesMaintenance =
+    existing.kind === 'maintenance' &&
+    existing.status !== 'scheduled' &&
+    input.status === 'scheduled'
+  // A terminal update restores services unless the partial-recovery box was
+  // ticked; any other move recomputes them only when it changes whether the
+  // row holds them (a start, a reopen, a window moved back to scheduled).
+  const recomputesComponents = becomesTerminal
+    ? !input.skipRestore
+    : holdsComponents(existing.kind, existing.status) !==
+      holdsComponents(existing.kind, input.status)
 
-  const updateData: Record<string, unknown> = { status: input.status, updatedAt: new Date() }
-  if (becomesTerminal && !existing.resolvedAt) {
-    updateData.resolvedAt = new Date()
+  const now = new Date()
+  const updateData: Record<string, unknown> = { status: input.status, updatedAt: now }
+  if (becomesTerminal && (!wasTerminal || !existing.resolvedAt)) {
+    updateData.resolvedAt = now
+  }
+  if (reopens) {
+    updateData.resolvedAt = null
   }
   if (startsMaintenance) {
-    updateData.scheduledStartAt = new Date()
+    updateData.scheduledStartAt = now
+  }
+  // A window moved back across a boundary that has already passed would be
+  // pushed straight forward again by the scheduler's sweep (re-completed, or
+  // re-started). Switch that automation off; the admin moves it on from the
+  // editor instead.
+  if (existing.kind === 'maintenance' && (reopens || unschedulesMaintenance)) {
+    if (existing.autoComplete && existing.scheduledEndAt && existing.scheduledEndAt <= now) {
+      updateData.autoComplete = false
+    }
+    if (
+      input.status === 'scheduled' &&
+      existing.autoStart &&
+      existing.scheduledStartAt &&
+      existing.scheduledStartAt <= now
+    ) {
+      updateData.autoStart = false
+    }
   }
 
   // The timeline row, the status change and the component statuses it moves
@@ -370,7 +417,7 @@ export async function postIncidentUpdate(
     })
     await tx.update(statusIncidents).set(updateData).where(eq(statusIncidents.id, id))
 
-    if (startsMaintenance || (becomesTerminal && !input.skipRestore)) {
+    if (recomputesComponents) {
       const links = await tx.query.statusIncidentComponents.findMany({
         where: eq(statusIncidentComponents.incidentId, id),
       })
@@ -387,10 +434,19 @@ export async function postIncidentUpdate(
     )
     await enqueueMaintenanceJobs({
       ...existing,
-      status: 'in_progress',
+      status: input.status,
       scheduledStartAt: updateData.scheduledStartAt as Date,
     }).catch((err) =>
       log.error({ err, incident_id: id }, 'failed to re-enqueue maintenance jobs on manual start')
+    )
+  } else if (existing.kind === 'maintenance' && (reopens || unschedulesMaintenance)) {
+    // Reopened or moved back: queue whichever boundaries are still ahead.
+    await enqueueMaintenanceJobs({
+      ...existing,
+      ...(updateData as Partial<typeof existing>),
+      status: input.status,
+    }).catch((err) =>
+      log.error({ err, incident_id: id }, 'failed to re-enqueue maintenance jobs on reopen')
     )
   }
 
@@ -409,7 +465,8 @@ export async function postIncidentUpdate(
   return getStatusIncidentById(id)
 }
 
-/** Soft delete. Cancels any pending maintenance automation jobs. */
+/** Soft delete. Cancels any pending maintenance automation jobs and releases
+ *  the services the incident was holding. */
 export async function deleteIncident(id: StatusIncidentId): Promise<void> {
   const existing = await requireIncident(id)
 
@@ -419,15 +476,28 @@ export async function deleteIncident(id: StatusIncidentId): Promise<void> {
     )
   }
 
-  const result = await db
-    .update(statusIncidents)
-    .set({ deletedAt: new Date() })
-    .where(and(eq(statusIncidents.id, id), isNull(statusIncidents.deletedAt)))
-    .returning()
+  await db.transaction(async (tx) => {
+    const result = await tx
+      .update(statusIncidents)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(statusIncidents.id, id), isNull(statusIncidents.deletedAt)))
+      .returning()
 
-  if (result.length === 0) {
-    throw new NotFoundError('STATUS_INCIDENT_NOT_FOUND', `Status incident ${id} not found`)
-  }
+    if (result.length === 0) {
+      throw new NotFoundError('STATUS_INCIDENT_NOT_FOUND', `Status incident ${id} not found`)
+    }
+
+    // A deleted incident no longer holds its services down: recompute each
+    // one from whatever is still open (reconcile's active set skips deleted
+    // rows), or an active incident's services would stay degraded forever.
+    const links = await tx.query.statusIncidentComponents.findMany({
+      where: eq(statusIncidentComponents.incidentId, id),
+    })
+    const source = existing.kind === 'incident' ? 'incident' : 'maintenance'
+    for (const link of links) {
+      await reconcileComponentStatus(link.componentId, source, id, tx)
+    }
+  })
 }
 
 /**

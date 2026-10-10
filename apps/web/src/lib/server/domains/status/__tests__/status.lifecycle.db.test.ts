@@ -17,6 +17,7 @@ import {
   statusIncidents,
 } from '@/lib/server/db'
 import { ValidationError } from '@/lib/shared/errors'
+import { ANONYMOUS_ACTOR } from '@/lib/server/policy/types'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -36,12 +37,15 @@ import { createStatusComponent, deleteStatusComponent } from '../status.componen
 import {
   createIncident,
   createStatusIncidentTemplate,
+  deleteIncident,
   getStatusIncidentById,
+  listStatusIncidents,
   listStatusIncidentTemplates,
   postIncidentUpdate,
   updateIncident,
 } from '../status.service'
-import { handleMaintenanceComplete } from '../status.maintenance'
+import { handleMaintenanceComplete, reconcileMaintenanceWindows } from '../status.maintenance'
+import { getStatusPageSnapshot } from '../status.public'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -54,6 +58,25 @@ let author: PrincipalId
 
 async function service(name: string): Promise<StatusComponentId> {
   return (await createStatusComponent({ name })).id
+}
+
+async function openIncident(
+  affected: {
+    componentId: StatusComponentId
+    componentStatus: 'major_outage' | 'degraded_performance'
+  }[]
+) {
+  return createIncident(
+    {
+      kind: 'incident',
+      title: 'Errors',
+      status: 'investigating',
+      body: 'Looking into it.',
+      affectedComponents: affected,
+      notifySubscribers: false,
+    },
+    { principalId: author }
+  )
 }
 
 async function statusOf(id: StatusComponentId) {
@@ -237,6 +260,126 @@ describe('status lifecycle (Postgres)', () => {
       expect(await testDb.query.statusIncidents.findMany()).toEqual([])
       expect(await testDb.query.statusIncidentComponents.findMany()).toEqual([])
       expect(await statusOf(api)).toBe('operational')
+    })
+  })
+
+  describe('deleting an incident', () => {
+    it('releases the services it held, but not ones another open incident still holds', async () => {
+      const api = await service('API')
+      const web = await service('Website')
+      const first = await openIncident([
+        { componentId: api, componentStatus: 'major_outage' },
+        { componentId: web, componentStatus: 'major_outage' },
+      ])
+      const second = await openIncident([
+        { componentId: api, componentStatus: 'degraded_performance' },
+      ])
+
+      await deleteIncident(first.id)
+      expect(await statusOf(web)).toBe('operational')
+      expect(await statusOf(api)).toBe('degraded_performance')
+
+      await deleteIncident(second.id)
+      expect(await statusOf(api)).toBe('operational')
+    })
+  })
+
+  describe('reopening', () => {
+    it('a resolved incident clears resolvedAt, rejoins the open lists and holds its services again', async () => {
+      const api = await service('API')
+      const incident = await openIncident([{ componentId: api, componentStatus: 'major_outage' }])
+      await postIncidentUpdate(
+        incident.id,
+        { status: 'resolved', body: 'Fixed.' },
+        { principalId: author }
+      )
+      expect(await statusOf(api)).toBe('operational')
+      // Make the first resolution clearly older than any later one.
+      await testDb
+        .update(statusIncidents)
+        .set({ resolvedAt: new Date(Date.now() - 2 * HOUR) })
+        .where(eq(statusIncidents.id, incident.id))
+
+      const reopened = await postIncidentUpdate(
+        incident.id,
+        { status: 'monitoring', body: 'It is back.' },
+        { principalId: author }
+      )
+      expect(reopened.status).toBe('monitoring')
+      expect(reopened.resolvedAt).toBeNull()
+      expect(await statusOf(api)).toBe('major_outage')
+      const open = await listStatusIncidents({ kind: 'incident', state: 'active' })
+      expect(open.items.map((i) => i.id)).toEqual([incident.id])
+      const snapshot = await getStatusPageSnapshot(ANONYMOUS_ACTOR, { pageDescription: '' })
+      expect(snapshot.activeIncidents.map((i) => i.id)).toEqual([incident.id])
+
+      const resolvedAgain = await postIncidentUpdate(
+        incident.id,
+        { status: 'resolved', body: 'Fixed for real.' },
+        { principalId: author }
+      )
+      expect(resolvedAgain.resolvedAt!.getTime()).toBeGreaterThan(Date.now() - 60_000)
+      expect(await statusOf(api)).toBe('operational')
+    })
+
+    it('a completed window goes back to holding its services and is not re-completed by the sweep', async () => {
+      const db = await service('Database')
+      const window = await createIncident(
+        {
+          kind: 'maintenance',
+          title: 'Upgrade',
+          status: 'in_progress',
+          body: 'Upgrading.',
+          affectedComponents: [{ componentId: db, componentStatus: 'under_maintenance' }],
+          scheduledStartAt: new Date(Date.now() - 2 * HOUR),
+          scheduledEndAt: new Date(Date.now() - HOUR),
+          notifySubscribers: false,
+        },
+        { principalId: author }
+      )
+      await handleMaintenanceComplete(window.id)
+      expect(await statusOf(db)).toBe('operational')
+
+      const reopened = await postIncidentUpdate(
+        window.id,
+        { status: 'verifying', body: 'Still checking replicas.' },
+        { principalId: author }
+      )
+      expect(reopened.resolvedAt).toBeNull()
+      // Its end has passed, so auto-complete would close it again at once.
+      expect(reopened.autoComplete).toBe(false)
+      expect(await statusOf(db)).toBe('under_maintenance')
+
+      await reconcileMaintenanceWindows()
+      expect((await getStatusIncidentById(window.id)).status).toBe('verifying')
+    })
+
+    it('a running window moved back to scheduled is not restarted by the sweep', async () => {
+      const db = await service('Database')
+      const window = await createIncident(
+        {
+          kind: 'maintenance',
+          title: 'Upgrade',
+          status: 'in_progress',
+          body: 'Upgrading.',
+          affectedComponents: [{ componentId: db, componentStatus: 'under_maintenance' }],
+          scheduledStartAt: new Date(Date.now() - HOUR),
+          scheduledEndAt: new Date(Date.now() + HOUR),
+          notifySubscribers: false,
+        },
+        { principalId: author }
+      )
+
+      const moved = await postIncidentUpdate(
+        window.id,
+        { status: 'scheduled', body: 'Not yet, rescheduling.' },
+        { principalId: author }
+      )
+      expect(moved.autoStart).toBe(false)
+      expect(await statusOf(db)).toBe('operational')
+
+      await reconcileMaintenanceWindows()
+      expect((await getStatusIncidentById(window.id)).status).toBe('scheduled')
     })
   })
 })

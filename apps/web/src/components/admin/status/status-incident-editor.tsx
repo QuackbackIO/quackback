@@ -192,13 +192,31 @@ function StatusIncidentEditorContent({
   async function handlePost() {
     if (!incident || !body.trim() || postMutation.isPending) return
     try {
-      await postMutation.mutateAsync({
+      const posted = await postMutation.mutateAsync({
         id: incidentId,
         status: effectiveTarget,
         body: body.trim(),
         skipRestore: terminal ? !restore : undefined,
         ...(templateId ? { templateId } : {}),
       })
+      // Starting, reopening or moving a window back can move its start bound
+      // or switch its automation off server-side. Take those into the
+      // sidebar, or the next autosave would write the stale values back.
+      if (posted.kind === 'maintenance') {
+        setDetails((prev) =>
+          prev
+            ? {
+                ...prev,
+                scheduledStart: posted.scheduledStartAt
+                  ? new Date(posted.scheduledStartAt)
+                  : undefined,
+                scheduledEnd: posted.scheduledEndAt ? new Date(posted.scheduledEndAt) : undefined,
+                autoStart: posted.autoStart,
+                autoComplete: posted.autoComplete,
+              }
+            : prev
+        )
+      }
       setBody('')
       setRestore(true)
       setTemplateId(null)
@@ -233,7 +251,9 @@ function StatusIncidentEditorContent({
         ? 'Post update & resolve'
         : effectiveTarget === 'completed'
           ? 'Post update & complete'
-          : `Post update & mark as ${LIFECYCLE_LABELS[effectiveTarget]}`
+          : currentStatus && isTerminalLifecycle(currentStatus)
+            ? `Post update & reopen as ${LIFECYCLE_LABELS[effectiveTarget]}`
+            : `Post update & mark as ${LIFECYCLE_LABELS[effectiveTarget]}`
 
   const sidebar = (
     <EditorSidebarContent
