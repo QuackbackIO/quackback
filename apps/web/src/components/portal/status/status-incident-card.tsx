@@ -43,12 +43,12 @@ export function StatusIncidentCard({ incident, className }: StatusIncidentCardPr
     >
       <div
         className={cn(
-          'flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5 px-4 py-2.5 text-white',
+          'flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5 px-4 py-2.5',
           impactStyle.solid
         )}
       >
         <h3 className="text-sm font-semibold">{incident.title}</h3>
-        <span className="text-[11px] font-semibold tracking-wide uppercase text-white/85">
+        <span className="text-[11px] font-semibold tracking-wide uppercase">
           {intl.formatMessage(LIFECYCLE_LABEL[incident.status])}
         </span>
       </div>

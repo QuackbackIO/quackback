@@ -113,6 +113,8 @@ export {
   getPublicStatusIncident,
   getUptimeSeries,
   listIncidentHistory,
+  listStatusFeedItems,
+  statusIncidentLastActivityAt,
 } from './status.public'
 
 export {
@@ -124,6 +126,7 @@ export {
   getStatusSubscriptionCounts,
   countStatusSubscriptionsSince,
   getActiveSubscribersForComponents,
+  getActiveSubscriptionsForComponents,
   countActiveSubscribersForComponents,
   addStatusSubscriberByEmail,
   importStatusSubscribersFromEmails,

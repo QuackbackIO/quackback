@@ -58,6 +58,8 @@ import {
   getPublicStatusIncident,
   getUptimeSeries,
   listIncidentHistory,
+  listStatusFeedItems,
+  statusIncidentLastActivityAt,
 } from '@/lib/server/domains/status'
 import type {
   StatusIncidentWithDetails,
@@ -142,6 +144,7 @@ function serializeSnapshot(snapshot: StatusPageSnapshot) {
       ...day,
       incidents: day.incidents.map(serializePublicIncident),
     })),
+    recentWindow: { ...snapshot.recentWindow, start: toIsoString(snapshot.recentWindow.start) },
   }
 }
 
@@ -852,6 +855,9 @@ export const getStatusUptimeFn = createServerFn({ method: 'GET' })
 const listStatusHistorySchema = z.object({
   cursor: z.string().optional(),
   limit: PageLimitSchema,
+  /** The page snapshot's `recentWindow.start`: history continues after the
+   *  incidents the page already lists. */
+  before: z.iso.datetime().optional(),
 })
 
 /** Paginated resolved-incident history (public view). */
@@ -866,6 +872,27 @@ export const listStatusHistoryFn = createServerFn({ method: 'GET' })
     const result = await listIncidentHistory(gate.actor, {
       cursor: data.cursor,
       limit: data.limit,
+      before: data.before ? new Date(data.before) : undefined,
     })
     return { ...result, items: result.items.map(serializePublicIncident) }
+  })
+
+const listStatusFeedSchema = z.object({
+  limit: PageLimitSchema,
+})
+
+/** The status RSS feed's items (public view): open incidents, scheduled and
+ *  in-progress maintenance, then recently resolved items, newest activity
+ *  first. Empty (not an error) when the page is gated out, like the history. */
+export const listStatusFeedFn = createServerFn({ method: 'GET' })
+  .validator(listStatusFeedSchema)
+  .handler(async ({ data }) => {
+    const gate = await resolveStatusPageGate()
+    if (!gate.available) return []
+
+    const items = await listStatusFeedItems(gate.actor, data.limit)
+    return items.map((incident) => ({
+      ...serializePublicIncident(incident),
+      lastActivityAt: toIsoString(statusIncidentLastActivityAt(incident)),
+    }))
   })

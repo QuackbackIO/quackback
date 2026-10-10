@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState, type ComponentProps } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { toast } from 'sonner'
@@ -25,10 +25,35 @@ import {
 } from '@/lib/client/queries/status'
 import { subscribeStatusFn, unsubscribeStatusFn } from '@/lib/server/functions/status-subscriptions'
 import type { StatusComponentId } from '@quackback/ids'
+import {
+  resumeSubscribeUrl,
+  savePendingStatusSubscription,
+  takePendingStatusSubscription,
+  takeResumeMarker,
+  type PendingStatusSubscription,
+} from './pending-status-subscription'
 
-/** Matches the exact string `subscribeStatusFn` throws for a lazy/anonymous
- *  better-auth session — see `lib/server/functions/status-subscriptions.ts`. */
-const ANONYMOUS_ERROR_MESSAGE = 'Anonymous interaction is not enabled'
+/** What `subscribeStatusFn` throws for a caller without a real account: no
+ *  session at all (`requireAuth`), or a lazy/anonymous better-auth session
+ *  (see `lib/server/functions/status-subscriptions.ts`). Either way the fix is
+ *  to sign in, not to retry. */
+const SIGN_IN_ERROR_MESSAGES = new Set([
+  'Authentication required',
+  'Anonymous interaction is not enabled',
+])
+
+// Only a subscriber who clicks "Subscribed" needs the confirm dialog.
+const LazyConfirmDialog = lazy(() =>
+  import('@/components/shared/confirm-dialog').then((m) => ({ default: m.ConfirmDialog }))
+)
+
+function ConfirmDialog(props: ComponentProps<typeof LazyConfirmDialog>) {
+  return (
+    <Suspense fallback={null}>
+      <LazyConfirmDialog {...props} />
+    </Suspense>
+  )
+}
 
 interface StatusSubscribeButtonProps {
   className?: string
@@ -38,9 +63,11 @@ interface StatusSubscribeButtonProps {
  * Self-serve Subscribe/Subscribed toggle for the public status page. Unlike
  * `ChangelogSubscribeButton` (only rendered once the caller is already
  * identified), this one is always visible: an anonymous visitor can open the
- * dialog and pick a scope, and submitting surfaces the portal auth dialog
- * instead of a generic error, since `subscribeStatusFn` requires a real
- * signed-in principal.
+ * dialog and pick a scope, and submitting opens the portal sign-in dialog,
+ * since `subscribeStatusFn` requires a real signed-in principal. The chosen
+ * scope is held across sign-in (see `pending-status-subscription.ts`) and
+ * the subscription completes once the visitor is back, signed in.
+ * Unsubscribing asks first.
  */
 export function StatusSubscribeButton({ className }: StatusSubscribeButtonProps) {
   const intl = useIntl()
@@ -51,8 +78,15 @@ export function StatusSubscribeButton({ className }: StatusSubscribeButtonProps)
   const [open, setOpen] = useState(false)
   const [scope, setScope] = useState<'page' | 'components'>('page')
   const [selectedIds, setSelectedIds] = useState<StatusComponentId[]>([])
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [confirmMounted, setConfirmMounted] = useState(false)
 
-  const { data: mySubscription } = useQuery(publicStatusSubscriptionQueries.mine())
+  // Only a signed-in visitor has a subscription to look up; for anyone else
+  // the read could only fail (and retry).
+  const { data: mySubscription } = useQuery({
+    ...publicStatusSubscriptionQueries.mine(),
+    enabled: signedIn,
+  })
   // Lazily loaded only once the dialog is open (and cheap — the same query the
   // index page itself uses, so it's usually already warm in the cache).
   const { data: pageData } = useQuery({ ...publicStatusPageQueries.get(), enabled: open })
@@ -68,9 +102,27 @@ export function StatusSubscribeButton({ className }: StatusSubscribeButtonProps)
   const invalidateSubscription = () =>
     queryClient.invalidateQueries({ queryKey: statusKeys.mySubscription() })
 
+  /** Send the visitor through sign-in, keeping what they chose for after. */
+  function requestSignIn(pending: PendingStatusSubscription) {
+    savePendingStatusSubscription(pending)
+    setOpen(false)
+    authPopover?.openAuthPopover({
+      mode: 'login',
+      // A sign-in that leaves the page (an SSO redirect, a magic link) comes
+      // back here, marked as a return from subscribing.
+      callbackUrl: resumeSubscribeUrl(),
+      // One that finishes in the dialog subscribes straight away.
+      onSuccess: completePendingSubscription,
+    })
+  }
+
+  function completePendingSubscription() {
+    const pending = takePendingStatusSubscription()
+    if (pending) subscribe(pending)
+  }
+
   const subscribeMutation = useMutation({
-    mutationFn: (input: { scope: 'page' | 'components'; componentIds?: string[] }) =>
-      subscribeStatusFn({ data: input }),
+    mutationFn: (input: PendingStatusSubscription) => subscribeStatusFn({ data: input }),
     onSuccess: () => {
       invalidateSubscription()
       setOpen(false)
@@ -81,10 +133,10 @@ export function StatusSubscribeButton({ className }: StatusSubscribeButtonProps)
         })
       )
     },
-    onError: (error: unknown) => {
-      if (error instanceof Error && error.message === ANONYMOUS_ERROR_MESSAGE) {
-        setOpen(false)
-        authPopover?.openAuthPopover({ mode: 'login' })
+    onError: (error: unknown, input) => {
+      // A session that lapsed since the page loaded.
+      if (error instanceof Error && SIGN_IN_ERROR_MESSAGES.has(error.message)) {
+        requestSignIn(input)
         return
       }
       toast.error(
@@ -96,10 +148,22 @@ export function StatusSubscribeButton({ className }: StatusSubscribeButtonProps)
     },
   })
 
+  // Back from a subscribe sign-in that left the page (the SSO redirect, or
+  // the tab a magic link opened): finish what the visitor asked for. Any
+  // other sign-in leaves a saved choice alone, so a visitor who closed the
+  // dialog and signs in later for some other reason isn't subscribed.
+  const { mutate: subscribe } = subscribeMutation
+  useEffect(() => {
+    if (!signedIn || !takeResumeMarker()) return
+    const pending = takePendingStatusSubscription()
+    if (pending) subscribe(pending)
+  }, [signedIn, subscribe])
+
   const unsubscribeMutation = useMutation({
     mutationFn: () => unsubscribeStatusFn(),
     onSuccess: () => {
       invalidateSubscription()
+      setConfirmOpen(false)
       toast.success(
         intl.formatMessage({
           id: 'portal.status.unsubscribe.success',
@@ -107,32 +171,79 @@ export function StatusSubscribeButton({ className }: StatusSubscribeButtonProps)
         })
       )
     },
+    onError: () => {
+      toast.error(
+        intl.formatMessage({
+          id: 'portal.status.unsubscribe.error',
+          defaultMessage: 'Could not unsubscribe. Please try again.',
+        })
+      )
+    },
   })
 
-  const subscribed = mySubscription?.subscribed ?? false
+  // A cached answer must not outlive the session it was read for.
+  const subscribed = signedIn && (mySubscription?.subscribed ?? false)
 
   if (subscribed) {
     return (
-      <Button
-        variant="outline"
-        size="sm"
-        className={cn('shrink-0 gap-1.5', className)}
-        disabled={unsubscribeMutation.isPending}
-        onClick={() => unsubscribeMutation.mutate()}
-      >
-        <BellIconSolid className="h-4 w-4 text-primary" />
-        <span className="sr-only sm:not-sr-only">
-          {intl.formatMessage({ id: 'portal.status.subscribed', defaultMessage: 'Subscribed' })}
-        </span>
-      </Button>
+      <>
+        <Button
+          variant="outline"
+          size="sm"
+          className={cn('shrink-0 gap-1.5', className)}
+          disabled={unsubscribeMutation.isPending}
+          onClick={() => {
+            setConfirmMounted(true)
+            setConfirmOpen(true)
+          }}
+        >
+          <BellIconSolid className="h-4 w-4 text-primary" />
+          <span className="sr-only sm:not-sr-only">
+            {intl.formatMessage({ id: 'portal.status.subscribed', defaultMessage: 'Subscribed' })}
+          </span>
+        </Button>
+        {confirmMounted && (
+          <ConfirmDialog
+            open={confirmOpen}
+            onOpenChange={setConfirmOpen}
+            title={intl.formatMessage({
+              id: 'portal.status.unsubscribe.confirmTitle',
+              defaultMessage: 'Unsubscribe from status updates?',
+            })}
+            description={intl.formatMessage({
+              id: 'portal.status.unsubscribe.confirmDescription',
+              defaultMessage: "You'll stop getting emails about incidents and maintenance.",
+            })}
+            confirmLabel={intl.formatMessage({
+              id: 'portal.status.unsubscribe.confirm',
+              defaultMessage: 'Unsubscribe',
+            })}
+            cancelLabel={intl.formatMessage({
+              id: 'portal.status.unsubscribe.cancel',
+              defaultMessage: 'Stay subscribed',
+            })}
+            isPending={unsubscribeMutation.isPending}
+            // Resolves on success (which closes the dialog); a failure keeps
+            // it open beside the error toast so the visitor can try again.
+            onConfirm={async () => {
+              await unsubscribeMutation.mutateAsync()
+            }}
+          />
+        )}
+      </>
     )
   }
 
   function handleSubscribe() {
-    subscribeMutation.mutate({
+    const pending: PendingStatusSubscription = {
       scope,
-      componentIds: scope === 'components' ? selectedIds : undefined,
-    })
+      componentIds: scope === 'components' ? selectedIds : [],
+    }
+    if (!signedIn) {
+      requestSignIn(pending)
+      return
+    }
+    subscribeMutation.mutate(pending)
   }
 
   function toggleComponent(id: StatusComponentId, checked: boolean) {

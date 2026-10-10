@@ -211,10 +211,10 @@ export function isSetupWizardMessage(key: string): boolean {
 /**
  * Strings only one area of the app shows. Like the viewer's, pages leave them
  * out of the catalog they seed. An area its routes render on the server loads
- * its strings in the route loader (portal settings and help center, the admin
- * notification preferences); one that opens on a click loads them as it opens
- * (the two-factor sign-in steps, the notification lists) or, for the not-found
- * and error pages, as they show. The private portal's gate loads the whole
+ * its strings in the route loader (portal settings, the help center and the
+ * status page, the admin notification preferences); one that opens on a click
+ * loads them as it opens (the two-factor sign-in steps, the notification
+ * lists) or, for the not-found and error pages, as they show. The private portal's gate loads the whole
  * catalog itself, so its strings need no seed at all.
  * See `AreaMessages`.
  *
@@ -229,6 +229,24 @@ export const AREA_MESSAGE_PREFIXES = {
   notificationText: ['portal.notifications.text.'],
   accessGate: ['portal.accessGate.'],
   errorPage: ['common.errorPage.'],
+  // The public status page's own strings. The status labels it shares with
+  // the admin status pages (componentStatus, hero, impact, lifecycle) stay
+  // in the seed.
+  statusPage: [
+    'portal.status.title',
+    'portal.status.description',
+    'portal.status.rssFeed',
+    'portal.status.subscribe',
+    'portal.status.unsubscribe.',
+    'portal.status.incidentCard.',
+    'portal.status.incidentDetail.',
+    'portal.status.uptime.',
+    'portal.status.section.',
+    'portal.status.history.',
+    'portal.status.noRecentIncidents',
+    'portal.status.notFound.',
+    'portal.status.signInRequired.',
+  ],
 } as const satisfies Record<string, readonly string[]>
 
 export type MessageArea = keyof typeof AREA_MESSAGE_PREFIXES

@@ -75,7 +75,7 @@ export const statusKeys = {
   publicIncident: (id: string) => [...statusKeys.public(), 'incident', id] as const,
   publicUptime: (componentIds: string[], windowDays?: number) =>
     [...statusKeys.public(), 'uptime', [...componentIds].sort(), windowDays ?? 90] as const,
-  publicHistory: () => [...statusKeys.public(), 'history'] as const,
+  publicHistory: (before?: string) => [...statusKeys.public(), 'history', before] as const,
   mySubscription: () => [...statusKeys.public(), 'my-subscription'] as const,
 }
 
@@ -221,13 +221,15 @@ export const publicStatusUptimeQueries = {
     }),
 }
 
-/** Paginated resolved-incident history, for the "Incident history" load-more. */
+/** Paginated resolved-incident history, for the "Incident history" load-more.
+ *  `before` is the page snapshot's `recentWindow.start`, so history continues
+ *  after the incidents the page already shows instead of repeating them. */
 export const publicStatusHistoryQueries = {
-  list: () =>
+  list: (before?: string) =>
     infiniteQueryOptions({
-      queryKey: statusKeys.publicHistory(),
+      queryKey: statusKeys.publicHistory(before),
       queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
-        listStatusHistoryFn({ data: { cursor: pageParam, limit: 20 } }),
+        listStatusHistoryFn({ data: { cursor: pageParam, limit: 20, before } }),
       initialPageParam: undefined as string | undefined,
       getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
       staleTime: STALE_TIME_MEDIUM,

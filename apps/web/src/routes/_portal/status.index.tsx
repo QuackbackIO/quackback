@@ -5,6 +5,8 @@ import { useIntl, FormattedMessage } from 'react-intl'
 import { RssIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import { PortalPageHeader } from '@/components/public/portal-page-header'
+import { AreaMessages } from '@/components/shared/area-messages'
+import { DEFAULT_LOCALE, loadAreaMessages } from '@/lib/shared/i18n'
 import { publicStatusPageQueries, publicStatusHistoryQueries } from '@/lib/client/queries/status'
 import { setPublicDocumentCacheHeaders } from '@/lib/server/functions/public-cache'
 import {
@@ -13,6 +15,8 @@ import {
   StatusIncidentCard,
   StatusIncidentTimeline,
   StatusSubscribeButton,
+  StatusSignInPrompt,
+  useStatusSignInCouldGrantAccess,
   LIFECYCLE_STYLE,
   LIFECYCLE_LABEL,
 } from '@/components/portal/status'
@@ -21,6 +25,12 @@ import type { StatusUptimeDay } from '@/components/portal/status'
 export const Route = createFileRoute('/_portal/status/')({
   loader: async ({ context }) => {
     if (typeof window === 'undefined') await setPublicDocumentCacheHeaders()
+    // The status page's strings stay out of the catalog every other page
+    // seeds; the page reads them with its data.
+    const messagesPromise = loadAreaMessages(
+      context.acceptLanguageLocale ?? DEFAULT_LOCALE,
+      'statusPage'
+    )
     try {
       await context.queryClient.ensureQueryData(publicStatusPageQueries.get())
     } catch {
@@ -33,6 +43,7 @@ export const Route = createFileRoute('/_portal/status/')({
     return {
       workspaceName: context.settings?.name ?? 'Quackback',
       baseUrl: context.baseUrl ?? '',
+      messages: await messagesPromise,
     }
   },
   head: ({ loaderData }) => {
@@ -54,9 +65,22 @@ export const Route = createFileRoute('/_portal/status/')({
       links: canonicalUrl ? [{ rel: 'canonical', href: canonicalUrl }] : [],
     }
   },
-  notFoundComponent: StatusPageNotFound,
-  component: StatusPage,
+  notFoundComponent: () => (
+    <AreaMessages area="statusPage">
+      <StatusPageNotFound />
+    </AreaMessages>
+  ),
+  component: StatusPageRoute,
 })
+
+function StatusPageRoute() {
+  const { messages } = Route.useLoaderData()
+  return (
+    <AreaMessages area="statusPage" messages={messages}>
+      <StatusPage />
+    </AreaMessages>
+  )
+}
 
 function formatUtcDayLong(dateStr: string, locale: string): string {
   return new Date(`${dateStr}T00:00:00Z`).toLocaleDateString(locale, {
@@ -120,10 +144,14 @@ function StatusPage() {
   const [historyExpanded, setHistoryExpanded] = useState(false)
   const {
     data: historyPages,
+    isSuccess: historyLoaded,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useInfiniteQuery({ ...publicStatusHistoryQueries.list(), enabled: historyExpanded })
+  } = useInfiniteQuery({
+    ...publicStatusHistoryQueries.list(snapshot.recentWindow.start),
+    enabled: historyExpanded,
+  })
   const historyItems = historyPages?.pages.flatMap((page) => page.items) ?? []
 
   return (
@@ -199,7 +227,7 @@ function StatusPage() {
                 return (
                   <div key={incident.id} className="flex gap-3.5 p-4 sm:p-5">
                     <div className="w-11 shrink-0 overflow-hidden rounded-md border border-border/60 text-center">
-                      <div className="bg-blue-500/15 py-0.5 text-[11px] font-semibold tracking-wide text-blue-600 uppercase dark:text-blue-400">
+                      <div className="bg-blue-500/15 py-0.5 text-[11px] font-semibold tracking-wide text-blue-700 uppercase dark:text-blue-400">
                         {start.toLocaleDateString(intl.locale, { month: 'short', timeZone: 'UTC' })}
                       </div>
                       <div className="py-0.5 text-sm font-semibold">
@@ -270,20 +298,23 @@ function StatusPage() {
           )}
         </div>
 
-        <div className="divide-y divide-border/40">
-          {snapshot.recentIncidents.map((day) => (
-            <div key={day.date} className="py-3.5 first:pt-0">
-              <p className="mb-1.5 text-[13px] font-semibold text-muted-foreground">
-                {formatUtcDayLong(day.date, intl.locale)}
-              </p>
-              {day.incidents.length === 0 ? (
-                <p className="text-[13px] text-muted-foreground/75">
-                  <FormattedMessage
-                    id="portal.status.noIncidentsReported"
-                    defaultMessage="No incidents reported."
-                  />
+        {/* Only days with an incident are listed, so a quiet window is an
+            empty list, not a run of empty days. */}
+        {snapshot.recentIncidents.length === 0 ? (
+          <p className="text-[13px] text-muted-foreground">
+            <FormattedMessage
+              id="portal.status.noRecentIncidents"
+              defaultMessage="No incidents in the last {days} days."
+              values={{ days: snapshot.recentWindow.days }}
+            />
+          </p>
+        ) : (
+          <div className="divide-y divide-border/40">
+            {snapshot.recentIncidents.map((day) => (
+              <div key={day.date} className="py-3.5 first:pt-0">
+                <p className="mb-1.5 text-[13px] font-semibold text-muted-foreground">
+                  {formatUtcDayLong(day.date, intl.locale)}
                 </p>
-              ) : (
                 <div className="flex flex-col gap-3.5">
                   {day.incidents.map((incident) => (
                     <div key={incident.id}>
@@ -304,10 +335,10 @@ function StatusPage() {
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
-          ))}
-        </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {historyExpanded && historyItems.length > 0 && (
           <div className="mt-4 flex flex-col gap-3.5 border-t border-border/40 pt-4">
@@ -334,6 +365,15 @@ function StatusPage() {
               </div>
             ))}
           </div>
+        )}
+
+        {historyExpanded && historyLoaded && historyItems.length === 0 && !hasNextPage && (
+          <p className="mt-4 border-t border-border/40 pt-4 text-[13px] text-muted-foreground">
+            <FormattedMessage
+              id="portal.status.history.empty"
+              defaultMessage="No earlier incidents."
+            />
+          </p>
         )}
 
         {historyExpanded && hasNextPage && (
@@ -365,6 +405,16 @@ function cnLifecycle(textClass: string): string {
 }
 
 function StatusPageNotFound() {
+  // Gated pages 404 like missing ones; a signed-out visitor who could get in
+  // by signing in is told so instead.
+  const signInCouldGrantAccess = useStatusSignInCouldGrantAccess()
+  if (signInCouldGrantAccess) {
+    return (
+      <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-16 text-center">
+        <StatusSignInPrompt />
+      </div>
+    )
+  }
   return (
     <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-16 text-center">
       <h1 className="text-2xl font-bold mb-2">

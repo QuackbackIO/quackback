@@ -1,6 +1,7 @@
 import { Button, Heading, Section, Text } from '@react-email/components'
 import { EmailLayout, NotificationFooter } from './email-layout'
 import { typography, button, colors } from './shared-styles'
+import { withLineBreaks } from './line-breaks'
 
 export type IncidentImpact = 'none' | 'minor' | 'major' | 'critical'
 
@@ -16,7 +17,7 @@ interface StatusIncidentPublishedEmailProps {
   impact: IncidentImpact
   /** Humanized incident status, e.g. "Investigating". */
   statusLabel: string
-  /** Plain text of the first update. */
+  /** Plain text of the first update. Its line breaks are kept. */
   body: string
   affectedComponents: AffectedComponent[]
   incidentUrl: string
@@ -106,7 +107,9 @@ export function StatusIncidentPublishedEmail({
           {incidentTitle}
         </Text>
         {body && (
-          <Text style={{ ...typography.textSmall, marginTop: '0', marginBottom: '0' }}>{body}</Text>
+          <Text style={{ ...typography.textSmall, marginTop: '0', marginBottom: '0' }}>
+            {withLineBreaks(body)}
+          </Text>
         )}
       </Section>
 

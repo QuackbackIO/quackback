@@ -1061,7 +1061,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-226 of 1081 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+227 of 1082 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1159,6 +1159,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/status.ts`::getStatusIncidentPublicFn | server-fn |
 | `lib/server/functions/status.ts`::getStatusPageFn | server-fn |
 | `lib/server/functions/status.ts`::getStatusUptimeFn | server-fn |
+| `lib/server/functions/status.ts`::listStatusFeedFn | server-fn |
 | `lib/server/functions/status.ts`::listStatusHistoryFn | server-fn |
 | `lib/server/functions/subscriptions.ts`::previewUnsubscribeTokenFn | server-fn |
 | `lib/server/functions/subscriptions.ts`::processUnsubscribeTokenFn | server-fn |

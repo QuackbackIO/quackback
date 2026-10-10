@@ -1910,25 +1910,6 @@ export async function getChangelogSubscriberTargets(
 // Status Page Subscriber Targets
 // ============================================================================
 
-const STATUS_COMPONENT_STATUS_LABELS: Record<string, string> = {
-  operational: 'Operational',
-  degraded_performance: 'Degraded performance',
-  partial_outage: 'Partial outage',
-  major_outage: 'Major outage',
-  under_maintenance: 'Under maintenance',
-}
-
-const STATUS_LIFECYCLE_LABELS: Record<string, string> = {
-  investigating: 'Investigating',
-  identified: 'Identified',
-  monitoring: 'Monitoring',
-  resolved: 'Resolved',
-  scheduled: 'Scheduled',
-  in_progress: 'In progress',
-  verifying: 'Verifying',
-  completed: 'Completed',
-}
-
 /**
  * Subscriber targets for the two status publish events (incident_created,
  * maintenance_scheduled). A subscriber is notified iff (a) they pass the
@@ -1937,6 +1918,9 @@ const STATUS_LIFECYCLE_LABELS: Record<string, string> = {
  * workspace `emailsDisabled` switch and the per-principal notification
  * matrix (`status_incident`/email, which subsumes `emailMuted`); the in-app
  * notification ignores `emailsDisabled` (it's email-specific).
+ *
+ * Each email lists only the affected components its recipient can see, with
+ * the status the incident set on each one, as the public page shows them.
  */
 export async function getStatusSubscriberTargets(
   event: EventData,
@@ -1950,13 +1934,16 @@ export async function getStatusSubscriberTargets(
 
   const {
     statusComponents,
+    statusIncidentComponents,
     statusIncidentUpdates,
     isNull: isNullOp,
     inArray: inArrayOp,
     eq: eqOp,
     asc: ascOp,
   } = await import('@/lib/server/db')
-  const { getActiveSubscribersForComponents } =
+  const { STATUS_COMPONENT_STATUS_LABELS, statusLifecycleLabel } =
+    await import('@/lib/server/domains/status/status.labels')
+  const { getActiveSubscriptionsForComponents } =
     await import('@/lib/server/domains/status/status.subscription')
   const { isStatusAudienceGranted } = await import('@/lib/server/domains/status/status.audience')
   const { canViewStatusComponent } = await import('@/lib/server/policy/status')
@@ -1966,15 +1953,26 @@ export async function getStatusSubscriberTargets(
 
   const settings = await getStatusSettings()
 
-  // Affected components (for the per-subscriber visibility check + email body).
+  // Affected components (for the per-subscriber visibility check + email
+  // body), each with the status this incident set on it. A component whose
+  // link is gone (edited after publish) shows its live status instead.
   const affected = affectedComponentIds.length
     ? await db
         .select({
           id: statusComponents.id,
           name: statusComponents.name,
           segmentIds: statusComponents.segmentIds,
+          liveStatus: statusComponents.status,
+          linkedStatus: statusIncidentComponents.componentStatus,
         })
         .from(statusComponents)
+        .leftJoin(
+          statusIncidentComponents,
+          and(
+            eqOp(statusIncidentComponents.componentId, statusComponents.id),
+            eqOp(statusIncidentComponents.incidentId, incident.id as never)
+          )
+        )
         .where(
           and(
             inArrayOp(statusComponents.id, affectedComponentIds as never),
@@ -1983,12 +1981,22 @@ export async function getStatusSubscriberTargets(
         )
     : []
   const affectedById = new Map(affected.map((c) => [String(c.id), c]))
+  // In the order the incident lists them.
+  const affectedInOrder = affectedComponentIds
+    .map((id) => affectedById.get(String(id)))
+    .filter((c): c is NonNullable<typeof c> => !!c)
 
-  // The base subscriber pool (page-wide OR overlapping an affected component).
-  const principalIds = (await getActiveSubscribersForComponents(
-    affectedComponentIds as never
-  )) as PrincipalId[]
-  if (principalIds.length === 0) return []
+  // The base subscriber pool (page-wide OR overlapping an affected component),
+  // with the components each one chose (null: the whole page).
+  const subscriptions = await getActiveSubscriptionsForComponents(affectedComponentIds as never)
+  if (subscriptions.length === 0) return []
+  const principalIds = subscriptions.map((s) => s.principalId as PrincipalId)
+  const chosenComponents = new Map(
+    subscriptions.map((s) => [
+      String(s.principalId),
+      s.scope === 'components' ? new Set(s.componentIds) : null,
+    ])
+  )
 
   // Batch-load role/type + segments + email for each subscriber.
   const principals = await db
@@ -2015,17 +2023,29 @@ export async function getStatusSubscriberTargets(
     segmentsByPrincipal.set(key, set)
   }
 
-  // Eligible = passes page gate AND can see ≥1 affected component.
-  const eligible = principals.filter((p) => {
+  // Eligible = passes page gate AND can see ≥1 affected component it follows
+  // (any, for a whole-page subscriber; one it chose, otherwise). A subscriber
+  // who chose only components they can no longer see isn't told about the
+  // rest. The visible subset is kept: it is the component list that
+  // recipient's email may show (the page hides the rest from them, so the
+  // email must too).
+  const eligible = principals.flatMap((p) => {
     const actor: Actor = {
       principalId: p.id,
       role: (p.role ?? null) as Actor['role'],
       principalType: p.type as Actor['principalType'],
       segmentIds: segmentsByPrincipal.get(String(p.id)) ?? new Set(),
     }
-    if (!isStatusAudienceGranted(actor, settings)) return false
-    if (affected.length === 0) return true
-    return affected.some((c) => canViewStatusComponent(actor, { segmentIds: c.segmentIds }))
+    if (!isStatusAudienceGranted(actor, settings)) return []
+    const visibleAffected = affectedInOrder.filter((c) =>
+      canViewStatusComponent(actor, { segmentIds: c.segmentIds })
+    )
+    const chosen = chosenComponents.get(String(p.id))
+    const followed = chosen
+      ? visibleAffected.filter((c) => chosen.has(String(c.id)))
+      : visibleAffected
+    if (affected.length > 0 && followed.length === 0) return []
+    return [{ ...p, visibleAffected }]
   })
   if (eligible.length === 0) return []
 
@@ -2042,17 +2062,10 @@ export async function getStatusSubscriberTargets(
     .limit(1)
   const firstUpdateBody = firstUpdate?.body ?? ''
 
-  // Per-viewer affected list is uniform here (all eligible can see ≥1); the
-  // email lists every affected component the workspace marked — acceptable,
-  // since eligibility already required visibility. Humanize for display.
-  const affectedForEmail = affectedComponentIds
-    .map((id) => affectedById.get(String(id)))
-    .filter((c): c is NonNullable<typeof c> => !!c)
-    .map((c) => ({
+  const affectedForEmail = (components: typeof affectedInOrder) =>
+    components.map((c) => ({
       name: c.name,
-      status:
-        STATUS_COMPONENT_STATUS_LABELS[incidentStatusForComponent(incident, String(c.id))] ??
-        'Operational',
+      status: STATUS_COMPONENT_STATUS_LABELS[c.linkedStatus ?? c.liveStatus],
     }))
 
   // In-app notification target (all eligible; ignores emailsDisabled).
@@ -2066,7 +2079,7 @@ export async function getStatusSubscriberTargets(
       incidentUrl,
       kind: incident.kind,
       impact: incident.impact,
-      statusLabel: STATUS_LIFECYCLE_LABELS[incident.status] ?? incident.status,
+      statusLabel: statusLifecycleLabel(incident.status),
     },
   })
 
@@ -2101,9 +2114,9 @@ export async function getStatusSubscriberTargets(
                 incidentTitle: incident.title,
                 incidentUrl,
                 impact: incident.impact,
-                statusLabel: STATUS_LIFECYCLE_LABELS[incident.status] ?? incident.status,
+                statusLabel: statusLifecycleLabel(incident.status),
                 body: firstUpdateBody,
-                affectedComponents: affectedForEmail,
+                affectedComponents: affectedForEmail(p.visibleAffected),
                 scheduledStartLabel: incident.scheduledStartAt
                   ? formatStatusDate(incident.scheduledStartAt)
                   : null,
@@ -2119,26 +2132,6 @@ export async function getStatusSubscriberTargets(
   }
 
   return targets
-}
-
-/** The status a specific component was set to while this incident is open. The
- *  publish payload doesn't carry per-component target statuses, so fall back to
- *  a sensible label; the live page always has the authoritative value. */
-function incidentStatusForComponent(
-  incident: { impact: string; kind: string },
-  _componentId: string
-): string {
-  if (incident.kind === 'maintenance') return 'under_maintenance'
-  switch (incident.impact) {
-    case 'critical':
-      return 'major_outage'
-    case 'major':
-      return 'partial_outage'
-    case 'minor':
-      return 'degraded_performance'
-    default:
-      return 'degraded_performance'
-  }
 }
 
 /** ISO string → "July 12, 2026, 02:00 UTC" for maintenance-window emails. */
