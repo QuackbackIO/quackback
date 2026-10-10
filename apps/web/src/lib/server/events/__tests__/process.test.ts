@@ -81,6 +81,24 @@ vi.mock('@/lib/server/logger', async (importOriginal) => {
 const syncProducer = vi.hoisted(() => vi.fn().mockResolvedValue({ id: 'op-1', state: 'uncertain' }))
 vi.mock('@/lib/server/integrations/sync/hooks', () => ({ queueHookSync: syncProducer }))
 
+// The scheduler's sentinel handlers, observed.
+const sentinels = vi.hoisted(() => ({
+  notifyChangelogPublished: vi.fn().mockResolvedValue(undefined),
+  handleMaintenanceStart: vi.fn().mockResolvedValue(undefined),
+  handleMaintenanceComplete: vi.fn().mockResolvedValue(undefined),
+  checkPostForMergeCandidates: vi.fn().mockResolvedValue(undefined),
+}))
+vi.mock('@/lib/server/domains/changelog/changelog.service', () => ({
+  notifyChangelogPublished: sentinels.notifyChangelogPublished,
+}))
+vi.mock('@/lib/server/domains/status/status.maintenance', () => ({
+  handleMaintenanceStart: sentinels.handleMaintenanceStart,
+  handleMaintenanceComplete: sentinels.handleMaintenanceComplete,
+}))
+vi.mock('@/lib/server/domains/merge-suggestions/merge-check.service', () => ({
+  checkPostForMergeCandidates: sentinels.checkPostForMergeCandidates,
+}))
+
 // --- Helpers ---
 
 function makeEvent(): PostCreatedEvent {
@@ -246,6 +264,33 @@ describe('Event processing', () => {
         )
         expect(syncProducer).not.toHaveBeenCalled()
         expect(run).not.toHaveBeenCalled()
+      }
+    )
+
+    // `scheduleDispatch` queues these with `event: null`: each reads its
+    // payload from config, so none may touch the event.
+    it.each([
+      ['__changelog_publish__', { changelogId: 'changelog_1' }, 'notifyChangelogPublished'],
+      ['__post_merge_recheck__', { postId: 'post_1' }, 'checkPostForMergeCandidates'],
+      [
+        '__status_maintenance_start__',
+        { incidentId: 'status_incident_1' },
+        'handleMaintenanceStart',
+      ],
+      [
+        '__status_maintenance_complete__',
+        { incidentId: 'status_incident_1' },
+        'handleMaintenanceComplete',
+      ],
+    ] as const)(
+      'runs the scheduled %s job, which carries no event',
+      async (hookType, config, handler) => {
+        const job = makeJob({
+          payload: { hookType, event: null, target: null, config: { ...config, actor: undefined } },
+        })
+        await expect(runHookJob(job)).resolves.toBeUndefined()
+        expect(sentinels[handler]).toHaveBeenCalledTimes(1)
+        expect(mockGetHook).not.toHaveBeenCalled()
       }
     )
 
