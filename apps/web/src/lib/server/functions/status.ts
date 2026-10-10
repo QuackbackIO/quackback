@@ -142,6 +142,7 @@ function serializeSnapshot(snapshot: StatusPageSnapshot) {
       ...day,
       incidents: day.incidents.map(serializePublicIncident),
     })),
+    recentWindow: { ...snapshot.recentWindow, start: toIsoString(snapshot.recentWindow.start) },
   }
 }
 
@@ -852,6 +853,9 @@ export const getStatusUptimeFn = createServerFn({ method: 'GET' })
 const listStatusHistorySchema = z.object({
   cursor: z.string().optional(),
   limit: PageLimitSchema,
+  /** The page snapshot's `recentWindow.start`: history continues after the
+   *  incidents the page already lists. */
+  before: z.iso.datetime().optional(),
 })
 
 /** Paginated resolved-incident history (public view). */
@@ -866,6 +870,7 @@ export const listStatusHistoryFn = createServerFn({ method: 'GET' })
     const result = await listIncidentHistory(gate.actor, {
       cursor: data.cursor,
       limit: data.limit,
+      before: data.before ? new Date(data.before) : undefined,
     })
     return { ...result, items: result.items.map(serializePublicIncident) }
   })

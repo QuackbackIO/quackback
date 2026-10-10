@@ -16,6 +16,7 @@ import {
   desc,
   asc,
   lt,
+  ne,
   lte,
   gte,
   statusComponentGroups,
@@ -244,6 +245,7 @@ export async function getStatusPageSnapshot(
     activeIncidents,
     upcomingMaintenance,
     recentIncidents: recentIncidents_grouped,
+    recentWindow: { start: recentWindowStart, days: RECENT_INCIDENTS_WINDOW_DAYS },
   }
 }
 
@@ -353,8 +355,18 @@ export async function listIncidentHistory(
   actor: Actor,
   params: IncidentHistoryParams
 ): Promise<IncidentHistoryResult> {
-  const { cursor, limit = 20 } = params
+  const { cursor, limit = 20, before } = params
   const conditions = [isNull(statusIncidents.deletedAt), isNotNull(statusIncidents.resolvedAt)]
+
+  // The page already lists the resolved incidents that started inside its
+  // recent window (`getStatusPageSnapshot`), so history picks up after them.
+  // Only incidents are cut: the window never shows maintenance, and a window
+  // completed last week would otherwise appear nowhere on the page.
+  if (before) {
+    conditions.push(
+      or(ne(statusIncidents.kind, 'incident'), lt(statusIncidents.startedAt, before))!
+    )
+  }
 
   if (cursor) {
     const cursorRow = await db.query.statusIncidents.findFirst({

@@ -120,10 +120,14 @@ function StatusPage() {
   const [historyExpanded, setHistoryExpanded] = useState(false)
   const {
     data: historyPages,
+    isSuccess: historyLoaded,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useInfiniteQuery({ ...publicStatusHistoryQueries.list(), enabled: historyExpanded })
+  } = useInfiniteQuery({
+    ...publicStatusHistoryQueries.list(snapshot.recentWindow.start),
+    enabled: historyExpanded,
+  })
   const historyItems = historyPages?.pages.flatMap((page) => page.items) ?? []
 
   return (
@@ -270,20 +274,23 @@ function StatusPage() {
           )}
         </div>
 
-        <div className="divide-y divide-border/40">
-          {snapshot.recentIncidents.map((day) => (
-            <div key={day.date} className="py-3.5 first:pt-0">
-              <p className="mb-1.5 text-[13px] font-semibold text-muted-foreground">
-                {formatUtcDayLong(day.date, intl.locale)}
-              </p>
-              {day.incidents.length === 0 ? (
-                <p className="text-[13px] text-muted-foreground/75">
-                  <FormattedMessage
-                    id="portal.status.noIncidentsReported"
-                    defaultMessage="No incidents reported."
-                  />
+        {/* Only days with an incident are listed, so a quiet window is an
+            empty list, not a run of empty days. */}
+        {snapshot.recentIncidents.length === 0 ? (
+          <p className="text-[13px] text-muted-foreground">
+            <FormattedMessage
+              id="portal.status.noRecentIncidents"
+              defaultMessage="No incidents in the last {days} days."
+              values={{ days: snapshot.recentWindow.days }}
+            />
+          </p>
+        ) : (
+          <div className="divide-y divide-border/40">
+            {snapshot.recentIncidents.map((day) => (
+              <div key={day.date} className="py-3.5 first:pt-0">
+                <p className="mb-1.5 text-[13px] font-semibold text-muted-foreground">
+                  {formatUtcDayLong(day.date, intl.locale)}
                 </p>
-              ) : (
                 <div className="flex flex-col gap-3.5">
                   {day.incidents.map((incident) => (
                     <div key={incident.id}>
@@ -304,10 +311,10 @@ function StatusPage() {
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
-          ))}
-        </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {historyExpanded && historyItems.length > 0 && (
           <div className="mt-4 flex flex-col gap-3.5 border-t border-border/40 pt-4">
@@ -334,6 +341,15 @@ function StatusPage() {
               </div>
             ))}
           </div>
+        )}
+
+        {historyExpanded && historyLoaded && historyItems.length === 0 && !hasNextPage && (
+          <p className="mt-4 border-t border-border/40 pt-4 text-[13px] text-muted-foreground">
+            <FormattedMessage
+              id="portal.status.history.empty"
+              defaultMessage="No earlier incidents."
+            />
+          </p>
         )}
 
         {historyExpanded && hasNextPage && (

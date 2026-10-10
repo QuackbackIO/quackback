@@ -352,7 +352,13 @@ export interface StatusPageSnapshot {
   ungroupedComponents: PublicStatusComponent[]
   activeIncidents: PublicStatusIncident[]
   upcomingMaintenance: PublicStatusIncident[]
+  /** Resolved incidents that started inside `recentWindow`, grouped by UTC
+   *  day, newest first. Only days with an incident appear, so the list is
+   *  empty when the window had none. */
   recentIncidents: StatusDayGroup[]
+  /** The recent-incidents window. Incident history resumes from its `start`
+   *  (`IncidentHistoryParams.before`) so it never repeats these incidents. */
+  recentWindow: { start: Date; days: number }
 }
 
 export interface UptimeDay {
@@ -371,6 +377,9 @@ export interface UptimeSeries {
 export interface IncidentHistoryParams {
   cursor?: string
   limit?: number
+  /** Leave out incidents that started at or after this instant: the page's
+   *  recent window (`StatusPageSnapshot.recentWindow.start`) already lists them. */
+  before?: Date
 }
 
 export interface IncidentHistoryResult {
