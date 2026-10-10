@@ -4,25 +4,46 @@
 -- now writes the planned start while a window is still scheduled and the real
 -- start when it begins (automatically, "Start now", or a posted update).
 --
--- Existing rows take scheduled_start_at wherever started_at is earlier than
--- it, which is exactly the rows stamped at creation ahead of their window. It
--- is the best record of the real start that exists: an automatic start fires
--- at it, and a manual start pulls it to the moment of starting. A row created
--- already under way (scheduled start at or before creation) keeps its
--- creation time, which is when it went live. Backfilled rows carry their own
--- historical times and are left alone.
+-- Existing rows are corrected from the best record there is:
+--   1. A window that has begun has a timeline row for it: automatic and
+--      manual starts both post an in_progress update, and a window can also
+--      move straight to verifying or completed. The first such update is
+--      when it really started, early starts by hand included.
+--   2. A window with no such update (still scheduled) takes its planned
+--      start, matching what the app now writes for scheduled windows.
+-- Each only moves started_at later, so a row created already under way
+-- keeps its creation time. Backfilled rows carry their own historical times
+-- and are left alone.
 --
--- The UPDATE sits in a DO block so a fleet replay is a no-op: every row it
--- touches ends with started_at equal to scheduled_start_at, so a second run
+-- The UPDATEs sit in a DO block so a fleet replay is a no-op: each leaves
+-- started_at equal to the value it compares against, so a second run
 -- matches nothing. A bare UPDATE would collapse the gap-heal window.
 
--- @replay: guarded-by started_at being earlier than scheduled_start_at; a row it updates ends with the two equal
+-- @replay: guarded-by started_at being earlier than the first start update or scheduled_start_at; a row it updates ends equal to that value
 DO $$
 BEGIN
-  UPDATE "status_incidents"
-  SET "started_at" = "scheduled_start_at"
-  WHERE "kind" = 'maintenance'
-    AND "backfilled" = false
-    AND "scheduled_start_at" IS NOT NULL
-    AND "started_at" < "scheduled_start_at";
+  UPDATE "status_incidents" AS i
+  SET "started_at" = s."first_start"
+  FROM (
+    SELECT "incident_id", min("created_at") AS "first_start"
+    FROM "status_incident_updates"
+    WHERE "status" IN ('in_progress', 'verifying', 'completed')
+    GROUP BY "incident_id"
+  ) AS s
+  WHERE i."id" = s."incident_id"
+    AND i."kind" = 'maintenance'
+    AND i."backfilled" = false
+    AND i."started_at" < s."first_start";
+
+  UPDATE "status_incidents" AS i
+  SET "started_at" = i."scheduled_start_at"
+  WHERE i."kind" = 'maintenance'
+    AND i."backfilled" = false
+    AND i."scheduled_start_at" IS NOT NULL
+    AND i."started_at" < i."scheduled_start_at"
+    AND NOT EXISTS (
+      SELECT 1 FROM "status_incident_updates" AS u
+      WHERE u."incident_id" = i."id"
+        AND u."status" IN ('in_progress', 'verifying', 'completed')
+    );
 END $$;

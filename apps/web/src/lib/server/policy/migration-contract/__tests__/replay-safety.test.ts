@@ -308,8 +308,8 @@ describe('the real corpus', () => {
     // 0295 marks a settings row only while its metadata lacks brandingLookup,
     // so a second run writes zero rows.
     // 0298 moves a maintenance started_at only while it is earlier than the
-    // row's scheduled start, and leaves the two equal, so a second run writes
-    // zero rows.
+    // window's first start update (or, with none, its scheduled start), and
+    // leaves the two equal, so a second run writes zero rows.
     const vouching = files.filter(
       (f) => assessReplaySafety(f, readFileSync(join(MIGRATIONS_DIR, f), 'utf8')).vouched.length > 0
     )

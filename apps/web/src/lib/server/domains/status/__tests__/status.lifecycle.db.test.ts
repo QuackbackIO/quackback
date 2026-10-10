@@ -19,6 +19,7 @@ import {
   statusComponentEvents,
   statusIncidentComponents,
   statusIncidents,
+  statusIncidentUpdates,
 } from '@/lib/server/db'
 import { ValidationError } from '@/lib/shared/errors'
 import { ANONYMOUS_ACTOR } from '@/lib/server/policy/types'
@@ -484,13 +485,14 @@ describe('status lifecycle (Postgres)', () => {
       ).rejects.toBeInstanceOf(ValidationError)
     })
 
-    it('migration 0298 dates existing windows by their start, and a second run changes nothing', async () => {
+    it('migration 0298 dates existing windows by their real or planned start, and a second run changes nothing', async () => {
       const day = 24 * HOUR
       const now = Date.now()
       const rows = {
         upcoming: { created: now - day, start: now + day },
         started: { created: now - 3 * day, start: now - 2 * day },
         createdUnderWay: { created: now - HOUR, start: now - 2 * HOUR },
+        startedEarlyByHand: { created: now - 3 * day, start: now - day },
       }
       const ids: Record<string, string> = {}
       for (const [name, row] of Object.entries(rows)) {
@@ -507,6 +509,14 @@ describe('status lifecycle (Postgres)', () => {
           .returning({ id: statusIncidents.id })
         ids[name] = inserted.id
       }
+      // "Start now" a day ahead of the planned start posted this update.
+      const startedByHandAt = now - 2 * day
+      await testDb.insert(statusIncidentUpdates).values({
+        incidentId: ids.startedEarlyByHand as never,
+        status: 'in_progress',
+        body: 'Started early.',
+        createdAt: new Date(startedByHandAt),
+      })
       const [incident] = await testDb
         .insert(statusIncidents)
         .values({
@@ -532,6 +542,7 @@ describe('status lifecycle (Postgres)', () => {
       expect(await startedAt(ids.upcoming)).toBe(rows.upcoming.start)
       expect(await startedAt(ids.started)).toBe(rows.started.start)
       expect(await startedAt(ids.createdUnderWay)).toBe(rows.createdUnderWay.created)
+      expect(await startedAt(ids.startedEarlyByHand)).toBe(startedByHandAt)
       expect(await startedAt(incident.id)).toBe(now - day)
     })
   })
