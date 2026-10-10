@@ -7,7 +7,7 @@ import {
 } from '@/lib/server/functions/portal'
 import { getVoteSidebarDataFn, getVotedPostsFn } from '@/lib/server/functions/public-posts'
 import type { CommentReactionCount, CommentStatusChange } from '@/lib/shared'
-import type { TiptapContent } from '@/lib/shared/db-types'
+import type { ReplyPolicy, TiptapContent } from '@/lib/shared/db-types'
 
 /**
  * Comment type for client components (Date fields may be strings after serialization)
@@ -91,6 +91,13 @@ export interface PublicPostDetailView {
    */
   canVote?: boolean
   canComment?: boolean
+  /**
+   * The board's reply rule. `'author-only'` means only the post's own author
+   * and the team may reply — `canComment` already accounts for it; this field
+   * exists so a denied viewer can be told which rule closed the composer.
+   * Undefined on legacy/cached payloads — treat undefined as `'anyone'`.
+   */
+  replyPolicy?: ReplyPolicy
   /** Merge/deduplication: info about canonical post if this is a merged duplicate */
   mergeInfo?: {
     canonicalPostId: string

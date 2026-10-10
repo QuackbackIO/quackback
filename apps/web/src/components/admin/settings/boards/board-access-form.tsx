@@ -29,6 +29,8 @@ import {
   UsersIcon,
 } from '@heroicons/react/24/solid'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Switch } from '@/components/ui/switch'
+import { SettingRow } from '@/components/admin/settings/setting-row'
 import { useDebouncedSave } from '@/lib/client/hooks/use-debounced-save'
 import { useUpdateBoardAccess } from '@/lib/client/mutations'
 import { useSegments } from '@/lib/client/hooks/use-segments-queries'
@@ -40,6 +42,7 @@ import {
   type AccessTier,
   type BoardAccess,
   DEFAULT_BOARD_ACCESS,
+  resolveReplyPolicy,
 } from '@/lib/shared/db-types'
 import { accessForPreset } from '@/lib/shared/schemas/boards'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
@@ -61,6 +64,8 @@ import { INLINE_LINK } from '@/components/admin/settings/inline-link'
  *     ceiling: when off, the `anonymous` cell on vote/comment/submit is
  *     disabled (striped + globe icon) and an effect auto-bumps any cell
  *     currently on `anonymous` up to `authenticated`.
+ *   - A switch below the matrix edits `access.replyPolicy` (absent or
+ *     `anyone` vs `author-only`) and autosaves with the rest of the form.
  *
  * The persisted shape is `BoardAccess` (see @/lib/shared/db-types).
  */
@@ -201,6 +206,13 @@ function deriveActivePreset(values: FormShape): PresetName {
 }
 
 const AUTOSAVE_DELAY_MS = 400
+
+/**
+ * `access.replyPolicy` sits beside the matrix rather than in it because it is
+ * not a tier: the Comment row still decides who may comment at all, and this
+ * narrows that set per post.
+ */
+const REPLY_POLICY_LABEL = 'Only the post author and team members can reply'
 
 // ─── Main form ────────────────────────────────────────────────────────
 
@@ -371,6 +383,16 @@ export function BoardAccessForm({ board }: BoardAccessFormProps) {
     [form]
   )
 
+  // `replyPolicy` is an optional key on BoardAccess (absent == 'anyone'), so
+  // it may be missing from the form's defaults. Writing it explicitly on
+  // toggle keeps the saved payload unambiguous in both directions.
+  const handleReplyPolicyChange = useCallback(
+    (authorOnly: boolean) => {
+      form.setValue('replyPolicy', authorOnly ? 'author-only' : 'anyone', { shouldDirty: true })
+    },
+    [form]
+  )
+
   // Changes save after a short pause, once every Segments tier has a segment.
   // Returning to the saved values leaves nothing to save, so a queued save for
   // the undone edit is dropped.
@@ -426,6 +448,18 @@ export function BoardAccessForm({ board }: BoardAccessFormProps) {
           </div>
         )}
       </div>
+
+      <SettingRow
+        label={REPLY_POLICY_LABEL}
+        htmlFor="board-reply-policy"
+        control={
+          <Switch
+            id="board-reply-policy"
+            checked={resolveReplyPolicy(values) === 'author-only'}
+            onCheckedChange={handleReplyPolicyChange}
+          />
+        }
+      />
 
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
         <ShieldCheckIcon className="h-3 w-3" />

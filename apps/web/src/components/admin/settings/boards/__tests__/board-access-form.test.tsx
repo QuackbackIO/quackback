@@ -13,6 +13,8 @@
  *   - Auto-bump when workspace flips off while a cell sits on Anonymous
  *   - Changes autosave; the payload preserves `moderation` round-trip (passthrough only;
  *     editing moderation lives in `<BoardModerationForm>`)
+ *   - The reply policy switch reads and autosaves `access.replyPolicy`, and a
+ *     save keeps every other access key
  *
  * The mutation, segments, and portalConfig queries are mocked. The
  * portalConfig mock is mutable so tests can flip workspace flags between
@@ -587,6 +589,116 @@ describe('<BoardAccessForm> autosave', () => {
         }),
       })
     )
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Replies (access.replyPolicy)
+// ---------------------------------------------------------------------------
+
+describe('<BoardAccessForm> reply policy', () => {
+  const REPLY_LABEL = 'Only the post author and team members can reply'
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  function replySwitch() {
+    return screen.getByRole('switch', { name: REPLY_LABEL })
+  }
+
+  it('renders the switch off when access.replyPolicy is absent', () => {
+    renderForm(PUBLIC_ACCESS)
+    expect(replySwitch()).toHaveAttribute('aria-checked', 'false')
+  })
+
+  it("renders the switch off for an explicit replyPolicy: 'anyone'", () => {
+    renderForm({ ...PUBLIC_ACCESS, replyPolicy: 'anyone' })
+    expect(replySwitch()).toHaveAttribute('aria-checked', 'false')
+  })
+
+  it("renders the switch on for replyPolicy: 'author-only'", () => {
+    renderForm({ ...PUBLIC_ACCESS, replyPolicy: 'author-only' })
+    expect(replySwitch()).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('opening the board saves nothing', () => {
+    renderForm({ ...PUBLIC_ACCESS, replyPolicy: 'author-only' })
+    flushAutosave()
+    expect(mutate).not.toHaveBeenCalled()
+  })
+
+  it("autosaves replyPolicy: 'author-only' with every other access key unchanged", () => {
+    const access: BoardAccess = {
+      view: 'anonymous',
+      vote: 'authenticated',
+      comment: 'authenticated',
+      submit: 'segments',
+      segments: { view: [], vote: [], comment: [], submit: ['seg_alpha'] },
+      moderation: { anonPosts: 'on', signedPosts: 'inherit', comments: 'off' },
+    }
+    renderForm(access)
+    fireEvent.click(replySwitch())
+    expect(replySwitch()).toHaveAttribute('aria-checked', 'true')
+    flushAutosave()
+    expect(mutate).toHaveBeenCalledTimes(1)
+    expect(mutate).toHaveBeenCalledWith({
+      boardId: BOARD_ID,
+      access: { ...access, replyPolicy: 'author-only' },
+    })
+  })
+
+  it("switching off saves an explicit replyPolicy: 'anyone'", () => {
+    const access: BoardAccess = { ...PUBLIC_ACCESS, replyPolicy: 'author-only' }
+    renderForm(access)
+    fireEvent.click(replySwitch())
+    expect(replySwitch()).toHaveAttribute('aria-checked', 'false')
+    flushAutosave()
+    expect(mutate).toHaveBeenCalledTimes(1)
+    expect(mutate).toHaveBeenCalledWith({
+      boardId: BOARD_ID,
+      access: { ...access, replyPolicy: 'anyone' },
+    })
+  })
+
+  it('does not save when the switch is turned back before the pause ends', () => {
+    renderForm({ ...PUBLIC_ACCESS, replyPolicy: 'author-only' })
+    fireEvent.click(replySwitch())
+    fireEvent.click(replySwitch())
+    flushAutosave()
+    expect(mutate).not.toHaveBeenCalled()
+  })
+
+  it('a tier change keeps an existing author-only replyPolicy', () => {
+    const access: BoardAccess = { ...PUBLIC_ACCESS, replyPolicy: 'author-only' }
+    renderForm(access)
+    clickTierCell('Comment', 'Team only')
+    flushAutosave()
+    expect(mutate).toHaveBeenCalledWith({
+      boardId: BOARD_ID,
+      access: { ...access, comment: 'team' },
+    })
+  })
+
+  it('a preset click keeps an existing author-only replyPolicy', () => {
+    renderForm({
+      view: 'team',
+      vote: 'team',
+      comment: 'team',
+      submit: 'team',
+      segments: { view: [], vote: [], comment: [], submit: [] },
+      moderation: { anonPosts: 'inherit', signedPosts: 'inherit', comments: 'inherit' },
+      replyPolicy: 'author-only',
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Everyone' }))
+    flushAutosave()
+    expect(mutate).toHaveBeenCalledWith({
+      boardId: BOARD_ID,
+      access: { ...accessForPreset('public'), replyPolicy: 'author-only' },
+    })
   })
 })
 
