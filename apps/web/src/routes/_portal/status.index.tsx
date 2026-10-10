@@ -73,6 +73,15 @@ export const Route = createFileRoute('/_portal/status/')({
   component: StatusPageRoute,
 })
 
+function StatusPageRoute() {
+  const { messages } = Route.useLoaderData()
+  return (
+    <AreaMessages area="statusPage" messages={messages}>
+      <StatusPage />
+    </AreaMessages>
+  )
+}
+
 function formatUtcDayLong(dateStr: string, locale: string): string {
   return new Date(`${dateStr}T00:00:00Z`).toLocaleDateString(locale, {
     month: 'long',
@@ -109,15 +118,6 @@ function formatMaintenanceWindow(
     timeZone: 'UTC',
   })
   return `${dayLabel} · ${startTime} – ${endTime} UTC`
-}
-
-function StatusPageRoute() {
-  const { messages } = Route.useLoaderData()
-  return (
-    <AreaMessages area="statusPage" messages={messages}>
-      <StatusPage />
-    </AreaMessages>
-  )
 }
 
 function StatusPage() {
