@@ -57,13 +57,17 @@ beforeEach(() => {
 })
 
 describe('the AI client is fleet-wide, and that is checkable', () => {
-  it('is constructed from the configured key and base URL and nothing else', () => {
+  it('is constructed only from the configured fleet client options', () => {
     withWorkspace('workspace-alpha', () => getOpenAI())
 
-    // Exactly two fields. A workspace value reaching the client would have to
-    // arrive as a third, or as a different value below.
+    // Exact shared options: no workspace-specific value reaches the client.
     expect(hoisted.openaiCtorArgs).toEqual([
-      { apiKey: 'sk-fleet', baseURL: 'https://gateway.example.com/v1' },
+      {
+        apiKey: 'sk-fleet',
+        baseURL: 'https://gateway.example.com/v1',
+        defaultHeaders: {},
+        fetch: expect.any(Function),
+      },
     ])
   })
 

@@ -21,6 +21,7 @@
  * WORKSPACE SWITCH. `aiClassifier` in the same settings turns the model call
  * off entirely. The deterministic sender signals are not AI and still run.
  */
+import { getOpenAIClientOptions } from '@/lib/server/domains/ai/client-options'
 import { chat } from '@tanstack/ai'
 import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
 import { z } from 'zod'
@@ -130,10 +131,7 @@ export async function classifyInboundAsSpam(input: ClassifyInboundSpamInput): Pr
   let verdict: { spam: boolean }
   try {
     verdict = await chat({
-      adapter: openaiCompatibleText(model, {
-        baseURL: config.openaiBaseUrl!,
-        apiKey: config.openaiApiKey!,
-      }),
+      adapter: openaiCompatibleText(model, getOpenAIClientOptions(config)),
       systemPrompts: [SYSTEM_PROMPT],
       messages: [
         {

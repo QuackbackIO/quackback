@@ -7,6 +7,7 @@
  * and each feature additionally requires a configured model (see ./models).
  */
 
+import { getOpenAIClientOptions } from '@/lib/server/domains/ai/client-options'
 import OpenAI from 'openai'
 import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
@@ -16,7 +17,7 @@ const log = logger.child({ component: 'ai-config' })
 /**
  * Deliberately process-wide, not per-workspace.
  *
- * The client is constructed from the API key and base URL alone, both of which
+ * The client is constructed from the API key, base URL and default headers, all of which
  * come from the environment; no workspace value reaches it, and no request
  * attaches per-caller headers to it. Partitioning it would open one upstream
  * connection pool per workspace for a client every workspace would configure
@@ -45,10 +46,7 @@ export function isAiClientConfigured(
 export function getOpenAI(): OpenAI | null {
   if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl)) return null
   if (!openai) {
-    openai = new OpenAI({
-      apiKey: config.openaiApiKey,
-      baseURL: config.openaiBaseUrl,
-    })
+    openai = new OpenAI(getOpenAIClientOptions(config))
   }
   return openai
 }

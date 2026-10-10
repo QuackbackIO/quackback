@@ -545,7 +545,7 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     name: 'openai',
     category: 'fleet-wide',
     reason:
-      'Constructed from OPENAI_API_KEY and OPENAI_BASE_URL alone. §8 established the AI key is ' +
+      'Constructed from OPENAI_API_KEY, OPENAI_BASE_URL and OPENAI_DEFAULT_HEADERS alone. §8 established the AI key is ' +
       'fleet-wide (the control plane writes one key into every workspace); no workspace value reaches ' +
       'the constructor and no request attaches per-caller headers.',
   },
