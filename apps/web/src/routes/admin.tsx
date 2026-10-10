@@ -22,10 +22,6 @@ import { FileViewerProvider, scrollToMessage } from '@/components/shared/files/f
 import { useHasPermission } from '@/lib/client/use-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { createRouteContextMemo } from '@/lib/client/route-context-memo'
-import {
-  adminBillingLock,
-  isAdminPathAllowedDuringTrialChoice,
-} from '@/lib/shared/billing/plan-downgrade-lock'
 import type { AdminBillingLockInputs } from '@/lib/server/domains/billing/pending-downgrade'
 import type { requireWorkspaceRole } from '@/lib/server/functions/workspace-utils'
 import { useFeatureFlag, useProductEnabled } from '@/lib/client/hooks/use-root-context'
@@ -87,18 +83,19 @@ export const Route = createFileRoute('/admin')({
     // the plan picker). Only a billing manager of a workspace with plan billing
     // (cloudEnabled) can be held, so only they pay for the check. Its inputs
     // are fetched once per route context and the path is decided here, so a
-    // click does not ask the server again; a failed read holds nobody.
-    if (
-      context.cloudEnabled &&
-      permissions.includes(PERMISSIONS.BILLING_MANAGE) &&
-      !isAdminPathAllowedDuringTrialChoice(location.pathname)
-    ) {
-      const lock = await billingLock
-        .get(async () => {
-          const { getAdminBillingLockFn } = await import('@/lib/server/functions/billing')
-          return getAdminBillingLockFn()
-        })
-        .catch(() => null)
+    // click does not ask the server again; a failed read holds nobody. The
+    // lock rules load on demand, so no one else's admin bundle carries them.
+    if (context.cloudEnabled && permissions.includes(PERMISSIONS.BILLING_MANAGE)) {
+      const { adminBillingLock, isAdminPathAllowedDuringTrialChoice } =
+        await import('@/lib/shared/billing/plan-downgrade-lock')
+      const lock = isAdminPathAllowedDuringTrialChoice(location.pathname)
+        ? null
+        : await billingLock
+            .get(async () => {
+              const { getAdminBillingLockFn } = await import('@/lib/server/functions/billing')
+              return getAdminBillingLockFn()
+            })
+            .catch(() => null)
       if (
         lock &&
         adminBillingLock({
